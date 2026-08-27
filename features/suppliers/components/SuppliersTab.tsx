@@ -21,17 +21,27 @@ import { useCallback, useEffect, useMemo } from "react";
 import {
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
   TouchableOpacity,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { SupplierRow } from "../services/suppliers.service";
 
 export type SuppliersViewTab = "list" | "analytics";
+
+/** Compact ₹ for secondary lines when space is tight (mobile list). */
+function formatAmountCompact(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 100000) return `${(value / 100000).toFixed(1)}L`;
+  if (abs >= 1000) return `${(value / 1000).toFixed(1)}k`;
+  return value.toLocaleString("en-IN");
+}
 
 /** Minimal ledger row for aggregation (compatible with LedgerTx). */
 export interface LedgerRowForSupplier {
@@ -101,6 +111,8 @@ export function SuppliersTab({
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+  const isWebDesktop = Platform.OS === "web" && screenWidth >= 1024;
   const isControlled = suppliersProp !== undefined && tripsProp !== undefined;
   const suppliersQuery = useSuppliersQuery(isControlled ? null : organizationId);
   const tripsQuery = useTripsQuery(isControlled ? null : organizationId);
@@ -246,7 +258,7 @@ export function SuppliersTab({
         </View>
       )}
       <View style={styles.tableHeader}>
-        <View style={styles.headerEntityCol}>
+        <View style={isWebDesktop ? styles.headerEntityCol : styles.headerEntityColMobile}>
           <Text style={[styles.tableHeaderCell, styles.ctLeft]} numberOfLines={1}>
             Supplier Entity
           </Text>
@@ -256,21 +268,31 @@ export function SuppliersTab({
             Trips
           </Text>
         </View>
-        <View style={styles.headerAmtCol}>
-          <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
-            Payables
-          </Text>
-        </View>
-        <View style={styles.headerAmtCol}>
-          <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
-            Paid
-          </Text>
-        </View>
-        <View style={styles.headerAmtCol}>
-          <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
-            Due
-          </Text>
-        </View>
+        {isWebDesktop ? (
+          <>
+            <View style={styles.headerAmtCol}>
+              <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
+                Payables
+              </Text>
+            </View>
+            <View style={styles.headerAmtCol}>
+              <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
+                Paid
+              </Text>
+            </View>
+            <View style={styles.headerAmtCol}>
+              <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
+                Due
+              </Text>
+            </View>
+          </>
+        ) : (
+          <View style={styles.headerOutstandingCol}>
+            <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
+              Due
+            </Text>
+          </View>
+        )}
       </View>
       <View style={styles.tableCard}>
         {rowsToRender.map((data) => {
@@ -279,10 +301,67 @@ export function SuppliersTab({
           const payables = data.payables ?? 0;
           const tripCount = data.trips ?? 0;
           const avatarData = supplierAvatarById.get(data.id);
+          if (isWebDesktop) {
+            return (
+              <TouchableOpacity
+                key={data.id}
+                style={styles.tableRow}
+                onPress={() =>
+                  onRowSelect
+                    ? onRowSelect(data, "SUPPLIER", "suppliers")
+                    : router.push(`/supplier/${data.id}`)
+                }
+                activeOpacity={0.7}
+              >
+                <View style={[styles.tableCell, styles.ctEntity]}>
+                  <View style={styles.tableEntityMain}>
+                    <EntityAvatar
+                      name={data.name ?? ""}
+                      avatarUrl={avatarData?.avatar_url}
+                      avatarSeed={avatarData?.avatar_seed}
+                      initialsColorSeed={data.id}
+                      entityType="supplier"
+                      isIntegrated={!!data.is_integrated}
+                      badgeOverlay
+                    />
+                    <Text style={styles.tableEntityName} numberOfLines={1} ellipsizeMode="tail">
+                      {data.name ?? "—"}
+                    </Text>
+                  </View>
+                </View>
+                <View style={[styles.tableCell, styles.ctTrips]}>
+                  <View style={styles.tripsPill}>
+                    <Text style={styles.tripsPillText}>{tripCount}</Text>
+                  </View>
+                </View>
+                <View style={[styles.tableCell, styles.ctAmt]}>
+                  <Text style={styles.tableAmtValue} numberOfLines={1}>
+                    ₹{payables.toLocaleString("en-IN")}
+                  </Text>
+                </View>
+                <View style={[styles.tableCell, styles.ctAmt]}>
+                  <Text style={styles.tableAmtPaid} numberOfLines={1}>
+                    ₹{paid.toLocaleString("en-IN")}
+                  </Text>
+                </View>
+                <View style={[styles.tableCell, styles.ctAmt]}>
+                  <Text
+                    style={[
+                      styles.tableDueValue,
+                      due > 0 ? styles.tableDueUnpaid : styles.tableDueSettled,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    ₹{due.toLocaleString("en-IN")}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          }
           return (
             <TouchableOpacity
               key={data.id}
-              style={styles.tableRow}
+              style={styles.tableRowMobile}
               onPress={() =>
                 onRowSelect
                   ? onRowSelect(data, "SUPPLIER", "suppliers")
@@ -290,46 +369,43 @@ export function SuppliersTab({
               }
               activeOpacity={0.7}
             >
-              <View style={[styles.tableCell, styles.ctEntity]}>
-                <View style={styles.tableEntityMain}>
-                  <EntityAvatar
-                    name={data.name ?? ""}
-                    avatarUrl={avatarData?.avatar_url}
-                    avatarSeed={avatarData?.avatar_seed}
-                    initialsColorSeed={data.id}
-                    entityType="supplier"
-                    isIntegrated={!!data.is_integrated}
-                    badgeOverlay
-                  />
-                  <Text style={styles.tableEntityName} numberOfLines={1} ellipsizeMode="tail">
-                    {data.name ?? "—"}
-                  </Text>
-                </View>
+              <EntityAvatar
+                name={data.name ?? ""}
+                avatarUrl={avatarData?.avatar_url}
+                avatarSeed={avatarData?.avatar_seed}
+                initialsColorSeed={data.id}
+                entityType="supplier"
+                isIntegrated={!!data.is_integrated}
+                badgeOverlay
+              />
+              <View style={[styles.tableCell, styles.ctEntityMobile]}>
+                <Text style={styles.tableEntityName} numberOfLines={1} ellipsizeMode="tail">
+                  {data.name ?? "—"}
+                </Text>
+                <Text style={styles.tableEntitySub} numberOfLines={1} ellipsizeMode="tail">
+                  Payables: ₹{formatAmountCompact(payables)}
+                </Text>
               </View>
               <View style={[styles.tableCell, styles.ctTrips]}>
                 <View style={styles.tripsPill}>
                   <Text style={styles.tripsPillText}>{tripCount}</Text>
                 </View>
               </View>
-              <View style={[styles.tableCell, styles.ctAmt]}>
-                <Text style={styles.tableAmtValue} numberOfLines={1}>
-                  ₹{payables.toLocaleString("en-IN")}
-                </Text>
-              </View>
-              <View style={[styles.tableCell, styles.ctAmt]}>
-                <Text style={styles.tableAmtPaid} numberOfLines={1}>
-                  ₹{paid.toLocaleString("en-IN")}
-                </Text>
-              </View>
-              <View style={[styles.tableCell, styles.ctAmt]}>
+              <View style={[styles.tableCell, styles.ctOutstanding]}>
                 <Text
                   style={[
-                    styles.tableDueValue,
+                    styles.tableOutstandingValue,
                     due > 0 ? styles.tableDueUnpaid : styles.tableDueSettled,
                   ]}
                   numberOfLines={1}
                 >
                   ₹{due.toLocaleString("en-IN")}
+                </Text>
+                <Text style={styles.tablePaidLine} numberOfLines={1}>
+                  Paid:{" "}
+                  <Text style={styles.tableDueSettled}>
+                    ₹{formatAmountCompact(paid)}
+                  </Text>
                 </Text>
               </View>
             </TouchableOpacity>
@@ -469,12 +545,21 @@ const styles = StyleSheet.create({
   ctCenter: { textAlign: "center" },
   ctRight: { textAlign: "right" },
   headerEntityCol: { flex: CUSTOMERS_SUPPLIERS.node, minWidth: 0, justifyContent: "center" },
+  headerEntityColMobile: { flex: 2.2, minWidth: 0, justifyContent: "center" },
   headerTripsCol: { flex: CUSTOMERS_SUPPLIERS.trips, minWidth: 44, justifyContent: "center" },
   headerAmtCol: { flex: CUSTOMERS_SUPPLIERS.mission, minWidth: 0, justifyContent: "center" },
+  headerOutstandingCol: { flex: 1.5, minWidth: 0, justifyContent: "center" },
   ctEntity: { flex: CUSTOMERS_SUPPLIERS.node, minWidth: 0 },
+  ctEntityMobile: { flex: 2.2, minWidth: 0 },
   ctTrips: { flex: CUSTOMERS_SUPPLIERS.trips, minWidth: 44, justifyContent: "center" },
   ctAmt: {
     flex: CUSTOMERS_SUPPLIERS.mission,
+    minWidth: 0,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
+  ctOutstanding: {
+    flex: 1.5,
     minWidth: 0,
     alignItems: "flex-end",
     justifyContent: "center",
@@ -483,6 +568,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     minHeight: 52,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  tableRowMobile: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minHeight: 62,
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderBottomWidth: 1,
@@ -504,14 +599,35 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  tableEntitySub: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textMuted,
+  },
   tableDueValue: {
     fontSize: 10,
     fontWeight: "600",
     fontStyle: "italic",
     textAlign: "right",
   },
+  tableOutstandingValue: {
+    fontSize: 11,
+    fontWeight: "600",
+    fontStyle: "italic",
+    textAlign: "right",
+  },
   tableDueUnpaid: { color: Theme.teslaRed },
   tableDueSettled: { color: Theme.darkGreen },
+  tablePaidLine: {
+    marginTop: 2,
+    fontSize: 8,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    textAlign: "right",
+  },
   tableAmtValue: {
     fontSize: 10,
     fontWeight: "600",

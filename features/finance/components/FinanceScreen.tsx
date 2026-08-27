@@ -1686,7 +1686,7 @@ export function FinanceScreen() {
         <>
           <View style={styles.mobileFixedTabBar}>
             <FinanceTabRow
-              treasuryInset
+              mobileBar
               activeTab={financeSubTab}
               onTabPress={handleTabPress}
               tabs={visibleFinanceTabs}
@@ -1989,7 +1989,7 @@ export function FinanceScreen() {
         onCloseReportModal={() => setShowReportModal(false)}
         reportTransactions={reportTransactions}
         reportTitle={reportTitle}
-        reportPeriodLabel={reportPeriodLabel}
+        reportPeriodLabel={reportPeriodLabel ?? undefined}
         reportCustom={reportCustom ?? undefined}
         hideReportCashSummary={financeSubTab !== "cash"}
         orgId={orgId}

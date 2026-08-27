@@ -39,6 +39,7 @@ import {
     TextInput,
     TouchableOpacity,
     View,
+    useWindowDimensions,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { ClientRow } from "../services/clients.service";
@@ -46,6 +47,14 @@ import type { ClientRow } from "../services/clients.service";
 export type EntityType = "CLIENT" | "SUPPLIER" | "VEHICLE" | "DRIVER";
 
 export type CustomersViewTab = "list" | "analytics";
+
+/** Compact ₹ for secondary lines when space is tight (mobile list). */
+function formatCustomerAmountCompact(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 100000) return `${(value / 100000).toFixed(1)}L`;
+  if (abs >= 1000) return `${(value / 1000).toFixed(1)}k`;
+  return value.toLocaleString("en-IN");
+}
 
 /** Format date as "11 MAR" for receivables-by-trip row. */
 function formatTripDateShort(iso: string | null | undefined): string {
@@ -1665,6 +1674,9 @@ export function CustomersTab({
 }: CustomersTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+  /** Wide multi-column matrix is desktop-only; mobile keeps the compact outstanding list. */
+  const isWebDesktop = Platform.OS === "web" && screenWidth >= 1024;
   const [selectedCustomer, setSelectedCustomer] =
     useState<FinancialRowData | null>(null);
   const isControlled = clientsProp !== undefined && tripsProp !== undefined;
@@ -1869,48 +1881,77 @@ export function CustomersTab({
           />
         </View>
       )}
-      <View style={styles.customerTableHeader}>
-        <View style={styles.customerTableHeaderEntityCol}>
-          <Text
-            style={[styles.customerTableHeaderCell, styles.ctHeaderLeft]}
-            numberOfLines={1}
-          >
-            Customer Entity
-          </Text>
+      {isWebDesktop ? (
+        <View style={styles.customerTableHeader}>
+          <View style={styles.customerTableHeaderEntityCol}>
+            <Text
+              style={[styles.customerTableHeaderCell, styles.ctHeaderLeft]}
+              numberOfLines={1}
+            >
+              Customer Entity
+            </Text>
+          </View>
+          <View style={styles.customerTableHeaderTripsCol}>
+            <Text
+              style={[styles.customerTableHeaderCell, styles.ctHeaderCenter]}
+              numberOfLines={1}
+            >
+              Trips
+            </Text>
+          </View>
+          <View style={styles.customerTableHeaderAmtCol}>
+            <Text
+              style={[styles.customerTableHeaderCell, styles.ctHeaderRight]}
+              numberOfLines={1}
+            >
+              Sales
+            </Text>
+          </View>
+          <View style={styles.customerTableHeaderAmtCol}>
+            <Text
+              style={[styles.customerTableHeaderCell, styles.ctHeaderRight]}
+              numberOfLines={1}
+            >
+              Received
+            </Text>
+          </View>
+          <View style={styles.customerTableHeaderAmtCol}>
+            <Text
+              style={[styles.customerTableHeaderCell, styles.ctHeaderRight]}
+              numberOfLines={1}
+            >
+              Due
+            </Text>
+          </View>
         </View>
-        <View style={styles.customerTableHeaderTripsCol}>
-          <Text
-            style={[styles.customerTableHeaderCell, styles.ctHeaderCenter]}
-            numberOfLines={1}
-          >
-            Trips
-          </Text>
+      ) : (
+        <View style={styles.customerTableHeader}>
+          <View style={styles.customerTableHeaderEntityColMobile}>
+            <Text
+              style={[styles.customerTableHeaderCell, styles.ctHeaderLeft]}
+              numberOfLines={1}
+            >
+              Customer Entity
+            </Text>
+          </View>
+          <View style={styles.customerTableHeaderTripsCol}>
+            <Text
+              style={[styles.customerTableHeaderCell, styles.ctHeaderCenter]}
+              numberOfLines={1}
+            >
+              Trips
+            </Text>
+          </View>
+          <View style={styles.customerTableHeaderOutstandingCol}>
+            <Text
+              style={[styles.customerTableHeaderCell, styles.ctHeaderRight]}
+              numberOfLines={1}
+            >
+              Outstanding
+            </Text>
+          </View>
         </View>
-        <View style={styles.customerTableHeaderAmtCol}>
-          <Text
-            style={[styles.customerTableHeaderCell, styles.ctHeaderRight]}
-            numberOfLines={1}
-          >
-            Sales
-          </Text>
-        </View>
-        <View style={styles.customerTableHeaderAmtCol}>
-          <Text
-            style={[styles.customerTableHeaderCell, styles.ctHeaderRight]}
-            numberOfLines={1}
-          >
-            Received
-          </Text>
-        </View>
-        <View style={styles.customerTableHeaderAmtCol}>
-          <Text
-            style={[styles.customerTableHeaderCell, styles.ctHeaderRight]}
-            numberOfLines={1}
-          >
-            Due
-          </Text>
-        </View>
-      </View>
+      )}
       <View style={styles.customerTableCard}>
         {rowsToRender.map((data) => {
           const due = data.pending ?? 0;
@@ -1918,32 +1959,98 @@ export function CustomersTab({
           const received = data.received ?? Math.max(0, sales - due);
           const tripCount = data.trips ?? 0;
           const avatarData = clientAvatarById.get(data.id);
+          if (isWebDesktop) {
+            return (
+              <TouchableOpacity
+                key={data.id}
+                style={styles.customerTableRow}
+                onPress={() => handleRowSelect(data)}
+                activeOpacity={0.7}
+              >
+                <View style={[styles.customerTableCell, styles.ctEntity]}>
+                  <View style={styles.customerTableEntityMain}>
+                    <EntityAvatar
+                      name={data.name ?? ""}
+                      avatarUrl={avatarData?.avatar_url}
+                      avatarSeed={avatarData?.avatar_seed}
+                      initialsColorSeed={data.id}
+                      entityType="client"
+                      isIntegrated={!!data.is_integrated}
+                      badgeOverlay
+                    />
+                    <Text
+                      style={styles.customerTableEntityName}
+                      numberOfLines={1}
+                      ellipsizeMode="tail"
+                    >
+                      {data.name ?? "—"}
+                    </Text>
+                  </View>
+                </View>
+                <View style={[styles.customerTableCell, styles.ctTrips]}>
+                  <View style={styles.customerTableTripsPill}>
+                    <Text style={styles.customerTableTripsPillText}>
+                      {tripCount}
+                    </Text>
+                  </View>
+                </View>
+                <View style={[styles.customerTableCell, styles.ctAmt]}>
+                  <Text style={styles.customerTableAmtValue} numberOfLines={1}>
+                    ₹{sales.toLocaleString("en-IN")}
+                  </Text>
+                </View>
+                <View style={[styles.customerTableCell, styles.ctAmt]}>
+                  <Text style={styles.customerTableAmtReceived} numberOfLines={1}>
+                    ₹{received.toLocaleString("en-IN")}
+                  </Text>
+                </View>
+                <View style={[styles.customerTableCell, styles.ctAmt]}>
+                  <Text
+                    style={[
+                      styles.customerTableDueValue,
+                      due > 0
+                        ? styles.customerTableDueUnpaid
+                        : styles.customerTableDueSettled,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    ₹{due.toLocaleString("en-IN")}
+                  </Text>
+                </View>
+              </TouchableOpacity>
+            );
+          }
           return (
             <TouchableOpacity
               key={data.id}
-              style={styles.customerTableRow}
+              style={styles.customerTableRowMobile}
               onPress={() => handleRowSelect(data)}
               activeOpacity={0.7}
             >
-              <View style={[styles.customerTableCell, styles.ctEntity]}>
-                <View style={styles.customerTableEntityMain}>
-                  <EntityAvatar
-                    name={data.name ?? ""}
-                    avatarUrl={avatarData?.avatar_url}
-                    avatarSeed={avatarData?.avatar_seed}
-                    initialsColorSeed={data.id}
-                    entityType="client"
-                    isIntegrated={!!data.is_integrated}
-                    badgeOverlay
-                  />
-                  <Text
-                    style={styles.customerTableEntityName}
-                    numberOfLines={1}
-                    ellipsizeMode="tail"
-                  >
-                    {data.name ?? "—"}
-                  </Text>
-                </View>
+              <EntityAvatar
+                name={data.name ?? ""}
+                avatarUrl={avatarData?.avatar_url}
+                avatarSeed={avatarData?.avatar_seed}
+                initialsColorSeed={data.id}
+                entityType="client"
+                isIntegrated={!!data.is_integrated}
+                badgeOverlay
+              />
+              <View style={[styles.customerTableCell, styles.ctEntityMobile]}>
+                <Text
+                  style={styles.customerTableEntityName}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {data.name ?? "—"}
+                </Text>
+                <Text
+                  style={styles.customerTableEntitySub}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  Sales: ₹{formatCustomerAmountCompact(sales)}
+                </Text>
               </View>
               <View style={[styles.customerTableCell, styles.ctTrips]}>
                 <View style={styles.customerTableTripsPill}>
@@ -1952,20 +2059,10 @@ export function CustomersTab({
                   </Text>
                 </View>
               </View>
-              <View style={[styles.customerTableCell, styles.ctAmt]}>
-                <Text style={styles.customerTableAmtValue} numberOfLines={1}>
-                  ₹{sales.toLocaleString("en-IN")}
-                </Text>
-              </View>
-              <View style={[styles.customerTableCell, styles.ctAmt]}>
-                <Text style={styles.customerTableAmtReceived} numberOfLines={1}>
-                  ₹{received.toLocaleString("en-IN")}
-                </Text>
-              </View>
-              <View style={[styles.customerTableCell, styles.ctAmt]}>
+              <View style={[styles.customerTableCell, styles.ctOutstanding]}>
                 <Text
                   style={[
-                    styles.customerTableDueValue,
+                    styles.customerTableOutstandingValue,
                     due > 0
                       ? styles.customerTableDueUnpaid
                       : styles.customerTableDueSettled,
@@ -1973,6 +2070,12 @@ export function CustomersTab({
                   numberOfLines={1}
                 >
                   ₹{due.toLocaleString("en-IN")}
+                </Text>
+                <Text style={styles.customerTableReceivedLine} numberOfLines={1}>
+                  Received:{" "}
+                  <Text style={styles.customerTableDueSettled}>
+                    ₹{formatCustomerAmountCompact(received)}
+                  </Text>
                 </Text>
               </View>
             </TouchableOpacity>
@@ -2145,6 +2248,11 @@ const styles = StyleSheet.create({
     minWidth: 0,
     justifyContent: "center",
   },
+  customerTableHeaderEntityColMobile: {
+    flex: 2.2,
+    minWidth: 0,
+    justifyContent: "center",
+  },
   customerTableHeaderTripsCol: {
     flex: CUSTOMERS_SUPPLIERS.trips,
     minWidth: 44,
@@ -2155,7 +2263,13 @@ const styles = StyleSheet.create({
     minWidth: 0,
     justifyContent: "center",
   },
+  customerTableHeaderOutstandingCol: {
+    flex: 1.5,
+    minWidth: 0,
+    justifyContent: "center",
+  },
   ctEntity: { flex: CUSTOMERS_SUPPLIERS.node, minWidth: 0 },
+  ctEntityMobile: { flex: 2.2, minWidth: 0 },
   ctTrips: {
     flex: CUSTOMERS_SUPPLIERS.trips,
     minWidth: 44,
@@ -2167,10 +2281,26 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
     justifyContent: "center",
   },
+  ctOutstanding: {
+    flex: 1.5,
+    minWidth: 0,
+    alignItems: "flex-end",
+    justifyContent: "center",
+  },
   customerTableRow: {
     flexDirection: "row",
     alignItems: "center",
     minHeight: 52,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  customerTableRowMobile: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    minHeight: 62,
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderBottomWidth: 1,
@@ -2191,6 +2321,12 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     flex: 1,
     minWidth: 0,
+  },
+  customerTableEntitySub: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textMuted,
   },
   customerTableTripsPill: {
     alignSelf: "center",
@@ -2215,8 +2351,23 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     textAlign: "right",
   },
+  customerTableOutstandingValue: {
+    fontSize: 11,
+    fontWeight: "600",
+    fontStyle: "italic",
+    textAlign: "right",
+  },
   customerTableDueUnpaid: { color: Theme.teslaRed },
   customerTableDueSettled: { color: Theme.darkGreen },
+  customerTableReceivedLine: {
+    marginTop: 2,
+    fontSize: 8,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    letterSpacing: 0.6,
+    textTransform: "uppercase",
+    textAlign: "right",
+  },
   customerTableAmtValue: {
     fontSize: 10,
     fontWeight: "600",

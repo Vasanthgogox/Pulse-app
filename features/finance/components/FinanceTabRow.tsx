@@ -19,6 +19,10 @@ export interface FinanceTabRowProps {
    * apply horizontal inset so pills align with the summary card content.
    */
   treasuryInset?: boolean;
+  /**
+   * Mobile pinned tab bar: equal-width pills, left-aligned fill (not desktop right-dock).
+   */
+  mobileBar?: boolean;
   /** RBAC-filtered tabs; defaults to all fiscal tabs. */
   tabs?: readonly { id: FinanceSubTab; label: string }[];
 }
@@ -27,6 +31,7 @@ export function FinanceTabRow({
   activeTab,
   onTabPress,
   treasuryInset = false,
+  mobileBar = false,
   tabs = TABS,
 }: FinanceTabRowProps) {
   const { t } = useLanguage();
@@ -39,6 +44,7 @@ export function FinanceTabRow({
       contentContainerStyle={[
         styles.financeHeroPillsRow,
         treasuryInset && styles.financeHeroPillsRowTreasuryInset,
+        mobileBar && styles.financeHeroPillsRowMobile,
       ]}
     >
       {tabs.map((tab) => {
@@ -48,6 +54,7 @@ export function FinanceTabRow({
             key={tab.id}
             style={[
               styles.financeHeroPill,
+              mobileBar && styles.financeHeroPillMobile,
               !isActive && styles.financeHeroPillInactive,
               isActive && styles.financeHeroPillActive,
             ]}
