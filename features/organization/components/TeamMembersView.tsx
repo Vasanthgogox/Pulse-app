@@ -76,9 +76,12 @@ function formatRelative(iso: string): string {
   return `${Math.max(1, m)}m ago`;
 }
 
+const COVER_HEIGHT = 40;
 const AVATAR_SIZE = 52;
 const AVATAR_RING = 56;
-const AVATAR_OVERLAP = AVATAR_RING / 2;
+/** How far the avatar hangs below the cover into the body. */
+const AVATAR_HANG = 28;
+const FOOTER_HEIGHT = 40;
 
 function RolePill({
   label,
@@ -88,9 +91,52 @@ function RolePill({
   color: string;
 }) {
   return (
-    <View style={[cardStyles.pill, { borderColor: color }]}>
+    <View
+      style={[
+        cardStyles.pill,
+        cardStyles.rolePill,
+        { borderColor: color },
+      ]}
+      accessibilityLabel={`Role ${label}`}
+    >
       <Shield size={9} color={color} strokeWidth={2.4} />
       <Text style={[cardStyles.pillText, { color }]} numberOfLines={1}>
+        {label}
+      </Text>
+    </View>
+  );
+}
+
+function StatusPill({
+  tone,
+  label,
+  accessibilityLabel,
+}: {
+  tone: "active" | "pending" | "warning";
+  label: string;
+  accessibilityLabel?: string;
+}) {
+  const toneStyle =
+    tone === "active"
+      ? cardStyles.statusActive
+      : tone === "warning"
+        ? cardStyles.statusWarning
+        : cardStyles.statusPending;
+  const textStyle =
+    tone === "active"
+      ? cardStyles.statusActiveText
+      : tone === "warning"
+        ? cardStyles.statusWarningText
+        : cardStyles.statusPendingText;
+  return (
+    <View
+      style={[cardStyles.pill, cardStyles.statusPill, toneStyle]}
+      accessibilityLabel={accessibilityLabel ?? label}
+    >
+      {tone === "active" ? (
+        <Check size={9} color={Theme.darkGreen} strokeWidth={2.8} />
+      ) : null}
+      <Text style={[cardStyles.pillText, textStyle]} numberOfLines={1}>
         {label}
       </Text>
     </View>
@@ -116,7 +162,7 @@ function TeamRosterCardShell({
   avatarSeed: string;
   avatarUrl?: string | null;
   children: React.ReactNode;
-  footer: React.ReactNode;
+  footer?: React.ReactNode | null;
 }) {
   return (
     <View style={[cardStyles.card, selected && cardStyles.cardSelected]}>
@@ -124,23 +170,30 @@ function TeamRosterCardShell({
       <View style={cardStyles.cardCover}>
         <View style={cardStyles.badgeRow}>
           <View style={cardStyles.badgeCluster}>{leftBadges}</View>
-          {rightBadge}
-        </View>
-        <View style={cardStyles.avatarOverlap} pointerEvents="none">
-          <View style={cardStyles.avatarRing}>
-            <PartyAvatar
-              name={avatarName}
-              initialsColorSeed={avatarSeed}
-              avatarUrl={avatarUrl ?? null}
-              size={AVATAR_SIZE}
-              shape="circle"
-              style={cardStyles.avatarInner}
-            />
-          </View>
+          <View style={cardStyles.badgeClusterEnd}>{rightBadge}</View>
         </View>
       </View>
+
+      {/* Absolute, full-width centering — avoids flex/web off-center avatars. */}
+      <View style={cardStyles.avatarAnchor} pointerEvents="none">
+        <View style={cardStyles.avatarRing}>
+          <PartyAvatar
+            name={avatarName}
+            initialsColorSeed={avatarSeed}
+            avatarUrl={avatarUrl ?? null}
+            size={AVATAR_SIZE}
+            shape="circle"
+            style={cardStyles.avatarInner}
+          />
+        </View>
+      </View>
+
       <View style={cardStyles.cardBody}>{children}</View>
-      <View style={cardStyles.footerSlot}>{footer}</View>
+
+      {/* Always reserve footer height so paired cards match. */}
+      <View style={cardStyles.footerSlot}>
+        {footer ?? <View style={cardStyles.footerPlaceholder} />}
+      </View>
     </View>
   );
 }
@@ -189,7 +242,7 @@ function MemberCard({
             accessibilityLabel={`Select ${displayName}`}
           >
             {selected ? (
-              <CheckSquare size={18} color={Theme.primary} strokeWidth={2.4} />
+              <CheckSquare size={18} color={Theme.accentBrown} strokeWidth={2.4} />
             ) : (
               <Square size={18} color={Theme.textSecondary} strokeWidth={2.2} />
             )}
@@ -208,53 +261,45 @@ function MemberCard({
       }
       rightBadge={
         isPending ? (
-          <View style={[cardStyles.pill, cardStyles.pendingPill]}>
-            <Text style={[cardStyles.pillText, cardStyles.pendingPillText]}>PENDING</Text>
-          </View>
+          <StatusPill tone="pending" label="PENDING" />
         ) : (
-          <View style={[cardStyles.pill, cardStyles.activePill]}>
-            <Check size={9} color={Theme.darkGreen} strokeWidth={2.8} />
-            <Text style={[cardStyles.pillText, cardStyles.activePillText]}>ACTIVE</Text>
-          </View>
+          <StatusPill tone="active" label="ACTIVE" />
         )
       }
       footer={
         canSelect ? (
           <Pressable
             onPress={() => onToggleSelect?.(member)}
-            style={({ pressed }) => [cardStyles.editBtn, pressed && { opacity: 0.82 }]}
+            style={({ pressed }) => [cardStyles.footerBtn, pressed && { opacity: 0.82 }]}
           >
-            <Text style={cardStyles.editBtnText}>
+            <Text style={cardStyles.footerBtnText}>
               {selected ? "Selected" : "Select"}
             </Text>
           </Pressable>
         ) : canEdit ? (
           <Pressable
             onPress={() => onEdit(member)}
-            style={({ pressed }) => [cardStyles.editBtn, pressed && { opacity: 0.82 }]}
+            style={({ pressed }) => [cardStyles.footerBtn, pressed && { opacity: 0.82 }]}
           >
-            <Pencil size={12} color={Theme.primary} strokeWidth={2.2} />
-            <Text style={cardStyles.editBtnText}>Edit</Text>
+            <Pencil size={13} color={Theme.accentBrownDeep} strokeWidth={2.2} />
+            <Text style={cardStyles.footerBtnText}>Edit</Text>
           </Pressable>
-        ) : (
-          <View style={cardStyles.footerSpacer} />
-        )
+        ) : null
       }
     >
       <View style={cardStyles.identityBlock}>
         <Text style={cardStyles.name} numberOfLines={1}>
           {displayName}
         </Text>
-        {!!member.phone && (
-          <Text style={cardStyles.phone} numberOfLines={1}>
-            {member.phone}
-          </Text>
-        )}
-        {!!member.email && (
-          <Text style={cardStyles.email} numberOfLines={1}>
-            {member.email}
-          </Text>
-        )}
+        <Text style={cardStyles.phone} numberOfLines={1}>
+          {member.phone?.trim() || "—"}
+        </Text>
+        <Text
+          style={[cardStyles.email, !member.email?.trim() && cardStyles.emailMuted]}
+          numberOfLines={1}
+        >
+          {member.email?.trim() || "No email"}
+        </Text>
         <View style={cardStyles.metaPill}>
           <Text style={cardStyles.metaPillText}>{formatRelative(member.joined_at)}</Text>
         </View>
@@ -278,6 +323,10 @@ function PendingPhoneInviteCard({
     role: invite.role,
     permissions: invite.permissions,
   });
+  const statusLabel = invite.email_conflict ? "EXISTS" : "SIGNUP";
+  const statusA11y = invite.email_conflict
+    ? "Account already exists"
+    : "Awaiting signup";
 
   return (
     <TeamRosterCardShell
@@ -285,28 +334,30 @@ function PendingPhoneInviteCard({
       avatarSeed={invite.id}
       leftBadges={<RolePill label={roleText} color={Theme.accentBrown} />}
       rightBadge={
-        <View style={[cardStyles.pill, cardStyles.pendingPill]}>
-          <Text style={[cardStyles.pillText, cardStyles.pendingPillText]} numberOfLines={1}>
-            {invite.email_conflict ? "ACCOUNT EXISTS" : "AWAITING SIGNUP"}
-          </Text>
-        </View>
+        <StatusPill
+          tone={invite.email_conflict ? "warning" : "pending"}
+          label={statusLabel}
+          accessibilityLabel={statusA11y}
+        />
       }
       footer={
         canManage ? (
           <Pressable
             onPress={() => onCancel(invite)}
-            style={({ pressed }) => [cardStyles.editBtn, pressed && { opacity: 0.82 }]}
+            style={({ pressed }) => [
+              cardStyles.footerBtn,
+              cardStyles.footerBtnDanger,
+              pressed && { opacity: 0.82 },
+            ]}
             accessibilityRole="button"
             accessibilityLabel={`Cancel invite for ${invite.invitee_name}`}
           >
-            <Trash2 size={12} color={Theme.destructive} strokeWidth={2.2} />
-            <Text style={[cardStyles.editBtnText, { color: Theme.destructive }]}>
+            <Trash2 size={13} color={Theme.destructive} strokeWidth={2.2} />
+            <Text style={[cardStyles.footerBtnText, cardStyles.footerBtnTextDanger]}>
               Cancel invite
             </Text>
           </Pressable>
-        ) : (
-          <View style={cardStyles.footerSpacer} />
-        )
+        ) : null
       }
     >
       <View style={cardStyles.identityBlock}>
@@ -316,36 +367,35 @@ function PendingPhoneInviteCard({
         <Text style={cardStyles.phone} numberOfLines={1}>
           {invite.invitee_phone}
         </Text>
-        {invite.invitee_email?.trim() ? (
-          <Text style={cardStyles.email} numberOfLines={1}>
-            {invite.invitee_email.trim()}
-          </Text>
-        ) : (
-          <Text style={cardStyles.emailMuted} numberOfLines={1}>
-            No email on invite
-          </Text>
-        )}
+        <Text
+          style={[
+            cardStyles.email,
+            !invite.invitee_email?.trim() && cardStyles.emailMuted,
+          ]}
+          numberOfLines={1}
+        >
+          {invite.invitee_email?.trim() || "No email on invite"}
+        </Text>
         <View style={cardStyles.metaPill}>
           <Text style={cardStyles.metaPillText}>
             Invited {formatRelative(invite.created_at)}
           </Text>
         </View>
-        <Text style={cardStyles.phoneHint}>
-          {invite.email_conflict
-            ? "Cancel this invite and re-send as an existing-user invitation from Team."
-            : "Joins when they sign up with this phone number."}
-        </Text>
-      </View>
-      {invite.email_conflict ? (
-        <View style={cardStyles.conflictBox}>
-          <Text style={cardStyles.conflictTitle}>Pulse account found</Text>
-          <Text style={cardStyles.conflictText}>
-            {invite.conflict_org_names?.length
-              ? `Linked to ${invite.conflict_org_names.join(", ")}. They must sign in — not sign up again.`
-              : "This email is already registered. Ask them to sign in to accept."}
+        {invite.email_conflict ? (
+          <View style={cardStyles.conflictBox}>
+            <Text style={cardStyles.conflictTitle}>Pulse account found</Text>
+            <Text style={cardStyles.conflictText} numberOfLines={3}>
+              {invite.conflict_org_names?.length
+                ? `Linked to ${invite.conflict_org_names.join(", ")}. Sign in — don’t sign up again.`
+                : "Email already registered. Ask them to sign in to accept."}
+            </Text>
+          </View>
+        ) : (
+          <Text style={cardStyles.phoneHint} numberOfLines={2}>
+            Joins when they sign up with this phone number.
           </Text>
-        </View>
-      ) : null}
+        )}
+      </View>
     </TeamRosterCardShell>
   );
 }
@@ -355,39 +405,41 @@ const cardStyles = StyleSheet.create({
     flex: 1,
     alignSelf: "stretch",
     flexDirection: "column",
+    position: "relative",
     backgroundColor: Theme.cardWhite,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
-    borderRadius: 14,
+    borderRadius: 16,
     shadowColor: Theme.shadow,
-    shadowOpacity: 0.04,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 3 },
     elevation: 2,
     overflow: "hidden",
   },
   cardSelected: {
-    borderColor: Theme.primary,
+    borderColor: Theme.accentBrown,
     borderWidth: 1.5,
   },
   checkboxWrap: {
     position: "absolute",
     top: 8,
     right: 8,
-    zIndex: 3,
+    zIndex: 5,
     width: 28,
     height: 28,
     alignItems: "center",
     justifyContent: "center",
     borderRadius: 8,
     backgroundColor: Theme.cardWhite,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
   },
   cardCover: {
-    height: 48,
-    backgroundColor: Theme.surfaceGray,
+    height: COVER_HEIGHT,
+    backgroundColor: Theme.accentBrownWash,
     borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
-    overflow: "visible",
+    borderBottomColor: Theme.accentBrownBorder,
     zIndex: 1,
   },
   badgeRow: {
@@ -396,74 +448,94 @@ const cardStyles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 6,
-    paddingHorizontal: 10,
+    paddingHorizontal: 8,
   },
   badgeCluster: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    flexShrink: 1,
+    gap: 4,
+    flex: 1,
     minWidth: 0,
+    paddingRight: 4,
+  },
+  badgeClusterEnd: {
+    flexShrink: 0,
+    alignItems: "flex-end",
   },
   pill: {
     height: 22,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
-    paddingHorizontal: 8,
-    borderRadius: 11,
+    gap: 3,
+    paddingHorizontal: 7,
+    borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
+  },
+  rolePill: {
+    flexShrink: 1,
+    minWidth: 0,
+    maxWidth: "100%",
+  },
+  statusPill: {
     flexShrink: 0,
   },
   pillText: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "700",
     letterSpacing: 0.3,
     textTransform: "uppercase",
-    lineHeight: 10,
-  },
-  pendingPill: {
-    backgroundColor: Theme.warningMuted,
-    borderColor: Theme.warningMuted,
+    lineHeight: 11,
     flexShrink: 1,
-    maxWidth: "58%",
   },
-  pendingPillText: {
-    color: Theme.warning,
-  },
-  activePill: {
+  statusActive: {
     backgroundColor: Theme.positiveMuted,
-    borderColor: Theme.positiveMuted,
+    borderColor: "rgba(21, 128, 61, 0.28)",
   },
-  activePillText: {
+  statusActiveText: {
     color: Theme.darkGreen,
+  },
+  statusPending: {
+    backgroundColor: Theme.accentBrownMuted,
+    borderColor: Theme.accentBrownBorder,
+  },
+  statusPendingText: {
+    color: Theme.accentBrownDeep,
+  },
+  statusWarning: {
+    backgroundColor: Theme.warningMuted,
+    borderColor: "rgba(180, 83, 9, 0.28)",
+  },
+  statusWarningText: {
+    color: Theme.warning,
   },
   youPill: {
     backgroundColor: Theme.aggregatePillBg,
-    borderColor: Theme.aggregatePillBg,
+    borderColor: Theme.aggregatePillBorder,
+    flexShrink: 0,
   },
   youPillText: {
     color: Theme.aggregatePillText,
   },
-  avatarOverlap: {
+  avatarAnchor: {
     position: "absolute",
+    top: COVER_HEIGHT - AVATAR_HANG,
     left: 0,
     right: 0,
-    bottom: -AVATAR_OVERLAP,
+    height: AVATAR_RING,
     alignItems: "center",
     justifyContent: "center",
-    zIndex: 2,
+    zIndex: 3,
   },
   avatarRing: {
     width: AVATAR_RING,
     height: AVATAR_RING,
-    borderRadius: AVATAR_OVERLAP,
-    borderWidth: 2,
+    borderRadius: AVATAR_RING / 2,
+    borderWidth: 3,
     borderColor: Theme.cardWhite,
-    backgroundColor: Theme.cardWhite,
+    backgroundColor: Theme.surfaceGray,
     alignItems: "center",
     justifyContent: "center",
     overflow: "hidden",
@@ -473,10 +545,12 @@ const cardStyles = StyleSheet.create({
   },
   cardBody: {
     flexGrow: 1,
+    flexShrink: 1,
     paddingHorizontal: 12,
-    paddingTop: AVATAR_OVERLAP + 10,
+    paddingTop: AVATAR_HANG + 10,
     paddingBottom: 12,
     alignItems: "center",
+    justifyContent: "flex-start",
   },
   identityBlock: {
     width: "100%",
@@ -484,74 +558,77 @@ const cardStyles = StyleSheet.create({
     gap: 5,
   },
   name: {
-    fontSize: 13,
+    width: "100%",
+    fontSize: 14,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
     letterSpacing: -0.2,
     textAlign: "center",
     lineHeight: 18,
+    minHeight: 18,
   },
   phone: {
-    fontSize: 11,
-    fontWeight: "500",
+    width: "100%",
+    fontSize: 12,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
     textAlign: "center",
-    lineHeight: 15,
+    lineHeight: 16,
+    minHeight: 16,
   },
   email: {
+    width: "100%",
     fontSize: 11,
     fontWeight: "400",
     color: Theme.textSecondary,
     textAlign: "center",
     lineHeight: 15,
-    paddingHorizontal: 4,
+    minHeight: 15,
+    paddingHorizontal: 2,
   },
   emailMuted: {
-    fontSize: 11,
-    fontWeight: "400",
     fontStyle: "italic",
     color: Theme.textMuted,
-    textAlign: "center",
-    lineHeight: 15,
   },
   conflictBox: {
-    marginTop: 10,
+    marginTop: 6,
     paddingHorizontal: 8,
     paddingVertical: 8,
     borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.warningMuted,
-    backgroundColor: Theme.warningMuted,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.accentBrownBorder,
+    backgroundColor: Theme.accentBrownWash,
     width: "100%",
     gap: 2,
   },
   conflictTitle: {
-    fontSize: 8,
+    fontSize: 9,
     fontWeight: "800",
-    color: Theme.warning,
+    color: Theme.accentBrownDeep,
     textAlign: "center",
     textTransform: "uppercase",
-    letterSpacing: 0.2,
+    letterSpacing: 0.35,
   },
   conflictText: {
-    fontSize: 8,
+    fontSize: 10,
     color: Theme.textSecondary,
     textAlign: "center",
-    lineHeight: 11,
+    lineHeight: 13,
   },
   phoneHint: {
+    marginTop: 4,
     fontSize: 10,
     color: Theme.textMuted,
     textAlign: "center",
-    lineHeight: 14,
-    paddingHorizontal: 4,
-    marginTop: 2,
+    lineHeight: 13,
+    paddingHorizontal: 2,
+    minHeight: 26,
   },
   metaPill: {
-    height: 20,
-    marginTop: 2,
-    paddingHorizontal: 8,
-    borderRadius: 10,
+    marginTop: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.surfaceGray,
@@ -560,32 +637,41 @@ const cardStyles = StyleSheet.create({
   },
   metaPillText: {
     fontSize: 10,
-    fontWeight: "500",
+    fontWeight: "600",
     color: Theme.textMuted,
   },
   footerSlot: {
     flexShrink: 0,
-    minHeight: 36,
-    width: "100%",
-  },
-  footerSpacer: {
-    height: 36,
-  },
-  editBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 5,
-    height: 36,
+    height: FOOTER_HEIGHT,
     width: "100%",
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
     backgroundColor: Theme.surfaceGray,
   },
-  editBtnText: {
-    fontSize: 11,
-    fontWeight: "600",
-    color: Theme.primary,
+  footerPlaceholder: {
+    flex: 1,
+    height: FOOTER_HEIGHT,
+  },
+  footerBtn: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 6,
+    height: FOOTER_HEIGHT,
+    width: "100%",
+  },
+  footerBtnDanger: {
+    backgroundColor: "rgba(232, 33, 39, 0.04)",
+  },
+  footerBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.accentBrownDeep,
+    letterSpacing: -0.1,
+  },
+  footerBtnTextDanger: {
+    color: Theme.destructive,
   },
 });
 
@@ -1181,15 +1267,16 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "stretch",
     gap: 12,
-    ...Platform.select({
-      web: { alignItems: "stretch" as const },
-    }),
   },
   gridCell: {
     flex: 1,
     minWidth: 0,
     ...Platform.select({
-      web: { display: "flex" as const, alignSelf: "stretch" as const },
+      web: {
+        display: "flex" as const,
+        flexDirection: "column" as const,
+        alignSelf: "stretch" as const,
+      },
     }),
   },
   busyCard: {

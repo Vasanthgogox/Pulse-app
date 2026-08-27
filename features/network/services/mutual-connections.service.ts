@@ -4,7 +4,11 @@
  * Uses `get_mutual_connections` RPC (SECURITY DEFINER) so third-party
  * connection_requests for the target org are visible — direct table queries
  * are RLS-filtered to rows involving only the viewer org.
+ *
+ * Avatar enrichment matches Discover: merge `get_connection_partner_display_batch`
+ * so org `logo_url` / owner photo still show when the mutuals RPC omits them.
  */
+import { getLinkedOrgProfilesBatch } from "@/features/clients/services/clients.service";
 import { supabase } from "@/lib/supabase";
 
 export type MutualConnectionRow = {
@@ -67,6 +71,30 @@ function asMutualRows(data: unknown): MutualConnectionRpcRow[] {
   return [...byId.values()];
 }
 
+async function enrichMutualsWithPartnerDisplay(
+  rows: MutualConnectionRow[],
+): Promise<MutualConnectionRow[]> {
+  if (rows.length === 0) return rows;
+  const profiles = await getLinkedOrgProfilesBatch(rows.map((r) => r.id));
+  return rows.map((row) => {
+    const profile = profiles[row.id];
+    const batchUrl =
+      (profile?.avatarUrl ?? "").trim() ||
+      (profile?.logoUrl ?? "").trim() ||
+      (profile?.ownerAvatarUrl ?? "").trim() ||
+      "";
+    const batchSeed =
+      (profile?.avatarSeed ?? "").trim() ||
+      (profile?.orgAvatarSeed ?? "").trim() ||
+      "";
+    return {
+      ...row,
+      avatar_url: (row.avatar_url ?? "").trim() || batchUrl || null,
+      avatar_seed: (row.avatar_seed ?? "").trim() || batchSeed || null,
+    };
+  });
+}
+
 export async function getMutualConnections(
   viewerOrgId: string,
   targetOrgId: string,
@@ -84,13 +112,16 @@ export async function getMutualConnections(
     return { error: new Error(error.message), mutuals: [] };
   }
 
-  return {
-    error: null,
-    mutuals: asMutualRows(data).map((row) => ({
-      id: row.id,
-      name: row.name,
-      avatar_seed: row.avatar_seed ?? null,
-      avatar_url: (row.avatar_url ?? "").trim() || null,
-    })),
-  };
+  const base = asMutualRows(data).map((row) => ({
+    id: row.id,
+    name: row.name,
+    avatar_seed: row.avatar_seed ?? null,
+    avatar_url: (row.avatar_url ?? "").trim() || null,
+  }));
+
+  try {
+    return { error: null, mutuals: await enrichMutualsWithPartnerDisplay(base) };
+  } catch {
+    return { error: null, mutuals: base };
+  }
 }
