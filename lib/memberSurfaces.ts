@@ -693,7 +693,13 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Indent list & detail",
     domain: "sales",
     anyOfCaps: DISP,
-    requires: "sales.tab",
+    // tripops.tab, not sales.tab: /indent/:id is its own top-level route,
+    // independent of the Network tab. Requiring sales.tab here meant granting
+    // indent-view access also flipped MemberDomainGate's sales-domain check
+    // (domainsFromSurfaces reads surfaces["sales.tab"]) and silently unlocked
+    // the entire Network tab for a Trip Ops member who only needed to open
+    // one awarded indent.
+    requires: "tripops.tab",
   },
   {
     id: "tripops.indents.create",
@@ -1187,13 +1193,12 @@ export function defaultSurfacesForRole(
         "tripops.trips.verification",
         "fleet.drivers.view",
         "fleet.vehicles.view",
-        // sales.tab is the required parent of tripops.indents.view/allocate
-        // (memberHasSurface walks `requires` before granting a child surface).
-        // Without it, an operator assigned an awarded indent cannot open it —
-        // confirmed live: operator is organization_members.role for legacy
-        // members, and this allowlist predates the tripops.indents.* surfaces
-        // that indent detail/allocation screens gate on.
-        "sales.tab",
+        // tripops.indents.view/allocate now require tripops.tab (already
+        // granted above), not sales.tab — confirmed live: operator is
+        // organization_members.role for legacy members, and this allowlist
+        // predates the tripops.indents.* surfaces that indent detail/
+        // allocation screens gate on. Without these, an operator assigned an
+        // awarded indent cannot open it.
         "tripops.indents.view",
         "tripops.indents.allocate",
       ]);
