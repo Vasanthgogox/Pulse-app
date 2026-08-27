@@ -312,15 +312,26 @@ export function WorkspaceAccountPanel({
   const languageLabel =
     LOCALE_OPTIONS.find((o) => o.value === locale)?.label ?? "English";
   const roleLabel =
-    role === "owner" ? "Owner" : role === "admin" ? "Admin" : role === "member" ? "Member" : "Member";
+    role === "owner" ? "Owner" : role === "admin" ? "Admin" : "Member";
   // "Member" alone doesn't say what the member can actually do — surface the
   // assigned functional role (Finance / Sales / Trip Ops / Restricted) so
   // someone like a Trip-Ops-only member can see their own scope here instead
   // of having to ask an admin. Redundant for owner/admin (they already read
-  // "Owner"/"Admin" above) so only shown for plain members.
+  // "Owner"/"Admin" above) so only shown for non-owner/admin.
+  //
+  // organization_members.role is OrgMemberRole, which includes legacy values
+  // 'dispatcher' | 'finance' | 'driver' | 'member' — all four map to the
+  // generic "Member" roleLabel above (same as this file already treated
+  // them). A role === "member" check here only matched the literal string
+  // and silently never fired for the 'dispatcher' rows this org's actual
+  // Trip Ops members are stored as — confirmed live (Ayush is
+  // organization_members.role = 'dispatcher', permissions.platformRole =
+  // 'tripops'). Must check "not owner/admin", not "is exactly member".
   const { memberPlatformRole } = useOptionalActiveWorkspace() ?? {};
   const functionalRoleLabel =
-    role === "member" && memberPlatformRole ? platformRoleLabel(memberPlatformRole) : null;
+    role !== "owner" && role !== "admin" && memberPlatformRole
+      ? platformRoleLabel(memberPlatformRole)
+      : null;
   const hasOperationalAccess =
     capabilities.includes("finance_view") ||
     capabilities.includes("finance_manage") ||
