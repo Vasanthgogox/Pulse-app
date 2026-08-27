@@ -589,6 +589,15 @@ export function useBusinessSignUpFlow() {
       router.replace('/');
       return;
     }
+    // Invite track jumps straight from step 2 to step 7 (skips the org-creation
+    // steps 3-6 entirely, since they join an existing org rather than build one)
+    // — back from step 7 must not fall through to goToPage(6)/OrgLogoStep,
+    // a screen for a company they never created.
+    if (step === 7 && signupTrack === 'invite') {
+      clearBusinessSignupBranding();
+      router.replace('/');
+      return;
+    }
     // Step 6 is the first post-account-creation step. Pressing back here would
     // land on an already-submitted form, and further back presses would trigger
     // router.back() which exits the screen — then the branding flag redirects
@@ -937,7 +946,11 @@ export function useBusinessSignUpFlow() {
     }
 
     trackOnboardingEvent('invitation_accepted', { inviteId: selectedInvite.inviteId });
-    router.replace(ROUTES.TABS.TRIPS as Parameters<typeof router.replace>[0]);
+    // Let the invited member pick their own avatar before landing in the app,
+    // same step the "create new org" track already uses (case 7 in
+    // BusinessSignUpScreen renders it regardless of signupTrack). continueFromProfilePhoto
+    // / skipProfilePhoto route to Trips instead of SuccessStep for this track.
+    goToPage(7);
   };
 
   const signInToAcceptInvitation = async () => {
@@ -1503,14 +1516,28 @@ export function useBusinessSignUpFlow() {
     }
   };
 
+  const finishProfilePhotoStep = () => {
+    // Invite track: the org already exists (they joined it, not created it) —
+    // SuccessStep's "workspace created" messaging doesn't apply. Go straight in.
+    // Must clear the branding-active flag first: app/index.tsx's boot redirect
+    // holds off entirely while it's set (isBusinessSignupBrandingActiveSync),
+    // so leaving it on would strand this user on a reload right after landing.
+    if (signupTrack === 'invite') {
+      clearBusinessSignupBranding();
+      router.replace(ROUTES.TABS.TRIPS as Parameters<typeof router.replace>[0]);
+      return;
+    }
+    goToPage(8);
+  };
+
   const continueFromProfilePhoto = async () => {
     const ok = await persistProfilePhoto();
-    if (ok) goToPage(8);
+    if (ok) finishProfilePhotoStep();
   };
 
   const skipProfilePhoto = async () => {
     const ok = await persistProfilePhoto();
-    if (ok) goToPage(8);
+    if (ok) finishProfilePhotoStep();
   };
 
 
