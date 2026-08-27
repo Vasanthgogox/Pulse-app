@@ -678,15 +678,9 @@ export function IndentDetailScreen({
         queryClient.invalidateQueries({
           queryKey: ["indents", "quote-counts"],
         });
-        setQuoteModalVisible(false);
         setQuoteEntryError(undefined);
         await Promise.allSettled([refetchMyQuotes(), refetchQuotes(), load()]);
-        Alert.alert(
-          "Quote submitted",
-          myQuote
-            ? "Your bid was updated for this load."
-            : "Your quote was sent for this load.",
-        );
+        // Keep entry open — IndentBidAmountEntry shows BidConfirmModal success.
         return true;
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Unknown error.";
@@ -699,7 +693,6 @@ export function IndentDetailScreen({
     [
       indent,
       orgId,
-      myQuote,
       queryClient,
       refetchMyQuotes,
       refetchQuotes,
@@ -1668,6 +1661,16 @@ export function IndentDetailScreen({
         destination={destination}
         vehicleType={vehicleType !== "—" ? vehicleType : undefined}
         weightLabel={weightKg !== "—" ? weightKg : undefined}
+        material={
+          indent?.load_type && indent.load_type !== "—"
+            ? indent.load_type
+            : undefined
+        }
+        ownerName={
+          (indent?.client_name ?? "").trim() ||
+          (indent?.creator_organization_name ?? "").trim() ||
+          undefined
+        }
         targetRateInr={supplierNum > 0 ? supplierNum : undefined}
         initialAmount={
           isCounteredPending
@@ -1677,11 +1680,7 @@ export function IndentDetailScreen({
               : null
         }
         isUpdate={hasMyPendingQuote}
-        validationError={
-          submittingQuote
-            ? "Submitting…"
-            : quoteEntryError
-        }
+        validationError={quoteEntryError}
         onClearValidationError={() => setQuoteEntryError(undefined)}
         onInvalidAmount={() =>
           setQuoteEntryError("Enter an amount greater than 0.")
