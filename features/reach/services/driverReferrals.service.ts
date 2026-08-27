@@ -103,7 +103,11 @@ export interface DriverReachStoryRow {
   org_logo_url: string | null;
   campaign_status: string;
   published_at: string | null;
+  /** True original story post date (falls back to published_at). Use this for "Xd ago", not published_at. */
+  posted_at: string | null;
   expires_at: string | null;
+  /** Set if the org deleted the source story; the campaign snapshot keeps delivering, but the client should show this was removed. */
+  source_deleted_at: string | null;
   snapshot_post_type: 'UPDATE' | 'LOAD' | null;
   snapshot_title: string | null;
   snapshot_origin: string | null;

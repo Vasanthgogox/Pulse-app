@@ -111,7 +111,7 @@ function previewToPost(
     is_active: preview.is_active,
     view_count: 0,
     bid_count: 0,
-    created_at: story?.published_at ?? new Date().toISOString(),
+    created_at: story?.posted_at ?? story?.published_at ?? new Date().toISOString(),
     is_sponsored: true,
     reach_campaign_id: story?.campaign_id ?? null,
   };
@@ -265,7 +265,9 @@ function buildQueue(
         org_logo_url: null,
         campaign_status: "active",
         published_at: null,
+        posted_at: null,
         expires_at: null,
+        source_deleted_at: null,
         snapshot_post_type: "LOAD",
         snapshot_title: null,
         snapshot_origin: null,
@@ -496,6 +498,9 @@ export function DriverPulseStoryViewer({
               </View>
               <View style={styles.topBarSubRow}>
                 <Text style={styles.timeAgoLabel}>{timeAgo(post.created_at)}</Text>
+                {activeStory?.source_deleted_at ? (
+                  <Text style={styles.timeAgoLabel}> · Removed by org</Text>
+                ) : null}
                 <Pressable
                   style={styles.sponsoredTag}
                   onPress={() =>
