@@ -21,9 +21,11 @@ import {
   type WorkspacePanelId,
 } from "@/features/organization/components/workspace/workspacePanelTypes";
 import { ROUTES } from "@/lib/routes";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import { useLocalSearchParams, useRouter } from "expo-router";
-import { useCallback, useMemo, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { StyleSheet, View } from "react-native";
+import type { MemberSurfaceId } from "@/lib/memberSurfaces";
 
 export default function WorkspaceScreen() {
   const router = useRouter();
@@ -43,6 +45,32 @@ export default function WorkspaceScreen() {
 
   const previousPanelRef = useRef<WorkspacePanelId | null>(null);
 
+  /**
+   * WorkspaceHubMenu already gates each menu row on the matching surface
+   * (see its own comment: "this drawer renders above every MemberDomainGate,
+   * so each row needs its own surface check") — but that only stops a member
+   * from tapping into a panel via the menu. The panel components themselves
+   * (WorkspaceProfilePanel, WorkspaceOrgKycPanel, WorkspaceTeamPanel,
+   * WorkspaceProductsPanel) had no check of their own, so a direct URL
+   * (?panel=kyc, ?panel=team, ?panel=profile, ?panel=products) bypassed the
+   * menu-level gating entirely. Enforce the identical surface requirement
+   * here, at the one place every entry point (menu tap or direct URL) must
+   * pass through. "account"/"account-edit"/"language"/"region" stay open —
+   * personal identity and preferences, not org-business data.
+   */
+  const { can: canSurface, isLoading: memberAccessLoading } = useMemberAccess();
+  const panelRequiredSurface: Partial<Record<WorkspacePanelId, MemberSurfaceId>> = {
+    profile: "sales.tab",
+    kyc: "workspace.kyc",
+    team: "team.manage",
+    settings: "workspace.settings",
+    products: "workspace.products",
+    "ocr-usage": "workspace.products",
+  };
+  const requiredSurface = activePanel ? panelRequiredSurface[activePanel] : undefined;
+  const panelDenied =
+    !memberAccessLoading && !!requiredSurface && !canSurface(requiredSurface);
+
   const closeOverlay = useCallback(() => {
     if (router.canGoBack()) router.back();
     else router.replace(ROUTES.TABS.NETWORK as Parameters<typeof router.replace>[0]);
@@ -59,6 +87,12 @@ export default function WorkspaceScreen() {
   const closePanel = useCallback(() => {
     router.setParams({ panel: "", section: "" });
   }, [router]);
+
+  // Bounce a denied panel back to the hub menu — mirrors MemberDomainGate's
+  // redirect-on-deny pattern for full-screen routes, scoped to this overlay.
+  useEffect(() => {
+    if (panelDenied) closePanel();
+  }, [panelDenied, closePanel]);
 
   const closeTeamPanel = useCallback(() => {
     const previous = previousPanelRef.current;
@@ -97,6 +131,7 @@ export default function WorkspaceScreen() {
   );
 
   const panelContent = useMemo(() => {
+    if (panelDenied) return null;
     if (activePanel === "account") {
       return (
         <WorkspaceAccountPanel
@@ -149,7 +184,7 @@ export default function WorkspaceScreen() {
       return <WorkspaceOcrUsagePanel onBack={closeOcrUsagePanel} />;
     }
     return null;
-  }, [activePanel, closeOverlay, closePanel, closeOcrUsagePanel, closeTeamPanel, openOrgSection, openPanel, orgSection, router]);
+  }, [activePanel, closeOverlay, closePanel, closeOcrUsagePanel, closeTeamPanel, openOrgSection, openPanel, orgSection, panelDenied, router]);
 
   const shellPanelOpen = !!activePanel && !isWorkspaceHubInlinePanel(activePanel);
 
