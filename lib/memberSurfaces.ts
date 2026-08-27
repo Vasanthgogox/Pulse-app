@@ -1166,8 +1166,7 @@ export function defaultSurfacesForRole(
             s.domain === "tripops" ||
             s.domain === "fleet" ||
             s.id.startsWith("tripops.indents.") ||
-            s.id === "tripops.pulse_loads" ||
-            s.id === "sales.tab",
+            s.id === "tripops.pulse_loads",
         ).map((s) => s.id),
       );
     case "planner":

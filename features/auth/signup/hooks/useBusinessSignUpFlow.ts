@@ -73,7 +73,7 @@ import {
 import { supabase } from '@/lib/supabase';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, Platform, ScrollView, useWindowDimensions } from 'react-native';
+import { Alert, Platform, ScrollView } from 'react-native';
 
 import type { IndiaLocation } from '../components/CityPicker';
 import {
@@ -97,6 +97,7 @@ import { useCompleteInvitationJoin } from './useCompleteInvitationJoin';
 import type { InvitePhase, SignupTrack } from '../signupInviteTypes';
 import { usePendingOnboarding } from '@/contexts/PendingOnboardingContext';
 import { reverseGeocodePlaceInIndia, resolveIndiaPincode } from '@/lib/placesService';
+import { useViewportWidth } from '@/lib/hooks/useViewportWidth';
 import {
   matchIndiaLocation,
   parsePlaceDisplayName,
@@ -107,7 +108,9 @@ export { STEP_LABELS };
 export type { InvitePhase, SignupTrack } from '../signupInviteTypes';
 
 export function useBusinessSignUpFlow() {
-  const { width } = useWindowDimensions();
+  // Width only — height ticks from the Android Chrome keyboard would re-render
+  // every Join-your-team TextInput under the caret (see useViewportWidth).
+  const width = useViewportWidth();
   const router = useRouter();
   const searchParams = useLocalSearchParams<{ intent?: string; invite?: string; ref?: string }>();
   const entryIntent = parseSignupEntryIntent(searchParams);

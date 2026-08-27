@@ -1,10 +1,12 @@
-import { Platform, useWindowDimensions, type ViewStyle } from 'react-native';
+import { Platform, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import {
   effectiveKeyboardInset,
   useKeyboardVisible,
 } from '@/lib/hooks/useKeyboardVisible';
+import { useViewportWidth } from '@/lib/hooks/useViewportWidth';
+import { shouldAvoidWebKeyboardFormReflow } from '@/lib/webKeyboard';
 
 /** Signup wizard desktop breakpoint (matches signUpConstants). */
 export const MOBILE_WEB_FORM_DESKTOP_BREAKPOINT = 1024;
@@ -35,14 +37,19 @@ export function useMobileWebStepLayout(options: MobileWebStepLayoutOptions = {})
   } = options;
 
   const insets = useSafeAreaInsets();
-  const { width } = useWindowDimensions();
+  const width = useViewportWidth();
   const isDesktop = width >= MOBILE_WEB_FORM_DESKTOP_BREAKPOINT;
   const isMobileWeb = Platform.OS === 'web' && !isDesktop;
   const { keyboardVisible, keyboardHeight } = useKeyboardVisible();
 
-  const keyboardInset = isMobileWeb
-    ? effectiveKeyboardInset(keyboardVisible, keyboardHeight, 280)
-    : 0;
+  // Android Chrome overlays the keyboard (interactive-widget=overlays-content).
+  // Adding that height as ScrollView margin / footer padding reflows the form
+  // under the focused input, which Chromium treats as "page moved" and blurs.
+  // Same class of bug as shrinking `--app-vh` in htmlShell.ts.
+  const keyboardInset =
+    isMobileWeb && !shouldAvoidWebKeyboardFormReflow()
+      ? effectiveKeyboardInset(keyboardVisible, keyboardHeight, 280)
+      : 0;
 
   /** Mobile web always docks the CTA — inline scroll CTAs break with the iOS keyboard. */
   const useDockedFooter = isMobileWeb ? true : !inlinePrimary;

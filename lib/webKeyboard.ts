@@ -12,7 +12,12 @@
  *   iOS browsers get the fixed-position cage with no compensating offset sync,
  *   which is what allowed the page to still scroll on iOS Chrome.
  * - Android Chrome: `interactive-widget=overlays-content` keeps layout height;
- *   keyboard occludes from below — handled via `--keyboard-height` padding.
+ *   the keyboard overlays from below. Do NOT shrink a focused form (ScrollView
+ *   margin / footer padding) or programmatically scrollIntoView — Chromium
+ *   blurs the active input when its overflow ancestor moves, which reads as
+ *   the keyboard "unfocusing" on Join your team / Account. Chrome already
+ *   keeps the focused field in the visual viewport. `--keyboard-height` stays
+ *   a CSS var only (no React reflow).
  */
 
 export const WEB_KEYBOARD_INSET_THRESHOLD_PX = 48;
@@ -33,16 +38,45 @@ export function isIOSWebSafari(): boolean {
   return /Safari/i.test(ua) && !/CriOS|FxiOS|EdgiOS|Chrome/i.test(ua);
 }
 
+/** Android Chrome / Chromium (not iOS CriOS, not desktop Chrome). */
+export function isAndroidChromeWeb(): boolean {
+  if (typeof navigator === 'undefined') return false;
+  const ua = navigator.userAgent || '';
+  return /Android/i.test(ua) && /Chrome/i.test(ua);
+}
+
 export function isAndroidChromeOverlayKeyboard(): boolean {
-  if (typeof navigator === 'undefined' || typeof document === 'undefined') {
+  if (!isAndroidChromeWeb() || typeof document === 'undefined') {
     return false;
   }
-  const ua = navigator.userAgent || '';
-  if (!/Android/i.test(ua) || !/Chrome/i.test(ua)) return false;
   const meta = document.querySelector('meta[name="viewport"]');
   const content = meta?.getAttribute('content') || '';
   return content.includes('interactive-widget=overlays-content');
 }
+
+/**
+ * Signup / onboarding form steps must not reflow or programmatically scroll
+ * while an input is focused. Android Chrome dismisses the IME when the
+ * focused field's overflow parent is resized or scrollTo'd.
+ */
+export function shouldAvoidWebKeyboardFormReflow(): boolean {
+  return isAndroidChromeWeb();
+}
+
+/**
+ * Keep the focused input alive when tapping a trailing control (password eye).
+ * `mousedown`/`pointerdown` on the icon would otherwise steal focus and close
+ * the keyboard. Pointer covers mouse, touch, and pen on mobile Chrome.
+ */
+export function preventWebFocusSteal(event: { preventDefault?: () => void }): void {
+  event.preventDefault?.();
+}
+
+/** RN Web View props — attach to any control that must not steal input focus. */
+export const WEB_TRAILING_FOCUS_GUARD = {
+  onMouseDown: preventWebFocusSteal,
+  onPointerDown: preventWebFocusSteal,
+} as const;
 
 export interface WebVisualViewportMetrics {
   height: number;
@@ -212,6 +246,10 @@ export function cancelPendingWebInputScroll(): void {
  */
 export function scrollFocusedWebInputIntoView(): void {
   if (typeof document === 'undefined') return;
+  if (shouldAvoidWebKeyboardFormReflow()) {
+    cancelPendingWebInputScroll();
+    return;
+  }
 
   const el = document.activeElement;
   if (!(el instanceof HTMLElement)) return;

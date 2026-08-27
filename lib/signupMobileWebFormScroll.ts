@@ -81,6 +81,11 @@ export function signupMobileWebScrollGestureProps(options: {
     // field. The keyboard closes and then reopens a frame later when focus
     // lands, which is the open/close flicker on Android Chrome. Dragging
     // (onScrollBeginDrag + keyboardDismissMode) still dismisses.
+    //
+    // Also: do not pair this with a React keyboard-inset reflow on Android
+    // Chrome (see shouldAvoidWebKeyboardFormReflow). Shrinking the ScrollView
+    // and then scrollTo'ing the focused field is what unfocuses the IME on
+    // Join your team (name / email / password).
     bounces: !(Platform.OS === 'web' && isIOSWeb() && options.keyboardVisible),
   };
 }

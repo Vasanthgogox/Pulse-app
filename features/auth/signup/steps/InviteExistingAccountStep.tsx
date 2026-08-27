@@ -73,20 +73,36 @@ export function InviteExistingAccountStep({ flow }: { flow: SignUpFlow }) {
         placeholder={flow.onboardingContext?.existingAccountEmail ?? 'you@example.com'}
         keyboardType="email-address"
         autoCapitalize="none"
+        autoComplete="email"
+        textContentType="emailAddress"
+        autoCorrect={false}
         editable={!flow.loading}
         errorMessage={flow.inviteAccountAttempted ? flow.step5Errors.email : null}
       />
       <SignUpPulseField
         label="Password"
         required
+        dense
         value={flow.password}
         onChangeText={flow.setPassword}
         placeholder="Your existing password"
         secureTextEntry={!flow.showPassword}
+        autoCapitalize="none"
+        autoCorrect={false}
+        spellCheck={false}
+        autoComplete="password"
+        textContentType="password"
+        maxLength={128}
         editable={!flow.loading}
         errorMessage={flow.inviteAccountAttempted ? flow.step5Errors.password : null}
         trailing={
-          <Pressable onPress={flow.toggleShowPassword} hitSlop={8}>
+          <Pressable
+            onPress={flow.toggleShowPassword}
+            hitSlop={8}
+            focusable={false}
+            accessibilityRole="button"
+            accessibilityLabel={flow.showPassword ? 'Hide password' : 'Show password'}
+          >
             {flow.showPassword ? (
               <EyeOff size={18} color={Theme.textMuted} />
             ) : (

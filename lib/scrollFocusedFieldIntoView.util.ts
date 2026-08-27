@@ -1,7 +1,11 @@
 import { Dimensions, Platform, ScrollView, View } from 'react-native';
 import type { RefObject } from 'react';
 
-import { isIOSWeb, shouldApplyWebKeyboardScrollInset } from '@/lib/webKeyboard';
+import {
+  isIOSWeb,
+  shouldApplyWebKeyboardScrollInset,
+  shouldAvoidWebKeyboardFormReflow,
+} from '@/lib/webKeyboard';
 
 const DEFAULT_HEADER_OFFSET = 76;
 const DEFAULT_BOTTOM_PAD = 20;
@@ -115,7 +119,9 @@ function scrollWebFieldIntoView(
 
   if (!scrollParent) {
     el.scrollIntoView?.({
-      block: isIOSWeb() ? 'nearest' : 'center',
+      // `center` forces a document scroll even when the field is already
+      // visible. On Android Chrome that scroll blurs the focused input.
+      block: 'nearest',
       behavior: animated ? 'smooth' : 'auto',
     });
     return true;
@@ -175,6 +181,14 @@ export function scrollFocusedFieldIntoView(
   const scroll = scrollRef.current;
   const field = fieldRef.current;
   if (!scroll || !field) return;
+
+  // Android Chrome: programmatic scroll of a focused input's overflow parent
+  // blurs the input and closes the keyboard. Chrome already pans the visual
+  // viewport to keep the caret on screen (overlays-content).
+  if (Platform.OS === 'web' && shouldAvoidWebKeyboardFormReflow()) {
+    cancelPendingFocusedFieldScroll();
+    return;
+  }
 
   const animated = options.animated ?? true;
   const headerOffset = options.headerOffset ?? DEFAULT_HEADER_OFFSET;

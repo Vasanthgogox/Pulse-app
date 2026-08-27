@@ -54,6 +54,8 @@ export function InviteAcceptanceStep({ flow }: { flow: SignUpFlow }) {
         onChangeText={flow.setFullName}
         placeholder="Your name"
         autoCapitalize="words"
+        autoComplete="name"
+        textContentType="name"
         editable={!flow.loading}
         errorMessage={flow.inviteAccountAttempted ? flow.step5Errors.fullName : null}
       />
@@ -65,20 +67,34 @@ export function InviteAcceptanceStep({ flow }: { flow: SignUpFlow }) {
         placeholder="you@example.com"
         keyboardType="email-address"
         autoCapitalize="none"
+        autoComplete="email"
+        textContentType="emailAddress"
+        autoCorrect={false}
         editable={!flow.loading}
         errorMessage={flow.inviteAccountAttempted ? flow.step5Errors.email : null}
       />
       <SignUpPulseField
         label="Password"
         required
+        dense
+        passwordField="new"
         value={flow.password}
         onChangeText={flow.setPassword}
         placeholder="At least 6 characters"
         secureTextEntry={!flow.showPassword}
+        autoCorrect={false}
+        spellCheck={false}
+        maxLength={128}
         editable={!flow.loading}
         errorMessage={flow.inviteAccountAttempted ? flow.step5Errors.password : null}
         trailing={
-          <Pressable onPress={flow.toggleShowPassword} hitSlop={8}>
+          <Pressable
+            onPress={flow.toggleShowPassword}
+            hitSlop={8}
+            focusable={false}
+            accessibilityRole="button"
+            accessibilityLabel={flow.showPassword ? 'Hide password' : 'Show password'}
+          >
             {flow.showPassword ? (
               <EyeOff size={18} color={Theme.textMuted} />
             ) : (
@@ -90,14 +106,27 @@ export function InviteAcceptanceStep({ flow }: { flow: SignUpFlow }) {
       <SignUpPulseField
         label="Confirm Password"
         required
+        dense
+        passwordField="confirm"
         value={flow.confirmPassword}
         onChangeText={flow.setConfirmPassword}
         placeholder="Repeat password"
         secureTextEntry={!flow.showConfirmPassword}
+        autoCorrect={false}
+        spellCheck={false}
+        maxLength={128}
         editable={!flow.loading}
         errorMessage={flow.inviteAccountAttempted ? flow.step5Errors.confirmPassword : null}
         trailing={
-          <Pressable onPress={flow.toggleShowConfirmPassword} hitSlop={8}>
+          <Pressable
+            onPress={flow.toggleShowConfirmPassword}
+            hitSlop={8}
+            focusable={false}
+            accessibilityRole="button"
+            accessibilityLabel={
+              flow.showConfirmPassword ? 'Hide confirm password' : 'Show confirm password'
+            }
+          >
             {flow.showConfirmPassword ? (
               <EyeOff size={18} color={Theme.textMuted} />
             ) : (

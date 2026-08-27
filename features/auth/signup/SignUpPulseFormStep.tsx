@@ -6,16 +6,17 @@ import {
   ScrollView,
   StyleSheet,
   Text,
-  useWindowDimensions,
   View,
   type View as RNView,
 } from 'react-native';
 
 import { useMobileWebStepLayout } from '@/lib/hooks/useMobileWebStepLayout';
+import { useViewportWidth } from '@/lib/hooks/useViewportWidth';
 import {
   scrollSignupFormFieldIntoView,
   signupMobileWebScrollGestureProps,
 } from '@/lib/signupMobileWebFormScroll';
+import { shouldAvoidWebKeyboardFormReflow } from '@/lib/webKeyboard';
 
 import { SignUpPulseFormStepProvider, type ScrollFieldIntoViewOptions } from './SignUpPulseFormStepContext';
 import { SignUpPulsePrimaryButton } from './SignUpPulsePrimaryButton';
@@ -71,7 +72,7 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
   secondaryAction,
   customFooter,
 }: SignUpPulseFormStepProps) {
-  const { width } = useWindowDimensions();
+  const width = useViewportWidth();
   const isDesktop = width >= DESKTOP_BREAKPOINT;
   const textStyles = useMemo(() => createPulseSignUpTextStyles(theme), [theme]);
 
@@ -103,7 +104,13 @@ export const SignUpPulseFormStep = memo(function SignUpPulseFormStep({
 
   useEffect(() => {
     // Only re-scroll when the keyboard *opens* — not on every keyboardInset tick.
-    if (!layout.keyboardVisible || !lastFocusedFieldRef.current) {
+    // Android Chrome: this second scroll (after onFocus already scrolled, or
+    // after Chrome's own caret pan) blurs the field and closes the keyboard.
+    if (
+      !layout.keyboardVisible ||
+      !lastFocusedFieldRef.current ||
+      shouldAvoidWebKeyboardFormReflow()
+    ) {
       return;
     }
     scrollSignupFormFieldIntoView(scrollRef, lastFocusedFieldRef.current, {

@@ -5,12 +5,12 @@ import {
   Text,
   TextInput,
   View,
-  useWindowDimensions,
   type TextInputProps,
 } from 'react-native';
 
 import { signUpPasswordInputProps, type SignUpPasswordFieldRole } from '@/lib/signupPasswordInput.util';
-import { scrollFocusedWebInputIntoView } from '@/lib/webKeyboard';
+import { WEB_TRAILING_FOCUS_GUARD, scrollFocusedWebInputIntoView } from '@/lib/webKeyboard';
+import { useViewportWidth } from '@/lib/hooks/useViewportWidth';
 import {
   pulseInputShellErrorStyle,
   pulseInputShellStyle,
@@ -60,7 +60,7 @@ export const SignUpPulseField = memo(function SignUpPulseField({
   onFocus,
   ...inputProps
 }: SignUpPulseFieldProps) {
-  const { width } = useWindowDimensions();
+  const width = useViewportWidth();
   const isMobile = width < DESKTOP_BREAKPOINT;
   const hasError = !!errorMessage;
   const fieldStyles = useMemo(
@@ -175,7 +175,12 @@ export const SignUpPulseField = memo(function SignUpPulseField({
           placeholderTextColor={theme.placeholder}
         />
         {trailing ? (
-          <View style={fieldStyles.trailingWrap}>{trailing}</View>
+          <View
+            style={fieldStyles.trailingWrap}
+            {...(Platform.OS === 'web' ? (WEB_TRAILING_FOCUS_GUARD as object) : null)}
+          >
+            {trailing}
+          </View>
         ) : null}
       </View>
       {errorMessage ? (
