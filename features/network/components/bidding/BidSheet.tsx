@@ -389,61 +389,23 @@ export function BidSheet({
       ? 'Update bid'
       : 'Submit bid';
 
-  const fieldSwitch = (
+  const notePreview = note.trim();
+  const noteActive = activeField === 'note';
+
+  const valueStage = (
     <View
       style={[
-        styles.fieldSwitch,
-        isDesktop && styles.fieldSwitchDesktop,
-        isTablet && styles.fieldSwitchTablet,
+        styles.valueStage,
+        !isMobile && styles.valueStageElevated,
       ]}
     >
       <Pressable
-        style={[
-          styles.fieldChip,
-          isDesktop && styles.fieldChipWide,
-          activeField === 'amount' && styles.fieldChipActive,
-        ]}
         onPress={() => setActiveField('amount')}
         accessibilityRole="button"
-        accessibilityState={{ selected: activeField === 'amount' }}
-      >
-        <Text
-          style={[
-            styles.fieldChipText,
-            activeField === 'amount' && styles.fieldChipTextActive,
-          ]}
-        >
-          Amount
-        </Text>
-      </Pressable>
-      <Pressable
-        style={[
-          styles.fieldChip,
-          isDesktop && styles.fieldChipWide,
-          activeField === 'note' && styles.fieldChipActive,
-        ]}
-        onPress={() => setActiveField('note')}
-        accessibilityRole="button"
-        accessibilityState={{ selected: activeField === 'note' }}
-      >
-        <Text
-          style={[
-            styles.fieldChipText,
-            activeField === 'note' && styles.fieldChipTextActive,
-          ]}
-        >
-          Note{note.trim() ? '' : ' · opt'}
-        </Text>
-      </Pressable>
-    </View>
-  );
-
-  const amountOrNoteStage =
-    activeField === 'amount' ? (
-      <View
-        style={[
-          styles.amountStage,
-          !isMobile && styles.amountStageElevated,
+        accessibilityLabel="Edit bid amount"
+        style={({ pressed }) => [
+          styles.amountPress,
+          pressed && activeField !== 'amount' && styles.amountPressDim,
         ]}
       >
         <NumericDisplay
@@ -453,35 +415,38 @@ export function BidSheet({
           placeholder="0"
           variant={isMobile ? 'hero' : 'default'}
         />
-        {validationError ? (
-          <Text style={styles.error} accessibilityRole="alert">
-            {validationError}
-          </Text>
-        ) : targetRate != null ? (
-          <Text style={styles.hint}>Target {formatINR(targetRate)}</Text>
-        ) : (
-          <View style={styles.hintSpacer} />
-        )}
-      </View>
-    ) : (
-      <View
+      </Pressable>
+
+      {validationError ? (
+        <Text style={styles.error} accessibilityRole="alert">
+          {validationError}
+        </Text>
+      ) : targetRate != null ? (
+        <Text style={styles.hint}>Target {formatINR(targetRate)}</Text>
+      ) : (
+        <View style={styles.hintSpacer} />
+      )}
+
+      <Pressable
         style={[
-          styles.noteStage,
-          !isMobile && styles.noteStageElevated,
+          styles.noteRow,
+          noteActive && styles.noteRowActive,
+          !isMobile && styles.noteRowElevated,
         ]}
+        onPress={() => setActiveField('note')}
+        accessibilityRole="button"
+        accessibilityLabel={
+          notePreview ? `Edit note: ${notePreview}` : 'Add optional note'
+        }
+        accessibilityState={{ selected: noteActive }}
       >
-        <View
-          style={[
-            styles.noteDisplayRow,
-            !isMobile && styles.noteDisplayRowElevated,
-          ]}
-        >
-          <MessageSquare
-            size={isMobile ? 16 : 18}
-            color={Theme.iconMuted}
-            strokeWidth={2.2}
-            style={styles.noteIcon}
-          />
+        <MessageSquare
+          size={isMobile ? 15 : 16}
+          color={noteActive ? Theme.buttonPrimaryText : Theme.iconMuted}
+          strokeWidth={2.2}
+          style={styles.noteIcon}
+        />
+        {noteActive ? (
           <KeypadDisplayValueWithCaret
             value={note}
             placeholder="Add a message with your bid"
@@ -489,13 +454,27 @@ export function BidSheet({
             valueStyle={[styles.noteValue, !isMobile && styles.noteValueElevated]}
             placeholderStyle={styles.notePlaceholder}
             caretStyle={styles.noteCaret}
+            fillRow
           />
-        </View>
+        ) : (
+          <Text
+            style={[
+              styles.noteIdleText,
+              notePreview ? styles.noteIdleFilled : null,
+            ]}
+            numberOfLines={1}
+          >
+            {notePreview || 'Add note (optional)'}
+          </Text>
+        )}
+      </Pressable>
+      {noteActive ? (
         <Text style={styles.noteCounter}>
           {note.trim().length}/{NOTE_MAX_LENGTH}
         </Text>
-      </View>
-    );
+      ) : null}
+    </View>
+  );
 
   const keypadBlock =
     activeField === 'amount' ? (
@@ -512,7 +491,7 @@ export function BidSheet({
         onKey={handleNoteKey}
         length={note.length}
         maxLength={NOTE_MAX_LENGTH}
-        compact={isMobile || isTablet}
+        compact={isDesktop}
       />
     );
 
@@ -563,8 +542,7 @@ export function BidSheet({
 
       <View style={styles.bodyPay}>
         {partyBlock}
-        {fieldSwitch}
-        {amountOrNoteStage}
+        {valueStage}
       </View>
 
       <View style={styles.bottom}>
@@ -653,8 +631,7 @@ export function BidSheet({
             compact
           />
         ) : null}
-        {fieldSwitch}
-        {amountOrNoteStage}
+        {valueStage}
       </View>
 
       <View style={styles.bottomElevated}>
@@ -809,60 +786,24 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
     marginTop: 4,
   },
-  fieldSwitch: {
-    flexDirection: 'row',
-    alignSelf: 'center',
+  valueStage: {
+    alignItems: 'center',
     width: '100%',
-    maxWidth: 320,
-    gap: 8,
-  },
-  fieldSwitchTablet: {
-    maxWidth: 340,
-  },
-  fieldSwitchDesktop: {
     maxWidth: 360,
-    marginTop: 4,
-  },
-  fieldChip: {
-    flex: 1,
-    minHeight: 36,
-    borderRadius: Theme.buttonPrimaryRadius,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.borderMedium,
-    backgroundColor: Theme.cardWhite,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  fieldChipWide: {
-    minHeight: 40,
-    paddingVertical: 10,
-  },
-  fieldChipActive: {
-    backgroundColor: Theme.buttonPrimary,
-    borderColor: Theme.buttonPrimaryBorder,
-  },
-  fieldChipText: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: Theme.textMuted,
-    letterSpacing: 0.15,
-  },
-  fieldChipTextActive: {
-    color: Theme.buttonPrimaryText,
-    fontWeight: '700',
-  },
-  amountStage: {
-    alignItems: 'center',
-    width: '100%',
-    gap: 6,
+    alignSelf: 'center',
+    gap: 8,
     paddingBottom: 4,
   },
-  amountStageElevated: {
-    paddingVertical: 8,
+  valueStageElevated: {
     maxWidth: 400,
-    alignSelf: 'center',
+    paddingVertical: 8,
+  },
+  amountPress: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  amountPressDim: {
+    opacity: 0.72,
   },
   hint: {
     fontSize: 12,
@@ -879,51 +820,58 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     paddingHorizontal: 16,
   },
-  noteStage: {
-    width: '100%',
-    maxWidth: 360,
-    alignSelf: 'center',
-    gap: 8,
-    paddingBottom: 4,
-  },
-  noteStageElevated: {
-    maxWidth: 400,
-    paddingVertical: 8,
-  },
-  noteDisplayRow: {
+  noteRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    minHeight: 48,
+    alignSelf: 'stretch',
+    minHeight: 44,
+    marginTop: 4,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
     backgroundColor: Theme.cardWhite,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  noteDisplayRowElevated: {
-    minHeight: 52,
+  noteRowElevated: {
+    minHeight: 48,
     borderRadius: 14,
+  },
+  noteRowActive: {
+    borderColor: Theme.buttonPrimaryBorder,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
   },
   noteIcon: {
     marginRight: 10,
   },
+  noteIdleText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    fontWeight: '500',
+    color: Theme.textMuted,
+  },
+  noteIdleFilled: {
+    color: Theme.textPrimaryDark,
+    fontWeight: '600',
+  },
   noteValue: {
-    fontSize: 15,
+    fontSize: 14,
     fontWeight: '600',
     color: Theme.textPrimaryDark,
     letterSpacing: -0.2,
   },
   noteValueElevated: {
-    fontSize: 16,
+    fontSize: 15,
   },
   notePlaceholder: {
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: '400',
     color: Theme.textMuted,
   },
   noteCaret: {
-    height: 18,
+    height: 16,
     backgroundColor: Theme.buttonPrimaryBorder,
   },
   noteCounter: {

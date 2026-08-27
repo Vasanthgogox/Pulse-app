@@ -1,6 +1,7 @@
 /**
  * QWERTY letter keypad for person names (space + delete enabled).
  * Chrome matches IndianVehicleRegistrationKeypad / DecimalKeypad apple pad.
+ * Sized for reliable thumb typing (default ≥48pt keys); `compact` for dense desktop docks.
  */
 import { memo, useCallback } from "react";
 import {
@@ -34,6 +35,7 @@ export interface PersonNameKeypadProps {
   disabled?: boolean;
   length?: number;
   maxLength?: number;
+  /** Dense dock (desktop popup only). Prefer default on phone / tablet. */
   compact?: boolean;
 }
 
@@ -68,6 +70,7 @@ function KeyCell({
     <Pressable
       onPress={disabled ? undefined : onPress}
       disabled={disabled}
+      hitSlop={compact ? 2 : 4}
       style={({ pressed }) => [
         styles.key,
         compact && styles.keyCompact,
@@ -83,9 +86,9 @@ function KeyCell({
     >
       {icon === "delete" ? (
         <Delete
-          size={compact ? 18 : 22}
+          size={compact ? 20 : 24}
           color={disabled ? APPLE_DISABLED_TEXT : Theme.textPrimaryDark}
-          strokeWidth={2}
+          strokeWidth={2.2}
         />
       ) : label ? (
         <Text
@@ -93,9 +96,11 @@ function KeyCell({
             styles.keyText,
             compact && styles.keyTextCompact,
             textStyle === "utility" && styles.keyTextUtility,
+            textStyle === "utility" && compact && styles.keyTextUtilityCompact,
             isSpecial && styles.keyTextSpecial,
             disabled && styles.keyTextInactive,
           ]}
+          numberOfLines={1}
         >
           {label}
         </Text>
@@ -147,7 +152,7 @@ export const PersonNameKeypad = memo(function PersonNameKeypad({
         </View>
 
         <View style={[styles.row, styles.rowInset, compact && styles.rowCompact]}>
-          <RowSpacer flex={0.45} />
+          <RowSpacer flex={0.5} />
           {LETTER_ROW_2.map((letter) => (
             <KeyCell
               key={letter}
@@ -158,11 +163,11 @@ export const PersonNameKeypad = memo(function PersonNameKeypad({
               accessibilityLabel={`Letter ${letter}`}
             />
           ))}
-          <RowSpacer flex={0.45} />
+          <RowSpacer flex={0.5} />
         </View>
 
         <View style={[styles.row, compact && styles.rowCompact]}>
-          <View style={{ flex: 1.35 }} pointerEvents="none" accessibilityElementsHidden />
+          <View style={{ flex: 1.4 }} pointerEvents="none" accessibilityElementsHidden />
           {LETTER_ROW_3.map((letter) => (
             <KeyCell
               key={letter}
@@ -178,7 +183,7 @@ export const PersonNameKeypad = memo(function PersonNameKeypad({
             onPress={() => handlePress("⌫")}
             disabled={!canDelete}
             variant="special"
-            flex={1.35}
+            flex={1.4}
             compact={compact}
             accessibilityLabel="Delete"
           />
@@ -194,7 +199,7 @@ export const PersonNameKeypad = memo(function PersonNameKeypad({
             onPress={() => handlePress(" ")}
             disabled={inputLocked || length === 0}
             accessibilityLabel="Space"
-            style={styles.spaceKey}
+            style={[styles.spaceKey, compact && styles.spaceKeyCompact]}
           />
         </View>
       </View>
@@ -206,44 +211,44 @@ const styles = StyleSheet.create({
   wrap: {
     width: "100%",
     backgroundColor: APPLE_KEYPAD_BG,
-    borderRadius: 12,
-    paddingHorizontal: 6,
-    paddingTop: 8,
-    paddingBottom: 8,
+    borderRadius: 14,
+    paddingHorizontal: 8,
+    paddingTop: 10,
+    paddingBottom: Platform.OS === "ios" ? 12 : 10,
     ...Platform.select({
       web: { userSelect: "none" as const },
       default: {},
     }),
   },
   wrapCompact: {
-    borderRadius: 10,
-    paddingHorizontal: 5,
-    paddingTop: 5,
-    paddingBottom: 5,
+    borderRadius: 12,
+    paddingHorizontal: 6,
+    paddingTop: 8,
+    paddingBottom: 8,
   },
   grid: {
     width: "100%",
-    gap: 7,
+    gap: 9,
   },
   gridCompact: {
-    gap: 5,
+    gap: 7,
   },
   row: {
     flexDirection: "row",
     alignItems: "stretch",
     width: "100%",
-    gap: 6,
+    gap: 7,
   },
   rowCompact: {
-    gap: 5,
+    gap: 6,
   },
   rowInset: {
-    paddingHorizontal: 2,
+    paddingHorizontal: 4,
   },
   key: {
     minWidth: 0,
-    minHeight: 44,
-    borderRadius: 6,
+    minHeight: 52,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     ...Platform.select({
@@ -262,7 +267,7 @@ const styles = StyleSheet.create({
     }),
   },
   keyCompact: {
-    minHeight: 34,
+    minHeight: 44,
     borderRadius: 7,
   },
   keyChar: {
@@ -279,20 +284,28 @@ const styles = StyleSheet.create({
     opacity: 0.55,
   },
   keyPressed: {
-    opacity: 0.85,
+    opacity: 0.82,
+    transform: [{ scale: 0.97 }],
   },
   keyText: {
-    fontSize: 16,
+    fontSize: 20,
     fontWeight: "500",
     color: Theme.textPrimaryDark,
+    letterSpacing: 0.2,
+    textAlign: "center",
+    includeFontPadding: false,
   },
   keyTextCompact: {
-    fontSize: 14,
+    fontSize: 17,
   },
   keyTextUtility: {
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: "600",
     textTransform: "lowercase",
+    letterSpacing: 0.4,
+  },
+  keyTextUtilityCompact: {
+    fontSize: 13,
   },
   keyTextSpecial: {
     color: Theme.textPrimaryDark,
@@ -301,6 +314,9 @@ const styles = StyleSheet.create({
     color: APPLE_DISABLED_TEXT,
   },
   spaceKey: {
-    minHeight: 44,
+    minHeight: 48,
+  },
+  spaceKeyCompact: {
+    minHeight: 42,
   },
 });
