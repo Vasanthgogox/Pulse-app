@@ -267,6 +267,17 @@ function NetworkScreenInner() {
   const canUseFleet =
     canAccessDrivers(capabilities) && canSurface("fleet.drivers.view");
   const canDiscover = canSurface("sales.network.discover");
+  /**
+   * "Your connections" (ConnectionsView) previously rendered for any member
+   * who could open the Network tab at all, with no per-surface check — it
+   * exposed every client/supplier connection regardless of the member's
+   * granular sales surfaces. Gate on the same surfaces that govern adding/
+   * viewing those relationships elsewhere in this screen.
+   */
+  const canViewConnections =
+    canSurface("sales.network.connect") ||
+    canSurface("sales.clients.view") ||
+    canUseSuppliers;
   const [refreshing, setRefreshing] = useState(false);
   const [connSearch, setConnSearch] = useState("");
   const [connFilter, setConnFilter] = useState<ConnectionFilterTab>("ALL");
@@ -1028,6 +1039,7 @@ function NetworkScreenInner() {
           <UnlinkedCounterpartiesSection orgId={orgId} />
         ) : null}
         <View style={[styles.networkMergedRow, !isWideNetwork && styles.networkMergedRowStack]}>
+          {canViewConnections ? (
           <View
             style={[
               styles.sectionBlock,
@@ -1159,6 +1171,7 @@ function NetworkScreenInner() {
               </View>
             </View>
           </View>
+          ) : null}
 
           {canDiscover ? (
           <View

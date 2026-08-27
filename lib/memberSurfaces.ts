@@ -1187,6 +1187,15 @@ export function defaultSurfacesForRole(
         "tripops.trips.verification",
         "fleet.drivers.view",
         "fleet.vehicles.view",
+        // sales.tab is the required parent of tripops.indents.view/allocate
+        // (memberHasSurface walks `requires` before granting a child surface).
+        // Without it, an operator assigned an awarded indent cannot open it —
+        // confirmed live: operator is organization_members.role for legacy
+        // members, and this allowlist predates the tripops.indents.* surfaces
+        // that indent detail/allocation screens gate on.
+        "sales.tab",
+        "tripops.indents.view",
+        "tripops.indents.allocate",
       ]);
     default:
       return {};
