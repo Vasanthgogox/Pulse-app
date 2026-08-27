@@ -165,7 +165,7 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
         onPartyPress={onPartyPress}
         forceMobileLayout={forceMobileLayout}
         compact={compact}
-        accessory={
+        dockAccessory={
           saleValue !== undefined ? (
             <PartnerRateSaleMarginStrip
               saleValue={saleValue}

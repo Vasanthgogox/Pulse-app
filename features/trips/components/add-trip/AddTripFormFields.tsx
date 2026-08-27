@@ -2669,6 +2669,7 @@ export function AddTripFormFields({
                 }
                 suppressPartyPreview={Boolean(allocationContextRow?.right)}
                 wizardShell
+                compact
                 saleValue={state.clientPrice}
               />
               )

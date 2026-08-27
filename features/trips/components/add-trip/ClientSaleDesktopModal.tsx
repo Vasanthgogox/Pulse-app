@@ -5,6 +5,7 @@
 import { memo, useEffect } from "react";
 import {
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -107,7 +108,11 @@ export const ClientSaleDesktopModal = memo(function ClientSaleDesktopModal({
           from={{ opacity: 0, scale: 0.94, translateY: 28 }}
           animate={{ opacity: 1, scale: 1, translateY: 0 }}
           transition={{ type: "timing", duration: 320, easing: SHEET_EASE }}
-          style={[styles.sheet, { maxHeight: sheetMaxH }]}
+          style={[
+            styles.sheet,
+            { maxHeight: sheetMaxH },
+            Platform.OS === "web" ? styles.sheetWebHug : null,
+          ]}
         >
           <View style={styles.sheetHeader}>
             <View style={styles.sheetHeaderCopy}>
@@ -176,6 +181,11 @@ const styles = StyleSheet.create({
   sheet: {
     width: "100%",
     maxWidth: 400,
+    flexGrow: 0,
+    flexShrink: 1,
+    alignSelf: "center",
+    flexDirection: "column",
+    alignItems: "stretch",
     backgroundColor: Theme.cardWhite,
     borderRadius: 20,
     borderWidth: 1,
@@ -188,6 +198,10 @@ const styles = StyleSheet.create({
       offsetY: 16,
       elevation: 14,
     }),
+  },
+  /** Cap via maxHeight only — do not stretch to fill the overlay. */
+  sheetWebHug: {
+    height: "auto",
   },
   sheetHeader: {
     flexDirection: "row",
@@ -230,9 +244,9 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderLight,
   },
   keypadHost: {
+    width: "100%",
     flexGrow: 0,
-    flexShrink: 1,
-    minHeight: 0,
+    flexShrink: 0,
   },
   sheetFooter: {
     gap: 8,

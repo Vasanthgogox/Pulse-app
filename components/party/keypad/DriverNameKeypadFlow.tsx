@@ -110,7 +110,7 @@ export const DriverNameKeypadFlow = memo(function DriverNameKeypadFlow({
   );
 
   usePersonNamePhysicalKeypad({
-    enabled: isDesktopWeb,
+    enabled: Platform.OS === "web",
     onKey: handleKey,
   });
 
@@ -133,20 +133,20 @@ export const DriverNameKeypadFlow = memo(function DriverNameKeypadFlow({
 
           <Pressable
             onPress={() => {
-              if (!isDesktopWeb || typeof window === "undefined") return;
+              if (Platform.OS !== "web" || typeof window === "undefined") return;
               window.focus();
             }}
-            disabled={!isDesktopWeb}
+            disabled={Platform.OS !== "web"}
             style={({ pressed }) => [
               flow.displayRow,
               wizardShell && styles.displayRowWizard,
               error && flow.displayRowError,
               isDesktopWeb && pressed && styles.displayRowPressed,
             ]}
-            accessibilityRole={isDesktopWeb ? "button" : undefined}
+            accessibilityRole={Platform.OS === "web" ? "button" : undefined}
             accessibilityLabel={
-              isDesktopWeb
-                ? `${label}. Type with your keyboard.`
+              Platform.OS === "web"
+                ? `${label}. Type with your keyboard or the on-screen keypad.`
                 : displayValue || label
             }
           >
@@ -168,35 +168,30 @@ export const DriverNameKeypadFlow = memo(function DriverNameKeypadFlow({
         {footerExtras ? <View style={flow.extras}>{footerExtras}</View> : null}
       </View>
 
-      {wizardShell || !isDesktopWeb ? (
-        <View style={wizardShell ? flow.bottomDock : undefined}>
-          {wizardShell ? (
-            <WizardActionBarHost style={flow.actionBarHost} />
-          ) : null}
+      <View style={wizardShell ? flow.bottomDock : undefined}>
+        {wizardShell ? (
+          <WizardActionBarHost style={flow.actionBarHost} />
+        ) : null}
 
-          {isDesktopWeb ? null : (
-            <View
-              style={
-                wizardShell || groupTop
-                  ? [
-                      flow.keypadDockWizard,
-                      flow.keypadDockWizardBleed,
-                      flow.keypadDockSignIn,
-                      flow.padDockFlush,
-                    ]
-                  : flow.keypadDock
-              }
-            >
-              <PersonNameKeypad
-                onKey={handleKey}
-                length={displayValue.length}
-                maxLength={maxLength}
-                compact={groupTop}
-              />
-            </View>
-          )}
+        <View
+          style={
+            wizardShell || groupTop
+              ? [
+                  flow.keypadDockWizard,
+                  flow.keypadDockWizardBleed,
+                  flow.keypadDockSignIn,
+                  flow.padDockFlush,
+                ]
+              : flow.keypadDock
+          }
+        >
+          <PersonNameKeypad
+            onKey={handleKey}
+            length={displayValue.length}
+            maxLength={maxLength}
+          />
         </View>
-      ) : null}
+      </View>
     </View>
   );
 });

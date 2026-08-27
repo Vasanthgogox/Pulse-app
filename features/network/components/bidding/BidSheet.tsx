@@ -28,6 +28,7 @@ import {
   getVisibleIndentById,
 } from '@/features/indents/services/indents.service';
 import { resolveCommercialOpportunity } from '@/features/marketplace/domain';
+import { BidConfirmModal, type BidConfirmPhase } from '@/features/network/components/bidding/BidConfirmModal';
 import { type BidRow } from '@/features/network/services/bids.service';
 import { type PostRow } from '@/features/network/services/posts.service';
 import { formatINR } from '@/lib/format';
@@ -106,6 +107,8 @@ export function BidSheet({
   const [note, setNote] = useState('');
   const [validationError, setValidationError] = useState<string | undefined>();
   const [submitting, setSubmitting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmPhase, setConfirmPhase] = useState<BidConfirmPhase>('review');
 
   const isEditMode = !!existingBid;
   const sourceIndentId = post?.source_indent_id ?? null;
@@ -175,6 +178,8 @@ export function BidSheet({
     setActiveField('amount');
     setValidationError(undefined);
     setSubmitting(false);
+    setConfirmOpen(false);
+    setConfirmPhase('review');
     const seed =
       initialAmount && initialAmount > 0
         ? Math.round(initialAmount)
@@ -252,7 +257,7 @@ export function BidSheet({
     setNote((prev) => appendNoteKey(prev, key, NOTE_MAX_LENGTH));
   }, []);
 
-  const handleSubmit = useCallback(async () => {
+  const requestConfirm = useCallback(() => {
     if (!post || !canSubmit) return;
     const amount = parseRawToNumber(amountRaw);
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -261,6 +266,38 @@ export function BidSheet({
       return;
     }
     if (!post.source_indent_id) {
+      Alert.alert(
+        'Cannot place bid',
+        'This story is not linked to a load indent. Use Get Load to quote, or ask the publisher to broadcast from an indent.',
+      );
+      return;
+    }
+    setValidationError(undefined);
+    setConfirmPhase('review');
+    setConfirmOpen(true);
+  }, [post, canSubmit, amountRaw]);
+
+  const finishAfterSuccess = useCallback(() => {
+    setConfirmOpen(false);
+    setConfirmPhase('review');
+    triggerFeedback('apply');
+    onSuccess?.();
+    onClose();
+  }, [onSuccess, onClose]);
+
+  const handleSubmit = useCallback(async () => {
+    if (!post || !canSubmit) return;
+    const amount = parseRawToNumber(amountRaw);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setConfirmOpen(false);
+      setConfirmPhase('review');
+      setValidationError('Enter an amount greater than 0.');
+      setActiveField('amount');
+      return;
+    }
+    if (!post.source_indent_id) {
+      setConfirmOpen(false);
+      setConfirmPhase('review');
       Alert.alert(
         'Cannot place bid',
         'This story is not linked to a load indent. Use Get Load to quote, or ask the publisher to broadcast from an indent.',
@@ -305,13 +342,13 @@ export function BidSheet({
     }
 
     if (submitError) {
+      setConfirmOpen(false);
+      setConfirmPhase('review');
       setValidationError(submitError.message);
       return;
     }
 
-    triggerFeedback('apply');
-    onSuccess?.();
-    onClose();
+    setConfirmPhase('success');
   }, [
     post,
     canSubmit,
@@ -324,15 +361,13 @@ export function BidSheet({
     orgId,
     currentOrganization?.name,
     invalidateQuoteCaches,
-    onSuccess,
-    onClose,
   ]);
 
   usePhysicalKeypadInput({
-    enabled: visible && activeField === 'amount',
+    enabled: visible && activeField === 'amount' && !confirmOpen,
     onKey: handleAmountKey,
     onSubmit: () => {
-      if (canSubmit) void handleSubmit();
+      if (canSubmit) requestConfirm();
     },
     onClose,
     allowDecimal: false,
@@ -391,6 +426,35 @@ export function BidSheet({
 
   const notePreview = note.trim();
   const noteActive = activeField === 'note';
+  const confirmAmount = parseRawToNumber(amountRaw);
+
+  const confirmModal = (
+    <BidConfirmModal
+      visible={confirmOpen}
+      phase={confirmPhase}
+      isEditMode={isEditMode}
+      amount={confirmAmount > 0 ? confirmAmount : 0}
+      ownerName={(post.org_name ?? '').trim() || 'Load owner'}
+      origin={origin || undefined}
+      destination={destination || undefined}
+      vehicle={vehicle}
+      weight={weight}
+      material={material}
+      targetRate={targetRate}
+      note={notePreview || undefined}
+      submitting={submitting}
+      onCancel={() => {
+        if (!submitting && confirmPhase === 'review') {
+          setConfirmOpen(false);
+          setConfirmPhase('review');
+        }
+      }}
+      onConfirm={() => {
+        void handleSubmit();
+      }}
+      onSuccessDone={finishAfterSuccess}
+    />
+  );
 
   const valueStage = (
     <View
@@ -491,7 +555,6 @@ export function BidSheet({
         onKey={handleNoteKey}
         length={note.length}
         maxLength={NOTE_MAX_LENGTH}
-        compact={isDesktop}
       />
     );
 
@@ -552,7 +615,7 @@ export function BidSheet({
           <View style={styles.fabCell}>
             <TouchableOpacity
               style={[styles.fabPay, !canSubmit && styles.fabPayDisabled]}
-              onPress={() => void handleSubmit()}
+              onPress={requestConfirm}
               disabled={!canSubmit}
               accessibilityRole="button"
               accessibilityLabel={submitLabel}
@@ -606,7 +669,7 @@ export function BidSheet({
         </View>
         <TouchableOpacity
           style={[styles.applyBtn, !canSubmit && styles.applyBtnMuted]}
-          onPress={() => void handleSubmit()}
+          onPress={requestConfirm}
           disabled={!canSubmit}
           accessibilityRole="button"
           accessibilityLabel={submitLabel}
@@ -640,7 +703,7 @@ export function BidSheet({
             styles.submitBar,
             !canSubmit && styles.submitBarMuted,
           ]}
-          onPress={() => void handleSubmit()}
+          onPress={requestConfirm}
           disabled={!canSubmit}
           accessibilityRole="button"
           accessibilityLabel={submitLabel}
@@ -677,66 +740,75 @@ export function BidSheet({
 
   if (isDesktop) {
     return (
-      <Modal
-        visible={visible}
-        transparent
-        animationType="fade"
-        onRequestClose={onClose}
-        statusBarTranslucent
-      >
-        <View style={styles.desktopOverlay}>
-          <TouchableWithoutFeedback onPress={onClose} accessibilityLabel="Close">
-            <View style={StyleSheet.absoluteFillObject} />
-          </TouchableWithoutFeedback>
-          <MotiView
-            from={{ translateX: 480 }}
-            animate={{ translateX: 0 }}
-            transition={{ type: 'spring', damping: 32, stiffness: 320, mass: 0.9 }}
-            style={styles.desktopDrawer}
-          >
-            {elevatedContent}
-          </MotiView>
-        </View>
-      </Modal>
+      <>
+        <Modal
+          visible={visible}
+          transparent
+          animationType="fade"
+          onRequestClose={onClose}
+          statusBarTranslucent
+        >
+          <View style={styles.desktopOverlay}>
+            <TouchableWithoutFeedback onPress={onClose} accessibilityLabel="Close">
+              <View style={StyleSheet.absoluteFillObject} />
+            </TouchableWithoutFeedback>
+            <MotiView
+              from={{ translateX: 480 }}
+              animate={{ translateX: 0 }}
+              transition={{ type: 'spring', damping: 32, stiffness: 320, mass: 0.9 }}
+              style={styles.desktopDrawer}
+            >
+              {elevatedContent}
+            </MotiView>
+          </View>
+        </Modal>
+        {confirmModal}
+      </>
     );
   }
 
   if (isTablet) {
     return (
-      <Modal
-        visible={visible}
-        transparent
-        animationType="fade"
-        onRequestClose={onClose}
-        statusBarTranslucent
-      >
-        <View style={styles.tabletOverlay}>
-          <TouchableWithoutFeedback onPress={onClose} accessibilityLabel="Close">
-            <View style={StyleSheet.absoluteFillObject} />
-          </TouchableWithoutFeedback>
-          <MotiView
-            from={{ opacity: 0, scale: 0.94 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ type: 'spring', damping: 28, stiffness: 300 }}
-            style={styles.tabletModal}
-          >
-            {elevatedContent}
-          </MotiView>
-        </View>
-      </Modal>
+      <>
+        <Modal
+          visible={visible}
+          transparent
+          animationType="fade"
+          onRequestClose={onClose}
+          statusBarTranslucent
+        >
+          <View style={styles.tabletOverlay}>
+            <TouchableWithoutFeedback onPress={onClose} accessibilityLabel="Close">
+              <View style={StyleSheet.absoluteFillObject} />
+            </TouchableWithoutFeedback>
+            <MotiView
+              from={{ opacity: 0, scale: 0.94 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              style={styles.tabletModal}
+            >
+              {elevatedContent}
+            </MotiView>
+          </View>
+        </Modal>
+        {confirmModal}
+      </>
     );
   }
 
   return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      presentationStyle="fullScreen"
-      onRequestClose={onClose}
-      statusBarTranslucent={Platform.OS === 'android'}
-    >
-      {mobileContent}
-    </Modal>
+    <>
+      <Modal
+        visible={visible}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={onClose}
+        statusBarTranslucent={Platform.OS === 'android'}
+      >
+        {mobileContent}
+      </Modal>
+      {confirmModal}
+    </>
   );
 }
 
