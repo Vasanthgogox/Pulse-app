@@ -446,31 +446,31 @@ export default function DriverWalletScreen() {
     return /(\bUTR\b|\bMode\s*:|\bTrip\s*Commission\b|\bTrip\s*Payment\b|\bSettlement\b)/i.test(s);
   }, []);
 
-  const latestFleetPaidPendingLedgerByTripId = useMemo(() => {
-    const byTrip: Record<string, driversService.DriverLedgerRow> = {};
+  /** Sum (not "latest") of fleet-marked-paid pending amounts per trip_id — a trip can be
+   * paid in multiple installments, each with its own pending row, so every unsettled
+   * fleet-marked row must count, not just the most recent one. */
+  const pendingFleetPaidTotalByTripId = useMemo(() => {
+    const byTrip: Record<string, number> = {};
     for (let i = 0; i < ledgerEntries.length; i++) {
       const e = ledgerEntries[i];
       const tid = e.trip_id?.trim() || null;
       if (!tid) continue;
-      // Once driver verified settlement exists, ignore stale fleet-marked ledger rows.
-      if ((receivedByTripId[tid] ?? 0) > 0) continue;
       if (e.type === 'settlement') continue;
       const amt = Number(e.amount) || 0;
       if (amt <= 0) continue;
       const desc = e.description;
       if (!hasFleetPaidPendingToken(desc) && !isLegacyFleetPendingEvidence(desc)) continue;
-      const prev = byTrip[tid];
-      const prevT = prev?.created_at ? new Date(prev.created_at).getTime() : 0;
-      const nextT = e.created_at ? new Date(e.created_at).getTime() : 0;
-      if (!prev || nextT > prevT) byTrip[tid] = e;
+      byTrip[tid] = (byTrip[tid] ?? 0) + amt;
     }
     return byTrip;
-  }, [ledgerEntries, receivedByTripId, hasFleetPaidPendingToken, isLegacyFleetPendingEvidence]);
+  }, [ledgerEntries, hasFleetPaidPendingToken, isLegacyFleetPendingEvidence]);
 
   // Cash balance:
   // - trip-related cash includes verified settlements.
   // - if a trip is fleet-marked paid but not yet verified, show that pending-paid amount immediately.
-  // - once settlement exists for a trip, skip pending-paid for that trip to avoid double counting.
+  // - a trip can be paid in installments: only the portion of fleet-marked-paid amount
+  //   still exceeding what's been verified-settled for that trip counts as pending, so a
+  //   later installment isn't hidden just because an earlier installment was already verified.
   // - non-trip ledger entries (salary/reimbursement/etc) still affect cash as before.
   const _totalReceived = useMemo(() => {
     const verifiedTripReceived = Object.values(receivedByTripId).reduce(
@@ -478,10 +478,11 @@ export default function DriverWalletScreen() {
       0,
     );
     const pendingTripReceived = Object.entries(
-      latestFleetPaidPendingLedgerByTripId,
-    ).reduce((sum, [tripId, entry]) => {
-      if ((receivedByTripId[tripId] ?? 0) > 0) return sum;
-      return sum + (Number(entry.amount) || 0);
+      pendingFleetPaidTotalByTripId,
+    ).reduce((sum, [tripId, pendingAmt]) => {
+      const settled = receivedByTripId[tripId] ?? 0;
+      const remaining = Math.max(0, pendingAmt - settled);
+      return sum + remaining;
     }, 0);
     const nonTripReceived = nonTripLedgerEntries.reduce(
       (sum, e) => sum + (Number(e.amount) || 0),
@@ -490,7 +491,7 @@ export default function DriverWalletScreen() {
     return Math.round(verifiedTripReceived + pendingTripReceived + nonTripReceived);
   }, [
     receivedByTripId,
-    latestFleetPaidPendingLedgerByTripId,
+    pendingFleetPaidTotalByTripId,
     nonTripLedgerEntries,
   ]);
 
