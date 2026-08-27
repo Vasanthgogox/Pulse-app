@@ -171,6 +171,7 @@ export function MutualAvatarStack({
           name={face.name}
           initialsColorSeed={face.id}
           avatarSeed={face.isReal ? null : (face.avatar_seed ?? face.id)}
+          organizationImageUrl={face.avatar_url ?? null}
           avatarUrl={face.avatar_url ?? null}
           entityType="client"
           size={faceSize}

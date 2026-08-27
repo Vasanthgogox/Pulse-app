@@ -705,16 +705,17 @@ const styles = StyleSheet.create({
     gap: 3,
   },
   orgName: {
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "500",
     color: INK,
-    letterSpacing: -0.2,
+    letterSpacing: -0.1,
+    lineHeight: 15,
   },
   metaLine: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "400",
     color: MUTED,
-    lineHeight: 14,
+    lineHeight: 13,
   },
   statusChip: {
     paddingHorizontal: 7,
@@ -834,7 +835,7 @@ const styles = StyleSheet.create({
   },
   routeLabel: {
     fontSize: 9,
-    fontWeight: "700",
+    fontWeight: "500",
     color: MUTED,
     letterSpacing: 0.45,
     textTransform: "uppercase",
@@ -846,11 +847,12 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   routeCity: {
-    fontSize: 14,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "600",
     color: INK,
-    lineHeight: 19,
-    letterSpacing: -0.15,
+    lineHeight: 15,
+    letterSpacing: -0.1,
+    textTransform: "uppercase",
     ...Platform.select({
       web: { maxWidth: "100%" } as ViewStyle,
       default: {},
@@ -861,20 +863,20 @@ const styles = StyleSheet.create({
     width: "100%",
   },
   routeState: {
-    marginTop: 2,
-    fontSize: 11,
+    marginTop: 1,
+    fontSize: 9,
     fontWeight: "400",
-    color: BODY,
-    lineHeight: 14,
+    color: MUTED,
+    lineHeight: 12,
   },
   routeStateEnd: {
     textAlign: "right",
     width: "100%",
   },
   routeStateSpacer: {
-    marginTop: 2,
-    fontSize: 11,
-    lineHeight: 14,
+    marginTop: 1,
+    fontSize: 9,
+    lineHeight: 12,
     color: "transparent",
   },
   /** Single-row side-scroll — match OpportunityCard; web needs max-content so chips don't stretch. */
@@ -987,7 +989,7 @@ const styles = StyleSheet.create({
   },
   allocationLabel: {
     fontSize: 9,
-    fontWeight: "700",
+    fontWeight: "500",
     color: MUTED,
     letterSpacing: 0.3,
     textTransform: "uppercase",
@@ -997,10 +999,11 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   allocationValue: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 10,
+    fontWeight: "500",
     color: INK,
     letterSpacing: -0.1,
+    lineHeight: 13,
   },
   allocationValueEnd: {
     textAlign: "right",
@@ -1047,7 +1050,7 @@ const styles = StyleSheet.create({
   },
   priceHint: {
     fontSize: 9,
-    fontWeight: "700",
+    fontWeight: "500",
     letterSpacing: 0.45,
     textTransform: "uppercase",
     color: MUTED,
@@ -1068,17 +1071,17 @@ const styles = StyleSheet.create({
   },
   priceRef: {
     marginTop: 2,
-    fontSize: 10,
-    fontWeight: "500",
+    fontSize: 9,
+    fontWeight: "400",
     color: MUTED,
     fontVariant: ["tabular-nums"],
-    lineHeight: 13,
+    lineHeight: 12,
   },
   /** Keeps grid footers level when some cards lack a target / client rate line. */
   priceRefSpacer: {
     marginTop: 2,
-    fontSize: 10,
-    lineHeight: 13,
+    fontSize: 9,
+    lineHeight: 12,
     color: "transparent",
   },
   priceMuted: {
