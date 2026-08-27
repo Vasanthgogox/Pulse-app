@@ -6,6 +6,8 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import { formatINR } from "@/lib/format";
 import { platformShadow } from "@/lib/platformShadow";
+import { resolveBidVsTarget } from "@/components/mobile-input/bidVsTarget";
+import { BidVsTargetHint } from "@/components/mobile-input/BidVsTargetHint";
 import {
   ArrowRight,
   Building2,
@@ -223,11 +225,18 @@ export const BidConfirmModal = memo(function BidConfirmModal({
   ]);
 
   // Auto-advance from success after a short beat (user can also tap Done).
+  // Keep onSuccessDone in a ref so parent identity churn (cache refresh) does
+  // not restart the timer and flicker the celebration.
+  const onSuccessDoneRef = useRef(onSuccessDone);
+  onSuccessDoneRef.current = onSuccessDone;
   useEffect(() => {
-    if (!visible || !isSuccess || !onSuccessDone) return;
-    const t = setTimeout(() => onSuccessDone(), isEditMode ? 3200 : 2800);
+    if (!visible || !isSuccess) return;
+    const t = setTimeout(
+      () => onSuccessDoneRef.current?.(),
+      isEditMode ? 3200 : 2800,
+    );
     return () => clearTimeout(t);
-  }, [visible, isSuccess, onSuccessDone, isEditMode]);
+  }, [visible, isSuccess, isEditMode]);
 
   const routeLine =
     origin && destination
@@ -241,6 +250,11 @@ export const BidConfirmModal = memo(function BidConfirmModal({
       ? deltaLabel(amount, targetRate)
       : null;
 
+  const amountVsTarget = useMemo(
+    () => resolveBidVsTarget(amount, targetRate),
+    [amount, targetRate],
+  );
+
   const confirmLabel = submitting
     ? isEditMode
       ? "Updating…"
@@ -253,6 +267,15 @@ export const BidConfirmModal = memo(function BidConfirmModal({
   const successSubtitle = isEditMode
     ? "Your revised offer is live for the load owner."
     : "Your offer is live — the load owner can review it now.";
+
+  const heroAmountColor =
+    amountVsTarget?.tone === "over"
+      ? Theme.negative
+      : amountVsTarget?.tone === "under"
+        ? Theme.positive
+        : amountVsTarget?.tone === "match"
+          ? Theme.driverEmeraldDark
+          : Theme.textPrimaryDark;
 
   const metaRows = useMemo(() => {
     const rows: {
@@ -414,7 +437,21 @@ export const BidConfirmModal = memo(function BidConfirmModal({
 
               <View style={styles.successAmountCard}>
                 <Text style={styles.successAmountLabel}>Your offer</Text>
-                <Text style={styles.successAmount}>{formatINR(amount)}</Text>
+                <Text
+                  style={[
+                    styles.successAmount,
+                    amountVsTarget?.tone === "over" && styles.successAmountOver,
+                    amountVsTarget?.tone === "under" && styles.successAmountUnder,
+                  ]}
+                >
+                  {formatINR(amount)}
+                </Text>
+                {amountVsTarget ? (
+                  <BidVsTargetHint
+                    caption={amountVsTarget.caption}
+                    tone={amountVsTarget.tone}
+                  />
+                ) : null}
                 {routeLine ? (
                   <Text style={styles.successRoute} numberOfLines={1}>
                     {routeLine}
@@ -489,10 +526,19 @@ export const BidConfirmModal = memo(function BidConfirmModal({
                 </View>
 
                 <Text style={styles.heroEyebrow}>Confirm your offer</Text>
-                <Text style={styles.heroAmount} accessibilityRole="header">
+                <Text
+                  style={[styles.heroAmount, { color: heroAmountColor }]}
+                  accessibilityRole="header"
+                >
                   {formatINR(amount)}
                 </Text>
-                {targetRate != null && targetRate > 0 ? (
+                {amountVsTarget ? (
+                  <BidVsTargetHint
+                    caption={amountVsTarget.caption}
+                    tone={amountVsTarget.tone}
+                    style={styles.heroDelta}
+                  />
+                ) : targetRate != null && targetRate > 0 ? (
                   <Text style={styles.heroTarget}>
                     Target {formatINR(targetRate)}
                   </Text>
@@ -723,6 +769,9 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
     lineHeight: 40,
   },
+  heroDelta: {
+    marginTop: 6,
+  },
   heroTarget: {
     marginTop: 5,
     fontSize: 12,
@@ -951,6 +1000,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     letterSpacing: -0.8,
     color: Theme.textPrimaryDark,
+  },
+  successAmountOver: {
+    color: Theme.negative,
+  },
+  successAmountUnder: {
+    color: Theme.positive,
   },
   successRoute: {
     marginTop: 2,

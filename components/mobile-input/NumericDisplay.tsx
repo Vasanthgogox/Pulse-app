@@ -16,6 +16,11 @@ interface NumericDisplayProps {
   placeholder?: string;
   /** Larger centered amount (mobile pay-style sheet). */
   variant?: "default" | "hero" | "wizard" | "wizardCompact";
+  /**
+   * Bid vs target colouring — `over` turns the amount red when above target.
+   * Only applied when the field has a value.
+   */
+  tone?: "default" | "over" | "under" | "match";
 }
 
 function computeLargeDisplayTypography(
@@ -53,6 +58,7 @@ export function NumericDisplay({
   suffix,
   placeholder = '0',
   variant = 'default',
+  tone = 'default',
 }: NumericDisplayProps) {
   const isHero = variant === 'hero';
   const isWizard = variant === 'wizard' || variant === 'wizardCompact';
@@ -75,6 +81,15 @@ export function NumericDisplay({
   const resolvedSuffix = suffix !== undefined ? suffix : type === 'percentage' ? '%' : '';
   const isEmpty = !rawValue;
   const display = isEmpty ? placeholder : formatEntryDisplay(rawValue, type);
+
+  const toneColor =
+    !isEmpty && tone === 'over'
+      ? Theme.negative
+      : !isEmpty && tone === 'under'
+        ? Theme.positive
+        : !isEmpty && tone === 'match'
+          ? Theme.driverEmeraldDark
+          : undefined;
 
   const largeTypography = useMemo(() => {
     if (!isLarge) return null;
@@ -115,6 +130,7 @@ export function NumericDisplay({
                 lineHeight: largeTypography.lineHeight,
               },
               isEmpty && styles.dim,
+              toneColor ? { color: toneColor } : null,
             ]}
             allowFontScaling={false}
           >
@@ -139,6 +155,7 @@ export function NumericDisplay({
             isEmpty && styles.amountPlaceholder,
             isEmpty && isLarge && styles.amountPlaceholderHero,
             isEmpty && styles.amountFlexible,
+            toneColor ? { color: toneColor } : null,
           ]}
           numberOfLines={1}
           adjustsFontSizeToFit

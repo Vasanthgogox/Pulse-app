@@ -113,6 +113,7 @@ export function DriverDirectBidSheet({
         submitting ? (isUpdate ? 'Updating…' : 'Submitting…') : isUpdate ? 'Update bid' : 'Submit bid'
       }
       validationError={validationError}
+      targetRate={target}
     />
   );
 }

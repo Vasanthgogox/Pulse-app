@@ -192,7 +192,7 @@ const styles = StyleSheet.create({
   },
   sheet: {
     width: "100%",
-    maxWidth: 420,
+    maxWidth: 400,
     flexGrow: 0,
     flexShrink: 1,
     alignSelf: "center",
@@ -211,6 +211,7 @@ const styles = StyleSheet.create({
       elevation: 14,
     }),
   },
+  /** Cap via maxHeight only — do not stretch to fill the overlay. */
   sheetWebHug: {
     height: "auto",
   },
@@ -257,8 +258,7 @@ const styles = StyleSheet.create({
   keypadHost: {
     width: "100%",
     flexGrow: 0,
-    flexShrink: 1,
-    minHeight: 0,
+    flexShrink: 0,
   },
   sheetFooter: {
     gap: 8,

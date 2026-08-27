@@ -127,12 +127,10 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
   const isPopupShell = forceMobileLayout;
   /** Pay-tray keypad chrome (sign-in dock) on mobile fill + desktop popups. */
   const usePayTrayChrome = isPopupShell || !isDesktopKeypad;
-  /** Partner rate etc. — taller dock (CTA + margin strip + pad). */
+  /** Extra body pad when margin strip sits above the pad on fill shells. */
   const hasDockAccessory = Boolean(dockAccessory);
-  const popupKeypadSize =
-    isPopupShell && (fields.length > 1 || hasDockAccessory)
-      ? "compact"
-      : "default";
+  // Mobile always uses compact type so the shell footer stays on-screen.
+  const useCompactChrome = compact || !isDesktopKeypad;
 
   const resolvedActiveId = activeFieldId ?? fields[0]?.id ?? "";
   const activeField =
@@ -187,14 +185,6 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
       : partyPreview
         ? "Billing"
         : undefined;
-
-  // Mobile always uses compact type so the shell footer stays on-screen.
-  const useCompactChrome = compact || !isDesktopKeypad;
-
-  /** Compact pay keys when the dock also hosts margin / multi-field chrome. */
-  const fillKeypadSize =
-    !isPopupShell && hasDockAccessory ? "compact" : "default";
-  const resolvedKeypadSize = isPopupShell ? popupKeypadSize : fillKeypadSize;
 
   const recipientHero = useMemo(() => {
     if (!partyPreview) return null;
@@ -452,7 +442,7 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
           <KeypadDock
             onKey={handleKey}
             showDecimal={showDecimal}
-            size={resolvedKeypadSize}
+            size="default"
           />
         </View>
       </View>

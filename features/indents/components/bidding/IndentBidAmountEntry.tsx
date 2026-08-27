@@ -136,6 +136,9 @@ export function IndentBidAmountEntry({
       maxDecimalPlaces={0}
       submitLabel={isUpdate ? "Update bid" : "Submit bid"}
       validationError={validationError}
+      targetRate={
+        targetRateInr != null && targetRateInr > 0 ? targetRateInr : null
+      }
     />
   );
 }

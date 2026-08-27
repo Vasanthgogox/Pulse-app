@@ -20,6 +20,9 @@ export type { NumericEntryPartyPreview } from './NumericEntryPartyBanner';
 export { DecimalKeypad, PAY_KEYPAD_CELL_PAD, PAY_KEYPAD_INSET } from './DecimalKeypad';
 export { NumericDisplay } from './NumericDisplay';
 export type { DisplayType } from './NumericDisplay';
+export { BidVsTargetHint } from './BidVsTargetHint';
+export { resolveBidVsTarget } from './bidVsTarget';
+export type { BidVsTargetDelta, BidVsTargetTone } from './bidVsTarget';
 
 // ─── Formatters ──────────────────────────────────────────────────────────────
 export {

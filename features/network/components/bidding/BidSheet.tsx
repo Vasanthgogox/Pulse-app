@@ -15,6 +15,8 @@ import {
 import type { NumericEntryPartyPreview } from '@/components/mobile-input/NumericEntryPartyBanner';
 import { NumericDisplay } from '@/components/mobile-input/NumericDisplay';
 import { NumericEntryRecipientHero } from '@/components/mobile-input/NumericEntryRecipientHero';
+import { BidVsTargetHint } from '@/components/mobile-input/BidVsTargetHint';
+import { resolveBidVsTarget } from '@/components/mobile-input/bidVsTarget';
 import { parseRawToNumber, toRawString } from '@/components/mobile-input';
 import { useInputPlatform } from '@/components/mobile-input/useInputPlatform';
 import { usePhysicalKeypadInput } from '@/components/mobile-input/usePhysicalKeypadInput';
@@ -37,7 +39,7 @@ import { queryKeys } from '@/lib/queryKeys';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { ArrowRight, MessageSquare } from 'lucide-react-native';
 import { MotiView } from 'moti';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   Modal,
@@ -109,6 +111,15 @@ export function BidSheet({
   const [submitting, setSubmitting] = useState(false);
   const [confirmOpen, setConfirmOpen] = useState(false);
   const [confirmPhase, setConfirmPhase] = useState<BidConfirmPhase>('review');
+  /** Freeze edit vs place for the confirm/success card while celebration runs. */
+  const [confirmIsEditMode, setConfirmIsEditMode] = useState(false);
+  const pendingQuoteInvalidateRef = useRef<string | null>(null);
+  /**
+   * Blocks form reseed while review/success is showing. A ref (not only
+   * confirmOpen state) so cache-driven re-renders cannot clear success before
+   * the next paint commits confirmOpen=true.
+   */
+  const celebrationLockRef = useRef(false);
 
   const isEditMode = !!existingBid;
   const sourceIndentId = post?.source_indent_id ?? null;
@@ -175,8 +186,10 @@ export function BidSheet({
 
   useEffect(() => {
     if (!visible) {
+      celebrationLockRef.current = false;
       setConfirmOpen(false);
       setConfirmPhase('review');
+      setConfirmIsEditMode(false);
       setSubmitting(false);
       return;
     }
@@ -185,12 +198,19 @@ export function BidSheet({
      * Update mutations refresh `existingBid.amount` in cache mid-flight — that
      * used to wipe `confirmPhase: 'success'` before the animation could play.
      */
-    if (confirmOpen) return;
+    if (
+      celebrationLockRef.current ||
+      confirmOpen ||
+      confirmPhase === 'success'
+    ) {
+      return;
+    }
 
     setActiveField('amount');
     setValidationError(undefined);
     setSubmitting(false);
     setConfirmPhase('review');
+    setConfirmIsEditMode(false);
     const seed =
       initialAmount && initialAmount > 0
         ? Math.round(initialAmount)
@@ -202,6 +222,7 @@ export function BidSheet({
   }, [
     visible,
     confirmOpen,
+    confirmPhase,
     existingBid?.id,
     existingBid?.amount,
     existingBid?.note,
@@ -292,22 +313,32 @@ export function BidSheet({
       return;
     }
     setValidationError(undefined);
+    celebrationLockRef.current = true;
+    setConfirmIsEditMode(isEditMode);
     setConfirmPhase('review');
     setConfirmOpen(true);
-  }, [post, canSubmit, amountRaw]);
+  }, [post, canSubmit, amountRaw, isEditMode]);
 
   const finishAfterSuccess = useCallback(() => {
+    const indentToInvalidate = pendingQuoteInvalidateRef.current;
+    pendingQuoteInvalidateRef.current = null;
+    celebrationLockRef.current = false;
     setConfirmOpen(false);
     setConfirmPhase('review');
+    setConfirmIsEditMode(false);
     triggerFeedback('apply');
+    if (indentToInvalidate) {
+      void invalidateQuoteCaches(indentToInvalidate);
+    }
     onSuccess?.();
     onClose();
-  }, [onSuccess, onClose]);
+  }, [onSuccess, onClose, invalidateQuoteCaches]);
 
   const handleSubmit = useCallback(async () => {
     if (!post || !canSubmit) return;
     const amount = parseRawToNumber(amountRaw);
     if (!Number.isFinite(amount) || amount <= 0) {
+      celebrationLockRef.current = false;
       setConfirmOpen(false);
       setConfirmPhase('review');
       setValidationError('Enter an amount greater than 0.');
@@ -315,6 +346,7 @@ export function BidSheet({
       return;
     }
     if (!post.source_indent_id) {
+      celebrationLockRef.current = false;
       setConfirmOpen(false);
       setConfirmPhase('review');
       Alert.alert(
@@ -328,6 +360,7 @@ export function BidSheet({
     setValidationError(undefined);
     const bidNote = note.trim();
     let submitError: Error | null = null;
+    const indentIdForCache = post.source_indent_id;
 
     try {
       if (isEditMode && existingBid) {
@@ -339,13 +372,12 @@ export function BidSheet({
         submitError = updateRes.error ?? null;
         if (!submitError) {
           const quoteRes = await createDirectQuote(
-            post.source_indent_id,
+            indentIdForCache,
             orgId,
             amount,
             bidNote || null,
           );
           submitError = quoteRes.error ?? null;
-          if (!submitError) await invalidateQuoteCaches(post.source_indent_id);
         }
       } else {
         const submitRes = await submitMutation.mutateAsync({
@@ -354,19 +386,25 @@ export function BidSheet({
           orgName: currentOrganization?.name ?? '',
         });
         submitError = submitRes.error;
-        if (!submitError) await invalidateQuoteCaches(post.source_indent_id);
       }
     } finally {
       setSubmitting(false);
     }
 
     if (submitError) {
+      celebrationLockRef.current = false;
+      pendingQuoteInvalidateRef.current = null;
       setConfirmOpen(false);
       setConfirmPhase('review');
       setValidationError(submitError.message);
       return;
     }
 
+    // Celebrate first — quote list invalidation waits until Done so refetch
+    // cannot tear down the success UI (especially on update).
+    celebrationLockRef.current = true;
+    pendingQuoteInvalidateRef.current = indentIdForCache;
+    setConfirmIsEditMode(isEditMode);
     setConfirmPhase('success');
   }, [
     post,
@@ -379,7 +417,6 @@ export function BidSheet({
     submitMutation,
     orgId,
     currentOrganization?.name,
-    invalidateQuoteCaches,
   ]);
 
   usePhysicalKeypadInput({
@@ -446,12 +483,16 @@ export function BidSheet({
   const notePreview = note.trim();
   const noteActive = activeField === 'note';
   const confirmAmount = parseRawToNumber(amountRaw);
+  const vsTarget = useMemo(
+    () => resolveBidVsTarget(confirmAmount, targetRate),
+    [confirmAmount, targetRate],
+  );
 
   const confirmModal = (
     <BidConfirmModal
       visible={confirmOpen}
       phase={confirmPhase}
-      isEditMode={isEditMode}
+      isEditMode={confirmIsEditMode}
       amount={confirmAmount > 0 ? confirmAmount : 0}
       ownerName={(post.org_name ?? '').trim() || 'Load owner'}
       origin={origin || undefined}
@@ -464,8 +505,10 @@ export function BidSheet({
       submitting={submitting}
       onCancel={() => {
         if (!submitting && confirmPhase === 'review') {
+          celebrationLockRef.current = false;
           setConfirmOpen(false);
           setConfirmPhase('review');
+          setConfirmIsEditMode(false);
         }
       }}
       onConfirm={() => {
@@ -497,6 +540,7 @@ export function BidSheet({
           prefix="₹"
           placeholder="0"
           variant={isMobile ? 'hero' : 'default'}
+          tone={vsTarget?.tone ?? 'default'}
         />
       </Pressable>
 
@@ -504,6 +548,8 @@ export function BidSheet({
         <Text style={styles.error} accessibilityRole="alert">
           {validationError}
         </Text>
+      ) : vsTarget ? (
+        <BidVsTargetHint caption={vsTarget.caption} tone={vsTarget.tone} />
       ) : targetRate != null ? (
         <Text style={styles.hint}>Target {formatINR(targetRate)}</Text>
       ) : (

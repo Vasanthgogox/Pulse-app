@@ -1385,12 +1385,12 @@ export const fullPageWizardStyles = StyleSheet.create({
    * (≈56 CTA + 4×54 keys + row gaps + dock chrome).
    */
   wizardKeypadBodyFillPad: {
-    /** Room for Continue + optional dock accessory (margin chips) + keypad. */
+    /** Room for Continue + default pay pad (match client-sale fill). */
     paddingBottom: 380,
   },
-  /** Partner rate fill — Continue + sale/margin strip + pay pad. */
+  /** Reserved when a dock accessory is used above the pad. */
   wizardKeypadBodyFillPadTall: {
-    paddingBottom: 450,
+    paddingBottom: 420,
   },
   wizardKeypadBodyCompact: {
     flexGrow: 1,
@@ -1412,13 +1412,13 @@ export const fullPageWizardStyles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 4,
   },
-  /** Popup body — cap height so Done + keypad stay on-screen; amount stays in view. */
+  /** Popup body — room for party + field switch + amount (partner rate). */
   wizardKeypadBodyScrollPopup: {
     flexGrow: 0,
     flexShrink: 1,
     flexBasis: "auto",
     minHeight: 0,
-    maxHeight: 240,
+    maxHeight: 320,
   },
   /** Keep the ₹ amount from collapsing under party / field chrome. */
   wizardKeypadAmountAnchor: {

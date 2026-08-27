@@ -7,7 +7,7 @@
  *
  * Uses a custom DecimalKeypad — no native keyboard for financial inputs.
  */
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useMemo } from 'react';
 import {
   Modal,
   View,
@@ -21,11 +21,19 @@ import { ArrowRight } from 'lucide-react-native';
 import { MotiView } from 'moti';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Theme from '@/constants/Theme';
+import { formatINR } from '@/lib/format';
 import { DecimalKeypad, PAY_KEYPAD_CELL_PAD, PAY_KEYPAD_INSET } from './DecimalKeypad';
+import { BidVsTargetHint } from './BidVsTargetHint';
+import { resolveBidVsTarget } from './bidVsTarget';
 import { NumericDisplay } from './NumericDisplay';
 import type { NumericEntryPartyPreview } from './NumericEntryPartyBanner';
 import { NumericEntryRecipientHero } from './NumericEntryRecipientHero';
-import { applyKeypadPress, rawToSubmitValue, isKeypadValueSubmittable } from './keypad';
+import {
+  applyKeypadPress,
+  parseRawToNumber,
+  rawToSubmitValue,
+  isKeypadValueSubmittable,
+} from './keypad';
 import { triggerFeedback } from './feedback';
 import { useInputPlatform } from './useInputPlatform';
 import { usePhysicalKeypadInput } from './usePhysicalKeypadInput';
@@ -57,6 +65,11 @@ export interface FullscreenNumericEntryProps {
   submitLabel?: string;
   /** Inline validation error to display below the amount (from parent validation). */
   validationError?: string;
+  /**
+   * Shipper / load target rate — when set, amount turns red if over target
+   * and a tiny ± vs target caption appears under the value.
+   */
+  targetRate?: number | null;
 }
 
 export function FullscreenNumericEntry({
@@ -75,6 +88,7 @@ export function FullscreenNumericEntry({
   maxDecimalPlaces,
   submitLabel = 'Apply',
   validationError,
+  targetRate = null,
 }: FullscreenNumericEntryProps) {
   const [raw, setRaw] = useState(initialValue);
   const platform = useInputPlatform();
@@ -132,15 +146,28 @@ export function FullscreenNumericEntry({
   const resolvedPlaceholder =
     placeholder ?? (type === 'distance' || type === 'quantity' ? '0' : undefined);
 
+  const vsTarget = useMemo(() => {
+    if (type !== 'currency') return null;
+    return resolveBidVsTarget(parseRawToNumber(raw), targetRate);
+  }, [raw, targetRate, type]);
+
   const amountDisplay = (
-    <NumericDisplay
-      rawValue={raw}
-      type={type}
-      prefix={prefix}
-      suffix={suffix}
-      placeholder={resolvedPlaceholder}
-      variant={isPayLayout ? payDisplayVariant : 'default'}
-    />
+    <View style={styles.amountStack}>
+      <NumericDisplay
+        rawValue={raw}
+        type={type}
+        prefix={prefix}
+        suffix={suffix}
+        placeholder={resolvedPlaceholder}
+        variant={isPayLayout ? payDisplayVariant : 'default'}
+        tone={vsTarget?.tone ?? 'default'}
+      />
+      {vsTarget ? (
+        <BidVsTargetHint caption={vsTarget.caption} tone={vsTarget.tone} />
+      ) : targetRate != null && targetRate > 0 && type === 'currency' ? (
+        <Text style={styles.targetFallback}>Target {formatINR(targetRate)}</Text>
+      ) : null}
+    </View>
   );
 
   const validationBlock = validationError ? (
@@ -446,6 +473,18 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
     textAlign: 'center',
     paddingHorizontal: 8,
+  },
+  amountStack: {
+    width: '100%',
+    alignItems: 'center',
+    gap: 6,
+  },
+  targetFallback: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: Theme.textMuted,
+    textAlign: 'center',
+    lineHeight: 14,
   },
   payBottom: {
     flexShrink: 0,
