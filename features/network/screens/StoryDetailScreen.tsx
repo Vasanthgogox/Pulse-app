@@ -22,6 +22,7 @@ import { StoryMessageSheet } from "@/features/network/components/StoryMessageShe
 import { StoryViewersSheet } from "@/features/network/components/StoryViewersSheet";
 import { BidSheet } from "@/features/network/components/bidding/BidSheet";
 import { StoryOwnerBidsSheet } from "@/features/network/components/bidding/StoryOwnerBidsSheet";
+import { type BidRow } from "@/features/network/services/bids.service";
 import {
     deactivatePost,
     getPostById,
@@ -254,6 +255,8 @@ export default function StoryDetailScreen() {
   const [bidPost, setBidPost] = useState<PostRow | null>(null);
   const guardVerified = useVerifiedActionGuard();
   const [editBidMode, setEditBidMode] = useState(false);
+  /** Snapshot so live myBid refresh cannot flip edit mode mid-celebration. */
+  const [bidSheetExisting, setBidSheetExisting] = useState<BidRow | null>(null);
   const [deletingPostId, setDeletingPostId] = useState<string | null>(null);
   const [showViewers, setShowViewers] = useState(false);
   const [showBids, setShowBids] = useState(false);
@@ -278,12 +281,26 @@ export default function StoryDetailScreen() {
 
   useEffect(() => {
     if (resolvedStoryList.length === 0) return;
+    // Pause auto-advance while bidding so success returns to this story preview.
+    if (bidPost != null) {
+      if (animRef.current) animRef.current.stop();
+      return;
+    }
     if (animRef.current) animRef.current.stop();
     progress.setValue(0);
-    animRef.current = Animated.timing(progress, { toValue: 1, duration: STORY_DURATION, easing: Easing.linear, useNativeDriver: false });
-    animRef.current.start(({ finished }) => { if (finished) goNext(); });
-    return () => { if (animRef.current) animRef.current.stop(); };
-  }, [current, resolvedStoryList.length, goNext, progress]);
+    animRef.current = Animated.timing(progress, {
+      toValue: 1,
+      duration: STORY_DURATION,
+      easing: Easing.linear,
+      useNativeDriver: false,
+    });
+    animRef.current.start(({ finished }) => {
+      if (finished) goNext();
+    });
+    return () => {
+      if (animRef.current) animRef.current.stop();
+    };
+  }, [current, resolvedStoryList.length, goNext, progress, bidPost]);
 
   const initialStoryIndex = useMemo(() => {
     const targetPostId = params.postId ?? "";
@@ -879,7 +896,13 @@ export default function StoryDetailScreen() {
                     styles.authorizeBtnCompact,
                     pressed && styles.authorizeBtnPressed,
                   ]}
-                  onPress={() => guardVerified(() => { setEditBidMode(true); setBidPost(post); })}
+                  onPress={() =>
+                    guardVerified(() => {
+                      setEditBidMode(true);
+                      setBidSheetExisting(myBid);
+                      setBidPost(post);
+                    })
+                  }
                 >
                   <Edit3 size={15} color={INK} />
                   <Text style={styles.authorizeBtnText}>
@@ -891,7 +914,13 @@ export default function StoryDetailScreen() {
           ) : commercialOpportunity.permissions.canBid ? (
             <Pressable
               style={({ pressed }) => [styles.authorizeBtn, pressed && styles.authorizeBtnPressed]}
-              onPress={() => guardVerified(() => { setEditBidMode(false); setBidPost(post); })}
+              onPress={() =>
+                guardVerified(() => {
+                  setEditBidMode(false);
+                  setBidSheetExisting(null);
+                  setBidPost(post);
+                })
+              }
             >
               <Send size={16} color={INK} />
               <Text style={styles.authorizeBtnText}>
@@ -935,7 +964,7 @@ export default function StoryDetailScreen() {
         visible={bidPost != null}
         post={bidPost}
         orgId={myOrgId}
-        existingBid={editBidMode ? myBid : null}
+        existingBid={editBidMode ? bidSheetExisting : null}
         initialAmount={
           editBidMode && counterOfferInr != null
             ? counterOfferInr
@@ -944,12 +973,21 @@ export default function StoryDetailScreen() {
               : null
         }
         initialNote={params.refNote ?? null}
-        onClose={() => { setBidPost(null); setEditBidMode(false); }}
+        onClose={() => {
+          setBidPost(null);
+          setEditBidMode(false);
+          setBidSheetExisting(null);
+        }}
         onSuccess={() => {
           invalidatePosts();
           if (myOrgId) invalidateIndents(myOrgId);
+          void myBidQ.refetch();
+          void myQuotesQ.refetch();
           setBidPost(null);
           setEditBidMode(false);
+          setBidSheetExisting(null);
+          // Restart story progress on the same preview after celebration.
+          progress.setValue(0);
         }}
       />
 

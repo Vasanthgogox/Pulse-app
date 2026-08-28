@@ -8,12 +8,14 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   NativeScrollEvent,
   NativeSyntheticEvent,
+  Platform,
   RefreshControl,
   ScrollView,
   View,
   Text,
   StyleSheet,
   TouchableOpacity,
+  useWindowDimensions,
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -37,6 +39,14 @@ import {
 } from '../services/drivers.service';
 import type { VehicleRow } from '@/features/vehicles/services/vehicles.service';
 import { FleetDriverAnalyticsTab } from "./analytics/FleetDriverAnalyticsTab";
+
+/** Compact ₹ for secondary lines when space is tight (mobile list). */
+function formatAmountCompact(value: number): string {
+  const abs = Math.abs(value);
+  if (abs >= 100000) return `${(value / 100000).toFixed(1)}L`;
+  if (abs >= 1000) return `${(value / 1000).toFixed(1)}k`;
+  return value.toLocaleString('en-IN');
+}
 
 /** Minimal ledger row for aggregation (compatible with LedgerTx). */
 export interface LedgerRowForDriver {
@@ -105,6 +115,8 @@ export function DriversTab({
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const insets = useSafeAreaInsets();
+  const { width: screenWidth } = useWindowDimensions();
+  const isWebDesktop = Platform.OS === 'web' && screenWidth >= 1024;
   const [driverRatingsMap, setDriverRatingsMap] = useState<Record<string, { avg: number | null; count: number }>>({});
   const isControlled = driversProp !== undefined && tripsProp !== undefined;
 
@@ -312,7 +324,7 @@ export function DriversTab({
       )}
       {viewTab !== "analytics" ? (
         <View style={styles.tableHeader}>
-          <View style={styles.headerEntityCol}>
+          <View style={isWebDesktop ? styles.headerEntityCol : styles.headerEntityColMobile}>
             <Text style={[styles.tableHeaderCell, styles.ctLeft]} numberOfLines={1}>
               Driver Entity
             </Text>
@@ -322,21 +334,31 @@ export function DriversTab({
               Trips
             </Text>
           </View>
-          <View style={styles.headerAmtCol}>
-            <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
-              Earned
-            </Text>
-          </View>
-          <View style={styles.headerAmtCol}>
-            <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
-              Paid
-            </Text>
-          </View>
-          <View style={styles.headerAmtCol}>
-            <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
-              Pending
-            </Text>
-          </View>
+          {isWebDesktop ? (
+            <>
+              <View style={styles.headerAmtCol}>
+                <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
+                  Earned
+                </Text>
+              </View>
+              <View style={styles.headerAmtCol}>
+                <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
+                  Paid
+                </Text>
+              </View>
+              <View style={styles.headerAmtCol}>
+                <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
+                  Pending
+                </Text>
+              </View>
+            </>
+          ) : (
+            <View style={styles.headerOutstandingCol}>
+              <Text style={[styles.tableHeaderCell, styles.ctRight]} numberOfLines={1}>
+                Pending
+              </Text>
+            </View>
+          )}
         </View>
       ) : null}
       {viewTab !== "analytics" ? (
@@ -350,10 +372,67 @@ export function DriversTab({
               data.left_at != null && String(data.left_at).trim() !== '';
             const isIntegrated = !isDisconnected && !!data.is_integrated;
             const driver = driverById.get(data.id);
+            if (isWebDesktop) {
+              return (
+                <TouchableOpacity
+                  key={data.id}
+                  style={styles.tableRow}
+                  onPress={() =>
+                    onRowSelect
+                      ? onRowSelect(data, 'DRIVER', 'drivers')
+                      : router.push(`/driver/${data.id}`)
+                  }
+                  activeOpacity={0.7}
+                >
+                  <View style={[styles.tableCell, styles.ctEntity]}>
+                    <View style={styles.tableEntityMain}>
+                      <EntityAvatar
+                        name={data.name ?? ''}
+                        avatarUrl={driver?.avatar_url}
+                        avatarSeed={driver?.avatar_seed}
+                        initialsColorSeed={data.id}
+                        entityType="driver"
+                        isIntegrated={isIntegrated}
+                        badgeOverlay
+                      />
+                      <Text style={styles.tableEntityName} numberOfLines={1} ellipsizeMode="tail">
+                        {data.name ?? '—'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={[styles.tableCell, styles.ctTrips]}>
+                    <View style={styles.tripsPill}>
+                      <Text style={styles.tripsPillText}>{tripCount}</Text>
+                    </View>
+                  </View>
+                  <View style={[styles.tableCell, styles.ctAmt]}>
+                    <Text style={styles.tableAmtValue} numberOfLines={1}>
+                      ₹{earned.toLocaleString('en-IN')}
+                    </Text>
+                  </View>
+                  <View style={[styles.tableCell, styles.ctAmt]}>
+                    <Text style={styles.tableAmtPaid} numberOfLines={1}>
+                      ₹{paid.toLocaleString('en-IN')}
+                    </Text>
+                  </View>
+                  <View style={[styles.tableCell, styles.ctAmt]}>
+                    <Text
+                      style={[
+                        styles.tablePendingValue,
+                        pending > 0 ? styles.tablePendingDue : styles.tablePendingSettled,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      ₹{pending.toLocaleString('en-IN')}
+                    </Text>
+                  </View>
+                </TouchableOpacity>
+              );
+            }
             return (
               <TouchableOpacity
                 key={data.id}
-                style={styles.tableRow}
+                style={styles.tableRowMobile}
                 onPress={() =>
                   onRowSelect
                     ? onRowSelect(data, 'DRIVER', 'drivers')
@@ -361,46 +440,43 @@ export function DriversTab({
                 }
                 activeOpacity={0.7}
               >
-                <View style={[styles.tableCell, styles.ctEntity]}>
-                  <View style={styles.tableEntityMain}>
-                    <EntityAvatar
-                      name={data.name ?? ''}
-                      avatarUrl={driver?.avatar_url}
-                      avatarSeed={driver?.avatar_seed}
-                      initialsColorSeed={data.id}
-                      entityType="driver"
-                      isIntegrated={isIntegrated}
-                      badgeOverlay
-                    />
-                    <Text style={styles.tableEntityName} numberOfLines={1} ellipsizeMode="tail">
-                      {data.name ?? '—'}
-                    </Text>
-                  </View>
+                <EntityAvatar
+                  name={data.name ?? ''}
+                  avatarUrl={driver?.avatar_url}
+                  avatarSeed={driver?.avatar_seed}
+                  initialsColorSeed={data.id}
+                  entityType="driver"
+                  isIntegrated={isIntegrated}
+                  badgeOverlay
+                />
+                <View style={[styles.tableCell, styles.ctEntityMobile]}>
+                  <Text style={styles.tableEntityName} numberOfLines={1} ellipsizeMode="tail">
+                    {data.name ?? '—'}
+                  </Text>
+                  <Text style={styles.tableEntitySub} numberOfLines={1} ellipsizeMode="tail">
+                    Earned: ₹{formatAmountCompact(earned)}
+                  </Text>
                 </View>
                 <View style={[styles.tableCell, styles.ctTrips]}>
                   <View style={styles.tripsPill}>
                     <Text style={styles.tripsPillText}>{tripCount}</Text>
                   </View>
                 </View>
-                <View style={[styles.tableCell, styles.ctAmt]}>
-                  <Text style={styles.tableAmtValue} numberOfLines={1}>
-                    ₹{earned.toLocaleString('en-IN')}
-                  </Text>
-                </View>
-                <View style={[styles.tableCell, styles.ctAmt]}>
-                  <Text style={styles.tableAmtPaid} numberOfLines={1}>
-                    ₹{paid.toLocaleString('en-IN')}
-                  </Text>
-                </View>
-                <View style={[styles.tableCell, styles.ctAmt]}>
+                <View style={[styles.tableCell, styles.ctOutstanding]}>
                   <Text
                     style={[
-                      styles.tablePendingValue,
+                      styles.tableOutstandingValue,
                       pending > 0 ? styles.tablePendingDue : styles.tablePendingSettled,
                     ]}
                     numberOfLines={1}
                   >
                     ₹{pending.toLocaleString('en-IN')}
+                  </Text>
+                  <Text style={styles.tablePaidLine} numberOfLines={1}>
+                    Paid:{' '}
+                    <Text style={styles.tablePendingSettled}>
+                      ₹{formatAmountCompact(paid)}
+                    </Text>
                   </Text>
                 </View>
               </TouchableOpacity>
@@ -544,12 +620,21 @@ const styles = StyleSheet.create({
   ctCenter: { textAlign: 'center' },
   ctRight: { textAlign: 'right' },
   headerEntityCol: { flex: CUSTOMERS_SUPPLIERS.node, minWidth: 0, justifyContent: 'center' },
+  headerEntityColMobile: { flex: 2.2, minWidth: 0, justifyContent: 'center' },
   headerTripsCol: { flex: CUSTOMERS_SUPPLIERS.trips, minWidth: 44, justifyContent: 'center' },
   headerAmtCol: { flex: CUSTOMERS_SUPPLIERS.mission, minWidth: 0, justifyContent: 'center' },
+  headerOutstandingCol: { flex: 1.5, minWidth: 0, justifyContent: 'center' },
   ctEntity: { flex: CUSTOMERS_SUPPLIERS.node, minWidth: 0 },
+  ctEntityMobile: { flex: 2.2, minWidth: 0 },
   ctTrips: { flex: CUSTOMERS_SUPPLIERS.trips, minWidth: 44, justifyContent: 'center' },
   ctAmt: {
     flex: CUSTOMERS_SUPPLIERS.mission,
+    minWidth: 0,
+    alignItems: 'flex-end',
+    justifyContent: 'center',
+  },
+  ctOutstanding: {
+    flex: 1.5,
     minWidth: 0,
     alignItems: 'flex-end',
     justifyContent: 'center',
@@ -558,6 +643,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     minHeight: 52,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderLight,
+  },
+  tableRowMobile: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    minHeight: 62,
     paddingVertical: 10,
     paddingHorizontal: 14,
     borderBottomWidth: 1,
@@ -578,6 +673,12 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     flex: 1,
     minWidth: 0,
+  },
+  tableEntitySub: {
+    marginTop: 4,
+    fontSize: 10,
+    fontWeight: '500',
+    color: Theme.textMuted,
   },
   tripsPill: {
     alignSelf: 'center',
@@ -602,8 +703,23 @@ const styles = StyleSheet.create({
     fontStyle: 'italic',
     textAlign: 'right',
   },
+  tableOutstandingValue: {
+    fontSize: 11,
+    fontWeight: '600',
+    fontStyle: 'italic',
+    textAlign: 'right',
+  },
   tablePendingDue: { color: Theme.teslaRed },
   tablePendingSettled: { color: Theme.darkGreen },
+  tablePaidLine: {
+    marginTop: 2,
+    fontSize: 8,
+    fontWeight: '500',
+    color: Theme.textMuted,
+    letterSpacing: 0.6,
+    textTransform: 'uppercase',
+    textAlign: 'right',
+  },
   tableAmtValue: {
     fontSize: 11,
     fontWeight: '600',

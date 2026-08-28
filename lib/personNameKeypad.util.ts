@@ -11,6 +11,7 @@ export function appendPersonNameKey(value: string, key: string): string {
   }
 
   if (key === " ") {
+    // Allow a single separating space between words; ignore leading / duplicate taps.
     if (!value.length || value.endsWith(" ")) return value;
     if (value.length >= PERSON_NAME_MAX_LENGTH) return value;
     return `${value} `;

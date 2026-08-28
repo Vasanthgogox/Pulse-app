@@ -78,7 +78,6 @@ import {
     type TripForStatement,
 } from "../aggregation";
 import type { LedgerRow } from "../services/finance.service";
-import { MIN_FISCAL_TAB_WIDTH } from "../types";
 import { EntityCompareVerifyView } from "./EntityCompareVerifyView";
 import {
     FinancialRow,
@@ -433,7 +432,7 @@ export function EntityDetailOverlay({
   >(null);
   const [entityLedgerViewMode, setEntityLedgerViewMode] = useState<
     "table" | "transaction"
-  >("table");
+  >("transaction");
   const [driverRatings, setDriverRatings] = useState<RatingRow[]>([]);
   /** Width of ratings grid content (excludes section horizontal padding); fixes column math in narrow overlays. */
   const [driverRatingsBandInnerWidth, setDriverRatingsBandInnerWidth] =
@@ -494,8 +493,14 @@ export function EntityDetailOverlay({
     setExpandedMonthKey(null);
     setExpandedDriverLedgerRowId(null);
     setExpandedEntityLedgerRowId(null);
-    setEntityLedgerViewMode("table");
   }, [entity.id, entityType, initialDetailTab]);
+
+  const { width: screenWidth } = useWindowDimensions();
+  const isWebDesktop = Platform.OS === "web" && screenWidth >= 1024;
+
+  useEffect(() => {
+    setEntityLedgerViewMode(isWebDesktop ? "table" : "transaction");
+  }, [entity.id, isWebDesktop]);
 
   const tripRouteLabelByTripId = useMemo(() => {
     const m = new Map<string, string>();
@@ -1145,8 +1150,6 @@ export function EntityDetailOverlay({
         ? `${entityType} · ${entity.rating.toFixed(1)} ★${entity.ratingCount != null && entity.ratingCount > 0 ? ` (${entity.ratingCount})` : ""}`
         : entityType;
 
-  const { width: screenWidth } = useWindowDimensions();
-  const isWebDesktop = Platform.OS === "web" && screenWidth >= 1024;
   const driverRatingGridGap = 8;
   const driverRatingsLayoutWidth = useMemo(() => {
     const pad = Layout.screenPaddingHorizontal * 2;
@@ -1171,16 +1174,7 @@ export function EntityDetailOverlay({
     ),
   );
   const detailTabsContent = isCustomerOrSupplier ? (
-    <ScrollView
-      horizontal
-      showsHorizontalScrollIndicator={false}
-      contentContainerStyle={[
-        styles.entityTabRow,
-        {
-          minWidth: Math.max(screenWidth, 3 * MIN_FISCAL_TAB_WIDTH),
-        },
-      ]}
-    >
+    <View style={styles.entityTabRow}>
       <TouchableOpacity
         style={[
           styles.entityTab,
@@ -1253,7 +1247,7 @@ export function EntityDetailOverlay({
           <View style={styles.entityTabUnderline} />
         )}
       </TouchableOpacity>
-    </ScrollView>
+    </View>
   ) : isVehicle ? (
     <View style={styles.entityTabRow}>
       <TouchableOpacity
@@ -1438,6 +1432,7 @@ export function EntityDetailOverlay({
           ]}
           showsVerticalScrollIndicator={false}
         >
+          {isWebDesktop ? (
           <View style={styles.ledgerViewModeRow}>
             <TouchableOpacity
               style={[
@@ -1474,8 +1469,9 @@ export function EntityDetailOverlay({
               </Text>
             </TouchableOpacity>
           </View>
+          ) : null}
 
-          {entityLedgerViewMode === "transaction" ? (
+          {(!isWebDesktop || entityLedgerViewMode === "transaction") ? (
             selectedEntityTransactions && selectedEntityTransactions.length > 0 ? (
               <LedgerTransactionListView
                 transactions={selectedEntityTransactions}
@@ -4425,18 +4421,21 @@ const styles = StyleSheet.create({
   },
   entityTabRow: {
     flexDirection: "row",
+    width: "100%",
+    alignItems: "stretch",
     paddingBottom: 8,
     borderBottomWidth: 1,
     borderBottomColor: Theme.separatorDark,
   },
   entityTab: {
     flex: 1,
-    minWidth: MIN_FISCAL_TAB_WIDTH,
+    minWidth: 0,
     position: "relative" as const,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     paddingVertical: 6,
+    paddingHorizontal: 4,
   },
   tdNetWrap: {
     flex: 0.21,

@@ -1,6 +1,6 @@
 /**
  * BidModal — full-screen bid amount entry (ledger / GPay-style keypad).
- * Extracted from LoadCenterView.tsx.
+ * Uses IndentBidAmountEntry + BidConfirmModal celebration (same as story bids).
  */
 import { IndentBidAmountEntry } from "@/features/indents/components/bidding/IndentBidAmountEntry";
 import {
@@ -12,7 +12,7 @@ import {
 import { useInvalidateIndents } from "@/lib/queries";
 import { queryKeys } from "@/lib/queryKeys";
 import { type QueryClient } from "@tanstack/react-query";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 import { Alert } from "react-native";
 
 interface BidModalProps {
@@ -52,6 +52,7 @@ export function BidModal({
 }: BidModalProps) {
   const [entryError, setEntryError] = useState<string | undefined>();
   const [submittingQuote, setSubmittingQuote] = useState(false);
+  const successMsgRef = useRef("Offer Published");
 
   const activeBidQuote = useMemo(() => {
     if (!load) return null;
@@ -87,6 +88,9 @@ export function BidModal({
           refetchMarketIndents();
           return false;
         }
+        successMsgRef.current = hadExistingQuote
+          ? "Quote updated"
+          : "Offer Published";
         invalidateIndents(orgId);
         await Promise.allSettled([
           queryClient.invalidateQueries({
@@ -101,7 +105,6 @@ export function BidModal({
           refetchMyQuotes(),
           refetchMarketIndents(),
         ]);
-        onSuccess(hadExistingQuote ? "Quote updated" : "Offer Published");
         if (existingQuoteBeforeSave) {
           onUpdateLocalBidHistory(load.id, {
             amount: Number(existingQuoteBeforeSave.amount ?? 0),
@@ -109,7 +112,7 @@ export function BidModal({
               existingQuoteBeforeSave.updated_at ?? new Date().toISOString(),
           });
         }
-        handleClose();
+        // Keep entry open — IndentBidAmountEntry shows BidConfirmModal success.
         return true;
       } catch (e) {
         const msg =
@@ -132,9 +135,7 @@ export function BidModal({
       queryClient,
       refetchMyQuotes,
       refetchMarketIndents,
-      onSuccess,
       onUpdateLocalBidHistory,
-      handleClose,
       submittingQuote,
     ],
   );
@@ -147,23 +148,31 @@ export function BidModal({
     load.weight != null && Number(load.weight) > 0
       ? `${Number(load.weight)} KG`
       : undefined;
+  const material = (load.load_type ?? "").trim() || undefined;
+  const ownerName =
+    (load.client_name ?? "").trim() ||
+    (load.creator_organization_name ?? "").trim() ||
+    undefined;
 
   return (
     <IndentBidAmountEntry
       visible={visible}
       onClose={handleClose}
       onSubmitAmount={submitQuoteAmount}
+      onSuccessDone={() => onSuccess(successMsgRef.current)}
       indentDisplayNumber={getIndentDisplayNumber(load)}
       origin={load.pickup_area}
       destination={load.drop_location}
       vehicleType={vehicleType}
       weightLabel={weightLabel}
+      material={material}
+      ownerName={ownerName}
       targetRateInr={targetRate > 0 ? targetRate : undefined}
       initialAmount={
         activeBidQuote?.amount != null ? Number(activeBidQuote.amount) : null
       }
       isUpdate={hasExistingQuote && isPendingQuote}
-      validationError={submittingQuote ? "Submitting…" : entryError}
+      validationError={entryError}
       onClearValidationError={() => setEntryError(undefined)}
       onInvalidAmount={() =>
         setEntryError("Enter an amount greater than 0.")

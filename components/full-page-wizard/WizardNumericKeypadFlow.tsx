@@ -6,7 +6,14 @@
  * switch → title/hint → hero amount → keypad — matches GPay “Paying …” screen.
  */
 import { memo, useCallback, useEffect, useMemo, type ReactNode } from "react";
-import { Platform, Pressable, Text, useWindowDimensions, View } from "react-native";
+import {
+  Platform,
+  Pressable,
+  ScrollView,
+  Text,
+  useWindowDimensions,
+  View,
+} from "react-native";
 
 import { DecimalKeypad } from "@/components/mobile-input/DecimalKeypad";
 import type { NumericEntryPartyPreview } from "@/components/mobile-input/NumericEntryPartyBanner";
@@ -104,8 +111,14 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
   compact = false,
 }: WizardNumericKeypadFlowProps) {
   const { width } = useWindowDimensions();
+  /**
+   * Side-by-side desktop card only when not forced into the mobile GPay stack
+   * and not in compact chrome (popups / phone fill steps).
+   */
   const isDesktopKeypad =
-    !forceMobileLayout && width >= Layout.wizardSteppedMaxWidth;
+    !forceMobileLayout &&
+    !compact &&
+    width >= Layout.wizardSteppedMaxWidth;
   /**
    * Desktop rate/sale *modals* only — shrink-wrap root.
    * Must NOT apply on normal mobile wizard fill (that collapsed flex:1 and
@@ -114,6 +127,10 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
   const isPopupShell = forceMobileLayout;
   /** Pay-tray keypad chrome (sign-in dock) on mobile fill + desktop popups. */
   const usePayTrayChrome = isPopupShell || !isDesktopKeypad;
+  /** Extra body pad when margin strip sits above the pad on fill shells. */
+  const hasDockAccessory = Boolean(dockAccessory);
+  // Mobile always uses compact type so the shell footer stays on-screen.
+  const useCompactChrome = compact || !isDesktopKeypad;
 
   const resolvedActiveId = activeFieldId ?? fields[0]?.id ?? "";
   const activeField =
@@ -168,9 +185,6 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
       : partyPreview
         ? "Billing"
         : undefined;
-
-  // Mobile always uses compact type so the shell footer stays on-screen.
-  const useCompactChrome = compact || !isDesktopKeypad;
 
   const recipientHero = useMemo(() => {
     if (!partyPreview) return null;
@@ -334,6 +348,33 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
     );
   }
 
+  const bodyInner = (
+    <>
+      {recipientHero ? (
+        <View style={styles.wizardKeypadRecipientWrap}>{recipientHero}</View>
+      ) : null}
+      {fieldSwitch}
+      <View
+        style={[
+          styles.wizardKeypadAmountAnchor,
+          isPopupShell && styles.wizardKeypadAmountAnchorPopup,
+        ]}
+      >
+        {payoutStage}
+      </View>
+      {accessory ? (
+        <View
+          style={[
+            styles.wizardKeypadAccessory,
+            isPopupShell && styles.wizardKeypadAccessoryPopup,
+          ]}
+        >
+          {accessory}
+        </View>
+      ) : null}
+    </>
+  );
+
   return (
     <View
       style={[
@@ -342,31 +383,34 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
         isPopupShell && styles.wizardKeypadRootPopup,
       ]}
     >
-      <View
-        style={[
-          styles.wizardKeypadBody,
-          styles.wizardKeypadBodyMobilePay,
-          useCompactChrome && styles.wizardKeypadBodyCompact,
-          !isPopupShell && styles.wizardKeypadBodyFillPad,
-          isPopupShell && styles.wizardKeypadBodyPopup,
-        ]}
-      >
-        {recipientHero ? (
-          <View style={styles.wizardKeypadRecipientWrap}>{recipientHero}</View>
-        ) : null}
-        {fieldSwitch}
-        {payoutStage}
-        {accessory ? (
-          <View
-            style={[
-              styles.wizardKeypadAccessory,
-              isPopupShell && styles.wizardKeypadAccessoryPopup,
-            ]}
-          >
-            {accessory}
-          </View>
-        ) : null}
-      </View>
+      {isPopupShell ? (
+        <ScrollView
+          style={styles.wizardKeypadBodyScrollPopup}
+          contentContainerStyle={[
+            styles.wizardKeypadBody,
+            styles.wizardKeypadBodyMobilePay,
+            useCompactChrome && styles.wizardKeypadBodyCompact,
+            styles.wizardKeypadBodyPopup,
+          ]}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          bounces={false}
+        >
+          {bodyInner}
+        </ScrollView>
+      ) : (
+        <View
+          style={[
+            styles.wizardKeypadBody,
+            styles.wizardKeypadBodyMobilePay,
+            useCompactChrome && styles.wizardKeypadBodyCompact,
+            styles.wizardKeypadBodyFillPad,
+            hasDockAccessory && styles.wizardKeypadBodyFillPadTall,
+          ]}
+        >
+          {bodyInner}
+        </View>
+      )}
       {/* Absolute bottom dock on fill shells — reliable mobile GPay layout. */}
       <View
         style={[
@@ -377,7 +421,14 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
       >
         <WizardActionBarHost style={styles.wizardKeypadActionBar} />
         {dockAccessory ? (
-          <View style={styles.wizardKeypadDockAccessory}>{dockAccessory}</View>
+          <View
+            style={[
+              styles.wizardKeypadDockAccessory,
+              isPopupShell && styles.wizardKeypadDockAccessoryPopup,
+            ]}
+          >
+            {dockAccessory}
+          </View>
         ) : null}
         <View
           style={[
@@ -385,6 +436,7 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
             flow.keypadDockWizardBleed,
             usePayTrayChrome && flow.keypadDockSignIn,
             styles.wizardKeypadPadDock,
+            isPopupShell && styles.wizardKeypadPadDockPopup,
           ]}
         >
           <KeypadDock

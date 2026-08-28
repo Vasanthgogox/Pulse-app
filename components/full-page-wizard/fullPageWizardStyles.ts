@@ -1345,10 +1345,20 @@ export const fullPageWizardStyles = StyleSheet.create({
     flex: 1,
     minHeight: 0,
   },
+  /**
+   * Desktop rate/sale popup — hug content.
+   * Must set `flex: 0` (not only flexGrow) so RN Web’s `flex: 1` shorthand
+   * from wizardKeypadRoot does not keep growing the sheet and leave a dead
+   * white gap under the keypad.
+   */
   wizardKeypadRootPopup: {
+    flex: 0,
     flexGrow: 0,
     flexShrink: 1,
     flexBasis: "auto",
+    minHeight: 0,
+    width: "100%",
+    alignSelf: "stretch",
   },
   wizardKeypadBody: {
     flex: 1,
@@ -1375,8 +1385,12 @@ export const fullPageWizardStyles = StyleSheet.create({
    * (≈56 CTA + 4×54 keys + row gaps + dock chrome).
    */
   wizardKeypadBodyFillPad: {
-    /** Room for Continue + optional dock accessory (margin chips) + keypad. */
-    paddingBottom: 360,
+    /** Room for Continue + default pay pad (match client-sale fill). */
+    paddingBottom: 380,
+  },
+  /** Reserved when a dock accessory is used above the pad. */
+  wizardKeypadBodyFillPadTall: {
+    paddingBottom: 420,
   },
   wizardKeypadBodyCompact: {
     flexGrow: 1,
@@ -1388,13 +1402,33 @@ export const fullPageWizardStyles = StyleSheet.create({
   },
   /** Desktop rate/sale popup — stack from the top like driver sign-in. */
   wizardKeypadBodyPopup: {
+    flex: 0,
     flexGrow: 0,
     flexShrink: 0,
+    flexBasis: "auto",
     justifyContent: "flex-start",
     gap: 8,
     paddingHorizontal: 16,
     paddingTop: 10,
     paddingBottom: 4,
+  },
+  /** Popup body — room for party + field switch + amount (partner rate). */
+  wizardKeypadBodyScrollPopup: {
+    flexGrow: 0,
+    flexShrink: 1,
+    flexBasis: "auto",
+    minHeight: 0,
+    maxHeight: 320,
+  },
+  /** Keep the ₹ amount from collapsing under party / field chrome. */
+  wizardKeypadAmountAnchor: {
+    width: "100%",
+    flexShrink: 0,
+    alignItems: "center",
+  },
+  wizardKeypadAmountAnchorPopup: {
+    minHeight: 72,
+    justifyContent: "center",
   },
   wizardKeypadPartyWrap: {
     alignSelf: "stretch",
@@ -1433,6 +1467,12 @@ export const fullPageWizardStyles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
   },
+  wizardKeypadDockAccessoryPopup: {
+    paddingHorizontal: 16,
+    paddingTop: 6,
+    paddingBottom: 6,
+    borderTopWidth: 0,
+  },
   wizardKeypadBottomDock: {
     flexGrow: 0,
     flexShrink: 0,
@@ -1449,9 +1489,16 @@ export const fullPageWizardStyles = StyleSheet.create({
     marginTop: 0,
   },
   wizardKeypadBottomDockPopup: {
-    marginTop: 8,
+    flex: 0,
+    flexGrow: 0,
+    flexShrink: 0,
+    marginTop: 4,
   },
   wizardKeypadPadDock: {
+    marginTop: 0,
+  },
+  /** Kill marginTop:"auto" from pay-tray dock styles inside shrink-wrap popups. */
+  wizardKeypadPadDockPopup: {
     marginTop: 0,
   },
   wizardKeypadActionBar: {

@@ -1,4 +1,8 @@
-import { useCallback, useMemo } from "react";
+/**
+ * Full-page bid amount entry (Get Load / Load Center) with the same
+ * review → success celebration as story BidSheet.
+ */
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import {
   FullscreenNumericEntry,
@@ -6,13 +10,22 @@ import {
   toRawString,
 } from "@/components/mobile-input";
 import type { NumericEntryPartyPreview } from "@/components/mobile-input";
+import {
+  BidConfirmModal,
+  type BidConfirmPhase,
+} from "@/features/network/components/bidding/BidConfirmModal";
 import { formatINR } from "@/lib/format";
 
 export interface IndentBidAmountEntryProps {
   visible: boolean;
   onClose: () => void;
-  /** Called with validated INR amount; return false to keep entry open. */
+  /**
+   * Persist the bid. Return true on success — entry shows celebration.
+   * Do not close the entry yourself; celebration Done calls onClose.
+   */
   onSubmitAmount: (amountInr: number) => Promise<boolean>;
+  /** Optional toast / refresh after success celebration dismisses. */
+  onSuccessDone?: () => void;
   indentDisplayNumber: string;
   origin?: string | null;
   destination?: string | null;
@@ -20,6 +33,9 @@ export interface IndentBidAmountEntryProps {
   vehicleType?: string | null;
   /** e.g. 30 t / 30000 KG */
   weightLabel?: string | null;
+  material?: string | null;
+  /** Load owner / client shown on confirm card. */
+  ownerName?: string | null;
   targetRateInr?: number;
   /** Pre-fill when updating an existing quote. */
   initialAmount?: number | null;
@@ -51,11 +67,14 @@ export function IndentBidAmountEntry({
   visible,
   onClose,
   onSubmitAmount,
+  onSuccessDone,
   indentDisplayNumber,
   origin,
   destination,
   vehicleType,
   weightLabel,
+  material,
+  ownerName,
   targetRateInr,
   initialAmount,
   isUpdate = false,
@@ -64,6 +83,21 @@ export function IndentBidAmountEntry({
   onInvalidAmount,
 }: IndentBidAmountEntryProps) {
   const title = isUpdate ? "Update your bid" : "Place your bid";
+
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmPhase, setConfirmPhase] = useState<BidConfirmPhase>("review");
+  const [pendingAmount, setPendingAmount] = useState(0);
+  const [confirmSubmitting, setConfirmSubmitting] = useState(false);
+  const celebrationLockRef = useRef(false);
+
+  useEffect(() => {
+    if (visible) return;
+    celebrationLockRef.current = false;
+    setConfirmOpen(false);
+    setConfirmPhase("review");
+    setConfirmSubmitting(false);
+    setPendingAmount(0);
+  }, [visible]);
 
   const initialValue = useMemo(() => {
     if (initialAmount != null && Number(initialAmount) > 0) {
@@ -105,37 +139,125 @@ export function IndentBidAmountEntry({
     targetRateInr,
   ]);
 
-  const handleSubmit = useCallback(
+  const originCity = cleanSpec(origin);
+  const destinationCity = cleanSpec(destination);
+  const vehicle = cleanSpec(vehicleType);
+  const weight = cleanSpec(weightLabel);
+  const materialClean = cleanSpec(material);
+  const owner =
+    (ownerName ?? "").trim() ||
+    `Indent ${indentDisplayNumber}`;
+
+  const requestConfirm = useCallback(
     (raw: string) => {
-      void (async () => {
-        onClearValidationError?.();
-        const amount = parseRawToNumber(raw);
-        if (!Number.isFinite(amount) || amount <= 0) {
-          onInvalidAmount?.();
-          return;
-        }
-        await onSubmitAmount(amount);
-      })();
+      onClearValidationError?.();
+      const amount = parseRawToNumber(raw);
+      if (!Number.isFinite(amount) || amount <= 0) {
+        onInvalidAmount?.();
+        return;
+      }
+      celebrationLockRef.current = true;
+      setPendingAmount(amount);
+      setConfirmPhase("review");
+      setConfirmOpen(true);
     },
-    [onClearValidationError, onInvalidAmount, onSubmitAmount],
+    [onClearValidationError, onInvalidAmount],
   );
 
+  const handleConfirm = useCallback(async () => {
+    if (confirmSubmitting || pendingAmount <= 0) return;
+    setConfirmSubmitting(true);
+    onClearValidationError?.();
+    try {
+      const ok = await onSubmitAmount(pendingAmount);
+      if (!ok) {
+        celebrationLockRef.current = false;
+        setConfirmOpen(false);
+        setConfirmPhase("review");
+        return;
+      }
+      celebrationLockRef.current = true;
+      setConfirmPhase("success");
+    } finally {
+      setConfirmSubmitting(false);
+    }
+  }, [
+    confirmSubmitting,
+    pendingAmount,
+    onClearValidationError,
+    onSubmitAmount,
+  ]);
+
+  const finishAfterSuccess = useCallback(() => {
+    celebrationLockRef.current = false;
+    setConfirmOpen(false);
+    setConfirmPhase("review");
+    setPendingAmount(0);
+    onSuccessDone?.();
+    onClose();
+  }, [onSuccessDone, onClose]);
+
+  const handleCancelConfirm = useCallback(() => {
+    if (confirmSubmitting || confirmPhase !== "review") return;
+    celebrationLockRef.current = false;
+    setConfirmOpen(false);
+    setConfirmPhase("review");
+  }, [confirmSubmitting, confirmPhase]);
+
+  const handleCloseEntry = useCallback(() => {
+    if (confirmSubmitting || celebrationLockRef.current) return;
+    onClose();
+  }, [confirmSubmitting, onClose]);
+
   return (
-    <FullscreenNumericEntry
-      visible={visible}
-      onClose={onClose}
-      onSubmit={handleSubmit}
-      initialValue={initialValue}
-      label={title}
-      contextLine={undefined}
-      partyPreview={partyPreview}
-      type="currency"
-      prefix="₹"
-      placeholder="0"
-      allowDecimal={false}
-      maxDecimalPlaces={0}
-      submitLabel={isUpdate ? "Update bid" : "Submit bid"}
-      validationError={validationError}
-    />
+    <>
+      <FullscreenNumericEntry
+        visible={visible}
+        onClose={handleCloseEntry}
+        onSubmit={requestConfirm}
+        initialValue={initialValue}
+        label={title}
+        contextLine={undefined}
+        partyPreview={partyPreview}
+        type="currency"
+        prefix="₹"
+        placeholder="0"
+        allowDecimal={false}
+        maxDecimalPlaces={0}
+        submitLabel={isUpdate ? "Update bid" : "Submit bid"}
+        validationError={
+          confirmSubmitting
+            ? isUpdate
+              ? "Updating…"
+              : "Submitting…"
+            : validationError
+        }
+        targetRate={
+          targetRateInr != null && targetRateInr > 0 ? targetRateInr : null
+        }
+      />
+
+      <BidConfirmModal
+        visible={confirmOpen}
+        phase={confirmPhase}
+        isEditMode={isUpdate}
+        amount={pendingAmount}
+        ownerName={owner}
+        origin={originCity}
+        destination={destinationCity}
+        vehicle={vehicle}
+        weight={weight}
+        material={materialClean}
+        targetRate={
+          targetRateInr != null && targetRateInr > 0 ? targetRateInr : null
+        }
+        submitting={confirmSubmitting}
+        onCancel={handleCancelConfirm}
+        onConfirm={() => {
+          void handleConfirm();
+        }}
+        onSuccessDone={finishAfterSuccess}
+      />
+    </>
   );
 }

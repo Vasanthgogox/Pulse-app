@@ -1,8 +1,27 @@
 /**
- * BidSheet — bottom sheet (mobile) / centered dialog (desktop web) for bids on load stories.
+ * BidSheet — story load bid entry on one page:
+ * Amount ↔ Note field switch toggles DecimalKeypad ↔ PersonNameKeypad
+ * (same keypad standards as indent amount + driver-name flows).
+ * Layout mirrors FullscreenNumericEntry: mobile pay tray, tablet modal, desktop drawer.
  */
-import { LoadingIndicator } from "@/components/LoadingIndicator";
-import Layout from "@/constants/Layout";
+import { LoadingIndicator } from '@/components/LoadingIndicator';
+import { DecimalKeypad, PAY_KEYPAD_CELL_PAD, PAY_KEYPAD_INSET } from '@/components/mobile-input/DecimalKeypad';
+import { triggerFeedback } from '@/components/mobile-input/feedback';
+import {
+  applyKeypadPress,
+  isKeypadValueSubmittable,
+  type KeypadKey,
+} from '@/components/mobile-input/keypad';
+import type { NumericEntryPartyPreview } from '@/components/mobile-input/NumericEntryPartyBanner';
+import { NumericDisplay } from '@/components/mobile-input/NumericDisplay';
+import { NumericEntryRecipientHero } from '@/components/mobile-input/NumericEntryRecipientHero';
+import { BidVsTargetHint } from '@/components/mobile-input/BidVsTargetHint';
+import { resolveBidVsTarget } from '@/components/mobile-input/bidVsTarget';
+import { parseRawToNumber, toRawString } from '@/components/mobile-input';
+import { useInputPlatform } from '@/components/mobile-input/useInputPlatform';
+import { usePhysicalKeypadInput } from '@/components/mobile-input/usePhysicalKeypadInput';
+import { KeypadDisplayValueWithCaret } from '@/components/party/keypad/KeypadDisplayValueWithCaret';
+import { PersonNameKeypad } from '@/components/party/keypad/PersonNameKeypad';
 import Theme from '@/constants/Theme';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { createDirectQuote } from '@/features/indents/services/direct-quotes.service';
@@ -11,91 +30,105 @@ import {
   getVisibleIndentById,
 } from '@/features/indents/services/indents.service';
 import { resolveCommercialOpportunity } from '@/features/marketplace/domain';
-import {
-  StoryFlowSheetPortal,
-  useStoryPhonePopup,
-} from "@/features/network/components/StoryMobilePopupShell";
+import { BidConfirmModal, type BidConfirmPhase } from '@/features/network/components/bidding/BidConfirmModal';
 import { type BidRow } from '@/features/network/services/bids.service';
 import { type PostRow } from '@/features/network/services/posts.service';
 import { formatINR } from '@/lib/format';
 import { useSubmitBidMutation, useUpdateBidMutation } from '@/lib/queries/useBidsQuery';
 import { queryKeys } from '@/lib/queryKeys';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import {
-  ArrowRight,
-  Edit3,
-  MapPin,
-  MessageSquare,
-  Package,
-  ThumbsUp,
-  Truck,
-  X,
-} from 'lucide-react-native';
-import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowRight, MessageSquare } from 'lucide-react-native';
+import { MotiView } from 'moti';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
-  Animated,
-  KeyboardAvoidingView,
+  Modal,
   Platform,
   Pressable,
   StyleSheet,
   Text,
-  TextInput,
+  TouchableOpacity,
+  TouchableWithoutFeedback,
   View,
-  useWindowDimensions,
-  type TextStyle,
-  type ViewStyle,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 
-const DESKTOP_MIN_WIDTH = 1024;
+const NOTE_MAX_LENGTH = 80;
 
 interface BidSheetProps {
   visible: boolean;
   post: PostRow | null;
   orgId: string;
   existingBid?: BidRow | null;
-  /** Pre-fill for a fresh bid (e.g. a driver's suggested rate from an
-   * approved Boost recommendation). Ignored in edit mode. */
   initialAmount?: number | null;
-  /** Pre-fill note for a fresh bid (e.g. the recommending driver's note). */
   initialNote?: string | null;
   onClose: () => void;
   onSuccess?: () => void;
 }
 
-function splitLocation(label: string | null | undefined): { primary: string; secondary: string } {
+function cityPart(label: string | null | undefined): string {
   const raw = (label ?? '').trim();
-  if (!raw) return { primary: '—', secondary: '' };
-  const parts = raw.split(',').map((p) => p.trim()).filter(Boolean);
-  if (parts.length <= 1) return { primary: raw, secondary: '' };
-  return { primary: parts[0], secondary: parts.slice(1).join(', ') };
+  if (!raw) return '';
+  return raw.split(',')[0]?.trim() || raw;
 }
 
-export function BidSheet({ visible, post, orgId, existingBid, initialAmount, initialNote, onClose, onSuccess }: BidSheetProps) {
+/** Letter + space for optional bid note (alphabet keypad). */
+function appendNoteKey(value: string, key: string, maxLength = NOTE_MAX_LENGTH): string {
+  if (key === '⌫') return value.slice(0, -1);
+  if (key === ' ') {
+    if (!value.length || value.endsWith(' ')) return value;
+    if (value.length >= maxLength) return value;
+    return `${value} `;
+  }
+  if (!/^[A-Za-z]$/.test(key)) return value;
+  if (value.length >= maxLength) return value;
+  const atWordStart = value.length === 0 || value.endsWith(' ');
+  const next = atWordStart ? key.toUpperCase() : key.toLowerCase();
+  return `${value}${next}`;
+}
+
+type ActiveField = 'amount' | 'note';
+
+export function BidSheet({
+  visible,
+  post,
+  orgId,
+  existingBid,
+  initialAmount,
+  initialNote,
+  onClose,
+  onSuccess,
+}: BidSheetProps) {
   const insets = useSafeAreaInsets();
+  const platform = useInputPlatform();
   const { currentOrganization } = useOrganization();
-  const { width: viewportWidth } = useWindowDimensions();
-  const phonePopup = useStoryPhonePopup();
-  const isDesktop =
-    !phonePopup && Platform.OS === 'web' && viewportWidth >= DESKTOP_MIN_WIDTH;
   const queryClient = useQueryClient();
-  const [amount, setAmount] = useState('');
+
+  const [activeField, setActiveField] = useState<ActiveField>('amount');
+  const [amountRaw, setAmountRaw] = useState('');
   const [note, setNote] = useState('');
-  const [success, setSuccess] = useState(false);
-  const sheetAnim = useRef(new Animated.Value(isDesktop ? 0 : 400)).current;
-  const dialogOpacity = useRef(new Animated.Value(0)).current;
-  const dialogScale = useRef(new Animated.Value(0.96)).current;
+  const [validationError, setValidationError] = useState<string | undefined>();
+  const [submitting, setSubmitting] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
+  const [confirmPhase, setConfirmPhase] = useState<BidConfirmPhase>('review');
+  /** Freeze edit vs place for the confirm/success card while celebration runs. */
+  const [confirmIsEditMode, setConfirmIsEditMode] = useState(false);
+  const pendingQuoteInvalidateRef = useRef<string | null>(null);
+  /**
+   * Blocks form reseed while review/success is showing. A ref (not only
+   * confirmOpen state) so cache-driven re-renders cannot clear success before
+   * the next paint commits confirmOpen=true.
+   */
+  const celebrationLockRef = useRef(false);
 
   const isEditMode = !!existingBid;
   const sourceIndentId = post?.source_indent_id ?? null;
+
   const linkedIndentQ = useQuery({
     queryKey: ['q', 'indents', 'bid-sheet-target', orgId, sourceIndentId],
     queryFn: async () => {
       const { indent, error } = await getVisibleIndentById(orgId, sourceIndentId!);
       if (error) throw error;
-      // Broadcast may not be circulated to this org, so the market lookup can
-      // miss. Fall back to the broadcast-scoped RPC for supplier_target.
       if (indent?.supplier_target && Number(indent.supplier_target) > 0) return indent;
       const target = await getBroadcastIndentTarget(sourceIndentId);
       if (!target) return indent;
@@ -107,12 +140,13 @@ export function BidSheet({ visible, post, orgId, existingBid, initialAmount, ini
     enabled: visible && !!sourceIndentId && !!orgId,
     staleTime: 60_000,
   });
+
   const opportunity = useMemo(
     () =>
       resolveCommercialOpportunity({
         viewerOrgId: orgId || null,
-        ownerOrgId: post?.organization_id ?? "",
-        isLoad: post?.type === "LOAD",
+        ownerOrgId: post?.organization_id ?? '',
+        isLoad: post?.type === 'LOAD',
         indentStatus: linkedIndentQ.data?.status ?? null,
         postIsActive: post?.is_active,
         bidCount: post?.bid_count ?? (existingBid ? 1 : 0),
@@ -138,6 +172,7 @@ export function BidSheet({ visible, post, orgId, existingBid, initialAmount, ini
       existingBid?.status,
     ],
   );
+
   const targetRate = opportunity.pricing.displayPrice;
   const biddingAllowed =
     opportunity.permissions.canBid ||
@@ -148,82 +183,128 @@ export function BidSheet({ visible, post, orgId, existingBid, initialAmount, ini
 
   const submitMutation = useSubmitBidMutation(post?.id ?? null, orgId);
   const updateMutation = useUpdateBidMutation(post?.id ?? null, orgId);
-  const isPending = isEditMode ? updateMutation.isPending : submitMutation.isPending;
-
-  const parsedAmount = Number(amount.replace(/,/g, '').trim() || '0');
-  const canSubmit =
-    biddingAllowed &&
-    Number.isFinite(parsedAmount) &&
-    parsedAmount > 0 &&
-    !isPending;
-
-  const origin = splitLocation(post?.origin);
-  const destination = splitLocation(post?.destination);
-
-  const handleAmountChange = (raw: string) => {
-    setAmount(raw.replace(/[^\d]/g, ''));
-  };
 
   useEffect(() => {
-    if (visible) {
-      setAmount(
-        initialAmount && initialAmount > 0
-          ? String(Math.round(initialAmount))
-          : existingBid?.amount
-            ? String(Math.round(existingBid.amount))
-            : '',
-      );
-      setNote(existingBid?.note ?? initialNote ?? '');
-      setSuccess(false);
-      if (isDesktop) {
-        dialogOpacity.setValue(0);
-        dialogScale.setValue(0.96);
-        Animated.parallel([
-          Animated.timing(dialogOpacity, { toValue: 1, duration: 180, useNativeDriver: true }),
-          Animated.spring(dialogScale, { toValue: 1, tension: 80, friction: 11, useNativeDriver: true }),
-        ]).start();
-      } else {
-        Animated.spring(sheetAnim, {
-          toValue: 0,
-          tension: 65,
-          friction: 11,
-          useNativeDriver: true,
-        }).start();
-      }
-    } else if (isDesktop) {
-      Animated.timing(dialogOpacity, { toValue: 0, duration: 140, useNativeDriver: true }).start();
-    } else {
-      Animated.timing(sheetAnim, {
-        toValue: 400,
-        duration: 200,
-        useNativeDriver: true,
-      }).start();
+    if (!visible) {
+      celebrationLockRef.current = false;
+      setConfirmOpen(false);
+      setConfirmPhase('review');
+      setConfirmIsEditMode(false);
+      setSubmitting(false);
+      return;
     }
-  }, [visible, isDesktop, existingBid?.amount, existingBid?.note, initialAmount, initialNote]);
+    /**
+     * Never reseeds / resets while the confirm or success celebration is open.
+     * Update mutations refresh `existingBid.amount` in cache mid-flight — that
+     * used to wipe `confirmPhase: 'success'` before the animation could play.
+     */
+    if (
+      celebrationLockRef.current ||
+      confirmOpen ||
+      confirmPhase === 'success'
+    ) {
+      return;
+    }
 
-  const invalidateQuoteCaches = async (matchedIndentId: string) => {
-    // Reach Stability: prefer narrow keys. Full indents.all() refetches every
-    // Give/Get list and freezes UI under concurrent bids.
-    await Promise.allSettled([
-      queryClient.invalidateQueries({ queryKey: queryKeys.indents.market(orgId) }),
-      queryClient.invalidateQueries({
-        queryKey: [...queryKeys.indents.finite(orgId), 'my-direct-quotes'],
-      }),
-      queryClient.invalidateQueries({
-        queryKey: ['indents', matchedIndentId, 'direct-quotes'],
-      }),
-      queryClient.invalidateQueries({
-        predicate: (q) =>
-          Array.isArray(q.queryKey) &&
-          q.queryKey[0] === 'indents' &&
-          (q.queryKey[1] === 'offer-counts' || q.queryKey[1] === 'quote-counts'),
-      }),
-    ]);
-  };
+    setActiveField('amount');
+    setValidationError(undefined);
+    setSubmitting(false);
+    setConfirmPhase('review');
+    setConfirmIsEditMode(false);
+    const seed =
+      initialAmount && initialAmount > 0
+        ? Math.round(initialAmount)
+        : existingBid?.amount
+          ? Math.round(existingBid.amount)
+          : null;
+    setAmountRaw(seed != null ? toRawString(seed) : '');
+    setNote(existingBid?.note ?? initialNote ?? '');
+  }, [
+    visible,
+    confirmOpen,
+    confirmPhase,
+    existingBid?.id,
+    existingBid?.amount,
+    existingBid?.note,
+    initialAmount,
+    initialNote,
+  ]);
 
-  const handleSubmit = async () => {
+  const origin = cityPart(post?.origin);
+  const destination = cityPart(post?.destination);
+  const route =
+    origin && destination
+      ? `${origin} → ${destination}`
+      : origin || destination || undefined;
+  const vehicle = post?.vehicle_type?.trim() || undefined;
+  const weight =
+    post?.weight_tonnes != null ? `${post.weight_tonnes}T` : undefined;
+  const material = post?.material?.trim() || undefined;
+
+  const partySubtitle = useMemo(() => {
+    const parts: string[] = [];
+    if (route) parts.push(route);
+    const specs = [vehicle, weight, material].filter(Boolean);
+    if (specs.length > 0) parts.push(specs.join(' · '));
+    if (targetRate != null) parts.push(`Target ${formatINR(targetRate)}`);
+    return parts.length > 0 ? parts.join(' · ') : undefined;
+  }, [route, vehicle, weight, material, targetRate]);
+
+  const partyPreview = useMemo((): NumericEntryPartyPreview | undefined => {
+    if (!post) return undefined;
+    return {
+      name: (post.org_name ?? '').trim() || 'Load owner',
+      subtitle: partySubtitle,
+      entityType: 'supplier',
+      organizationImageUrl: post.org_avatar_url ?? null,
+      organizationAvatarSeed: post.org_avatar_seed ?? null,
+    };
+  }, [post, partySubtitle]);
+
+  const invalidateQuoteCaches = useCallback(
+    async (matchedIndentId: string) => {
+      await Promise.allSettled([
+        queryClient.invalidateQueries({ queryKey: queryKeys.indents.market(orgId) }),
+        queryClient.invalidateQueries({
+          queryKey: [...queryKeys.indents.finite(orgId), 'my-direct-quotes'],
+        }),
+        queryClient.invalidateQueries({
+          queryKey: ['indents', matchedIndentId, 'direct-quotes'],
+        }),
+        queryClient.invalidateQueries({
+          predicate: (q) =>
+            Array.isArray(q.queryKey) &&
+            q.queryKey[0] === 'indents' &&
+            (q.queryKey[1] === 'offer-counts' || q.queryKey[1] === 'quote-counts'),
+        }),
+      ]);
+    },
+    [orgId, queryClient],
+  );
+
+  const canSubmit =
+    biddingAllowed &&
+    isKeypadValueSubmittable(amountRaw) &&
+    parseRawToNumber(amountRaw) > 0 &&
+    !submitting;
+
+  const handleAmountKey = useCallback((key: KeypadKey) => {
+    setAmountRaw((prev) => applyKeypadPress(prev, key, { maxDecimalPlaces: 0 }));
+    setValidationError(undefined);
+  }, []);
+
+  const handleNoteKey = useCallback((key: string) => {
+    setNote((prev) => appendNoteKey(prev, key, NOTE_MAX_LENGTH));
+  }, []);
+
+  const requestConfirm = useCallback(() => {
     if (!post || !canSubmit) return;
-
+    const amount = parseRawToNumber(amountRaw);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      setValidationError('Enter an amount greater than 0.');
+      setActiveField('amount');
+      return;
+    }
     if (!post.source_indent_id) {
       Alert.alert(
         'Cannot place bid',
@@ -231,738 +312,903 @@ export function BidSheet({ visible, post, orgId, existingBid, initialAmount, ini
       );
       return;
     }
+    setValidationError(undefined);
+    celebrationLockRef.current = true;
+    setConfirmIsEditMode(isEditMode);
+    setConfirmPhase('review');
+    setConfirmOpen(true);
+  }, [post, canSubmit, amountRaw, isEditMode]);
 
-    let submitError: Error | null = null;
-
-    if (isEditMode && existingBid) {
-      const updateRes = await updateMutation.mutateAsync({
-        bidId: existingBid.id,
-        amount: parsedAmount,
-        note: note.trim() || undefined,
-      });
-      submitError = updateRes.error ?? null;
-      if (!submitError) {
-        const quoteRes = await createDirectQuote(
-          post.source_indent_id,
-          orgId,
-          parsedAmount,
-          note.trim() || null,
-        );
-        submitError = quoteRes.error ?? null;
-        if (!submitError) await invalidateQuoteCaches(post.source_indent_id);
-      }
-    } else {
-      const submitRes = await submitMutation.mutateAsync({
-        amount: parsedAmount,
-        note: note.trim() || undefined,
-        orgName: currentOrganization?.name ?? "",
-      });
-      submitError = submitRes.error;
-      if (!submitError) await invalidateQuoteCaches(post.source_indent_id);
+  const finishAfterSuccess = useCallback(() => {
+    const indentToInvalidate = pendingQuoteInvalidateRef.current;
+    pendingQuoteInvalidateRef.current = null;
+    celebrationLockRef.current = false;
+    setConfirmOpen(false);
+    setConfirmPhase('review');
+    setConfirmIsEditMode(false);
+    triggerFeedback('apply');
+    if (indentToInvalidate) {
+      void invalidateQuoteCaches(indentToInvalidate);
     }
+    onSuccess?.();
+    onClose();
+  }, [onSuccess, onClose, invalidateQuoteCaches]);
 
-    if (submitError) {
-      Alert.alert(isEditMode ? 'Update failed' : 'Bid failed', submitError.message);
+  const handleSubmit = useCallback(async () => {
+    if (!post || !canSubmit) return;
+    const amount = parseRawToNumber(amountRaw);
+    if (!Number.isFinite(amount) || amount <= 0) {
+      celebrationLockRef.current = false;
+      setConfirmOpen(false);
+      setConfirmPhase('review');
+      setValidationError('Enter an amount greater than 0.');
+      setActiveField('amount');
+      return;
+    }
+    if (!post.source_indent_id) {
+      celebrationLockRef.current = false;
+      setConfirmOpen(false);
+      setConfirmPhase('review');
+      Alert.alert(
+        'Cannot place bid',
+        'This story is not linked to a load indent. Use Get Load to quote, or ask the publisher to broadcast from an indent.',
+      );
       return;
     }
 
-    setSuccess(true);
-    setTimeout(() => {
-      onSuccess?.();
-      onClose();
-    }, 1200);
-  };
+    setSubmitting(true);
+    setValidationError(undefined);
+    const bidNote = note.trim();
+    let submitError: Error | null = null;
+    const indentIdForCache = post.source_indent_id;
+
+    try {
+      if (isEditMode && existingBid) {
+        const updateRes = await updateMutation.mutateAsync({
+          bidId: existingBid.id,
+          amount,
+          note: bidNote || undefined,
+        });
+        submitError = updateRes.error ?? null;
+        if (!submitError) {
+          const quoteRes = await createDirectQuote(
+            indentIdForCache,
+            orgId,
+            amount,
+            bidNote || null,
+          );
+          submitError = quoteRes.error ?? null;
+        }
+      } else {
+        const submitRes = await submitMutation.mutateAsync({
+          amount,
+          note: bidNote || undefined,
+          orgName: currentOrganization?.name ?? '',
+        });
+        submitError = submitRes.error;
+      }
+    } finally {
+      setSubmitting(false);
+    }
+
+    if (submitError) {
+      celebrationLockRef.current = false;
+      pendingQuoteInvalidateRef.current = null;
+      setConfirmOpen(false);
+      setConfirmPhase('review');
+      setValidationError(submitError.message);
+      return;
+    }
+
+    // Celebrate first — quote list invalidation waits until Done so refetch
+    // cannot tear down the success UI (especially on update).
+    celebrationLockRef.current = true;
+    pendingQuoteInvalidateRef.current = indentIdForCache;
+    setConfirmIsEditMode(isEditMode);
+    setConfirmPhase('success');
+  }, [
+    post,
+    canSubmit,
+    amountRaw,
+    note,
+    isEditMode,
+    existingBid,
+    updateMutation,
+    submitMutation,
+    orgId,
+    currentOrganization?.name,
+  ]);
+
+  usePhysicalKeypadInput({
+    enabled: visible && activeField === 'amount' && !confirmOpen,
+    onKey: handleAmountKey,
+    onSubmit: () => {
+      if (canSubmit) requestConfirm();
+    },
+    onClose,
+    allowDecimal: false,
+  });
+
+  useEffect(() => {
+    if (!visible || activeField !== 'note' || Platform.OS !== 'web') return;
+    if (typeof window === 'undefined') return;
+    const handler = (event: KeyboardEvent) => {
+      const target = event.target;
+      if (target instanceof HTMLElement) {
+        const tag = target.tagName;
+        if (
+          tag === 'INPUT' ||
+          tag === 'TEXTAREA' ||
+          tag === 'SELECT' ||
+          target.isContentEditable
+        ) {
+          return;
+        }
+      }
+      const { key } = event;
+      if (key === 'Backspace' || key === 'Delete') {
+        event.preventDefault();
+        handleNoteKey('⌫');
+        return;
+      }
+      if (key === ' ' || key === 'Spacebar') {
+        event.preventDefault();
+        handleNoteKey(' ');
+        return;
+      }
+      if (/^[a-zA-Z]$/.test(key)) {
+        event.preventDefault();
+        handleNoteKey(key.toUpperCase());
+      }
+    };
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, [visible, activeField, handleNoteKey]);
 
   if (!post) return null;
 
-  const loadContext = (
-    <>
-      {isDesktop ? (
-        <View style={styles.desktopContextInner}>
-          <Text style={styles.desktopContextKicker}>Load broadcast</Text>
-          <View style={styles.desktopRouteBlock}>
-            <View style={styles.desktopRouteCol}>
-              <View style={[styles.routeDot, styles.routeDotPickup]} />
-              <Text style={styles.desktopRoutePrimary}>{origin.primary}</Text>
-              {origin.secondary ? (
-                <Text style={styles.desktopRouteSecondary}>{origin.secondary}</Text>
-              ) : null}
-            </View>
-            <View style={styles.desktopRouteMid}>
-              <View style={styles.desktopRouteLine} />
-              <ArrowRight size={16} color={Theme.textOnDarkMuted} />
-            </View>
-            <View style={[styles.desktopRouteCol, styles.desktopRouteColEnd]}>
-              <View style={[styles.routeDot, styles.routeDotDrop]} />
-              <Text style={[styles.desktopRoutePrimary, styles.desktopRoutePrimaryEnd]}>
-                {destination.primary}
-              </Text>
-              {destination.secondary ? (
-                <Text style={[styles.desktopRouteSecondary, styles.desktopRouteSecondaryEnd]}>
-                  {destination.secondary}
-                </Text>
-              ) : null}
-            </View>
-          </View>
+  const isDesktop = platform === 'desktop';
+  const isTablet = platform === 'tablet';
+  const isMobile = platform === 'mobile';
 
-          <View style={styles.desktopSpecGrid}>
-            {post.vehicle_type ? (
-              <View style={styles.desktopSpecItem}>
-                <Truck size={14} color={Theme.textOnDarkMuted} />
-                <View style={styles.desktopSpecTextCol}>
-                  <Text style={styles.desktopSpecLabel}>Vehicle</Text>
-                  <Text style={styles.desktopSpecValue}>{post.vehicle_type}</Text>
-                </View>
-              </View>
-            ) : null}
-            {post.weight_tonnes != null ? (
-              <View style={styles.desktopSpecItem}>
-                <Package size={14} color={Theme.textOnDarkMuted} />
-                <View style={styles.desktopSpecTextCol}>
-                  <Text style={styles.desktopSpecLabel}>Weight</Text>
-                  <Text style={styles.desktopSpecValue}>{post.weight_tonnes} tonnes</Text>
-                </View>
-              </View>
-            ) : null}
-            {post.material ? (
-              <View style={styles.desktopSpecItem}>
-                <MapPin size={14} color={Theme.textOnDarkMuted} />
-                <View style={styles.desktopSpecTextCol}>
-                  <Text style={styles.desktopSpecLabel}>Material</Text>
-                  <Text style={styles.desktopSpecValue}>{post.material}</Text>
-                </View>
-              </View>
-            ) : null}
-          </View>
+  const title = isEditMode ? 'Update your bid' : 'Place your bid';
+  const submitLabel = submitting
+    ? isEditMode
+      ? 'Updating…'
+      : 'Submitting…'
+    : isEditMode
+      ? 'Update bid'
+      : 'Submit bid';
 
-          {targetRate != null ? (
-            <View style={styles.desktopTargetCard}>
-              <Text style={styles.desktopTargetLabel}>Supplier target</Text>
-              <Text style={styles.desktopTargetValue}>{formatINR(targetRate)}</Text>
-              <Text style={styles.desktopTargetHint}>Reference rate from load owner</Text>
-            </View>
-          ) : null}
-        </View>
-      ) : (
-        <View style={styles.loadSummary}>
-          {post.vehicle_type ? (
-            <View style={styles.summaryChip}>
-              <Truck size={13} color={Theme.textPrimaryDark} strokeWidth={2.2} />
-              <Text style={styles.summaryChipText}>{post.vehicle_type}</Text>
-            </View>
-          ) : null}
-          {post.weight_tonnes != null ? (
-            <View style={styles.summaryChip}>
-              <Text style={styles.summaryChipText}>{post.weight_tonnes}T</Text>
-            </View>
-          ) : null}
-          {post.material ? (
-            <View style={styles.summaryChip}>
-              <Text style={styles.summaryChipText}>{post.material}</Text>
-            </View>
-          ) : null}
-          {targetRate != null ? (
-            <View style={[styles.summaryChip, styles.rateChip]}>
-              <Text style={styles.rateChipText}>Target: {formatINR(targetRate)}</Text>
-            </View>
-          ) : null}
-        </View>
-      )}
-    </>
+  const notePreview = note.trim();
+  const noteActive = activeField === 'note';
+  const confirmAmount = parseRawToNumber(amountRaw);
+  const vsTarget = useMemo(
+    () => resolveBidVsTarget(confirmAmount, targetRate),
+    [confirmAmount, targetRate],
   );
 
-  const bidForm = success ? (
-    <View style={[styles.successView, isDesktop && styles.successViewDesktop]}>
-      <View style={styles.successIcon}>
-        <ThumbsUp size={32} color="#10b981" fill="#10b981" />
-      </View>
-      <Text style={styles.successText}>{isEditMode ? 'Bid Updated!' : 'Bid Submitted!'}</Text>
-      <Text style={styles.successSub}>The load owner will review your offer</Text>
-    </View>
-  ) : (
-    <>
-      <View style={styles.inputGroup}>
-        <Text style={[styles.inputLabel, isDesktop && styles.inputLabelDesktop]}>
-          {isDesktop ? 'Your bid amount' : 'YOUR BID AMOUNT'}
-        </Text>
-        {isDesktop && targetRate != null ? (
-          <Text style={styles.desktopAmountHint}>
-            Target reference: {formatINR(targetRate)}
-          </Text>
-        ) : null}
-        <View style={[styles.amountRow, isDesktop && styles.amountRowDesktop]}>
-          <View style={[styles.currencyBadge, isDesktop && styles.currencyBadgeDesktop]}>
-            <Text style={[styles.currencyText, isDesktop && styles.currencyTextDesktop]}>₹</Text>
-          </View>
-          <TextInput
-            style={[styles.amountInput, isDesktop && styles.amountInputDesktop]}
-            placeholder="0"
-            placeholderTextColor={Theme.textMuted}
-            keyboardType={Platform.OS === 'web' ? 'numeric' : 'number-pad'}
-            value={amount}
-            onChangeText={handleAmountChange}
-            autoFocus={!isDesktop}
-            returnKeyType="next"
-            selectTextOnFocus
-          />
-        </View>
-      </View>
+  const confirmModal = (
+    <BidConfirmModal
+      visible={confirmOpen}
+      phase={confirmPhase}
+      isEditMode={confirmIsEditMode}
+      amount={confirmAmount > 0 ? confirmAmount : 0}
+      ownerName={(post.org_name ?? '').trim() || 'Load owner'}
+      origin={origin || undefined}
+      destination={destination || undefined}
+      vehicle={vehicle}
+      weight={weight}
+      material={material}
+      targetRate={targetRate}
+      note={notePreview || undefined}
+      submitting={submitting}
+      onCancel={() => {
+        if (!submitting && confirmPhase === 'review') {
+          celebrationLockRef.current = false;
+          setConfirmOpen(false);
+          setConfirmPhase('review');
+          setConfirmIsEditMode(false);
+        }
+      }}
+      onConfirm={() => {
+        void handleSubmit();
+      }}
+      onSuccessDone={finishAfterSuccess}
+    />
+  );
 
-      <View style={styles.inputGroup}>
-        <Text style={[styles.inputLabel, isDesktop && styles.inputLabelDesktop]}>
-          {isDesktop ? 'Note (optional)' : 'NOTE (OPTIONAL)'}
+  const valueStage = (
+    <View
+      style={[
+        styles.valueStage,
+        !isMobile && styles.valueStageElevated,
+      ]}
+    >
+      <Pressable
+        onPress={() => setActiveField('amount')}
+        accessibilityRole="button"
+        accessibilityLabel="Edit bid amount"
+        style={({ pressed }) => [
+          styles.amountPress,
+          pressed && activeField !== 'amount' && styles.amountPressDim,
+        ]}
+      >
+        <NumericDisplay
+          rawValue={amountRaw}
+          type="currency"
+          prefix="₹"
+          placeholder="0"
+          variant={isMobile ? 'hero' : 'default'}
+          tone={vsTarget?.tone ?? 'default'}
+        />
+      </Pressable>
+
+      {validationError ? (
+        <Text style={styles.error} accessibilityRole="alert">
+          {validationError}
         </Text>
-        <View style={[styles.noteContainer, isDesktop && styles.noteContainerDesktop]}>
-          <MessageSquare
-            size={15}
-            color={Theme.textPrimaryDark}
-            strokeWidth={2.2}
-            style={styles.noteIcon}
-          />
-          <TextInput
-            style={[styles.noteInput, isDesktop && styles.noteInputDesktop]}
-            placeholder="Add a message with your bid..."
-            placeholderTextColor={Theme.textMuted}
-            value={note}
-            onChangeText={setNote}
-            multiline
-            numberOfLines={isDesktop ? 4 : 2}
-            returnKeyType="done"
-            blurOnSubmit
-          />
-        </View>
-      </View>
+      ) : vsTarget ? (
+        <BidVsTargetHint caption={vsTarget.caption} tone={vsTarget.tone} />
+      ) : targetRate != null ? (
+        <Text style={styles.hint}>Target {formatINR(targetRate)}</Text>
+      ) : (
+        <View style={styles.hintSpacer} />
+      )}
 
       <Pressable
         style={[
-          styles.submitBtn,
-          isDesktop && styles.submitBtnDesktop,
-          (!canSubmit || isPending) && styles.submitBtnDisabled,
+          styles.noteRow,
+          noteActive && styles.noteRowActive,
+          !isMobile && styles.noteRowElevated,
         ]}
-        onPress={handleSubmit}
-        disabled={!canSubmit}
+        onPress={() => setActiveField('note')}
+        accessibilityRole="button"
+        accessibilityLabel={
+          notePreview ? `Edit note: ${notePreview}` : 'Add optional note'
+        }
+        accessibilityState={{ selected: noteActive }}
       >
-        {isPending ? (
-          <LoadingIndicator color={Theme.buttonPrimaryText} />
+        <MessageSquare
+          size={isMobile ? 15 : 16}
+          color={noteActive ? Theme.buttonPrimaryText : Theme.iconMuted}
+          strokeWidth={2.2}
+          style={styles.noteIcon}
+        />
+        {noteActive ? (
+          <KeypadDisplayValueWithCaret
+            value={note}
+            placeholder="Add a message with your bid"
+            showCaret={note.length < NOTE_MAX_LENGTH}
+            valueStyle={[styles.noteValue, !isMobile && styles.noteValueElevated]}
+            placeholderStyle={styles.notePlaceholder}
+            caretStyle={styles.noteCaret}
+            fillRow
+          />
         ) : (
-          <>
-            {isEditMode ? (
-              <Edit3 size={16} color={Theme.buttonPrimaryText} strokeWidth={2.3} />
-            ) : (
-              <ThumbsUp size={16} color={Theme.buttonPrimaryText} strokeWidth={2.3} />
-            )}
-            <Text style={styles.submitBtnText}>
-              {isEditMode ? 'Update bid' : 'Submit bid'}
-              {canSubmit ? ` — ${formatINR(parsedAmount)}` : ''}
-            </Text>
-          </>
+          <Text
+            style={[
+              styles.noteIdleText,
+              notePreview ? styles.noteIdleFilled : null,
+            ]}
+            numberOfLines={1}
+          >
+            {notePreview || 'Add note (optional)'}
+          </Text>
         )}
       </Pressable>
-
-      {(submitMutation.error || updateMutation.error) && (
-        <Text style={styles.errorText}>{String(submitMutation.error ?? updateMutation.error)}</Text>
-      )}
-    </>
-  );
-
-  const header = (
-    <View style={[styles.header, isDesktop && styles.headerDesktop]}>
-      <View style={styles.headerTextCol}>
-        {isDesktop ? (
-          <Text style={styles.desktopFormKicker}>
-            {isEditMode ? 'Update quotation' : 'Submit quotation'}
-          </Text>
-        ) : null}
-        <Text style={[styles.headerTitle, isDesktop && styles.headerTitleDesktop]}>
-          {isEditMode ? 'Edit Bid' : 'Place Bid'}
+      {noteActive ? (
+        <Text style={styles.noteCounter}>
+          {note.trim().length}/{NOTE_MAX_LENGTH}
         </Text>
-        {!isDesktop ? (
-          <Text style={styles.headerSubtitle} numberOfLines={1}>
-            {post.origin} → {post.destination}
-          </Text>
-        ) : null}
-      </View>
-      <Pressable
-        onPress={onClose}
-        hitSlop={8}
-        style={[styles.closeBtn, isDesktop && styles.closeBtnDesktop]}
-        accessibilityRole="button"
-        accessibilityLabel="Close bid dialog"
-      >
-        <X
-          size={isDesktop ? 20 : 22}
-          color={Theme.textPrimaryDark}
-          strokeWidth={2.3}
-        />
-      </Pressable>
+      ) : null}
     </View>
   );
 
-  const sheetBody = isDesktop ? (
-    <Animated.View
-      style={[
-        styles.desktopDialog,
-        {
-          opacity: dialogOpacity,
-          transform: [{ scale: dialogScale }],
-          maxHeight: Math.min(640, viewportWidth * 0.9),
-        },
-      ]}
-    >
-      {header}
-      <View style={styles.desktopBody}>
-        <View style={styles.desktopContextPanel}>{loadContext}</View>
-        <View style={styles.desktopFormPanel}>
-          <View style={styles.desktopFormPanelInner}>{bidForm}</View>
-        </View>
-      </View>
-    </Animated.View>
+  const keypadBlock =
+    activeField === 'amount' ? (
+      <DecimalKeypad
+        onKey={handleAmountKey}
+        showDecimal={false}
+        variant="pay"
+        layout="phone"
+        size={isDesktop ? 'compact' : 'default'}
+        hapticsEnabled={false}
+      />
+    ) : (
+      <PersonNameKeypad
+        onKey={handleNoteKey}
+        length={note.length}
+        maxLength={NOTE_MAX_LENGTH}
+      />
+    );
+
+  const partyBlock = partyPreview ? (
+    <NumericEntryRecipientHero
+      party={partyPreview}
+      caption={
+        partyPreview.name.trim().toLowerCase() === title.toLowerCase()
+          ? undefined
+          : title
+      }
+      nameInline={
+        partyPreview.name.trim().toLowerCase() !== title.toLowerCase()
+      }
+      compact
+      dense={!isMobile}
+    />
   ) : (
-    <Animated.View
-      style={[
-        styles.sheet,
-        { paddingBottom: insets.bottom + 16, transform: [{ translateY: sheetAnim }] },
-      ]}
-    >
-      <View style={styles.handle} />
-      {header}
-      {loadContext}
-      {bidForm}
-    </Animated.View>
+    <Text style={styles.fallbackTitle}>{title}</Text>
   );
 
-  return (
-    <StoryFlowSheetPortal
-      visible={visible}
-      onClose={onClose}
-      accessibilityLabel="Close bid sheet"
-      animationType="fade"
+  /** Mobile: GPay-style pay tray + emerald continue FAB (FullscreenNumericEntry). */
+  const mobileContent = (
+    <View
+      style={[
+        styles.root,
+        styles.rootPay,
+        { paddingBottom: Math.max(insets.bottom, 6) },
+      ]}
     >
-      <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
-        enabled={Platform.OS !== 'web'}
-        style={[styles.kvContainer, isDesktop && styles.kvContainerDesktop]}
-        pointerEvents="box-none"
+      <View
+        style={[
+          styles.topBar,
+          Platform.OS === 'ios' && { paddingTop: Math.max(insets.top, 8) },
+          Platform.OS !== 'ios' && { paddingTop: Math.max(insets.top, 12) },
+        ]}
       >
-        {sheetBody}
-      </KeyboardAvoidingView>
-    </StoryFlowSheetPortal>
+        <TouchableOpacity
+          style={styles.closeBtnPay}
+          onPress={onClose}
+          hitSlop={12}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+        >
+          <Text style={styles.closeTextPay}>✕</Text>
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.bodyPay}>
+        {partyBlock}
+        {valueStage}
+      </View>
+
+      <View style={styles.bottom}>
+        <View style={styles.fabRow}>
+          <View style={styles.fabCell} />
+          <View style={styles.fabCell} />
+          <View style={styles.fabCell}>
+            <TouchableOpacity
+              style={[styles.fabPay, !canSubmit && styles.fabPayDisabled]}
+              onPress={requestConfirm}
+              disabled={!canSubmit}
+              accessibilityRole="button"
+              accessibilityLabel={submitLabel}
+              accessibilityState={{ disabled: !canSubmit }}
+            >
+              {submitting ? (
+                <LoadingIndicator color="#ffffff" />
+              ) : (
+                <ArrowRight
+                  size={22}
+                  color={canSubmit ? '#ffffff' : Theme.textMuted}
+                  strokeWidth={2.4}
+                />
+              )}
+            </TouchableOpacity>
+          </View>
+        </View>
+        {keypadBlock}
+      </View>
+    </View>
+  );
+
+  /** Tablet / desktop: header Apply CTA (Pulse buttonPrimary). */
+  const elevatedContent = (
+    <View
+      style={[
+        styles.root,
+        styles.rootElevated,
+        { paddingBottom: isDesktop || isTablet ? 20 : Math.max(insets.bottom, 16) },
+      ]}
+    >
+      <View style={styles.headerElevated}>
+        <TouchableOpacity
+          style={styles.closeBtnElevated}
+          onPress={onClose}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel="Cancel"
+        >
+          <Text style={styles.closeTextElevated}>✕</Text>
+        </TouchableOpacity>
+        <View style={styles.headerMid}>
+          <Text style={styles.headerLabel} numberOfLines={1}>
+            {title}
+          </Text>
+          {partySubtitle ? (
+            <Text style={styles.headerContext} numberOfLines={2}>
+              {partySubtitle}
+            </Text>
+          ) : null}
+        </View>
+        <TouchableOpacity
+          style={[styles.applyBtn, !canSubmit && styles.applyBtnMuted]}
+          onPress={requestConfirm}
+          disabled={!canSubmit}
+          accessibilityRole="button"
+          accessibilityLabel={submitLabel}
+          accessibilityState={{ disabled: !canSubmit }}
+        >
+          {submitting ? (
+            <LoadingIndicator color={Theme.buttonPrimaryText} />
+          ) : (
+            <Text style={[styles.applyText, !canSubmit && styles.applyTextMuted]}>
+              {isEditMode ? 'Update' : 'Submit'}
+            </Text>
+          )}
+        </TouchableOpacity>
+      </View>
+
+      <View style={styles.bodyElevated}>
+        {partyPreview &&
+        partyPreview.name.trim().toLowerCase() !== title.toLowerCase() ? (
+          <NumericEntryRecipientHero
+            party={partyPreview}
+            dense
+            compact
+          />
+        ) : null}
+        {valueStage}
+      </View>
+
+      <View style={styles.bottomElevated}>
+        <TouchableOpacity
+          style={[
+            styles.submitBar,
+            !canSubmit && styles.submitBarMuted,
+          ]}
+          onPress={requestConfirm}
+          disabled={!canSubmit}
+          accessibilityRole="button"
+          accessibilityLabel={submitLabel}
+        >
+          {submitting ? (
+            <LoadingIndicator color={Theme.buttonPrimaryText} />
+          ) : (
+            <>
+              <ArrowRight
+                size={18}
+                color={
+                  canSubmit ? Theme.buttonPrimaryText : Theme.textSecondary
+                }
+                strokeWidth={2.4}
+              />
+              <Text
+                style={[
+                  styles.submitBarText,
+                  !canSubmit && styles.submitBarTextMuted,
+                ]}
+              >
+                {submitLabel}
+                {canSubmit && isKeypadValueSubmittable(amountRaw)
+                  ? ` · ${formatINR(parseRawToNumber(amountRaw))}`
+                  : ''}
+              </Text>
+            </>
+          )}
+        </TouchableOpacity>
+        <View style={styles.keypadElevated}>{keypadBlock}</View>
+      </View>
+    </View>
+  );
+
+  if (isDesktop) {
+    return (
+      <>
+        <Modal
+          visible={visible}
+          transparent
+          animationType="fade"
+          onRequestClose={onClose}
+          statusBarTranslucent
+        >
+          <View style={styles.desktopOverlay}>
+            <TouchableWithoutFeedback onPress={onClose} accessibilityLabel="Close">
+              <View style={StyleSheet.absoluteFillObject} />
+            </TouchableWithoutFeedback>
+            <MotiView
+              from={{ translateX: 480 }}
+              animate={{ translateX: 0 }}
+              transition={{ type: 'spring', damping: 32, stiffness: 320, mass: 0.9 }}
+              style={styles.desktopDrawer}
+            >
+              {elevatedContent}
+            </MotiView>
+          </View>
+        </Modal>
+        {confirmModal}
+      </>
+    );
+  }
+
+  if (isTablet) {
+    return (
+      <>
+        <Modal
+          visible={visible}
+          transparent
+          animationType="fade"
+          onRequestClose={onClose}
+          statusBarTranslucent
+        >
+          <View style={styles.tabletOverlay}>
+            <TouchableWithoutFeedback onPress={onClose} accessibilityLabel="Close">
+              <View style={StyleSheet.absoluteFillObject} />
+            </TouchableWithoutFeedback>
+            <MotiView
+              from={{ opacity: 0, scale: 0.94 }}
+              animate={{ opacity: 1, scale: 1 }}
+              transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+              style={styles.tabletModal}
+            >
+              {elevatedContent}
+            </MotiView>
+          </View>
+        </Modal>
+        {confirmModal}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <Modal
+        visible={visible}
+        animationType="slide"
+        presentationStyle="fullScreen"
+        onRequestClose={onClose}
+        statusBarTranslucent={Platform.OS === 'android'}
+      >
+        {mobileContent}
+      </Modal>
+      {confirmModal}
+    </>
   );
 }
 
-const webDialogShadow = Platform.select({
-  web: {
-    boxShadow: '0 28px 64px rgba(15, 23, 42, 0.22), 0 8px 24px rgba(15, 23, 42, 0.12)',
-  } as ViewStyle,
-  default: {},
-});
-
 const styles = StyleSheet.create({
-  overlay: {
+  root: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
+    backgroundColor: Theme.screenBackground,
+  },
+  rootPay: {
+    justifyContent: 'space-between',
+  },
+  rootElevated: {
+    minHeight: 0,
+  },
+  topBar: {
+    flexDirection: 'row',
     justifyContent: 'flex-end',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingBottom: 4,
+    minHeight: 48,
   },
-  overlayDesktop: {
+  closeBtnPay: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
     justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingVertical: 24,
-    backgroundColor: Theme.overlayBackdrop,
   },
-  kvContainer: { justifyContent: 'flex-end', width: '100%' },
-  kvContainerDesktop: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    width: '100%',
-    maxWidth: 920,
-  },
-  sheet: {
-    backgroundColor: Theme.screenBackground,
-    borderTopLeftRadius: 24,
-    borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 12,
-  },
-  desktopDialog: {
-    width: '100%',
-    maxWidth: 880,
-    backgroundColor: Theme.screenBackground,
-    overflow: 'hidden',
-    ...webDialogShadow,
-  },
-  handle: {
-    width: 36,
-    height: 4,
-    backgroundColor: Theme.borderMedium,
-    alignSelf: 'center',
-    marginBottom: 16,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    marginBottom: 14,
-  },
-  headerDesktop: {
-    paddingHorizontal: 24,
-    paddingTop: 20,
-    paddingBottom: 0,
-    marginBottom: 0,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderMedium,
-    alignItems: 'center',
-  },
-  headerTextCol: { flex: 1, minWidth: 0 },
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.4,
-    marginBottom: 4,
-  },
-  headerTitleDesktop: {
-    fontSize: 22,
-    marginBottom: 0,
-    color: Theme.textPrimaryDark,
-  },
-  headerSubtitle: {
-    fontSize: 13,
+  closeTextPay: {
+    fontSize: 24,
+    fontWeight: '300',
     color: Theme.textPrimary,
-    fontWeight: '600',
-    lineHeight: 18,
-    marginBottom: 12,
+    lineHeight: 24,
   },
-  desktopFormKicker: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: Theme.textSecondary,
-    textTransform: 'uppercase',
-    letterSpacing: 1.4,
-    marginBottom: 4,
-  },
-  closeBtn: {
-    padding: 4,
-  },
-  closeBtnDesktop: {
-    width: 40,
-    height: 40,
-    backgroundColor: Theme.surfaceLight,
+  bodyPay: {
+    flex: 1,
+    minHeight: 0,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  desktopBody: {
-    flexDirection: 'row',
-    minHeight: 380,
-  },
-  desktopContextPanel: {
-    flex: 1,
-    backgroundColor: Theme.textPrimaryDark,
-    minWidth: 0,
-  },
-  desktopContextInner: {
-    flex: 1,
-    padding: 24,
-    justifyContent: 'space-between',
-    gap: 20,
-  },
-  desktopContextKicker: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: Theme.textOnDarkMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 1.2,
-  },
-  desktopRouteBlock: {
-    flexDirection: 'row',
-    alignItems: 'stretch',
+    paddingHorizontal: 20,
     gap: 12,
+  },
+  fallbackTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
     marginTop: 4,
   },
-  desktopRouteCol: {
-    flex: 1,
-    minWidth: 0,
-    gap: 4,
-  },
-  desktopRouteColEnd: {
-    alignItems: 'flex-end',
-  },
-  desktopRouteMid: {
-    width: 32,
+  valueStage: {
     alignItems: 'center',
-    justifyContent: 'center',
-    gap: 6,
-    paddingTop: 4,
-  },
-  desktopRouteLine: {
-    width: 2,
-    flex: 1,
-    minHeight: 24,
-    backgroundColor: Theme.borderOnDark,
-  },
-  routeDot: {
-    width: 10,
-    height: 10,
-    marginBottom: 6,
-  },
-  routeDotPickup: { backgroundColor: '#10b981' },
-  routeDotDrop: { backgroundColor: Theme.brandBluePressed },
-  desktopRoutePrimary: {
-    fontSize: 16,
-    fontWeight: '900',
-    color: Theme.textOnDark,
-    letterSpacing: -0.3,
-  },
-  desktopRoutePrimaryEnd: { textAlign: 'right' },
-  desktopRouteSecondary: {
-    fontSize: 11,
-    fontWeight: '600',
-    color: Theme.textOnDarkMuted,
-  },
-  desktopRouteSecondaryEnd: { textAlign: 'right' },
-  desktopSpecGrid: {
-    gap: 12,
-  },
-  desktopSpecItem: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-  },
-  desktopSpecTextCol: { flex: 1, minWidth: 0, gap: 2 },
-  desktopSpecLabel: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: Theme.textOnDarkMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.8,
-  },
-  desktopSpecValue: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Theme.textOnDark,
-  },
-  desktopTargetCard: {
-    padding: 14,
-    backgroundColor: 'rgba(255,255,255,0.08)',
-    gap: 4,
-  },
-  desktopTargetLabel: {
-    fontSize: 9,
-    fontWeight: '800',
-    color: Theme.textOnDarkMuted,
-    textTransform: 'uppercase',
-    letterSpacing: 0.9,
-  },
-  desktopTargetValue: {
-    fontSize: 26,
-    fontWeight: '900',
-    color: '#a5b4fc',
-    letterSpacing: -0.8,
-  },
-  desktopTargetHint: {
-    fontSize: 11,
-    fontWeight: '500',
-    color: Theme.textOnDarkMuted,
-    marginTop: 2,
-  },
-  desktopFormPanel: {
-    flex: 1.05,
-    minWidth: 0,
-    borderLeftWidth: StyleSheet.hairlineWidth,
-    borderLeftColor: Theme.borderMedium,
-  },
-  desktopFormPanelInner: {
-    padding: 24,
-    flex: 1,
-    justifyContent: 'center',
-    gap: 4,
-  },
-  loadSummary: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
+    width: '100%',
+    maxWidth: 360,
+    alignSelf: 'center',
     gap: 8,
-    marginBottom: 20,
-    padding: 12,
-    borderRadius: 12,
-    backgroundColor: Theme.surface,
+    paddingBottom: 4,
   },
-  summaryChip: {
+  valueStageElevated: {
+    maxWidth: 400,
+    paddingVertical: 8,
+  },
+  amountPress: {
+    width: '100%',
+    alignItems: 'center',
+  },
+  amountPressDim: {
+    opacity: 0.72,
+  },
+  hint: {
+    fontSize: 12,
+    fontWeight: '500',
+    color: Theme.textMuted,
+  },
+  hintSpacer: {
+    height: 16,
+  },
+  error: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Theme.teslaRed,
+    textAlign: 'center',
+    paddingHorizontal: 16,
+  },
+  noteRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    backgroundColor: Theme.cardWhite,
+    alignSelf: 'stretch',
+    minHeight: 44,
+    marginTop: 4,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
-    borderRadius: 8,
-    paddingHorizontal: 10,
-    paddingVertical: 6,
+    backgroundColor: Theme.cardWhite,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
   },
-  summaryChipText: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.1,
+  noteRowElevated: {
+    minHeight: 48,
+    borderRadius: 14,
   },
-  rateChip: {
-    backgroundColor: Theme.brandBlueSoft,
-    borderColor: Theme.brandBlueInk,
+  noteRowActive: {
+    borderColor: Theme.buttonPrimaryBorder,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
   },
-  rateChipText: {
-    fontSize: 12,
-    fontWeight: '800',
-    color: Theme.textPrimaryDark,
+  noteIcon: {
+    marginRight: 10,
   },
-  inputGroup: { marginBottom: 18 },
-  inputLabel: {
-    fontSize: 11,
-    fontWeight: '800',
-    color: Theme.textPrimaryDark,
-    letterSpacing: 0.6,
-    marginBottom: 8,
-  },
-  inputLabelDesktop: {
-    fontSize: 12,
-    letterSpacing: 0.4,
-    color: Theme.textPrimaryDark,
-    marginBottom: 6,
-  },
-  desktopAmountHint: {
+  noteIdleText: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 13,
-    fontWeight: '600',
-    color: Theme.textPrimary,
-    marginBottom: 10,
+    fontWeight: '500',
+    color: Theme.textMuted,
   },
-  amountRow: {
+  noteIdleFilled: {
+    color: Theme.textPrimaryDark,
+    fontWeight: '600',
+  },
+  noteValue: {
+    fontSize: 14,
+    fontWeight: '600',
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+  },
+  noteValueElevated: {
+    fontSize: 15,
+  },
+  notePlaceholder: {
+    fontSize: 13,
+    fontWeight: '400',
+    color: Theme.textMuted,
+  },
+  noteCaret: {
+    height: 16,
+    backgroundColor: Theme.buttonPrimaryBorder,
+  },
+  noteCounter: {
+    alignSelf: 'flex-end',
+    fontSize: 10,
+    fontWeight: '500',
+    color: Theme.textMuted,
+  },
+  bottom: {
+    width: '100%',
+    flexShrink: 0,
+    paddingTop: 2,
+  },
+  fabRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    overflow: 'hidden',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
-    backgroundColor: Theme.cardWhite,
+    paddingHorizontal: PAY_KEYPAD_INSET - PAY_KEYPAD_CELL_PAD,
+    paddingTop: 2,
+    paddingBottom: 2,
   },
-  amountRowDesktop: {
-    backgroundColor: Theme.surface,
-  },
-  currencyBadge: {
-    paddingHorizontal: 14,
-    paddingVertical: 14,
-    backgroundColor: Theme.buttonPrimary,
-    borderRightWidth: 1,
-    borderRightColor: Theme.buttonPrimaryBorder,
-  },
-  currencyBadgeDesktop: {
-    paddingHorizontal: 18,
-    paddingVertical: 18,
-  },
-  currencyText: {
-    fontSize: 22,
-    fontWeight: '800',
-    color: Theme.textPrimaryDark,
-  },
-  currencyTextDesktop: {
-    fontSize: 22,
-  },
-  amountInput: {
+  fabCell: {
     flex: 1,
-    fontSize: 30,
-    fontWeight: '800',
-    color: Theme.textPrimaryDark,
-    paddingHorizontal: 16,
-    letterSpacing: -0.8,
-    ...Platform.select({
-      web: { outlineStyle: 'none', outlineWidth: 0, boxShadow: 'none' } as unknown as TextStyle,
-    }),
-  },
-  amountInputDesktop: {
-    fontSize: 32,
-    paddingHorizontal: 20,
-    paddingVertical: 16,
-  },
-  noteContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    backgroundColor: Theme.surface,
-    borderWidth: 1,
-    borderColor: Theme.borderMedium,
-    borderRadius: 12,
-    padding: 12,
-    minHeight: 72,
-  },
-  noteContainerDesktop: {
-    minHeight: 108,
-    padding: 14,
-  },
-  noteIcon: { marginTop: 2 },
-  noteInput: {
-    flex: 1,
-    fontSize: 15,
-    color: Theme.textPrimaryDark,
-    fontWeight: '500',
-    lineHeight: 22,
-    textAlignVertical: 'top',
-  },
-  noteInputDesktop: {
-    fontSize: 15,
-    lineHeight: 22,
-    minHeight: 80,
-  },
-  submitBtn: {
-    flexDirection: 'row',
+    minWidth: 0,
+    padding: PAY_KEYPAD_CELL_PAD,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  fabPay: {
+    width: 52,
+    height: 52,
+    borderRadius: 26,
+    backgroundColor: Theme.driverEmeraldDark,
+    alignItems: 'center',
+    justifyContent: 'center',
+    ...Platform.select({
+      ios: {
+        shadowColor: Theme.driverEmeraldDark,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.28,
+        shadowRadius: 10,
+      },
+      android: { elevation: 5 },
+      default: {},
+    }),
+  },
+  fabPayDisabled: {
+    backgroundColor: 'rgba(148,163,184,0.22)',
+    shadowOpacity: 0,
+    elevation: 0,
+  },
+  headerElevated: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderMedium,
+    minHeight: 56,
     gap: 8,
+  },
+  closeBtnElevated: {
+    width: 36,
+    height: 36,
+    backgroundColor: Theme.surface,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    borderRadius: 8,
+  },
+  closeTextElevated: {
+    fontSize: 15,
+    color: Theme.textSecondary,
+    lineHeight: 18,
+  },
+  headerMid: {
+    flex: 1,
+    alignItems: 'center',
+    minWidth: 0,
+  },
+  headerLabel: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: Theme.textPrimaryDark,
+    textAlign: 'center',
+    letterSpacing: -0.2,
+  },
+  headerContext: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: Theme.textMuted,
+    marginTop: 2,
+    textAlign: 'center',
+  },
+  applyBtn: {
+    minWidth: 72,
+    minHeight: 36,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: 12,
-    paddingVertical: 16,
-    marginTop: 4,
+    borderRadius: Theme.buttonPrimaryRadius,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
   },
-  submitBtnDesktop: {
-    marginTop: 8,
-    paddingVertical: 18,
+  applyBtnMuted: {
+    backgroundColor: Theme.borderLight,
+    borderColor: Theme.borderMedium,
   },
-  submitBtnDisabled: { opacity: 0.5 },
-  submitBtnText: {
-    fontSize: 16,
-    fontWeight: '800',
+  applyText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Theme.buttonPrimaryText,
+  },
+  applyTextMuted: {
+    color: Theme.textSecondary,
+    fontWeight: '500',
+  },
+  bodyElevated: {
+    flex: 1,
+    minHeight: 0,
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    gap: 12,
+  },
+  bottomElevated: {
+    width: '100%',
+    flexShrink: 0,
+    paddingHorizontal: 16,
+    gap: 10,
+  },
+  submitBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    minHeight: 48,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
+  },
+  submitBarMuted: {
+    backgroundColor: Theme.surfaceGray,
+    borderColor: Theme.borderMedium,
+    opacity: 0.85,
+  },
+  submitBarText: {
+    fontSize: 14,
+    fontWeight: '700',
     color: Theme.buttonPrimaryText,
     letterSpacing: -0.2,
   },
-  errorText: {
-    fontSize: 12,
-    color: '#ef4444',
-    textAlign: 'center',
-    marginTop: 8,
-  },
-  successView: {
-    alignItems: 'center',
-    paddingVertical: 32,
-    gap: 10,
-  },
-  successViewDesktop: {
-    paddingVertical: 48,
-  },
-  successIcon: {
-    width: 72,
-    height: 72,
-    borderRadius: 36,
-    backgroundColor: '#10b98118',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 4,
-  },
-  successText: {
-    fontSize: 22,
-    fontWeight: '900',
-    color: '#10b981',
-    letterSpacing: -0.5,
-  },
-  successSub: {
-    fontSize: 13,
+  submitBarTextMuted: {
     color: Theme.textSecondary,
-    textAlign: 'center',
+    fontWeight: '500',
+  },
+  keypadElevated: {
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+  },
+  desktopOverlay: {
+    flex: 1,
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    backgroundColor: Theme.overlayBackdrop,
+  },
+  desktopDrawer: {
+    width: 480,
+    maxWidth: '100%',
+    backgroundColor: Theme.screenBackground,
+    shadowColor: '#000',
+    shadowOffset: { width: -2, height: 0 },
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 24,
+  },
+  tabletOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: Theme.overlayBackdrop,
+    padding: 24,
+  },
+  tabletModal: {
+    width: '100%',
+    maxWidth: 480,
+    maxHeight: '92%',
+    backgroundColor: Theme.screenBackground,
+    borderRadius: 16,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 12 },
+    shadowOpacity: 0.2,
+    shadowRadius: 24,
+    elevation: 20,
   },
 });

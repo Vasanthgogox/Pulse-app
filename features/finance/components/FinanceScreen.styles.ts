@@ -622,6 +622,16 @@ export const styles = StyleSheet.create({
   financeHeroPillsRowTreasuryInset: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
   },
+  /** Mobile pinned bar: fill width evenly, start-aligned (not desktop right-dock). */
+  financeHeroPillsRowMobile: {
+    justifyContent: "flex-start",
+    alignItems: "stretch",
+    flexGrow: 1,
+    width: "100%",
+    paddingLeft: Layout.screenPaddingHorizontal,
+    paddingRight: Layout.screenPaddingHorizontal,
+    gap: 6,
+  },
   financeHeroPill: {
     borderRadius: 999,
     borderWidth: 1,
@@ -630,6 +640,13 @@ export const styles = StyleSheet.create({
     minHeight: 34,
     justifyContent: "center",
     alignItems: "center",
+  },
+  financeHeroPillMobile: {
+    flexGrow: 1,
+    flexShrink: 1,
+    flexBasis: 0,
+    minWidth: 56,
+    paddingHorizontal: 8,
   },
   financeHeroPillInactive: {
     backgroundColor: "rgba(255,255,255,0.05)",
