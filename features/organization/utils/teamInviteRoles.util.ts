@@ -8,6 +8,7 @@ import {
   defaultSurfacesForRole,
   domainsFromSurfaces,
   hydrateMemberSurfaces,
+  normalizeSurfaces,
   type MemberSurfaceMap,
 } from "@/lib/memberSurfaces";
 
@@ -261,11 +262,18 @@ export function buildTeamInvitePermissions(
   orgCaps: Capability[] = [],
   surfaces?: MemberSurfaceMap,
 ): TeamInvitePermissions {
-  const resolvedSurfaces =
+  const rawSurfaces =
     surfaces ??
     (orgCaps.length > 0
       ? defaultSurfacesForRole(platformRole, orgCaps)
       : undefined);
+  // Guard against an unsatisfiable grant (a surface true with its requires
+  // chain missing/false) reaching storage from any caller, not just the
+  // permissions panel — see normalizeSurfaces for why this must never be
+  // skipped on a write path.
+  const resolvedSurfaces = rawSurfaces
+    ? normalizeSurfaces(rawSurfaces, orgCaps)
+    : undefined;
   const resolvedDomains =
     domains ??
     (resolvedSurfaces

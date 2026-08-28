@@ -58,6 +58,7 @@ import {
   defaultSurfacesForRole,
   domainsFromSurfaces,
   hydrateMemberSurfaces,
+  normalizeSurfaces,
   MEMBER_SECTION_SURFACES,
   MEMBER_SURFACE_CATALOG,
   type MemberSectionKey,
@@ -441,11 +442,17 @@ export function MemberPermissionsPanel({ memberId, onBack, embedded = false }: P
     setSaving(true);
     setError(null);
     try {
+      // Force every enabled surface's full requires-chain on before writing —
+      // a stored map can otherwise end up with a leaf true and its parent
+      // missing/false (a preset gap, a legacy edit, or any manual write path
+      // that didn't go through applySurfaceToggle), which memberHasSurface()
+      // then silently treats as "not granted" with no error anywhere.
+      const normalizedSurfaces = normalizeSurfaces(surfaces, orgCaps);
       if (canEditAsManager) {
         // Manager path: surfaces only, via the department-scoped RPC.
         const { error: saveError } = await updateMemberSurfacesAsManager(
           member.id,
-          surfaces,
+          normalizedSurfaces,
         );
         if (saveError) {
           setError(
@@ -458,7 +465,7 @@ export function MemberPermissionsPanel({ memberId, onBack, embedded = false }: P
         setBaseline({
           role: platformRole,
           domains,
-          surfaces,
+          surfaces: normalizedSurfaces,
           isDepartmentManager: baseline?.isDepartmentManager ?? false,
         });
         invalidate();
@@ -468,7 +475,7 @@ export function MemberPermissionsPanel({ memberId, onBack, embedded = false }: P
       }
 
       const permissions = {
-        ...buildPermissionsFromSurfaces(surfaces, {
+        ...buildPermissionsFromSurfaces(normalizedSurfaces, {
           platformRole,
           preferAdmin: platformRole === "admin",
           orgCaps,
@@ -489,8 +496,8 @@ export function MemberPermissionsPanel({ memberId, onBack, embedded = false }: P
       }
       setBaseline({
         role: permissions.platformRole,
-        domains: permissions.domains ?? domainsFromSurfaces(surfaces),
-        surfaces: permissions.surfaces ?? surfaces,
+        domains: permissions.domains ?? domainsFromSurfaces(normalizedSurfaces),
+        surfaces: permissions.surfaces ?? normalizedSurfaces,
         isDepartmentManager,
       });
       setPlatformRole(permissions.platformRole);

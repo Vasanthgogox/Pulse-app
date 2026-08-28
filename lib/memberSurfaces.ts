@@ -1133,6 +1133,38 @@ export function hydrateMemberSurfaces(
 }
 
 /**
+ * Safety net for the opposite direction from `hydrateMemberSurfaces`: force
+ * every `true` surface's full `requires` chain to also be `true`.
+ *
+ * A surface can be individually `true` while its parent chain is missing or
+ * `false` — e.g. a preset bundle (`defaultSurfacesForRole`) selecting a leaf
+ * by `domain` without also including a differently-domained `requires` root
+ * (the "sales" preset historically missed `tripops.tab` this way), or a
+ * manual/legacy DB edit that wrote a flat map without walking the chain.
+ * `memberHasSurface`'s recursive check then silently returns false for that
+ * surface and everything gated on it, with no error anywhere.
+ *
+ * Call this on every surfaces map before it is persisted (preset apply,
+ * manual toggle save, department-manager save) so the stored map can never
+ * represent an unsatisfiable grant.
+ */
+export function normalizeSurfaces(
+  stored: MemberSurfaceMap,
+  orgCaps: Capability[],
+): MemberSurfaceMap {
+  const out: MemberSurfaceMap = { ...stored };
+  for (const def of MEMBER_SURFACE_CATALOG) {
+    if (out[def.id] !== true) continue;
+    let cursor: MemberSurfaceId | undefined = def.requires;
+    while (cursor) {
+      if (orgAllowsSurface(orgCaps, cursor)) out[cursor] = true;
+      cursor = SURFACE_BY_ID[cursor]?.requires;
+    }
+  }
+  return out;
+}
+
+/**
  * Default surface map for a platform role preset.
  * Only surfaces the org allows should be persisted as true by the UI.
  */
@@ -1156,8 +1188,21 @@ export function defaultSurfacesForRole(
         MEMBER_SURFACE_CATALOG.filter((s) => s.domain === "finance").map((s) => s.id),
       );
     case "sales":
+      // tripops.indents.* and tripops.pulse_loads are catalogued under
+      // domain:"sales" (give-load lives in the Network tab) but their
+      // requires-chain root is tripops.tab (domain:"tripops") — a plain
+      // domain==="sales" filter excludes tripops.tab, so a sales-preset
+      // member gets indents.create/view=true with no way to satisfy the
+      // chain, and every gated action silently no-ops. Mirrors the same
+      // fix already applied to the "tripops" and "planner" cases below.
       return allOn(
-        MEMBER_SURFACE_CATALOG.filter((s) => s.domain === "sales").map((s) => s.id),
+        MEMBER_SURFACE_CATALOG.filter(
+          (s) =>
+            s.domain === "sales" ||
+            s.id.startsWith("tripops.indents.") ||
+            s.id === "tripops.tab" ||
+            s.id === "tripops.pulse_loads",
+        ).map((s) => s.id),
       );
     case "tripops":
       return allOn(
