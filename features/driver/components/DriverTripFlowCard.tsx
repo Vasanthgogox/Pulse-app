@@ -455,6 +455,7 @@ export function DriverTripFlowCard({
   const prevStepForLrPageRef = useRef<StepId>(deriveDriverFlowStepFromTrip(trip));
 
   const [lrDocuments, setLrDocuments] = useState<tripDocumentsService.TripDocumentRow[]>([]);
+  const [lrNumber, setLrNumber] = useState('');
   const [lrLoading, setLrLoading] = useState(false);
   const [lrUploading, setLrUploading] = useState(false);
   const [lrSkipped, setLrSkipped] = useState(false);
@@ -1230,7 +1231,7 @@ export function DriverTripFlowCard({
         arrayBuffer,
         fileName,
         mimeType,
-      }, 'lr');
+      }, 'lr', lrNumber);
       if (error) {
         setStepError(error.message);
         return;
@@ -1241,6 +1242,7 @@ export function DriverTripFlowCard({
       }
       if (doc) {
         setLrDocuments((prev) => [doc, ...prev]);
+        setLrNumber('');
         tripDocumentsService.getDocumentViewUrl(doc.storage_path).then((u) => {
           setLrViewUrls((prev) => ({ ...prev, [doc.id]: u }));
         });
@@ -1399,6 +1401,8 @@ export function DriverTripFlowCard({
             onUpload={uploadLr}
             onCancelUpload={cancelLrUpload}
             onSkip={() => setLrSkipped(true)}
+            lrNumber={lrNumber}
+            onChangeLrNumber={setLrNumber}
             onResolvePreview={resolveLrPreviewUrl}
             onDelete={confirmDeleteLr}
             onConfirmAction={() => { void engageTransit(); }}

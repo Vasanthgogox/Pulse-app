@@ -12,6 +12,51 @@ export { clientProfileStyles as spStyles } from "@/features/clients/components/d
 
 /** Additional atoms not in the client profile styles — merged into spStyles override. */
 export const supplierStyles = StyleSheet.create({
+  // Driver salary/advance requests card (Drivers tab)
+  salaryRequestsCard: {
+    marginBottom: 14,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: METRONIC.border,
+    backgroundColor: "rgba(255,255,255,0.9)",
+    overflow: "hidden",
+  },
+  salaryRequestsHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: METRONIC.border,
+  },
+  salaryRequestsTitle: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: METRONIC.text,
+  },
+  salaryRequestRow: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderBottomWidth: 1,
+    borderBottomColor: METRONIC.border,
+    gap: 2,
+  },
+  salaryRequestDriver: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: METRONIC.text,
+  },
+  salaryRequestMeta: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: METRONIC.muted,
+  },
+  salaryRequestDate: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: METRONIC.muted,
+  },
   // Hero stats strip
   heroStatsRow: {
     flexDirection: "row",

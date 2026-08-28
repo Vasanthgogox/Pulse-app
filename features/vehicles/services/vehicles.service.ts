@@ -143,6 +143,27 @@ export async function getVehicleById(
   return { error: null, vehicle: data as VehicleRow | null };
 }
 
+/**
+ * Read-only, minimal vehicle info for a viewer org that does not own the
+ * vehicle but has a legitimate trip referencing it (e.g. an aggregator
+ * viewing the vendor's own truck on a subcontracted trip). Returns only
+ * basic fields + documents — no trip history/ledger/driver list, which stay
+ * scoped to the vehicle's own organization.
+ */
+export async function getVehicleForTripViewer(
+  vehicleId: string,
+  tripId: string,
+  viewerOrgId: string,
+): Promise<{ error: Error | null; vehicle: VehicleRow | null }> {
+  const { data, error } = await supabase().rpc('get_vehicle_for_trip_viewer', {
+    p_vehicle_id: vehicleId,
+    p_trip_id: tripId,
+    p_viewer_org_id: viewerOrgId,
+  });
+  if (error) return { error: new Error(error.message), vehicle: null };
+  return { error: null, vehicle: (data as VehicleRow | null) ?? null };
+}
+
 export async function createVehicle(
   orgId: string,
   payload: VehicleInsert

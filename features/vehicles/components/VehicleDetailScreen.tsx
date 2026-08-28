@@ -50,7 +50,11 @@ import {
   type TripRow,
 } from "@/features/trips/services/trips.service";
 import { buildTripPnL, getExpenseLinesForTripPnL } from "@/features/vehicles/pnl";
-import { getVehicleById, type VehicleRow } from "../services/vehicles.service";
+import {
+  getVehicleById,
+  getVehicleForTripViewer,
+  type VehicleRow,
+} from "../services/vehicles.service";
 import {
   AddVehicleEntryModal,
   type TripOption,
@@ -90,6 +94,8 @@ export default function VehicleDetailScreen({
   const canViewVehicleAnalytics = canSurface("fleet.vehicles.analytics");
   const canViewVehicleDocuments = canSurface("fleet.vehicles.documents");
   const [vehicle, setVehicle] = useState<VehicleRow | null>(null);
+  /** True when `vehicle` was resolved via the cross-org trip-viewer fallback (vendor's own vehicle). */
+  const [isCrossOrgVehicle, setIsCrossOrgVehicle] = useState(false);
   const [trips, setTrips] = useState<TripRow[]>([]);
   const [transactions, setTransactions] = useState<LedgerRow[]>([]);
   const [drivers, setDrivers] = useState<DriverOption[]>([]);
@@ -161,11 +167,29 @@ export default function VehicleDetailScreen({
       getDriversByOrganization(orgId),
       getTransactionsByOrganization(orgId),
     ]).then(([res, ownerRes, supplierRes, driversRes, txRes]) => {
-      if (res.error) {
-        setError(res.error.message);
-        setVehicle(null);
+      if (res.vehicle) {
+        setVehicle(res.vehicle);
+        setIsCrossOrgVehicle(false);
+      } else if (!res.error && initialLedgerTripId) {
+        // Not our own vehicle — this is likely a vendor's vehicle on a trip we
+        // subcontracted (e.g. an aggregator viewing the supplier's own truck).
+        // Fall back to a minimal, read-only cross-org lookup instead of
+        // reporting "not found": basic info + documents only, no trip
+        // history/ledger/driver list (those stay properly org-scoped to the vendor).
+        getVehicleForTripViewer(vehicleId, initialLedgerTripId, orgId).then((res2) => {
+          if (res2.vehicle) {
+            setVehicle(res2.vehicle);
+            setIsCrossOrgVehicle(true);
+          } else {
+            setError(res2.error?.message ?? null);
+            setVehicle(null);
+            setIsCrossOrgVehicle(false);
+          }
+        });
       } else {
-        setVehicle(res.vehicle ?? null);
+        setError(res.error?.message ?? null);
+        setVehicle(null);
+        setIsCrossOrgVehicle(false);
       }
       const ownerTrips = ownerRes.error ? [] : ownerRes.trips ?? [];
       const supplierTrips = supplierRes.error ? [] : (supplierRes.trips ?? []).map(supplierRowToTripRow);
@@ -522,6 +546,15 @@ export default function VehicleDetailScreen({
           </TouchableOpacity>
         </View>
       </View>
+
+      {isCrossOrgVehicle ? (
+        <View style={styles.crossOrgNotice}>
+          <FontAwesome name="info-circle" size={13} color={Theme.textMuted} />
+          <Text style={styles.crossOrgNoticeText}>
+            Limited view — this vehicle belongs to your vendor. Trip history, cash ledger, and driver list stay with their organization.
+          </Text>
+        </View>
+      ) : null}
 
       <ScrollView
         style={styles.scroll}
@@ -968,6 +1001,25 @@ export default function VehicleDetailScreen({
 const styles = StyleSheet.create({
   errorText: { fontSize: 15, color: Theme.textSecondary },
   errorWrap: { padding: 16 },
+  crossOrgNotice: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 8,
+    padding: 10,
+    borderRadius: 10,
+    backgroundColor: Theme.screenBackground,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.border,
+  },
+  crossOrgNoticeText: {
+    flex: 1,
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    lineHeight: 16,
+  },
   wrap: {
     flex: 1,
     backgroundColor: Theme.screenBackground,

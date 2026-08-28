@@ -1050,6 +1050,7 @@ export default function TripDetailScreen({
     fileName: string;
     mimeType: string;
   } | null>(null);
+  const [pendingLrNumber, setPendingLrNumber] = useState('');
   const [vaultDeleteTarget, setVaultDeleteTarget] = useState<{
     cardId: string;
     label: string;
@@ -1094,12 +1095,14 @@ export default function TripDetailScreen({
           mimeType: pending.mimeType,
         },
         pending.docType,
+        pending.docType === "lr" ? pendingLrNumber : undefined,
       );
       if (error) {
         Alert.alert("Upload failed", error.message);
         return;
       }
       setPendingVaultUpload(null);
+      setPendingLrNumber("");
       detail.handleRefresh();
       Alert.alert("Uploaded", `${pending.label} is saved in the vault.`);
     } catch (e) {
@@ -1112,6 +1115,7 @@ export default function TripDetailScreen({
     }
   }, [
     pendingVaultUpload,
+    pendingLrNumber,
     detail.trip?.id,
     detail.currentUserId,
     detail.handleRefresh,
@@ -2501,7 +2505,7 @@ export default function TripDetailScreen({
 
   const openVehicleDetails = () => {
     if (!trip.vehicle_id) return;
-    router.push(`/vehicle/${trip.vehicle_id}` as never);
+    router.push(ROUTES.vehicleDetail(trip.vehicle_id, trip.id) as never);
   };
 
   const openTripDocumentsFlow = () => {
@@ -2521,7 +2525,7 @@ export default function TripDetailScreen({
       return;
     }
     if (doc.id === "vehicle-documents" && trip.vehicle_id) {
-      router.push(`/vehicle/${trip.vehicle_id}` as never);
+      router.push(ROUTES.vehicleDetail(trip.vehicle_id, trip.id) as never);
     }
   };
 
@@ -2542,7 +2546,7 @@ export default function TripDetailScreen({
     }
     if (doc.id === "vehicle-documents") {
       if (trip.vehicle_id) {
-        router.push(`/vehicle/${trip.vehicle_id}` as never);
+        router.push(ROUTES.vehicleDetail(trip.vehicle_id, trip.id) as never);
       }
       return;
     }
@@ -5850,7 +5854,10 @@ export default function TripDetailScreen({
         animationType="fade"
         transparent
         onRequestClose={() => {
-          if (!uploadingDocId) setPendingVaultUpload(null);
+          if (!uploadingDocId) {
+            setPendingVaultUpload(null);
+            setPendingLrNumber("");
+          }
         }}
       >
         <View style={styles.docModalBackdrop}>
@@ -5867,7 +5874,10 @@ export default function TripDetailScreen({
             <View style={styles.docModalHeader}>
               <TouchableOpacity
                 onPress={() => {
-                  if (!uploadingDocId) setPendingVaultUpload(null);
+                  if (!uploadingDocId) {
+                    setPendingVaultUpload(null);
+                    setPendingLrNumber("");
+                  }
                 }}
                 style={styles.docModalCloseIcon}
                 activeOpacity={0.8}
@@ -5910,12 +5920,31 @@ export default function TripDetailScreen({
                   </View>
                 )
               ) : null}
+
+              {pendingVaultUpload?.docType === "lr" ? (
+                <View style={styles.lrNumberFieldWrap}>
+                  <Text style={styles.lrNumberFieldLabel}>LR NUMBER</Text>
+                  <TextInput
+                    value={pendingLrNumber}
+                    onChangeText={setPendingLrNumber}
+                    placeholder="Enter LR number (optional)"
+                    placeholderTextColor={Theme.textMuted}
+                    style={styles.lrNumberFieldInput}
+                    autoCapitalize="characters"
+                    editable={!uploadingDocId}
+                    returnKeyType="done"
+                  />
+                </View>
+              ) : null}
             </View>
 
             <View style={styles.docModalFooter}>
               <TouchableOpacity
                 style={styles.docModalFooterCancelBtn}
-                onPress={() => setPendingVaultUpload(null)}
+                onPress={() => {
+                  setPendingVaultUpload(null);
+                  setPendingLrNumber("");
+                }}
                 activeOpacity={0.85}
                 disabled={!!uploadingDocId}
               >

@@ -27,6 +27,7 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
 } from 'react-native';
@@ -62,6 +63,9 @@ export type DriverPodCompletionPageProps = {
   onUpload: (source: 'camera' | 'library') => void;
   onCancelUpload: () => void;
   onSkip: () => void;
+  /** LR number, entered before upload. Only rendered/used when variant='lr'. */
+  lrNumber?: string;
+  onChangeLrNumber?: (value: string) => void;
   /** Resolves a signed preview URL (and caches on parent). */
   onResolvePreview: (
     doc: tripDocumentsService.TripDocumentRow,
@@ -142,6 +146,8 @@ export function DriverPodCompletionPage({
   onUpload,
   onCancelUpload,
   onSkip,
+  lrNumber = '',
+  onChangeLrNumber,
   onResolvePreview,
   onDelete,
   onConfirmAction,
@@ -348,6 +354,22 @@ export function DriverPodCompletionPage({
                 : copy.uploadHintEmpty}
           </Text>
 
+          {variant === 'lr' ? (
+            <View style={styles.lrNumberField}>
+              <Text style={styles.lrNumberLabel}>LR NUMBER</Text>
+              <TextInput
+                value={lrNumber}
+                onChangeText={onChangeLrNumber}
+                placeholder="Enter LR number (optional)"
+                placeholderTextColor={Theme.textMuted}
+                style={styles.lrNumberInput}
+                autoCapitalize="characters"
+                editable={!uploading}
+                returnKeyType="done"
+              />
+            </View>
+          ) : null}
+
           <Animated.View style={[styles.uploadTilesRow, uploadPulseStyle]}>
             <TouchableOpacity
               style={[styles.uploadTile, uploading && styles.uploadZoneBusy]}
@@ -442,7 +464,9 @@ export function DriverPodCompletionPage({
                       <Text style={styles.fileName} numberOfLines={1}>
                         {doc.file_name || 'POD'}
                       </Text>
-                      <Text style={styles.fileMeta}>Ready</Text>
+                      <Text style={styles.fileMeta}>
+                        {doc.document_number ? `LR #${doc.document_number}` : 'Ready'}
+                      </Text>
                     </View>
                     <TouchableOpacity
                       onPress={() => openPreview(doc)}
@@ -742,6 +766,26 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
     color: Theme.textMuted,
+  },
+  lrNumberField: {
+    gap: 4,
+  },
+  lrNumberLabel: {
+    fontSize: 10,
+    fontWeight: '800',
+    letterSpacing: 0.7,
+    color: Theme.textMuted,
+  },
+  lrNumberInput: {
+    borderWidth: 1.5,
+    borderColor: Theme.border,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+    backgroundColor: Theme.surface,
   },
   uploadTilesRow: {
     flexDirection: 'row',

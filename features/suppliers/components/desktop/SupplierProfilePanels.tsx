@@ -1199,7 +1199,8 @@ export function SupplierProfileFleetPanel({ bundle, orgId, supplierId, onRefresh
 // ── TAB 6: Drivers ────────────────────────────────────────────────────────────
 
 export function SupplierProfileDriversPanel({ bundle }: BundleProps) {
-  const { drivers } = bundle;
+  const { drivers, driverSalaryRequests } = bundle;
+  const isLinked = !!bundle.supplier.linked_organization_id;
 
   return (
     <SupplierPanelShell>
@@ -1210,6 +1211,41 @@ export function SupplierProfileDriversPanel({ bundle }: BundleProps) {
           <Text style={spStyles.addBtnText}>Add driver</Text>
         </Pressable>
       </View>
+
+      {isLinked && driverSalaryRequests.length > 0 ? (
+        <View style={spStyles.salaryRequestsCard}>
+          <View style={spStyles.salaryRequestsHeader}>
+            <Bell size={14} color={METRONIC.link} />
+            <Text style={spStyles.salaryRequestsTitle}>
+              {driverSalaryRequests.length} pending salary/advance request
+              {driverSalaryRequests.length === 1 ? "" : "s"}
+            </Text>
+          </View>
+          {driverSalaryRequests.map((r) => (
+            <View key={r.id} style={spStyles.salaryRequestRow}>
+              <Text style={spStyles.salaryRequestDriver} numberOfLines={1}>
+                {r.driver_name ?? "Driver"}
+              </Text>
+              <Text style={spStyles.salaryRequestMeta} numberOfLines={1}>
+                {r.request_type} · {formatINR(r.amount)}
+                {r.note ? ` · ${r.note}` : ""}
+              </Text>
+              <Text style={spStyles.salaryRequestDate}>
+                {formatRelative(r.created_at)}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
+
+      {!isLinked ? (
+        <View style={spStyles.emptyActionCard}>
+          <Bell size={20} color={METRONIC.muted} strokeWidth={1.5} />
+          <Text style={spStyles.emptyActionSub}>
+            This supplier isn&apos;t a linked Pulse organization, so their drivers&apos; salary requests can&apos;t be shown here.
+          </Text>
+        </View>
+      ) : null}
 
       {drivers.length === 0 ? (
         <View style={spStyles.emptyActionCard}>

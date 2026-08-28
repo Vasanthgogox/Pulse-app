@@ -80,6 +80,8 @@ export interface TripDocumentRow {
   uploaded_by: string | null;
   document_type: TripDocumentType;
   ocr_job_id?: string | null;
+  /** Optional user-entered document number (e.g. printed LR number). Only populated for document_type='lr' today. */
+  document_number?: string | null;
 }
 
 export interface UploadTripDocumentResult {
@@ -312,6 +314,7 @@ export async function uploadTripDocument(
   uploadedBy: string,
   file: { arrayBuffer: ArrayBuffer; fileName: string; mimeType: string },
   documentType: TripDocumentType = 'pod',
+  documentNumber?: string,
 ): Promise<UploadTripDocumentResult> {
   if (!file.arrayBuffer?.byteLength) {
     return { doc: null, error: new Error("File is empty") };
@@ -341,6 +344,8 @@ export async function uploadTripDocument(
     };
   }
 
+  const trimmedDocumentNumber = documentNumber?.trim() || null;
+
   const { data: row, error: insertError } = await supabase()
     .from("trip_documents")
     .insert({
@@ -351,8 +356,9 @@ export async function uploadTripDocument(
       size_bytes: file.arrayBuffer.byteLength,
       uploaded_by: uploadedBy,
       document_type: documentType,
+      document_number: trimmedDocumentNumber,
     })
-    .select("id, trip_id, file_name, storage_path, mime_type, size_bytes, uploaded_at, uploaded_by, document_type")
+    .select("id, trip_id, file_name, storage_path, mime_type, size_bytes, uploaded_at, uploaded_by, document_type, document_number")
     .single();
 
   if (insertError) {
@@ -369,6 +375,7 @@ export async function uploadTripDocument(
         uploaded_at: now,
         uploaded_by: uploadedBy,
         document_type: documentType,
+        document_number: trimmedDocumentNumber,
       };
       if (documentType === "pod") publishPodUploadedEvent(tripId, fallbackDoc);
       return { doc: fallbackDoc, error: null };

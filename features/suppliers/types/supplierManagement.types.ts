@@ -249,6 +249,8 @@ export type SupplierManagementBundle = {
   trips: TripRow[];
   transactions: LedgerRow[];
   drivers: DriverRow[];
+  /** Pending driver salary/advance requests filed under the supplier's own linked org, if linked. */
+  driverSalaryRequests: SupplierDriverSalaryRequest[];
   contacts: SupplierContactRow[];
   kyc_documents: SupplierKycDocument[];
   compliance_docs: ComplianceDocument[];
@@ -259,6 +261,17 @@ export type SupplierManagementBundle = {
   crm_status: SupplierCrmStatus;
   crm_notes: SupplierCrmNote[];
   timeline: TimelineEvent[];
+};
+
+export type SupplierDriverSalaryRequest = {
+  id: string;
+  driver_id: string;
+  driver_name: string | null;
+  request_type: string;
+  amount: number;
+  status: string;
+  note: string | null;
+  created_at: string;
 };
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -315,6 +328,7 @@ export function buildDefaultBundle(supplier: SupplierRow, trips: TripRow[], tran
     trips,
     transactions,
     drivers,
+    driverSalaryRequests: [],
     contacts: [],
     kyc_documents: [],
     compliance_docs: [],

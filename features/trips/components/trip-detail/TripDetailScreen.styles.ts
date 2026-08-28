@@ -6547,6 +6547,27 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
+  lrNumberFieldWrap: {
+    marginTop: 12,
+    gap: 4,
+  },
+  lrNumberFieldLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.7,
+    color: "#64748b",
+  },
+  lrNumberFieldInput: {
+    borderWidth: 1.5,
+    borderColor: "#e2e8f0",
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontWeight: "700",
+    color: "#0f172a",
+    backgroundColor: "#fff",
+  },
   docModalCenter: {
     flex: 1,
     minHeight: 260,

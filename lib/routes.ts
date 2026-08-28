@@ -227,9 +227,15 @@ export const ROUTES = {
     const normalized = tab === "cash" ? "ledger" : tab;
     return `${base}?tab=${encodeURIComponent(normalized)}` as const;
   },
-  /** Vehicle detail (trips, P&L, operations). */
-  vehicleDetail: (vehicleId: string) =>
-    `/vehicle/${encodeURIComponent(vehicleId)}` as const,
+  /**
+   * Vehicle detail (trips, P&L, operations). Pass tripId when navigating from
+   * a trip so the page can fall back to a read-only cross-org view if the
+   * vehicle belongs to a vendor rather than the viewer's own org.
+   */
+  vehicleDetail: (vehicleId: string, tripId?: string) => {
+    const base = `/vehicle/${encodeURIComponent(vehicleId)}`;
+    return (tripId ? `${base}?tripId=${encodeURIComponent(tripId)}` : base) as `/vehicle/${string}`;
+  },
   supplierAnalytics: (supplierId: string) =>
     `/supplier/${encodeURIComponent(supplierId)}/analytics` as const,
   driverAnalytics: (driverId: string) =>
