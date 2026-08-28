@@ -266,7 +266,12 @@ export function useDriverTripSettlement(
   const requestPayment = useCallback(async () => {
     if (!trip || !settlementView) return;
     const driverId = trip.driver_id ?? linkedDrivers[0]?.id ?? null;
-    const orgId = trip.organization_id ?? null;
+    // Route to the driver's OWN fleet-owner org, not trip.organization_id —
+    // on an aggregator/subcontracted trip those can be different orgs.
+    const orgId =
+      linkedDrivers.find((d) => String(d.id) === String(driverId))?.organization_id ??
+      trip.organization_id ??
+      null;
     const reqAmount = Math.round(settlementView.amount);
     if (!driverId || !orgId || reqAmount <= 0) return;
 

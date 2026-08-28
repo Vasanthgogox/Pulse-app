@@ -942,7 +942,12 @@ export default function DriverWalletScreen() {
     async (p: { trip: tripsService.TripRow; displayId: string; fleetName: string; amount: number; from: string; to: string; status: string }) => {
       const { trip, displayId, fleetName, amount, from, to, status } = p;
       const driverId = trip.driver_id ?? linkedDrivers[0]?.id ?? null;
-      const orgId = trip.organization_id ?? null;
+      // Route to the driver's OWN fleet-owner org, not trip.organization_id —
+      // on an aggregator/subcontracted trip those can be different orgs.
+      const orgId =
+        linkedDrivers.find((d) => String(d.id) === String(driverId))?.organization_id ??
+        trip.organization_id ??
+        null;
       const reqAmount = Math.round(amount);
       if (!driverId || !orgId) return;
       if (!Number.isFinite(reqAmount) || reqAmount <= 0) return;
@@ -1055,7 +1060,12 @@ export default function DriverWalletScreen() {
       }
 
       const driverId = trip.driver_id ?? linkedDrivers[0]?.id ?? null;
-      const orgId = trip.organization_id ?? null;
+      // Route to the driver's OWN fleet-owner org, not trip.organization_id —
+      // on an aggregator/subcontracted trip those can be different orgs.
+      const orgId =
+        linkedDrivers.find((d) => String(d.id) === String(driverId))?.organization_id ??
+        trip.organization_id ??
+        null;
       const earned = Math.round(tripEarnings(trip, payoutTermsForTrip(trip)));
       const received = Math.round(receivedByTripId[trip.id] ?? 0);
       const reqAmount = Math.max(0, earned - received) || earned;
@@ -1150,8 +1160,16 @@ export default function DriverWalletScreen() {
         return { ok: false as const, errorMessage: 'Trips not found.' };
       }
 
-      const orgId = String(trips[0].organization_id ?? '');
-      if (!orgId || trips.some((t) => String(t.organization_id ?? '') !== orgId)) {
+      // Route to the driver's OWN fleet-owner org, not trip.organization_id —
+      // on an aggregator/subcontracted trip those can be different orgs.
+      const resolveOwnerOrgId = (t: tripsService.TripRow): string =>
+        String(
+          linkedDrivers.find((d) => String(d.id) === String(t.driver_id))?.organization_id ??
+            t.organization_id ??
+            '',
+        );
+      const orgId = resolveOwnerOrgId(trips[0]);
+      if (!orgId || trips.some((t) => resolveOwnerOrgId(t) !== orgId)) {
         return { ok: false as const, errorMessage: 'Select trips from the same fleet only.' };
       }
 
@@ -2015,8 +2033,13 @@ export default function DriverWalletScreen() {
       >();
 
       for (const item of pendingTripJourneyItems) {
-        const orgId = item.trip.organization_id ?? '';
         const driverId = item.trip.driver_id ?? '';
+        // Route to the driver's OWN fleet-owner org, not trip.organization_id —
+        // on an aggregator/subcontracted trip those can be different orgs.
+        const orgId =
+          linkedDrivers.find((d) => String(d.id) === String(driverId))?.organization_id ??
+          item.trip.organization_id ??
+          '';
         if (!orgId || !driverId) continue;
         const key = `${orgId}:${driverId}`;
         const g =

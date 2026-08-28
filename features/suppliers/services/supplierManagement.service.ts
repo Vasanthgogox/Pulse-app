@@ -6,8 +6,7 @@ import {
 } from "@/features/suppliers/services/suppliers.service";
 import { getTripsForOrg } from "@/features/trips/services/trips.service";
 import { getTransactionsByOrganization } from "@/features/finance/services/finance.service";
-import { getDriversByOrganization } from "@/features/drivers/services/drivers.service";
-import { getSalaryRequestsByOrganization } from "@/features/drivers/services/salaryRequests.service";
+import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import {
   buildSupplierPerformanceFromTrips,
   type SupplierManagementBundle,
@@ -49,30 +48,64 @@ export async function getSupplierManagementBundle(
 
   // Drivers and salary requests belong to the supplier's OWN organization
   // (when they're a linked Pulse org), not the aggregator's — the caller
-  // (orgId) is only the aggregator looking in from the outside.
-  const linkedOrgId = supplier.linked_organization_id ?? null;
-  const [driversRes, salaryRes] = linkedOrgId
-    ? await Promise.all([
-        getDriversByOrganization(linkedOrgId),
-        getSalaryRequestsByOrganization(linkedOrgId, { status: "pending" }),
-      ])
-    : [{ error: null, drivers: [] }, { error: null, requests: [] }];
-
-  const driverNameById = new Map(
-    (driversRes.drivers ?? []).map((d) => [d.id, d.name ?? d.phone ?? null]),
-  );
-  const driverSalaryRequests: SupplierDriverSalaryRequest[] = (salaryRes.requests ?? []).map(
-    (r) => ({
-      id: r.id,
-      driver_id: r.driver_id,
-      driver_name: driverNameById.get(r.driver_id) ?? null,
-      request_type: r.request_type,
-      amount: Number(r.amount),
-      status: r.status,
-      note: r.note ?? null,
-      created_at: r.created_at,
+  // (orgId) is only the aggregator looking in from the outside, and the
+  // vendor org's RLS ("Org members can manage drivers" / "...
+  // driver_salary_requests") blocks a plain cross-org select. Both go
+  // through SECURITY DEFINER RPCs that explicitly verify the supplier link
+  // instead of relying on table RLS.
+  const [driversRpcRes, salaryRpcRes] = await Promise.all([
+    supabase().rpc("get_supplier_linked_drivers", {
+      p_supplier_id: supplierId,
+      p_viewer_org_id: orgId,
     }),
-  );
+    supabase().rpc("get_supplier_driver_salary_requests", {
+      p_supplier_id: supplierId,
+      p_viewer_org_id: orgId,
+    }),
+  ]);
+
+  const linkedOrgId = supplier.linked_organization_id ?? null;
+  const drivers: DriverRow[] = (
+    (driversRpcRes.data ?? []) as Array<{
+      id: string;
+      name: string;
+      phone: string | null;
+      license_number: string | null;
+      status: string;
+    }>
+  ).map((d) => ({
+    id: d.id,
+    organization_id: linkedOrgId ?? "",
+    user_id: null,
+    name: d.name,
+    phone: d.phone,
+    license_number: d.license_number,
+    status: d.status,
+    assigned_vehicle_id: null,
+    created_at: "",
+    updated_at: "",
+  }));
+  const driverSalaryRequests: SupplierDriverSalaryRequest[] = (
+    (salaryRpcRes.data ?? []) as Array<{
+      id: string;
+      driver_id: string;
+      driver_name: string | null;
+      request_type: string;
+      amount: number;
+      status: string;
+      note: string | null;
+      created_at: string;
+    }>
+  ).map((r) => ({
+    id: r.id,
+    driver_id: r.driver_id,
+    driver_name: r.driver_name,
+    request_type: r.request_type,
+    amount: Number(r.amount),
+    status: r.status,
+    note: r.note,
+    created_at: r.created_at,
+  }));
 
   const contacts = (rpcData.contacts ?? []) as SupplierContactRow[];
   const kyc_documents = (rpcData.kyc_documents ?? []) as SupplierKycDocument[];
@@ -98,7 +131,7 @@ export async function getSupplierManagementBundle(
       supplier,
       trips: supplierTrips,
       transactions: txRes.transactions ?? [],
-      drivers: driversRes.drivers ?? [],
+      drivers,
       driverSalaryRequests,
       contacts,
       kyc_documents,
