@@ -465,6 +465,17 @@ export function BidSheet({
     return () => window.removeEventListener('keydown', handler);
   }, [visible, activeField, handleNoteKey]);
 
+  // Must run before the `if (!post) return null` guard below — a hook
+  // called only on some renders (e.g. this component staying mounted while
+  // its owner navigates from one story's bid sheet to another, where `post`
+  // is briefly null/undefined) throws "Rendered more hooks than during the
+  // previous render."
+  const confirmAmount = parseRawToNumber(amountRaw);
+  const vsTarget = useMemo(
+    () => resolveBidVsTarget(confirmAmount, targetRate),
+    [confirmAmount, targetRate],
+  );
+
   if (!post) return null;
 
   const isDesktop = platform === 'desktop';
@@ -482,11 +493,6 @@ export function BidSheet({
 
   const notePreview = note.trim();
   const noteActive = activeField === 'note';
-  const confirmAmount = parseRawToNumber(amountRaw);
-  const vsTarget = useMemo(
-    () => resolveBidVsTarget(confirmAmount, targetRate),
-    [confirmAmount, targetRate],
-  );
 
   const confirmModal = (
     <BidConfirmModal
