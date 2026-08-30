@@ -83,10 +83,14 @@ export const ROUTES = {
   driverMyFleetAdd: () => '/(driver)/my-fleet/add' as const,
   driverMyFleetVehicle: (vehicleId: string) =>
     `/(driver)/my-fleet/${encodeURIComponent(vehicleId)}` as const,
-  /** Phase 3A: open marketplace loads (Fleet Owner, read-only). */
+  /** Market: open marketplace loads for Fleet Owner / DCO bidding. */
   driverAvailableLoads: () => '/(driver)/available-loads' as const,
   driverAvailableLoad: (indentId: string) =>
     `/(driver)/available-loads/${encodeURIComponent(indentId)}` as const,
+  /** Phase A/B: this bidder's own market_bids rows. */
+  driverMyBids: () => '/(driver)/my-bids' as const,
+  /** Phase A/B: awarded Market trips (source='market_bid'). */
+  driverMarketAwards: () => '/(driver)/market-awards' as const,
   /** Phase 3B.1: FO capacity Story composer (optional vehicleId). */
   driverCapacityStory: (vehicleId?: string) =>
     vehicleId

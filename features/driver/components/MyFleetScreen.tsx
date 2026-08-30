@@ -145,10 +145,10 @@ export default function MyFleetScreen() {
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Text style={[styles.loadsPromoTitle, { color: colors.text }]}>
-            Available Loads
+            Market
           </Text>
           <Text style={[styles.loadsPromoSub, { color: colors.textMuted }]}>
-            Browse open marketplace demand · bidding next
+            Browse open marketplace demand · bid with your fleet
           </Text>
         </View>
         <ChevronRight size={18} color={colors.textMuted} />

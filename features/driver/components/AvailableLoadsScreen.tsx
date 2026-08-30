@@ -79,7 +79,7 @@ export default function AvailableLoadsScreen() {
     return (
       <View style={[styles.root, { backgroundColor: pageBg }]}>
         <DriverSubScreenHeader
-          title="Available Loads"
+          title="Market"
           subtitle="Fleet Owner required"
           onBack={() =>
             router.canGoBack() ? router.back() : router.replace(ROUTES.DRIVER_ROOT)
@@ -90,8 +90,8 @@ export default function AvailableLoadsScreen() {
             Become a Fleet Owner to browse loads
           </Text>
           <Text style={[styles.gateBody, { color: colors.textMuted }]}>
-            Open marketplace demand comes from businesses. You can bid later — you
-            cannot create loads in the Driver App.
+            Open marketplace demand comes from businesses. You can bid once
+            you're a Fleet Owner — you cannot create loads in the Driver App.
           </Text>
           <Pressable
             onPress={() =>
@@ -114,12 +114,39 @@ export default function AvailableLoadsScreen() {
   return (
     <View style={[styles.root, { backgroundColor: pageBg }]}>
       <DriverSubScreenHeader
-        title="Available Loads"
-        subtitle="Open marketplace · read-only"
+        title="Market"
+        subtitle="Open marketplace"
         onBack={() =>
           router.canGoBack() ? router.back() : router.replace(ROUTES.DRIVER_ROOT)
         }
       />
+
+      <View style={styles.navRow}>
+        <Pressable
+          onPress={() =>
+            router.push(ROUTES.driverMyBids() as Parameters<typeof router.push>[0])
+          }
+          style={({ pressed }) => [
+            styles.navLink,
+            { borderColor: cardBorder, backgroundColor: colors.surface, opacity: pressed ? 0.9 : 1 },
+          ]}
+        >
+          <Text style={[styles.navLinkText, { color: colors.text }]}>My Bids</Text>
+          <ChevronRight size={14} color={colors.textMuted} />
+        </Pressable>
+        <Pressable
+          onPress={() =>
+            router.push(ROUTES.driverMarketAwards() as Parameters<typeof router.push>[0])
+          }
+          style={({ pressed }) => [
+            styles.navLink,
+            { borderColor: cardBorder, backgroundColor: colors.surface, opacity: pressed ? 0.9 : 1 },
+          ]}
+        >
+          <Text style={[styles.navLinkText, { color: colors.text }]}>Awards</Text>
+          <ChevronRight size={14} color={colors.textMuted} />
+        </Pressable>
+      </View>
 
       <View style={styles.filterRow}>
         {(
@@ -194,7 +221,6 @@ export default function AvailableLoadsScreen() {
             </Text>
             <Text style={[styles.emptyBody, { color: colors.textMuted }]}>
               When businesses broadcast marketplace demand, it appears here.
-              Bidding arrives in the next phase.
             </Text>
           </View>
         ) : (
@@ -295,6 +321,22 @@ const styles = StyleSheet.create({
   gate: { padding: 20, gap: 10 },
   gateTitle: { fontSize: 17, fontWeight: '800' },
   gateBody: { fontSize: 13, lineHeight: 19 },
+  navRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
+    paddingTop: 10,
+  },
+  navLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+  },
+  navLinkText: { fontSize: 12, fontWeight: '700' },
   filterRow: {
     flexDirection: 'row',
     gap: 8,

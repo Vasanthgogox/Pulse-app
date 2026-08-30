@@ -206,6 +206,18 @@ export const queryKeys = {
     /** Phase 3B.1: FO capacity Stories authored by this driver. */
     capacityStories: (userId: string) =>
       ["q", "driver-app", userId, "capacity-stories"] as const,
+    /** Phase A/B: this bidder's own market_bids rows (My Bids). */
+    myMarketBids: (userId: string) =>
+      ["q", "driver-app", userId, "my-market-bids"] as const,
+    /** Phase A/B: this bidder's own bid on one indent (Load detail Bid state). */
+    myMarketBidForIndent: (userId: string, indentId: string) =>
+      ["q", "driver-app", userId, "my-market-bid", indentId] as const,
+    /** Phase A/B: awarded Market trips (trips.source = 'market_bid'), keyed by driver-ids set. */
+    myMarketAwards: (driverIdsKey: string) =>
+      ["q", "driver-app", "my-market-awards", driverIdsKey] as const,
+    /** Phase A5: active/upcoming trip counts for the Pilot relationship summary. */
+    pilotWorkSummary: (driverIdsKey: string) =>
+      ["q", "driver-app", "pilot-work-summary", driverIdsKey] as const,
   },
 
   salaryRequests: (orgId: string, status?: string) =>

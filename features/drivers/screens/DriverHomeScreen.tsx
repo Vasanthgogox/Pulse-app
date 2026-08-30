@@ -22,6 +22,7 @@ import { DriverDailySummaryCard } from "@/features/driver/components/DriverDaily
 import { DriverDashboardMapPreview } from "@/features/driver/components/DriverDashboardMapPreview";
 import { DriverExpenseCaptureFab } from "@/features/driver/components/DriverExpenseCaptureFab";
 import { DriverTripFlowCard } from "@/features/driver/components/DriverTripFlowCard";
+import { PilotRelationshipSummary } from "@/features/driver/components/PilotRelationshipSummary";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -5873,6 +5874,7 @@ export default function DriverRadarScreen() {
                     onPressExpand={() => setIsFullMapVisible(true)}
                   />
                 ) : null}
+                <PilotRelationshipSummary uid={uid} />
                 <DriverDailySummaryCard uid={uid} />
                 {renderDriverDashboardTripInner(false)}
               </ScrollView>
