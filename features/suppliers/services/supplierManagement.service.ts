@@ -72,6 +72,8 @@ export async function getSupplierManagementBundle(
       phone: string | null;
       license_number: string | null;
       status: string;
+      created_at: string;
+      updated_at: string;
     }>
   ).map((d) => ({
     id: d.id,
@@ -82,8 +84,8 @@ export async function getSupplierManagementBundle(
     license_number: d.license_number,
     status: d.status,
     assigned_vehicle_id: null,
-    created_at: "",
-    updated_at: "",
+    created_at: d.created_at,
+    updated_at: d.updated_at,
   }));
   const driverSalaryRequests: SupplierDriverSalaryRequest[] = (
     (salaryRpcRes.data ?? []) as Array<{

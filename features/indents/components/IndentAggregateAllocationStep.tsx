@@ -29,6 +29,13 @@ export type IndentAggregateAllocationStepProps = {
   onAddPartner: () => void;
   /** After a partner tile is tapped — parent advances to Rates. */
   onPartnerSelected?: () => void;
+  /**
+   * What THIS org itself bid & won on the indent (its own receivable from
+   * whoever awarded it) — shown as a fixed "You won" reference next to the
+   * payable rate being typed for its own sub-supplier, never written into
+   * the rate field itself (the two figures are legitimately different).
+   */
+  awardedRate?: number | null;
 };
 
 export const IndentAggregateAllocationStep = memo(function IndentAggregateAllocationStep({
@@ -39,6 +46,7 @@ export const IndentAggregateAllocationStep = memo(function IndentAggregateAlloca
   set,
   onAddPartner,
   onPartnerSelected,
+  awardedRate,
 }: IndentAggregateAllocationStepProps) {
   const {
     subcontractSupplierId,
@@ -187,6 +195,12 @@ export const IndentAggregateAllocationStep = memo(function IndentAggregateAlloca
         onPartnerRateChange={set.subcontractRate}
         advancePaid={aggregateAdvancePaid}
         onAdvancePaidChange={set.aggregateAdvancePaid}
+        // Reference only — what THIS org bid & won on the indent (its own
+        // receivable). The rate typed above is what it pays its own
+        // sub-supplier, a separate, smaller-or-larger figure by design; the
+        // margin strip shows the difference live as the dispatcher types.
+        saleValue={awardedRate != null ? String(awardedRate) : undefined}
+        saleLabel="You won"
         partyPreview={
           selectedPartner ? supplierToNumericPartyPreview(selectedPartner) : undefined
         }

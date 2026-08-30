@@ -194,6 +194,57 @@ export function IndentAllocationFlowScreen({
     else if (initialFocus === "driver") setStep("driver");
   }, [indent, open, initialFocus]);
 
+  /**
+   * Seed the subcontract partner + rate from the indent's own award — but
+   * only when THIS org is the indent's owner (organization_id), i.e. they
+   * are the one who awarded the load and are now deploying it to the
+   * partner they already chose. assigned_supplier_id is an organizations
+   * FK naming who won the award, so match it against
+   * suppliers.linked_organization_id to find this account's own tracking
+   * record for that real org.
+   *
+   * When the viewer org is instead the AWARDED supplier itself (e.g.
+   * Paperkraft, having won this indent from nihas logs, now sub-deploying
+   * to its own chosen partner further down the chain), assigned_supplier_id
+   * equals the viewer's own org — there is no "partner to preselect" here,
+   * because the partner on this screen is whoever Paperkraft is
+   * sub-contracting to, unrelated to who awarded Paperkraft. Pre-filling in
+   * that case would be wrong: assigned_supplier_rate is what Paperkraft
+   * RECEIVES from nihas logs, not what they PAY their own sub-supplier —
+   * those are two different figures and must not be conflated.
+   */
+  const awardSeededIndentIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!indent || !orgId || suppliers.length === 0) return;
+    if (awardSeededIndentIdRef.current === indent.id) return;
+    if (!indent.assigned_supplier_id) return;
+    // Only seed when this viewer is the indent's own owner awarding it out —
+    // never when the viewer IS the awarded org sub-deploying further.
+    if (indent.organization_id !== orgId) return;
+    const awardedSupplier = suppliers.find(
+      (s) => s.linked_organization_id === indent.assigned_supplier_id,
+    );
+    if (!awardedSupplier) return;
+    awardSeededIndentIdRef.current = indent.id;
+    set.subcontractSupplierId(awardedSupplier.id);
+    if (indent.assigned_supplier_rate != null) {
+      set.subcontractRate(String(indent.assigned_supplier_rate));
+    }
+  }, [indent, orgId, suppliers, set]);
+
+  /**
+   * Reference figure for the rates step: what THIS org itself bid & won on
+   * the indent, shown as a fixed "You won" strip next to whatever rate it's
+   * now typing for its own sub-supplier. Only meaningful when the viewer
+   * org IS the awarded supplier (assigned_supplier_id === orgId) — the
+   * scenario the seeding effect above deliberately skips, since that
+   * receivable figure is never the same as the payable rate being entered.
+   */
+  const awardedRate =
+    indent && orgId && indent.assigned_supplier_id === orgId
+      ? indent.assigned_supplier_rate ?? null
+      : null;
+
   useEffect(() => {
     return () => {
       openedIndentKeyRef.current = null;
@@ -888,6 +939,7 @@ export function IndentAllocationFlowScreen({
                 onAddPartner={onAddPartner}
                 blockedReasonBySupplierId={blockedPartnerReasons}
                 onPartnerSelected={advanceToRates}
+                awardedRate={awardedRate}
               />
             ) : null}
 

@@ -56,6 +56,8 @@ export interface PartnerRatesKeypadFlowProps {
   compact?: boolean;
   /** Client sale value — live sale / margin under the amount. */
   saleValue?: string;
+  /** Left column label for the sale/margin strip — default "Sale". */
+  saleLabel?: string;
 }
 
 export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
@@ -74,6 +76,7 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
   forceMobileLayout = false,
   compact = false,
   saleValue,
+  saleLabel,
 }: PartnerRatesKeypadFlowProps) {
   const [active, setActive] = useState<ActiveField>("rate");
   const inputPlatform = useInputPlatform();
@@ -170,6 +173,7 @@ export const PartnerRatesKeypadFlow = memo(function PartnerRatesKeypadFlow({
             <PartnerRateSaleMarginStrip
               saleValue={saleValue}
               partnerRate={partnerRate}
+              saleLabel={saleLabel}
             />
           ) : null
         }
