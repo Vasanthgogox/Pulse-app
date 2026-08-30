@@ -1363,6 +1363,13 @@ export function LoadCenterView({
       const isPending = quoteStatus === "pending";
       const isRejected = quoteStatus === "rejected";
       const isAccepted = quoteStatus === "accepted";
+      // The indent's own award state can move on independently of this
+      // specific bid row — e.g. a rejected/pending bid whose indent was
+      // later awarded to the same org through a different path (a re-award,
+      // a direct assignment). Check the live award state before trusting the
+      // bid's own status everywhere below, or a won load still shows
+      // "Update bid"/"rejected" instead of "Allocate"/"awarded".
+      const isAwardedByIndent = isAccepted || awardedToMeIndentIds.has(load.id);
       const isDoneOutcome =
         statusMatchesFilter(load.status || "", "DONE") ||
         indentIdsWithTrip.has(load.id);
@@ -1388,7 +1395,7 @@ export function LoadCenterView({
       const statusLabel =
         statusFilterTab === "DONE"
           ? mobileLabels.statusLabel
-          : isAccepted
+          : isAwardedByIndent
             ? "awarded"
             : isRejected
               ? "rejected"
@@ -1408,7 +1415,7 @@ export function LoadCenterView({
       const isCountered = isPending && counterInr != null;
       const quoteVariant = isDoneOutcome
         ? "done"
-        : isAccepted
+        : isAwardedByIndent
           ? "accepted"
           : isRejected
             ? "rejected"
@@ -1418,7 +1425,7 @@ export function LoadCenterView({
       const rightFooter =
         statusFilterTab === "DONE"
           ? mobileLabels.rightFooter
-          : isAccepted
+          : isAwardedByIndent
             ? "Bids won"
             : (load.load_type || "—").toUpperCase();
       const ticketCommerce = resolveGetLoadTicketCommerce(
@@ -1437,7 +1444,7 @@ export function LoadCenterView({
       const ctaLabel =
         doneOutcome?.kind === "converted"
           ? "View details"
-          : isAccepted
+          : isAwardedByIndent
             ? isDoneOutcome
               ? "View details"
               : "Allocate"
@@ -1456,7 +1463,7 @@ export function LoadCenterView({
       );
 
       const openLoad = () => {
-        if (isAccepted && !isDoneOutcome) {
+        if (isAwardedByIndent && !isDoneOutcome) {
           openIndentAllocation(load);
           return;
         }
@@ -1493,7 +1500,7 @@ export function LoadCenterView({
             layout.withActions ? (
               <GetLoadIndentCardActions
                 load={load}
-                isAccepted={isAccepted}
+                isAccepted={isAwardedByIndent}
                 isDoneOutcome={isDoneOutcome}
                 ctaLabel={ctaLabel}
                 showPrimaryCta={allowPrimaryCta}
