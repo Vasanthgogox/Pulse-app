@@ -8,6 +8,7 @@ import {
 import { LocationSearchField } from "@/features/trips/components/add-trip/LocationSearchField";
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { formatCityStateLabel } from "@/lib/placeCityState.util";
+import { formatMobileNumber } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { MapPin } from "lucide-react-native";
 import { useEffect, useState } from "react";
@@ -369,7 +370,12 @@ export function ClientProfileHubsEditSection({
           <Field
             label="Local GSTIN"
             value={draft.local_gstin}
-            onChangeText={(v) => setDraft((d) => ({ ...d, local_gstin: v }))}
+            onChangeText={(v) =>
+              setDraft((d) => ({
+                ...d,
+                local_gstin: v.replace(/\s/g, "").toUpperCase().slice(0, 15),
+              }))
+            }
             placeholder="GST number for this hub"
             autoCapitalize="characters"
           />
@@ -382,7 +388,9 @@ export function ClientProfileHubsEditSection({
           <Field
             label="Contact Phone"
             value={draft.contact_phone}
-            onChangeText={(v) => setDraft((d) => ({ ...d, contact_phone: v }))}
+            onChangeText={(v) =>
+              setDraft((d) => ({ ...d, contact_phone: formatMobileNumber(v) }))
+            }
             placeholder="+91 XXXXX XXXXX"
             keyboardType="phone-pad"
           />
