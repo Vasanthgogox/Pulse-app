@@ -47,6 +47,7 @@ export {
   useInvalidatePosts,
   useAfterPostDeleted,
   useIndentStoryStatesQuery,
+  useLiveOwnLoadStoriesQuery,
 } from './usePostsQuery';
 export {
   useBidsForPostQuery,

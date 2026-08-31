@@ -122,6 +122,17 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
   void _awarding;
   const partyName =
     (quote.bidder_organization_name ?? "Supplier").trim() || "Supplier";
+  const isDriverDirectOffer = quote.offer_source === "driver_direct_bid";
+  const avatarEntityType = isDriverDirectOffer ? "driver" : "supplier";
+  const avatarProps = {
+    name: partyName,
+    avatarUrl: quote.bidder_avatar_url ?? null,
+    avatarSeed: quote.bidder_avatar_seed ?? null,
+    initialsColorSeed:
+      quote.bidder_organization_id || quote.id || partyName,
+    entityType: avatarEntityType as "driver" | "supplier",
+    showIntegrationBadge: false as const,
+  };
   const amount = Number(quote.amount ?? 0);
   const amountDisplay = stripCurrencyPrefix(formatINR(amount));
   const status = (quote.status ?? "pending").toLowerCase();
@@ -207,11 +218,8 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
       >
         <View style={styles.minimalTop}>
           <EntityAvatar
-            name={partyName}
-            initialsColorSeed={quote.bidder_organization_id}
-            entityType="supplier"
+            {...avatarProps}
             size={AVATAR_SIZE_MINIMAL}
-            showIntegrationBadge={false}
           />
           <View style={styles.minimalBody}>
             <View style={styles.minimalNameRow}>
@@ -334,11 +342,8 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
       <View style={styles.topSection}>
         <View style={styles.avatarWrap}>
           <EntityAvatar
-            name={partyName}
-            initialsColorSeed={quote.bidder_organization_id}
-            entityType="supplier"
+            {...avatarProps}
             size={AVATAR_SIZE}
-            showIntegrationBadge={false}
           />
         </View>
 

@@ -2,6 +2,7 @@
  * Load Center — suggested partners widget (Give / Get).
  * Give: asset-owning suppliers. Get: aggregators sharing market indents.
  * Mobile (`compact`): collapsible chip header to keep the load list uncluttered.
+ * Avatar / row tap opens the same public org profile modal as Network Discover.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
@@ -18,6 +19,10 @@ import {
   METRONIC,
   networkDesktopHubStyles as styles,
 } from "@/features/network/components/desktop/networkDesktopHub.styles";
+import {
+  NetworkProfileModalBody,
+  type NetworkProfileModalNode,
+} from "@/features/network/components/NetworkProfileModalBody";
 import { useNetworkDiscovery } from "@/features/network/hooks/useNetworkDiscovery";
 import type { DiscoverOrg } from "@/features/network/services/discover.service";
 import {
@@ -28,26 +33,58 @@ import {
   type LoadCenterRecommendMode,
   type ScoredDiscoverOrg,
 } from "@/features/network/utils/discoverRecommendations.util";
+import { isRegisteredOrgId } from "@/features/network/utils/networkActions.util";
+import { maskGstin } from "@/features/network/utils/partyContactDisplay.util";
 import { useEnsureVerified } from "@/features/network/utils/verifiedActionGuard";
 import { showAppAlert } from "@/lib/appAlert";
-import { todayPendingInviteCountFromSent } from "@/lib/todayPendingInviteCount";
+import { useNetworkProfileSnapshotQuery } from "@/lib/queries/useNetworkProfileSnapshotQuery";
 import {
   useConnectionRequestsSentQuery,
   useInvalidateNetwork,
 } from "@/lib/queries/useNetworkQueries";
 import { ROUTES } from "@/lib/routes";
+import { todayPendingInviteCountFromSent } from "@/lib/todayPendingInviteCount";
 import { useRouter } from "expo-router";
 import { ChevronDown, ChevronUp, Sparkles, UserPlus, X } from "lucide-react-native";
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Alert,
+  Modal,
+  Platform,
   Pressable,
+  ScrollView,
+  StyleSheet,
   Text,
+  useWindowDimensions,
   View,
   type ViewStyle,
 } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const RECOMMENDATION_LIMIT = 3;
+
+function discoverOrgToProfileNode(org: DiscoverOrg): NetworkProfileModalNode {
+  const normalized = String(org.connection_status ?? "").toLowerCase();
+  const status: NetworkProfileModalNode["status"] =
+    normalized === "approved"
+      ? "CONNECTED"
+      : normalized === "pending"
+        ? "REQUEST SENT"
+        : "LIVE";
+  return {
+    id: org.id,
+    name: org.name,
+    type: "SUPPLIER",
+    location: getDiscoverOrgLocation(org)?.trim() || "Not available",
+    status,
+    rating: org.rating ?? org.average_rating ?? null,
+    mutuals: org.mutual_count ?? org.mutual_connections_count ?? 0,
+    avatar_url: org.avatar_url ?? null,
+    avatar_seed: org.avatar_seed ?? null,
+    is_kyc_verified: org.is_kyc_verified ?? false,
+    operating_model: org.operating_model ?? null,
+  };
+}
 
 type Props = {
   orgId: string;
@@ -111,6 +148,8 @@ function RecommendationRow({
       <Pressable
         onPress={onOpenProfile}
         disabled={!onOpenProfile}
+        accessibilityRole="button"
+        accessibilityLabel={`View ${org.name} public profile`}
         style={({ pressed }) => [
           styles.salesGrowRowMain,
           pressed && onOpenProfile && styles.salesGrowRowHeadPressed,
@@ -240,6 +279,9 @@ export function LoadCenterPartnerRecommendations({
   compact = false,
 }: Props) {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { width } = useWindowDimensions();
+  const isMobileLayout = width < 768 || Platform.OS !== "web";
   const { orgs, loading, error, refetch, invalidateCache } = useNetworkDiscovery({
     orgId,
     search: "",
@@ -251,6 +293,73 @@ export function LoadCenterPartnerRecommendations({
   /** Mobile starts collapsed so the load list stays primary. */
   const [expanded, setExpanded] = useState(!compact);
   const ensureVerified = useEnsureVerified();
+  /** Same public profile sheet as Network Discover when parent does not override. */
+  const [profileNode, setProfileNode] = useState<NetworkProfileModalNode | null>(
+    null,
+  );
+  const [profileTrips, setProfileTrips] = useState<number | null>(null);
+
+  const profileTargetId =
+    profileNode && isRegisteredOrgId(profileNode.id) ? profileNode.id : null;
+  const profileSnapshotQ = useNetworkProfileSnapshotQuery(orgId, profileTargetId);
+  const profileStatsLoading = Boolean(
+    profileTargetId && profileSnapshotQ.isPending,
+  );
+
+  useEffect(() => {
+    const snap = profileSnapshotQ.data;
+    if (!snap || !profileTargetId || snap.id !== profileTargetId) return;
+    setProfileTrips(snap.total_trips ?? 0);
+    setProfileNode((prev) => {
+      if (!prev || prev.id !== profileTargetId) return prev;
+      return {
+        ...prev,
+        name: snap.name?.trim() || prev.name,
+        type: snap.type ?? prev.type,
+        location:
+          snap.location && snap.location !== "Not available"
+            ? snap.location
+            : prev.location && prev.location !== "Not available"
+              ? prev.location
+              : snap.location,
+        status: snap.status ?? prev.status,
+        rating: snap.rating ?? prev.rating,
+        mutuals:
+          typeof snap.mutuals === "number" ? snap.mutuals : prev.mutuals,
+        phone: snap.phone ?? prev.phone,
+        avatar_url: snap.avatar_url ?? prev.avatar_url,
+        avatar_seed: snap.avatar_seed ?? prev.avatar_seed,
+        is_integrated: snap.is_integrated ?? prev.is_integrated,
+        is_kyc_verified: snap.is_kyc_verified ?? prev.is_kyc_verified,
+        registered_address: snap.registered_address ?? null,
+        branch_count: snap.branch_count ?? 0,
+        sector: snap.sector ?? null,
+        website: snap.website ?? null,
+        gstin: maskGstin(snap.gstin),
+        operating_model: snap.operating_model ?? null,
+        member_since_year: snap.member_since_year ?? prev.member_since_year ?? null,
+        vehicle_count: snap.vehicle_count ?? 0,
+        indent_count: snap.indent_count ?? 0,
+      };
+    });
+  }, [profileSnapshotQ.data, profileTargetId]);
+
+  const openProfileForOrg = useCallback(
+    (org: DiscoverOrg) => {
+      if (onOpenProfile) {
+        onOpenProfile(org);
+        return;
+      }
+      if (!isRegisteredOrgId(org.id)) return;
+      setProfileNode(discoverOrgToProfileNode(org));
+      setProfileTrips(
+        typeof org.trip_count === "number" && org.trip_count >= 0
+          ? org.trip_count
+          : null,
+      );
+    },
+    [onOpenProfile],
+  );
 
   const atDailyInviteLimit = useMemo(() => {
     const todayInviteCount = todayPendingInviteCountFromSent(sentQ.data ?? []);
@@ -455,9 +564,7 @@ export function LoadCenterPartnerRecommendations({
                     isLast={idx === recommendations.length - 1}
                     striped={idx % 2 === 1}
                     compact={compact}
-                    onOpenProfile={
-                      onOpenProfile ? () => onOpenProfile(org) : undefined
-                    }
+                    onOpenProfile={() => openProfileForOrg(org)}
                     onDismiss={() => handleDismiss(org.id)}
                     onConnect={() => void handleConnect(org)}
                     onCancel={() => void handleCancel(org)}
@@ -486,6 +593,54 @@ export function LoadCenterPartnerRecommendations({
           <Text style={styles.salesGrowInviteMetaText}>{inviteSummary}</Text>
         </View>
       )}
+
+      {profileNode ? (
+        <Modal
+          visible
+          transparent
+          animationType="fade"
+          onRequestClose={() => setProfileNode(null)}
+        >
+          <View
+            style={[
+              profileModalStyles.backdrop,
+              isMobileLayout && profileModalStyles.backdropMobile,
+            ]}
+          >
+            <Pressable
+              style={profileModalStyles.backdropTouch}
+              onPress={() => setProfileNode(null)}
+              accessibilityLabel="Close profile"
+            />
+            <View
+              style={[
+                profileModalStyles.card,
+                isMobileLayout && profileModalStyles.cardMobile,
+              ]}
+            >
+              <ScrollView
+                keyboardShouldPersistTaps="handled"
+                showsVerticalScrollIndicator={false}
+                contentContainerStyle={[
+                  profileModalStyles.scroll,
+                  isMobileLayout && {
+                    paddingBottom: 10 + insets.bottom,
+                  },
+                ]}
+              >
+                <NetworkProfileModalBody
+                  node={profileNode}
+                  viewerOrgId={orgId}
+                  isMobile={isMobileLayout}
+                  profileStatsLoading={profileStatsLoading}
+                  totalTrips={profileTrips ?? 0}
+                  onClose={() => setProfileNode(null)}
+                />
+              </ScrollView>
+            </View>
+          </View>
+        </Modal>
+      ) : null}
     </View>
   );
 }
@@ -550,3 +705,55 @@ const local = {
     minWidth: 0,
   } satisfies ViewStyle,
 };
+
+const profileModalStyles = StyleSheet.create({
+  backdrop: {
+    flex: 1,
+    backgroundColor: "rgba(15, 23, 42, 0.42)",
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    paddingVertical: 24,
+  },
+  backdropMobile: {
+    justifyContent: "flex-end",
+    paddingHorizontal: 0,
+    paddingVertical: 0,
+  },
+  backdropTouch: {
+    ...StyleSheet.absoluteFillObject,
+  },
+  card: {
+    width: "100%",
+    maxWidth: 420,
+    maxHeight: "88%",
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 20,
+    overflow: "hidden",
+    alignSelf: "center",
+    zIndex: 1,
+    ...Platform.select({
+      web: {
+        boxShadow: "0 16px 48px rgba(24, 28, 50, 0.12)",
+      },
+      default: {
+        shadowColor: "#0F172A",
+        shadowOpacity: 0.12,
+        shadowRadius: 28,
+        shadowOffset: { width: 0, height: 12 },
+        elevation: 10,
+      },
+    }),
+  },
+  cardMobile: {
+    maxWidth: "100%",
+    maxHeight: "92%",
+    borderBottomLeftRadius: 0,
+    borderBottomRightRadius: 0,
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+  },
+  scroll: {
+    paddingBottom: 16,
+  },
+});

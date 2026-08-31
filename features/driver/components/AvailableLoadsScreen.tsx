@@ -16,23 +16,18 @@ import {
   isLoadCompatibleWithFleet,
   type FleetOwnerOpenLoad,
 } from '@/features/driver/services/fleetOwnerLoads.service';
+import { marketBidStatusLabel, type MarketBidStatus } from '@/features/driver/services/marketBids.service';
+import { MyBidsContent } from '@/features/driver/components/MyBidsScreen';
+import { StoriesContent } from '@/features/reach/screens/DriverStoriesScreen';
 import { useDriverFleetOwnerQuery } from '@/lib/queries/useDriverFleetOwnerQuery';
 import { useFleetOwnerOpenLoadsQuery } from '@/lib/queries/useFleetOwnerOpenLoadsQuery';
+import { useMyMarketBidsQuery } from '@/lib/queries/useMyMarketBidsQuery';
 import { useOwnerVehiclesQuery } from '@/lib/queries/useOwnerVehiclesQuery';
 import { ROUTES } from '@/lib/routes';
 import { useRouter } from 'expo-router';
 import { ChevronRight, Filter, MapPin, Truck } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
-import {
-  ActivityIndicator,
-  Pressable,
-  RefreshControl,
-  ScrollView,
-  StyleSheet,
-  Text,
-  View,
-} from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 type FilterMode = 'all' | 'compatible';
 
@@ -50,102 +45,151 @@ function formatPickupDate(iso: string | null): string {
 }
 
 export default function AvailableLoadsScreen() {
-  const insets = useSafeAreaInsets();
   const router = useRouter();
   const { profile } = useAuth();
   const uid = profile?.uid ?? '';
   const { isDark } = useDriverTheme();
   const colors = useDriverThemeColors();
   const pageBg = driverDetailPageBackground(isDark, colors.background);
+  const [segment, setSegment] = useState<'find' | 'mybids'>('find');
+  const cardBorder = isDark ? colors.borderSubtle : 'rgba(226,232,240,0.95)';
+
+  return (
+    <View style={[styles.root, { backgroundColor: pageBg }]}>
+      <DriverSubScreenHeader
+        title="Market"
+        subtitle="Find work"
+        onBack={() =>
+          router.canGoBack() ? router.back() : router.replace(ROUTES.DRIVER_ROOT)
+        }
+      />
+
+      <View
+        style={[
+          styles.segmentRow,
+          { borderColor: cardBorder, backgroundColor: isDark ? colors.surfaceElevated : Theme.surfaceGray },
+        ]}
+      >
+        {(
+          [
+            { id: 'find' as const, label: 'Find Work' },
+            { id: 'mybids' as const, label: 'My Bids' },
+          ] as const
+        ).map((seg) => {
+          const on = segment === seg.id;
+          return (
+            <Pressable
+              key={seg.id}
+              onPress={() => setSegment(seg.id)}
+              style={[
+                styles.segmentBtn,
+                on && { backgroundColor: colors.surface, borderColor: cardBorder },
+              ]}
+            >
+              <Text style={[styles.segmentText, { color: on ? colors.text : colors.textMuted }]}>
+                {seg.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+
+      {segment === 'mybids' ? (
+        uid ? <MyBidsContent uid={uid} /> : null
+      ) : uid ? (
+        <MarketFindWorkScreen uid={uid} />
+      ) : null}
+    </View>
+  );
+}
+
+/**
+ * Market → Find Work: the existing Reach opportunities feed (`StoriesContent`,
+ * unchanged) with formal open-Market loads composed in as its last section,
+ * so both opportunity sources read as one feed instead of two stacked
+ * screens. No new sorting/business logic — same components, same queries,
+ * new composition only.
+ */
+function MarketFindWorkScreen({ uid }: { uid: string }) {
+  const { refetch: refetchLoads } = useFleetOwnerOpenLoadsQuery(uid);
+  const { refetch: refetchBids } = useMyMarketBidsQuery(uid);
+
+  return (
+    <StoriesContent
+      footer={<FindLoadsContent uid={uid} />}
+      onRefreshExtra={() => {
+        void refetchLoads();
+        void refetchBids();
+      }}
+    />
+  );
+}
+
+/**
+ * Presentation-only content adapter — the same open-Market load list/filters
+ * previously rendered inline in this screen, now embeddable at the bottom of
+ * the unified Find Work feed. Same hooks, same data, same Fleet Owner gate;
+ * only the surrounding ScrollView/header is gone (the caller owns scrolling).
+ */
+function FindLoadsContent({ uid }: { uid: string }) {
+  const router = useRouter();
+  const { isDark } = useDriverTheme();
+  const colors = useDriverThemeColors();
   const { isFleetOwner, isLoading: ownerLoading } = useDriverFleetOwnerQuery(uid);
-  const { loads, isLoading, isRefetching, refetch, error } =
-    useFleetOwnerOpenLoadsQuery(uid);
+  const { loads, isLoading, error } = useFleetOwnerOpenLoadsQuery(uid);
   const { vehicles } = useOwnerVehiclesQuery(uid);
+  const { bids } = useMyMarketBidsQuery(uid);
   const [filter, setFilter] = useState<FilterMode>('all');
+  const cardBorder = isDark ? colors.borderSubtle : 'rgba(226,232,240,0.95)';
 
   const fleetTypes = useMemo(
     () => vehicles.map((v) => v.vehicle_type),
     [vehicles],
   );
 
+  const bidStatusByIndentId = useMemo(() => {
+    const map = new Map<string, MarketBidStatus>();
+    for (const b of bids) map.set(b.indent_id, b.status);
+    return map;
+  }, [bids]);
+
   const visible = useMemo(() => {
     if (filter !== 'compatible') return loads;
     return loads.filter((l) => isLoadCompatibleWithFleet(l, fleetTypes));
   }, [loads, filter, fleetTypes]);
 
-  const cardBorder = isDark ? colors.borderSubtle : 'rgba(226,232,240,0.95)';
-
   if (!ownerLoading && !isFleetOwner) {
     return (
-      <View style={[styles.root, { backgroundColor: pageBg }]}>
-        <DriverSubScreenHeader
-          title="Market"
-          subtitle="Fleet Owner required"
-          onBack={() =>
-            router.canGoBack() ? router.back() : router.replace(ROUTES.DRIVER_ROOT)
+      <View style={styles.marketGate}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Market loads</Text>
+        <Text style={[styles.gateBody, { color: colors.textMuted }]}>
+          Open marketplace demand comes from businesses. Become a Fleet Owner
+          to also bid on formal Market loads here.
+        </Text>
+        <Pressable
+          onPress={() =>
+            router.push(
+              ROUTES.driverBecomeFleetOwner() as Parameters<typeof router.push>[0],
+            )
           }
-        />
-        <View style={styles.gate}>
-          <Text style={[styles.gateTitle, { color: colors.text }]}>
-            Become a Fleet Owner to browse loads
-          </Text>
-          <Text style={[styles.gateBody, { color: colors.textMuted }]}>
-            Open marketplace demand comes from businesses. You can bid once
-            you're a Fleet Owner — you cannot create loads in the Driver App.
-          </Text>
-          <Pressable
-            onPress={() =>
-              router.push(
-                ROUTES.driverBecomeFleetOwner() as Parameters<typeof router.push>[0],
-              )
-            }
-            style={({ pressed }) => [
-              styles.cta,
-              { backgroundColor: colors.emerald, opacity: pressed ? 0.88 : 1 },
-            ]}
-          >
-            <Text style={styles.ctaText}>Become a Fleet Owner</Text>
-          </Pressable>
-        </View>
+          style={({ pressed }) => [
+            styles.cta,
+            { backgroundColor: colors.emerald, opacity: pressed ? 0.88 : 1 },
+          ]}
+        >
+          <Text style={styles.ctaText}>Become a Fleet Owner</Text>
+        </Pressable>
       </View>
     );
   }
 
   return (
-    <View style={[styles.root, { backgroundColor: pageBg }]}>
-      <DriverSubScreenHeader
-        title="Market"
-        subtitle="Open marketplace"
-        onBack={() =>
-          router.canGoBack() ? router.back() : router.replace(ROUTES.DRIVER_ROOT)
-        }
-      />
-
-      <View style={styles.navRow}>
-        <Pressable
-          onPress={() =>
-            router.push(ROUTES.driverMyBids() as Parameters<typeof router.push>[0])
-          }
-          style={({ pressed }) => [
-            styles.navLink,
-            { borderColor: cardBorder, backgroundColor: colors.surface, opacity: pressed ? 0.9 : 1 },
-          ]}
-        >
-          <Text style={[styles.navLinkText, { color: colors.text }]}>My Bids</Text>
-          <ChevronRight size={14} color={colors.textMuted} />
-        </Pressable>
-        <Pressable
-          onPress={() =>
-            router.push(ROUTES.driverMarketAwards() as Parameters<typeof router.push>[0])
-          }
-          style={({ pressed }) => [
-            styles.navLink,
-            { borderColor: cardBorder, backgroundColor: colors.surface, opacity: pressed ? 0.9 : 1 },
-          ]}
-        >
-          <Text style={[styles.navLinkText, { color: colors.text }]}>Awards</Text>
-          <ChevronRight size={14} color={colors.textMuted} />
-        </Pressable>
+    <View style={styles.marketSection}>
+      <View style={styles.sectionHeader}>
+        <Text style={[styles.sectionTitle, { color: colors.text }]}>Market loads</Text>
+        <Text style={[styles.sectionSub, { color: colors.textMuted }]}>
+          Formal marketplace loads from businesses — bid with your fleet.
+        </Text>
       </View>
 
       <View style={styles.filterRow}>
@@ -186,27 +230,12 @@ export default function AvailableLoadsScreen() {
         })}
       </View>
 
-      <ScrollView
-        contentContainerStyle={{
-          paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
-          paddingBottom: Math.max(insets.bottom, 16) + 24,
-          gap: 10,
-        }}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={() => void refetch()}
-            tintColor={colors.emerald}
-          />
-        }
-      >
+      <View style={styles.marketListPad}>
         {error ? (
           <Text style={styles.errorText}>
             {error instanceof Error ? error.message : 'Could not load marketplace.'}
           </Text>
-        ) : null}
-
-        {isLoading ? (
+        ) : isLoading ? (
           <ActivityIndicator color={colors.emerald} style={{ marginTop: 28 }} />
         ) : visible.length === 0 ? (
           <View
@@ -229,6 +258,7 @@ export default function AvailableLoadsScreen() {
               key={load.id}
               load={load}
               compatible={isLoadCompatibleWithFleet(load, fleetTypes)}
+              bidStatus={bidStatusByIndentId.get(load.id)}
               cardBorder={cardBorder}
               colors={colors}
               isDark={isDark}
@@ -242,14 +272,29 @@ export default function AvailableLoadsScreen() {
             />
           ))
         )}
-      </ScrollView>
+      </View>
     </View>
   );
+}
+
+function bidStatusBadgeColor(
+  status: MarketBidStatus,
+  colors: ReturnType<typeof useDriverThemeColors>,
+): string {
+  switch (status) {
+    case 'accepted':
+      return colors.emerald;
+    case 'rejected':
+      return Theme.negative;
+    default:
+      return Theme.warning;
+  }
 }
 
 function LoadCard({
   load,
   compatible,
+  bidStatus,
   cardBorder,
   colors,
   isDark,
@@ -257,6 +302,7 @@ function LoadCard({
 }: {
   load: FleetOwnerOpenLoad;
   compatible: boolean;
+  bidStatus?: MarketBidStatus;
   cardBorder: string;
   colors: ReturnType<typeof useDriverThemeColors>;
   isDark: boolean;
@@ -281,6 +327,18 @@ function LoadCard({
         </Text>
         <ChevronRight size={18} color={colors.textMuted} />
       </View>
+      {bidStatus ? (
+        <View
+          style={[
+            styles.statusPill,
+            { backgroundColor: isDark ? colors.surfaceElevated : Theme.surfaceGray },
+          ]}
+        >
+          <Text style={[styles.statusPillText, { color: bidStatusBadgeColor(bidStatus, colors) }]}>
+            {bidStatus === 'pending' ? 'Bid submitted' : marketBidStatusLabel(bidStatus)}
+          </Text>
+        </View>
+      ) : null}
       {rate ? (
         <Text style={[styles.rate, { color: Theme.warning }]}>{rate}</Text>
       ) : (
@@ -318,25 +376,40 @@ function LoadCard({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  gate: { padding: 20, gap: 10 },
-  gateTitle: { fontSize: 17, fontWeight: '800' },
   gateBody: { fontSize: 13, lineHeight: 19 },
-  navRow: {
-    flexDirection: 'row',
-    gap: 8,
+  marketSection: { paddingTop: 16, gap: 10, paddingBottom: 4 },
+  marketGate: {
     paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
-    paddingTop: 10,
+    paddingTop: 16,
+    paddingBottom: 8,
+    gap: 8,
   },
-  navLink: {
+  marketListPad: { paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD, gap: 10 },
+  sectionHeader: {
+    paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
+    gap: 2,
+    marginBottom: 2,
+  },
+  sectionTitle: { fontSize: 13, fontWeight: '800', letterSpacing: -0.15 },
+  sectionSub: { fontSize: 11, fontWeight: '500', lineHeight: 15 },
+  segmentRow: {
     flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    borderRadius: 10,
+    marginHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
+    marginTop: 10,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    padding: 3,
+    gap: 3,
   },
-  navLinkText: { fontSize: 12, fontWeight: '700' },
+  segmentBtn: {
+    flex: 1,
+    borderRadius: 9,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'transparent',
+    paddingVertical: 8,
+    alignItems: 'center',
+  },
+  segmentText: { fontSize: 13, fontWeight: '700' },
   filterRow: {
     flexDirection: 'row',
     gap: 8,
@@ -372,6 +445,13 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   fitText: { fontSize: 11, fontWeight: '700' },
+  statusPill: {
+    alignSelf: 'flex-start',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  statusPillText: { fontSize: 11, fontWeight: '700' },
   empty: {
     borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,

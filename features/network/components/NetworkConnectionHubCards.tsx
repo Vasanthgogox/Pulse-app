@@ -198,21 +198,33 @@ export function HubConnectionListCard({
                 ]}
               >
                 {rating ? (
-                  <Star
-                    size={10}
-                    color={Theme.driverGold}
-                    fill={Theme.driverGold}
-                    strokeWidth={2.2}
-                  />
-                ) : null}
-                <Text
-                  style={[
-                    styles.hubRatingText,
-                    !rating && styles.hubRatingTextEmpty,
-                  ]}
-                >
-                  {rating ?? "No rating"}
-                </Text>
+                  <>
+                    <Text
+                      style={[
+                        styles.hubRatingText,
+                        !rating && styles.hubRatingTextEmpty,
+                      ]}
+                    >
+                      {rating}
+                    </Text>
+                    <Star
+                      size={10}
+                      color={Theme.driverGold}
+                      fill={Theme.driverGold}
+                      strokeWidth={2.2}
+                      style={styles.hubRatingStar}
+                    />
+                  </>
+                ) : (
+                  <Text
+                    style={[
+                      styles.hubRatingText,
+                      styles.hubRatingTextEmpty,
+                    ]}
+                  >
+                    No rating
+                  </Text>
+                )}
               </View>
             </View>
           </View>
@@ -510,12 +522,19 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
+    lineHeight: 12,
+    includeFontPadding: false,
+    textAlignVertical: "center",
+  },
+  hubRatingStar: {
+    marginTop: 0.5,
   },
   hubRatingTextEmpty: {
     fontSize: 7,
     fontWeight: "500",
     color: Theme.textMutedDemo,
     letterSpacing: -0.1,
+    lineHeight: 10,
   },
   cardTopRow: {
     flexDirection: "row",

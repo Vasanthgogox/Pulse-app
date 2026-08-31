@@ -166,8 +166,16 @@ export const IndentLiveBidsPanel = memo(function IndentLiveBidsPanel({
           <View style={styles.recoRow}>
             <EntityAvatar
               name={recommendedQuote.bidder_organization_name ?? "Supplier"}
-              initialsColorSeed={recommendedQuote.bidder_organization_id}
-              entityType="supplier"
+              avatarUrl={recommendedQuote.bidder_avatar_url ?? null}
+              avatarSeed={recommendedQuote.bidder_avatar_seed ?? null}
+              initialsColorSeed={
+                recommendedQuote.bidder_organization_id || recommendedQuote.id
+              }
+              entityType={
+                recommendedQuote.offer_source === "driver_direct_bid"
+                  ? "driver"
+                  : "supplier"
+              }
               size={28}
               showIntegrationBadge={false}
             />

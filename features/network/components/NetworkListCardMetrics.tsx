@@ -33,6 +33,9 @@ export function NetworkHubMetricsInlineRow({
         ·
       </Text>
       <View style={styles.inlineItem}>
+        <Text style={styles.inlineValue} numberOfLines={1}>
+          {rating}
+        </Text>
         <View style={[styles.inlineIconWrap, styles.inlineIconWrapRating]}>
           <Star
             size={11}
@@ -41,9 +44,6 @@ export function NetworkHubMetricsInlineRow({
             strokeWidth={2}
           />
         </View>
-        <Text style={styles.inlineValue} numberOfLines={1}>
-          {rating}
-        </Text>
       </View>
     </View>
   );

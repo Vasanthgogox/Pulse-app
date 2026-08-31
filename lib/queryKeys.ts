@@ -249,6 +249,9 @@ export const queryKeys = {
     detail: (postId: string) => ["q", "posts", "detail", postId] as const,
     indentStories: (orgId: string, indentIdsKey: string) =>
       ["q", "posts", orgId, "indent-stories", indentIdsKey] as const,
+    /** Live indent-linked LOAD stories for Mine / own story preview queue. */
+    liveOwnLoadStories: (orgId: string) =>
+      ["q", "posts", orgId, "live-own-load-stories"] as const,
   },
 
   bids: {
@@ -288,6 +291,12 @@ export const queryKeys = {
   discover: {
     search: (orgId: string, search: string) =>
       ["q", "discover", orgId, search] as const,
+  },
+
+  support: {
+    myTickets: (uid: string) => ["q", "support", "my-tickets", uid] as const,
+    ticketDetail: (ticketId: string) =>
+      ["q", "support", "ticket-detail", ticketId] as const,
   },
 
   mutualConnections: (viewerOrgId: string, targetOrgId: string) =>

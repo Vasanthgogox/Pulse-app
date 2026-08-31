@@ -1,158 +1,218 @@
 /**
- * ShareLoadSheet — light bottom sheet to broadcast an indent to the Pulse network.
- * Story broadcast (24h) + optional WhatsApp share with public story-detail URL (bidding page).
+ * ShareLoadSheet — broadcast an indent to the Pulse story reel (24h).
+ * Preview card mirrors Load Center hub indent card (PICKUP/DROP + chips + offer).
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
-import { type IndentRow, getIndentDisplayNumber, resolveSupplierTargetDisplayRate } from "@/features/indents";
+import {
+  type IndentRow,
+  getIndentDisplayNumber,
+  resolveSupplierTargetDisplayRate,
+} from "@/features/indents";
 import { ensureIndentStory } from "@/features/network/services/indentStoryPosts.service";
-import { splitHubRouteLocationDisplay } from "@/features/trips/utils/tripLocationDisplay.util";
+import {
+  formatStoryDate,
+  splitLocationParts,
+} from "@/features/network/utils/storyDisplay";
 import { formatINR } from "@/lib/format";
 import { buildPulseStoryPublicUrl } from "@/lib/routes";
+import { platformShadow } from "@/lib/platformShadow";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
 import * as Sharing from "expo-sharing";
-import { ArrowRight, CheckCircle2, Clock, Copy, TrendingUp, X, Zap } from "lucide-react-native";
-import React, { useCallback, useEffect, useRef, useState } from "react";
 import {
-    Animated,
-    Easing,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  ArrowRight,
+  CheckCircle2,
+  Clock,
+  Copy,
+  TrendingUp,
+  X,
+  Zap,
+} from "lucide-react-native";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Animated,
+  Easing,
+  KeyboardAvoidingView,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const IS_WEB = Platform.OS === "web";
 const SHEET_MAX_WIDTH = 440;
+const INK = Theme.textPrimaryDark;
+const MUTED = Theme.textMuted;
+const BORDER = Theme.borderLight;
+const CARD_EDGE = Theme.borderMedium;
 
-function routeLabel(value: string): string {
-  const trimmed = (value || "—").trim();
-  return trimmed ? trimmed.toUpperCase() : "—";
+function titleCaseWord(value: string): string {
+  const t = value.trim();
+  if (!t) return t;
+  return t
+    .split(/\s+/)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
+    .join(" ");
 }
 
-function BroadcastRoutePreview({
+function formatWeightChip(weightKg: number | null | undefined): string | null {
+  const kg = Number(weightKg);
+  if (!Number.isFinite(kg) || kg <= 0) return null;
+  const tonnes = kg / 1000;
+  if (tonnes >= 0.1) {
+    const rounded = Math.round(tonnes * 10) / 10;
+    return `${rounded % 1 === 0 ? rounded.toFixed(0) : rounded} t`;
+  }
+  return `${Math.round(kg)} kg`;
+}
+
+function LoadHubRoute({
   origin,
   destination,
 }: {
   origin: string;
   destination: string;
 }) {
-  const originParts = splitHubRouteLocationDisplay(origin);
-  const destParts = splitHubRouteLocationDisplay(destination);
+  const originParts = splitLocationParts(origin);
+  const destParts = splitLocationParts(destination);
 
   return (
-    <View style={styles.routePreview}>
-      <View style={styles.routeLeg}>
-        <View style={[styles.routeDot, styles.routeDotOrigin]} />
-        <View style={styles.routeLegText}>
-          <Text style={styles.routeCity} numberOfLines={1}>
-            {routeLabel(originParts.city)}
-          </Text>
+    <View style={styles.routeGrid}>
+      <View style={styles.routeCol}>
+        <Text style={styles.routeLabel}>PICKUP</Text>
+        <Text style={styles.routeCity} numberOfLines={1}>
+          {titleCaseWord(originParts.city)}
+        </Text>
+        {originParts.state ? (
           <Text style={styles.routeState} numberOfLines={1}>
-            {originParts.state ? routeLabel(originParts.state) : "\u00a0"}
+            {titleCaseWord(originParts.state)}
           </Text>
-        </View>
+        ) : (
+          <Text style={styles.routeStateSpacer}>{"\u00a0"}</Text>
+        )}
       </View>
-
-      <View style={styles.routeArrowWrap}>
-        <ArrowRight size={16} color={Theme.textMuted} strokeWidth={2.2} />
+      <View style={styles.routeSep} pointerEvents="none" accessibilityElementsHidden>
+        <View style={styles.routeSepLine} />
+        <ArrowRight size={11} color={MUTED} strokeWidth={2.4} />
+        <View style={styles.routeSepLine} />
       </View>
-
-      <View style={[styles.routeLeg, styles.routeLegEnd]}>
-        <View style={styles.routeLegText}>
-          <Text style={[styles.routeCity, styles.routeCityEnd]} numberOfLines={1}>
-            {routeLabel(destParts.city)}
-          </Text>
+      <View style={[styles.routeCol, styles.routeColEnd]}>
+        <Text style={[styles.routeLabel, styles.routeLabelEnd]}>DROP</Text>
+        <Text style={[styles.routeCity, styles.routeCityEnd]} numberOfLines={1}>
+          {titleCaseWord(destParts.city)}
+        </Text>
+        {destParts.state ? (
           <Text style={[styles.routeState, styles.routeStateEnd]} numberOfLines={1}>
-            {destParts.state ? routeLabel(destParts.state) : "\u00a0"}
+            {titleCaseWord(destParts.state)}
           </Text>
-        </View>
-        <View style={[styles.routeDot, styles.routeDotDest]} />
+        ) : (
+          <Text style={[styles.routeStateSpacer, styles.routeStateEnd]}>
+            {"\u00a0"}
+          </Text>
+        )}
       </View>
     </View>
   );
 }
 
-function BroadcastSpecsGrid({
-  vehicle,
-  loadType,
-  weight,
+function LoadPreviewCard({
+  indent,
+  statusChipText = "STORY",
 }: {
-  vehicle: string;
-  loadType: string;
-  weight: string;
+  indent: IndentRow;
+  statusChipText?: string;
 }) {
-  const items = [
-    { label: "Vehicle", value: vehicle },
-    { label: "Load", value: loadType },
-    { label: "Weight", value: weight },
-  ] as const;
-
-  return (
-    <View style={styles.specsGrid}>
-      {items.map((item) => (
-        <View key={item.label} style={styles.specCell}>
-          <Text style={styles.specLabel}>{item.label}</Text>
-          <Text style={styles.specValue} numberOfLines={3}>
-            {item.value}
-          </Text>
-        </View>
-      ))}
-    </View>
-  );
-}
-
-interface ShareLoadSheetProps {
-  visible: boolean;
-  indent: IndentRow | null;
-  orgId: string;
-  onClose: () => void;
-  onSuccess?: (type: "feed" | "story") => void;
-  /** After story broadcast — open Pulse Reach boost for this post. */
-  onBoostAfterBroadcast?: (postId: string) => void;
-}
-
-function LoadPreviewCard({ indent }: { indent: IndentRow }) {
-  const weightValue = Number(indent.weight);
-  const weightDetail =
-    Number.isFinite(weightValue) && weightValue > 0 ? `${weightValue} KG` : "—";
   const displayRate =
     resolveSupplierTargetDisplayRate(indent.supplier_target, indent.client_price) ??
     indent.client_price;
 
+  const loadDateLabel = indent.pickup_date
+    ? formatStoryDate(indent.pickup_date)
+    : null;
+
+  const specChips = useMemo(() => {
+    const chips: string[] = [];
+    const vehicle = (indent.vehicle_type ?? "").trim();
+    if (vehicle) chips.push(vehicle);
+    const weight = formatWeightChip(indent.weight);
+    if (weight) chips.push(weight);
+    const loadType = (indent.load_type ?? "").trim();
+    if (loadType) chips.push(loadType);
+    return chips;
+  }, [indent.vehicle_type, indent.weight, indent.load_type]);
+
+  const indentId = getIndentDisplayNumber(indent);
+
   return (
     <View style={styles.previewCard}>
-      <BroadcastRoutePreview
+      <View style={styles.cardTop}>
+        <View style={styles.cardTopIcon}>
+          <Zap size={14} color={Theme.textOnPrimary} fill={Theme.textOnPrimary} />
+        </View>
+        <View style={styles.cardTopText}>
+          <Text style={styles.cardTopTitle} numberOfLines={1}>
+            Broadcast load
+          </Text>
+          <Text style={styles.cardTopMeta} numberOfLines={1}>
+            {indentId} · Pulse network
+          </Text>
+        </View>
+        <View style={styles.statusChip}>
+          <Text style={styles.statusChipText}>{statusChipText}</Text>
+        </View>
+      </View>
+
+      <LoadHubRoute
         origin={indent.pickup_area || "—"}
         destination={indent.drop_location || "—"}
       />
-      <View style={styles.previewIdRow}>
-        <Text style={styles.previewId} numberOfLines={1}>
-          {getIndentDisplayNumber(indent)}
-        </Text>
-      </View>
-      <View style={styles.previewSpecsPanel}>
-        <BroadcastSpecsGrid
-          vehicle={indent.vehicle_type || "—"}
-          loadType={indent.load_type || "—"}
-          weight={weightDetail}
-        />
-      </View>
-      {displayRate ? (
-        <View style={styles.rateRow}>
-          <Text style={styles.rateLabel}>Offer</Text>
-          <Text style={styles.rateValue}>{formatINR(displayRate)}</Text>
-        </View>
+
+      {specChips.length > 0 || loadDateLabel ? (
+        <ScrollView
+          horizontal
+          nestedScrollEnabled
+          showsHorizontalScrollIndicator={false}
+          bounces={false}
+          style={styles.specScroll}
+          contentContainerStyle={styles.specRow}
+        >
+          {specChips.map((chip) => (
+            <View key={chip} style={styles.specChip}>
+              <Text style={styles.specChipText} numberOfLines={1}>
+                {chip}
+              </Text>
+            </View>
+          ))}
+          {loadDateLabel ? (
+            <View style={[styles.specChip, styles.specChipDate]}>
+              <Text style={styles.specChipDateText} numberOfLines={1}>
+                {loadDateLabel}
+              </Text>
+            </View>
+          ) : null}
+        </ScrollView>
       ) : null}
+
+      <View style={styles.priceRow}>
+        <View style={styles.priceCol}>
+          <Text style={styles.priceHint}>OFFER</Text>
+          <Text style={styles.priceValue} numberOfLines={1}>
+            {displayRate ? formatINR(Number(displayRate)) : "—"}
+          </Text>
+        </View>
+        <View style={styles.expiryInline}>
+          <Clock size={11} color={Theme.brandBlueInk} strokeWidth={2.4} />
+          <Text style={styles.expiryInlineText}>24h story</Text>
+        </View>
+      </View>
     </View>
   );
 }
@@ -178,14 +238,24 @@ function SuccessView({
 
   useEffect(() => {
     Animated.parallel([
-      Animated.spring(scale, { toValue: 1, tension: 80, friction: 8, useNativeDriver: true }),
-      Animated.timing(opacity, { toValue: 1, duration: 200, useNativeDriver: true }),
+      Animated.spring(scale, {
+        toValue: 1,
+        tension: 80,
+        friction: 8,
+        useNativeDriver: true,
+      }),
+      Animated.timing(opacity, {
+        toValue: 1,
+        duration: 200,
+        useNativeDriver: true,
+      }),
     ]).start();
   }, [opacity, scale]);
 
   const storyUrl = buildPulseStoryPublicUrl(postId, orgId, "LOAD");
   const hasWebBase =
-    (process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim().replace(/\/$/, "") || "") !== "";
+    (process.env.EXPO_PUBLIC_WEB_BASE_URL?.trim().replace(/\/$/, "") || "") !==
+    "";
 
   const handleCopyLink = useCallback(async () => {
     try {
@@ -198,37 +268,28 @@ function SuccessView({
   }, [storyUrl]);
 
   return (
-    <Animated.View style={[styles.successView, { opacity, transform: [{ scale }] }]}>
-      <View style={styles.successRouteCard}>
-        <BroadcastRoutePreview
-          origin={indent.pickup_area || "—"}
-          destination={indent.drop_location || "—"}
-        />
-        <View style={styles.successRouteMeta}>
-          <Text style={styles.successRouteId} numberOfLines={1}>
-            {getIndentDisplayNumber(indent)}
-          </Text>
-          <View style={styles.expiryPill}>
-            <Clock size={10} color={Theme.brandBlueInk} strokeWidth={2.4} />
-            <Text style={styles.expiryPillText}>24h story</Text>
-          </View>
-        </View>
-      </View>
+    <Animated.View
+      style={[styles.successView, { opacity, transform: [{ scale }] }]}
+    >
+      <LoadPreviewCard indent={indent} statusChipText="LIVE" />
 
       <View style={styles.successHero}>
         <View style={styles.successIcon}>
-          <CheckCircle2 size={30} color={Theme.darkGreen} strokeWidth={2.2} />
+          <CheckCircle2 size={28} color={Theme.darkGreen} strokeWidth={2.2} />
         </View>
         <Text style={styles.successTitle}>Story live</Text>
         <Text style={styles.successSub}>
-          Your load is in the story reel. Partners in your network can bid and message until it
-          expires. Boost with Pulse Reach to amplify visibility.
+          Partners in your network can bid and message until it expires. Boost
+          with Pulse Reach to amplify visibility.
         </Text>
       </View>
 
       {onBoostReach ? (
         <Pressable
-          style={({ pressed }) => [styles.boostBtn, pressed && styles.boostBtnPressed]}
+          style={({ pressed }) => [
+            styles.boostBtn,
+            pressed && styles.boostBtnPressed,
+          ]}
           onPress={onBoostReach}
           accessibilityRole="button"
           accessibilityLabel="Boost with Pulse Reach"
@@ -241,7 +302,8 @@ function SuccessView({
       {!hasWebBase ? (
         <View style={styles.devHintBanner}>
           <Text style={styles.devHintText}>
-            Set EXPO_PUBLIC_WEB_BASE_URL for a public https link when sharing outside the app.
+            Set EXPO_PUBLIC_WEB_BASE_URL for a public https link when sharing
+            outside the app.
           </Text>
         </View>
       ) : null}
@@ -256,7 +318,8 @@ function SuccessView({
         <Text style={styles.waBtnText}>Share link on WhatsApp</Text>
       </Pressable>
       <Text style={styles.waHint}>
-        Opens WhatsApp with your bidding page link — paste to Status or send to a chat.
+        Opens WhatsApp with your bidding page link — paste to Status or send to
+        a chat.
       </Text>
 
       <View style={styles.linkCard}>
@@ -265,18 +328,26 @@ function SuccessView({
           {storyUrl}
         </Text>
         <Pressable
-          style={({ pressed }) => [styles.copyBtn, pressed && styles.copyBtnPressed]}
+          style={({ pressed }) => [
+            styles.copyBtn,
+            pressed && styles.copyBtnPressed,
+          ]}
           onPress={handleCopyLink}
           accessibilityRole="button"
           accessibilityLabel="Copy bidding link"
         >
           <Copy size={13} color={Theme.brandBlueInk} strokeWidth={2.2} />
-          <Text style={styles.copyBtnText}>{copied ? "Copied" : "Copy link"}</Text>
+          <Text style={styles.copyBtnText}>
+            {copied ? "Copied" : "Copy link"}
+          </Text>
         </Pressable>
       </View>
 
       <Pressable
-        style={({ pressed }) => [styles.doneBtn, pressed && styles.doneBtnPressed]}
+        style={({ pressed }) => [
+          styles.doneBtn,
+          pressed && styles.doneBtnPressed,
+        ]}
         onPress={onDone}
         accessibilityRole="button"
         accessibilityLabel="Done"
@@ -285,6 +356,16 @@ function SuccessView({
       </Pressable>
     </Animated.View>
   );
+}
+
+interface ShareLoadSheetProps {
+  visible: boolean;
+  indent: IndentRow | null;
+  orgId: string;
+  onClose: () => void;
+  onSuccess?: (type: "feed" | "story") => void;
+  /** After story broadcast — open Pulse Reach boost for this post. */
+  onBoostAfterBroadcast?: (postId: string) => void;
 }
 
 export function ShareLoadSheet({
@@ -402,16 +483,19 @@ export function ShareLoadSheet({
       {!IS_WEB ? <View style={styles.handle} /> : null}
 
       <View style={styles.header}>
-        <View style={styles.headerLeft}>
-          <View style={styles.headerIcon}>
-            <Zap size={16} color={Theme.textOnPrimary} fill={Theme.textOnPrimary} />
-          </View>
-          <View style={styles.headerTextCol}>
-            <Text style={styles.headerTitle}>Broadcast load</Text>
-            <Text style={styles.headerSub}>Share to your Pulse network</Text>
-          </View>
+        <View style={styles.headerTextCol}>
+          <Text style={styles.headerTitle}>Broadcast load</Text>
+          <Text style={styles.headerSub}>
+            Share this load to your Pulse story reel
+          </Text>
         </View>
-        <Pressable onPress={onClose} hitSlop={10} style={styles.closeBtn}>
+        <Pressable
+          onPress={onClose}
+          hitSlop={10}
+          style={styles.closeBtn}
+          accessibilityRole="button"
+          accessibilityLabel="Close"
+        >
           <X size={16} color={Theme.textMuted} strokeWidth={2.2} />
         </Pressable>
       </View>
@@ -432,9 +516,18 @@ export function ShareLoadSheet({
       ) : !success ? (
         <>
           <LoadPreviewCard indent={indent} />
-          <Text style={styles.storyOnlyHint}>
-            Broadcasts to the story reel only · 24 hour expiry · No public timeline
-          </Text>
+
+          <View style={styles.hintRow}>
+            <View style={styles.hintChip}>
+              <Text style={styles.hintChipText}>Story reel only</Text>
+            </View>
+            <View style={styles.hintChip}>
+              <Text style={styles.hintChipText}>24h expiry</Text>
+            </View>
+            <View style={styles.hintChip}>
+              <Text style={styles.hintChipText}>No public timeline</Text>
+            </View>
+          </View>
 
           <View style={styles.noteSection}>
             <Text style={styles.sectionLabel}>Add a note (optional)</Text>
@@ -456,16 +549,28 @@ export function ShareLoadSheet({
           {error ? <Text style={styles.errorText}>{error}</Text> : null}
 
           <Pressable
-            style={[styles.broadcastBtn, loading && styles.broadcastBtnDisabled]}
+            style={({ pressed }) => [
+              styles.broadcastBtn,
+              loading && styles.broadcastBtnDisabled,
+              pressed && !loading && styles.broadcastBtnPressed,
+            ]}
             onPress={handleBroadcast}
             disabled={loading}
+            accessibilityRole="button"
+            accessibilityLabel="Broadcast to story for 24 hours"
           >
             {loading ? (
               <LoadingIndicator color={Theme.textOnPrimary} />
             ) : (
               <>
-                <Zap size={14} color={Theme.textOnPrimary} fill={Theme.textOnPrimary} />
-                <Text style={styles.broadcastBtnText}>Broadcast to story (24h)</Text>
+                <Zap
+                  size={15}
+                  color={Theme.textOnPrimary}
+                  fill={Theme.textOnPrimary}
+                />
+                <Text style={styles.broadcastBtnText}>
+                  Broadcast to story (24h)
+                </Text>
               </>
             )}
           </Pressable>
@@ -510,7 +615,11 @@ export function ShareLoadSheet({
               {sheetBody}
             </ScrollView>
           ) : (
-            <KeyboardAvoidingView behavior="padding" enabled style={styles.sheetInner}>
+            <KeyboardAvoidingView
+              behavior="padding"
+              enabled
+              style={styles.sheetInner}
+            >
               {sheetBody}
             </KeyboardAvoidingView>
           )}
@@ -549,10 +658,10 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    paddingHorizontal: 20,
-    paddingTop: 14,
+    paddingHorizontal: 16,
+    paddingTop: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
+    borderTopColor: BORDER,
     alignSelf: "stretch",
     position: "relative",
     maxHeight: IS_WEB ? "92%" : "88%",
@@ -560,7 +669,18 @@ const styles = StyleSheet.create({
       ? {
           width: "100%",
           maxWidth: SHEET_MAX_WIDTH,
-          boxShadow: "0 16px 48px rgba(15, 23, 42, 0.14)",
+          borderRadius: 20,
+          borderTopLeftRadius: 20,
+          borderTopRightRadius: 20,
+          borderWidth: StyleSheet.hairlineWidth,
+          borderColor: BORDER,
+          ...platformShadow("0 16px 48px rgba(15, 23, 42, 0.14)", {
+            color: Theme.shadow,
+            opacity: 0.14,
+            radius: 24,
+            offsetY: 12,
+            elevation: 12,
+          }),
         }
       : {}),
   },
@@ -579,48 +699,40 @@ const styles = StyleSheet.create({
   handle: {
     width: 40,
     height: 4,
+    borderRadius: 2,
     backgroundColor: Theme.borderMedium,
     alignSelf: "center",
-    marginBottom: 6,
+    marginBottom: 8,
   },
 
   header: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
-    gap: 8,
+    gap: 10,
+    paddingHorizontal: 2,
   },
-  headerLeft: { flexDirection: "row", alignItems: "center", gap: 10, flex: 1, minWidth: 0 },
   headerTextCol: { flex: 1, minWidth: 0, gap: 2 },
-  headerIcon: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    backgroundColor: Theme.brandBlueInk,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
   headerTitle: {
-    fontSize: 14,
-    fontWeight: "800",
-    color: Theme.textPrimaryDark,
-    letterSpacing: 0.6,
-    textTransform: "uppercase",
-    lineHeight: 18,
+    fontSize: 17,
+    fontWeight: "700",
+    color: INK,
+    letterSpacing: -0.3,
+    lineHeight: 22,
   },
   headerSub: {
     fontSize: 12,
     fontWeight: "500",
-    fontStyle: "normal",
-    color: Theme.textMuted,
+    color: MUTED,
     lineHeight: 16,
-    marginTop: 1,
   },
   closeBtn: {
     width: 34,
     height: 34,
+    borderRadius: 10,
     backgroundColor: Theme.surfaceGray,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: BORDER,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
@@ -628,165 +740,256 @@ const styles = StyleSheet.create({
 
   previewCard: {
     backgroundColor: Theme.cardWhite,
-    padding: 16,
-    gap: 12,
-  },
-  routePreview: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    justifyContent: "space-between",
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: CARD_EDGE,
+    paddingHorizontal: 14,
+    paddingTop: 12,
+    paddingBottom: 12,
     gap: 10,
-    width: "100%",
+    ...platformShadow("0 4px 14px rgba(15, 23, 42, 0.06)", {
+      color: Theme.shadow,
+      opacity: 0.06,
+      radius: 10,
+      offsetY: 3,
+      elevation: 2,
+    }),
   },
-  routeLeg: {
-    flex: 1,
-    minWidth: 0,
+  cardTop: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 8,
+    alignItems: "center",
+    gap: 10,
   },
-  routeLegEnd: {
-    justifyContent: "flex-end",
-  },
-  routeLegText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  routeDot: {
-    width: 7,
-    height: 7,
-    marginTop: 6,
+  cardTopIcon: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: Theme.brandBlueInk,
+    alignItems: "center",
+    justifyContent: "center",
     flexShrink: 0,
   },
-  routeDotOrigin: {
-    backgroundColor: Theme.textPrimaryDark,
-    opacity: 0.75,
+  cardTopText: {
+    flex: 1,
+    minWidth: 0,
+    gap: 1,
   },
-  routeDotDest: {
-    backgroundColor: Theme.positive,
+  cardTopTitle: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: INK,
+    letterSpacing: -0.1,
+  },
+  cardTopMeta: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: MUTED,
+    lineHeight: 14,
+  },
+  statusChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+    backgroundColor: Theme.brandBlueSoft,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.brandBlueRing,
+    flexShrink: 0,
+  },
+  statusChipText: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.45,
+    color: Theme.brandBlueInk,
+  },
+
+  routeGrid: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    width: "100%",
+    gap: 4,
+  },
+  routeCol: {
+    flex: 1,
+    minWidth: 0,
+  },
+  routeColEnd: {
+    alignItems: "flex-end",
+  },
+  routeSep: {
+    paddingTop: 16,
+    width: 28,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+    flexShrink: 0,
+  },
+  routeSepLine: {
+    flex: 1,
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: CARD_EDGE,
+  },
+  routeLabel: {
+    fontSize: 9,
+    fontWeight: "500",
+    color: MUTED,
+    letterSpacing: 0.45,
+    textTransform: "uppercase",
+    marginBottom: 3,
+    lineHeight: 12,
+  },
+  routeLabelEnd: {
+    textAlign: "right",
+    width: "100%",
   },
   routeCity: {
-    fontSize: 14,
-    fontWeight: "800",
-    fontStyle: "normal",
-    color: Theme.textPrimaryDark,
-    letterSpacing: 0.2,
+    fontSize: 12,
+    fontWeight: "600",
+    color: INK,
+    lineHeight: 15,
+    letterSpacing: -0.1,
     textTransform: "uppercase",
-    lineHeight: 18,
   },
   routeCityEnd: {
     textAlign: "right",
+    width: "100%",
   },
   routeState: {
-    marginTop: 2,
-    fontSize: 11,
-    fontWeight: "500",
-    color: Theme.textSecondary,
-    lineHeight: 14,
-    letterSpacing: 0.2,
-    textTransform: "uppercase",
+    marginTop: 1,
+    fontSize: 9,
+    fontWeight: "400",
+    color: MUTED,
+    lineHeight: 12,
   },
   routeStateEnd: {
     textAlign: "right",
-  },
-  routeArrowWrap: {
-    paddingTop: 4,
-    flexShrink: 0,
-    alignItems: "center",
-    justifyContent: "center",
-    width: 24,
-  },
-  previewIdRow: {
-    marginTop: -2,
-  },
-  previewId: {
-    alignSelf: "flex-start",
-    fontSize: 11,
-    fontWeight: "600",
-    fontStyle: "normal",
-    color: Theme.primary,
-    letterSpacing: 0.3,
-    textTransform: "uppercase",
-    backgroundColor: Theme.surfaceLight,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    overflow: "hidden",
-  },
-  previewSpecsPanel: {
-    backgroundColor: Theme.surfaceGray,
-    paddingVertical: 12,
-    paddingHorizontal: 12,
-  },
-  specsGrid: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
     width: "100%",
   },
-  specCell: {
-    flex: 1,
-    minWidth: 0,
-  },
-  specLabel: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.55,
-    marginBottom: 5,
-  },
-  specValue: {
-    fontSize: 12,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-    lineHeight: 16,
-  },
-  rateRow: {
-    flexDirection: "row",
-    alignItems: "baseline",
-    justifyContent: "space-between",
-    paddingTop: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
-  },
-  rateLabel: {
-    fontSize: 11,
-    fontWeight: "600",
-    fontStyle: "normal",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 0.6,
-  },
-  rateValue: {
-    fontSize: 18,
-    fontWeight: "700",
-    fontStyle: "normal",
-    color: Theme.primary,
-    letterSpacing: -0.2,
+  routeStateSpacer: {
+    marginTop: 1,
+    fontSize: 9,
+    lineHeight: 12,
+    color: "transparent",
   },
 
-  storyOnlyHint: {
+  specScroll: {
+    width: "100%",
+    flexGrow: 0,
+    flexShrink: 0,
+    alignSelf: "stretch",
+    marginTop: 2,
+  },
+  specRow: {
+    flexDirection: "row",
+    flexWrap: "nowrap",
+    alignItems: "center",
+    gap: 8,
+    paddingVertical: 2,
+    paddingRight: 8,
+  },
+  specChip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 6,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: BORDER,
+    backgroundColor: Theme.surfaceGray,
+  },
+  specChipText: {
     fontSize: 11,
     fontWeight: "500",
-    fontStyle: "normal",
-    color: Theme.textMuted,
-    textAlign: "center",
-    lineHeight: 16,
-    paddingHorizontal: 8,
+    color: Theme.textSecondary,
+  },
+  specChipDate: {
+    backgroundColor: Theme.brandBlueSoft,
+    borderColor: Theme.brandBlueRing,
+  },
+  specChipDateText: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.brandBlueInk,
   },
 
-  noteSection: { gap: 8 },
+  priceRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    justifyContent: "space-between",
+    gap: 10,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: BORDER,
+    marginTop: 2,
+  },
+  priceCol: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  priceHint: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: MUTED,
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+  },
+  priceValue: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: INK,
+    letterSpacing: -0.4,
+    lineHeight: 24,
+  },
+  expiryInline: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: Theme.brandBlueSoft,
+    flexShrink: 0,
+    marginBottom: 2,
+  },
+  expiryInlineText: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: Theme.brandBlueInk,
+    letterSpacing: 0.2,
+  },
+
+  hintRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 6,
+    paddingHorizontal: 2,
+  },
+  hintChip: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: BORDER,
+  },
+  hintChipText: {
+    fontSize: 10,
+    fontWeight: "600",
+    color: MUTED,
+  },
+
+  noteSection: { gap: 8, paddingHorizontal: 2 },
   sectionLabel: {
     fontSize: 11,
     fontWeight: "600",
-    fontStyle: "normal",
     color: Theme.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.5,
-    marginBottom: 0,
   },
   noteBox: {
     backgroundColor: Theme.cardWhite,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: BORDER,
     minHeight: 72,
     paddingHorizontal: 12,
     paddingVertical: 10,
@@ -794,8 +997,7 @@ const styles = StyleSheet.create({
   noteInput: {
     fontSize: 14,
     fontWeight: "400",
-    fontStyle: "normal",
-    color: Theme.textPrimaryDark,
+    color: INK,
     lineHeight: 20,
     textAlignVertical: "top",
     ...Platform.select({
@@ -820,58 +1022,21 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     paddingVertical: 14,
     minHeight: 48,
+    marginHorizontal: 2,
   },
+  broadcastBtnPressed: { opacity: 0.92 },
   broadcastBtnDisabled: { opacity: 0.6 },
   broadcastBtnText: {
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: "700",
     color: Theme.textOnPrimary,
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
 
   successView: {
     alignItems: "stretch",
-    paddingVertical: 8,
-    gap: 12,
-  },
-  successRouteCard: {
-    backgroundColor: Theme.surface,
-    borderRadius: 14,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
-    padding: 14,
-    gap: 10,
-  },
-  successRouteMeta: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  successRouteId: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.brandBlueInk,
-    letterSpacing: 0.4,
-    textTransform: "uppercase",
-  },
-  expiryPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 4,
-    backgroundColor: "rgba(77, 54, 54, 0.08)",
-    borderRadius: 999,
-    paddingHorizontal: 8,
     paddingVertical: 4,
-    flexShrink: 0,
-  },
-  expiryPillText: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.brandBlueInk,
-    letterSpacing: 0.2,
+    gap: 12,
   },
   successHero: {
     alignItems: "center",
@@ -891,7 +1056,7 @@ const styles = StyleSheet.create({
   successTitle: {
     fontSize: 18,
     fontWeight: "800",
-    color: Theme.textPrimaryDark,
+    color: INK,
     letterSpacing: -0.2,
   },
   successSub: {
@@ -906,14 +1071,14 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
     borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
+    borderColor: BORDER,
     paddingHorizontal: 12,
     paddingVertical: 10,
   },
   devHintText: {
     fontSize: 11,
     fontWeight: "500",
-    color: Theme.textMuted,
+    color: MUTED,
     textAlign: "center",
     lineHeight: 16,
   },
@@ -960,17 +1125,17 @@ const styles = StyleSheet.create({
   waHint: {
     fontSize: 11,
     fontWeight: "500",
-    color: Theme.textMuted,
+    color: MUTED,
     textAlign: "center",
     lineHeight: 16,
     paddingHorizontal: 6,
     marginTop: -4,
   },
   linkCard: {
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.cardWhite,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
+    borderColor: BORDER,
     padding: 12,
     gap: 6,
     alignItems: "stretch",
@@ -978,7 +1143,7 @@ const styles = StyleSheet.create({
   linkCardLabel: {
     fontSize: 10,
     fontWeight: "700",
-    color: Theme.textMuted,
+    color: MUTED,
     letterSpacing: 0.8,
     textTransform: "uppercase",
   },
@@ -998,7 +1163,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 7,
     borderRadius: 999,
-    backgroundColor: "rgba(77, 54, 54, 0.08)",
+    backgroundColor: Theme.brandBlueSoft,
   },
   copyBtnPressed: { opacity: 0.85 },
   copyBtnText: {
@@ -1012,7 +1177,7 @@ const styles = StyleSheet.create({
     minHeight: 44,
     borderRadius: 12,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
+    borderColor: BORDER,
     backgroundColor: Theme.screenBackground,
     marginTop: 2,
   },

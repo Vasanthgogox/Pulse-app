@@ -15,8 +15,9 @@ const DEFAULT_CHROME: Required<ImageViewportChrome> = {
 
 /**
  * Size an image for preview/lightbox:
- * - Never upscale beyond natural pixel dimensions (small images stay small).
- * - Downscale only when larger than the visible viewport.
+ * - Downscale when larger than the visible viewport.
+ * - When `allowUpscale` is true (full-screen lightbox), scale up to fill the viewport
+ *   while preserving aspect ratio (object-fit: contain at max size).
  * - Tall pages: keep natural width (capped), scroll vertically for the rest.
  */
 export function resolveFitImageLayout(
@@ -24,6 +25,7 @@ export function resolveFitImageLayout(
   viewportWidth: number,
   viewportHeight: number,
   chrome: ImageViewportChrome = {},
+  options?: { allowUpscale?: boolean },
 ): { width: number; height: number; scrollable: boolean } {
   const padH = chrome.horizontal ?? DEFAULT_CHROME.horizontal;
   const padTop = chrome.top ?? DEFAULT_CHROME.top;
@@ -47,7 +49,10 @@ export function resolveFitImageLayout(
     };
   }
 
-  const scale = Math.min(maxW / natW, maxH / natH, 1);
+  let scale = Math.min(maxW / natW, maxH / natH);
+  if (!options?.allowUpscale) {
+    scale = Math.min(scale, 1);
+  }
   return {
     width: Math.max(1, natW * scale),
     height: Math.max(1, natH * scale),

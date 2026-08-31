@@ -23,6 +23,14 @@ export interface DirectQuoteRow {
   vehicle_id?: string | null;
   /** Owner counter-offer (INR). Null = none. Status stays pending until award/reject. */
   counter_amount?: number | null;
+  /**
+   * Hub channel. Default / omitted = org direct_quotes.
+   * `driver_direct_bid` = Pilot / independent FO bid on the linked Pulse story.
+   */
+  offer_source?: "direct_quote" | "driver_direct_bid";
+  /** Pilot / FO bidder face (from profiles via list_driver_direct_bids_for_post). */
+  bidder_avatar_url?: string | null;
+  bidder_avatar_seed?: string | null;
 }
 
 /**

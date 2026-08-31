@@ -33,6 +33,7 @@ import {
   parseRawToNumber,
   rawToSubmitValue,
   isKeypadValueSubmittable,
+  toRawString,
 } from './keypad';
 import { triggerFeedback } from './feedback';
 import { useInputPlatform } from './useInputPlatform';
@@ -70,6 +71,11 @@ export interface FullscreenNumericEntryProps {
    * and a tiny ± vs target caption appears under the value.
    */
   targetRate?: number | null;
+  /**
+   * Tiny one-tap fill (e.g. "Match counter · ₹36,000") under the amount.
+   * Sets the keypad value to `amount` without submitting.
+   */
+  quickFill?: { label: string; amount: number } | null;
 }
 
 export function FullscreenNumericEntry({
@@ -89,8 +95,11 @@ export function FullscreenNumericEntry({
   submitLabel = 'Apply',
   validationError,
   targetRate = null,
+  quickFill = null,
 }: FullscreenNumericEntryProps) {
   const [raw, setRaw] = useState(initialValue);
+  /** Value before quick-fill; second tap restores it. */
+  const [preQuickFillRaw, setPreQuickFillRaw] = useState<string | null>(null);
   const platform = useInputPlatform();
   const insets = useSafeAreaInsets();
   const isDesktop = platform === 'desktop';
@@ -118,10 +127,14 @@ export function FullscreenNumericEntry({
 
   // Sync initial value each time the modal opens
   useEffect(() => {
-    if (visible) setRaw(initialValue);
+    if (visible) {
+      setRaw(initialValue);
+      setPreQuickFillRaw(null);
+    }
   }, [visible, initialValue]);
 
   const handleKey = useCallback((key: KeypadKey) => {
+    setPreQuickFillRaw(null);
     setRaw((prev) => applyKeypadPress(prev, key, keypadOpts));
   }, [keypadOpts]);
 
@@ -130,6 +143,33 @@ export function FullscreenNumericEntry({
     triggerFeedback('apply');
     onSubmit(rawToSubmitValue(raw));
   }, [raw, onSubmit]);
+
+  const quickFillAmount =
+    quickFill != null &&
+    Number.isFinite(quickFill.amount) &&
+    quickFill.amount > 0
+      ? Math.round(quickFill.amount)
+      : null;
+
+  const quickFillAlreadyMatched =
+    quickFillAmount != null &&
+    parseRawToNumber(raw) === quickFillAmount;
+
+  const canRevokeQuickFill =
+    quickFillAlreadyMatched && preQuickFillRaw != null;
+
+  const handleQuickFill = useCallback(() => {
+    if (quickFillAmount == null) return;
+    triggerFeedback('keyPress');
+    if (quickFillAlreadyMatched) {
+      if (preQuickFillRaw == null) return;
+      setRaw(preQuickFillRaw);
+      setPreQuickFillRaw(null);
+      return;
+    }
+    setPreQuickFillRaw(raw);
+    setRaw(toRawString(quickFillAmount));
+  }, [quickFillAmount, quickFillAlreadyMatched, preQuickFillRaw, raw]);
 
   usePhysicalKeypadInput({
     enabled: visible && (isDesktop || isTablet),
@@ -166,6 +206,39 @@ export function FullscreenNumericEntry({
         <BidVsTargetHint caption={vsTarget.caption} tone={vsTarget.tone} />
       ) : targetRate != null && targetRate > 0 && type === 'currency' ? (
         <Text style={styles.targetFallback}>Target {formatINR(targetRate)}</Text>
+      ) : null}
+      {quickFillAmount != null ? (
+        <TouchableOpacity
+          style={[
+            styles.quickFillChip,
+            quickFillAlreadyMatched && styles.quickFillChipMatched,
+          ]}
+          onPress={handleQuickFill}
+          disabled={quickFillAlreadyMatched && !canRevokeQuickFill}
+          activeOpacity={0.85}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={
+            canRevokeQuickFill
+              ? 'Undo match, restore previous amount'
+              : `${quickFill!.label} ${formatINR(quickFillAmount)}`
+          }
+          accessibilityState={{
+            disabled: quickFillAlreadyMatched && !canRevokeQuickFill,
+          }}
+        >
+          <Text
+            style={[
+              styles.quickFillChipText,
+              quickFillAlreadyMatched && styles.quickFillChipTextMatched,
+            ]}
+            numberOfLines={1}
+          >
+            {quickFillAlreadyMatched
+              ? `Matched · ${formatINR(quickFillAmount)}`
+              : `${quickFill!.label} · ${formatINR(quickFillAmount)}`}
+          </Text>
+        </TouchableOpacity>
       ) : null}
     </View>
   );
@@ -485,6 +558,29 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     textAlign: 'center',
     lineHeight: 14,
+  },
+  quickFillChip: {
+    marginTop: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: Theme.warningMuted,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.accentGoldBorder,
+    maxWidth: '88%',
+  },
+  quickFillChipMatched: {
+    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.positiveMutedDarkBorder,
+  },
+  quickFillChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Theme.warning,
+    letterSpacing: 0.15,
+  },
+  quickFillChipTextMatched: {
+    color: Theme.success,
   },
   payBottom: {
     flexShrink: 0,

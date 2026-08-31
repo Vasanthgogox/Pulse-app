@@ -32,6 +32,8 @@ export interface DriverDirectBidRow {
   post_id: string;
   driver_user_id: string;
   driver_display_name: string;
+  driver_avatar_url: string | null;
+  driver_avatar_seed: string | null;
   is_fleet_owner: boolean;
   amount: number;
   note: string | null;
@@ -53,6 +55,8 @@ export async function getDriverDirectBidsForPost(
     post_id: string;
     driver_user_id: string;
     driver_display_name: string | null;
+    driver_avatar_url?: string | null;
+    driver_avatar_seed?: string | null;
     is_fleet_owner: boolean | null;
     amount: number;
     note: string | null;
@@ -68,6 +72,8 @@ export async function getDriverDirectBidsForPost(
       post_id: r.post_id,
       driver_user_id: r.driver_user_id,
       driver_display_name: (r.driver_display_name ?? '').trim() || 'Driver',
+      driver_avatar_url: (r.driver_avatar_url ?? '').trim() || null,
+      driver_avatar_seed: (r.driver_avatar_seed ?? '').trim() || null,
       is_fleet_owner: Boolean(r.is_fleet_owner),
       amount: Number(r.amount ?? 0),
       note: r.note,
@@ -80,6 +86,66 @@ export async function getDriverDirectBidsForPost(
       updated_at: r.updated_at,
     })),
   };
+}
+
+export async function acceptDriverDirectBid(
+  bidId: string,
+): Promise<{ error: Error | null; tripId: string | null }> {
+  const { data, error } = await supabase().rpc('accept_driver_direct_bid', {
+    p_bid_id: bidId,
+  });
+  if (error) return { error: new Error(error.message), tripId: null };
+  const tripId =
+    data && typeof data === 'object' && 'trip_id' in data
+      ? String((data as { trip_id?: string }).trip_id ?? '') || null
+      : null;
+  return { error: null, tripId };
+}
+
+export async function rejectDriverDirectBid(
+  bidId: string,
+): Promise<{ error: Error | null }> {
+  const { error } = await supabase().rpc('reject_driver_direct_bid', {
+    p_bid_id: bidId,
+  });
+  if (error) return { error: new Error(error.message) };
+  return { error: null };
+}
+
+/**
+ * Owner counter-offer on a pending Pilot / FO driver_direct_bid.
+ * Persists counter_amount; status stays pending so award still works.
+ */
+export async function submitDriverDirectBidCounterOffer(
+  bidId: string,
+  counterAmount: number,
+): Promise<{ error: Error | null }> {
+  const amount = Number(counterAmount);
+  if (!Number.isFinite(amount) || amount <= 0) {
+    return { error: new Error('Counter offer must be a positive amount.') };
+  }
+  const { error } = await supabase().rpc('counter_driver_direct_bid', {
+    p_bid_id: bidId,
+    p_counter_amount: amount,
+  });
+  if (error) return { error: new Error(error.message) };
+  return { error: null };
+}
+
+/** Latest LOAD story post for an indent (any is_active) — for Review Hub DCO bids. */
+export async function getLatestLoadPostIdForIndent(
+  indentId: string,
+): Promise<{ error: Error | null; postId: string | null }> {
+  const { data, error } = await supabase()
+    .from('posts')
+    .select('id')
+    .eq('source_indent_id', indentId)
+    .eq('type', 'LOAD')
+    .order('created_at', { ascending: false })
+    .limit(1)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), postId: null };
+  return { error: null, postId: (data as { id?: string } | null)?.id ?? null };
 }
 
 async function enrichBidderOrgNames(bids: BidRow[]): Promise<BidRow[]> {
@@ -433,6 +499,7 @@ export async function getStoryBidCountsForOwnerIndents(
 /**
  * Unique pending offers per indent for Give Load badges.
  * Pulse story bids upsert direct_quotes for the same bidder — count distinct bidder orgs only.
+ * Also counts pending Pilot / FO driver_direct_bids (keyed by driver user id).
  */
 export async function getIndentOfferCountsForOwnerIndents(
   ownerOrgId: string,
@@ -441,14 +508,14 @@ export async function getIndentOfferCountsForOwnerIndents(
   if (indentIds.length === 0) return { error: null, counts: {} };
 
   const biddersByIndent = new Map<string, Set<string>>();
-  const trackBidder = (indentId: string, bidderOrgId: string) => {
-    if (!indentId || !bidderOrgId) return;
+  const trackBidder = (indentId: string, bidderKey: string) => {
+    if (!indentId || !bidderKey) return;
     let set = biddersByIndent.get(indentId);
     if (!set) {
       set = new Set();
       biddersByIndent.set(indentId, set);
     }
-    set.add(bidderOrgId);
+    set.add(bidderKey);
   };
 
   const { data: quotes, error: qErr } = await supabase()
@@ -467,12 +534,13 @@ export async function getIndentOfferCountsForOwnerIndents(
     );
   }
 
+  // Include inactive posts — a DCO bid must still badge after the 24h story window.
   const { data: posts, error: pErr } = await supabase()
     .from('posts')
     .select('id, source_indent_id')
     .eq('organization_id', ownerOrgId)
-    .in('source_indent_id', indentIds)
-    .eq('is_active', true);
+    .eq('type', 'LOAD')
+    .in('source_indent_id', indentIds);
 
   if (pErr) return { error: new Error(pErr.message), counts: {} };
 
@@ -494,6 +562,21 @@ export async function getIndentOfferCountsForOwnerIndents(
       const iid = indentByPost.get(pid);
       if (!iid) continue;
       trackBidder(iid, (row as { bidder_organization_id: string }).bidder_organization_id);
+    }
+
+    const { data: directBids, error: dErr } = await supabase()
+      .from('driver_direct_bids')
+      .select('post_id, driver_user_id')
+      .in('post_id', postIds)
+      .eq('status', 'pending');
+
+    if (dErr) return { error: new Error(dErr.message), counts: {} };
+
+    for (const row of directBids ?? []) {
+      const pid = (row as { post_id: string }).post_id;
+      const iid = indentByPost.get(pid);
+      if (!iid) continue;
+      trackBidder(iid, `ddb:${(row as { driver_user_id: string }).driver_user_id}`);
     }
   }
 

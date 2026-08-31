@@ -131,18 +131,36 @@ export default function AvailableLoadDetailScreen() {
         }
       />
 
-      {isLoading ? (
+      {isLoading || (!load && bidLoading) ? (
         <ActivityIndicator color={colors.emerald} style={{ marginTop: 40 }} />
       ) : error || !load ? (
         <View style={styles.gate}>
           <Text style={[styles.gateTitle, { color: colors.text }]}>
-            Load unavailable
+            {myBid?.status === 'accepted'
+              ? 'Awarded to you'
+              : myBid?.status === 'rejected'
+                ? 'Not selected'
+                : 'Load unavailable'}
           </Text>
           <Text style={[styles.gateBody, { color: colors.textMuted }]}>
             {error instanceof Error
               ? error.message
-              : 'It may have closed or been awarded.'}
+              : myBid?.status === 'accepted'
+                ? 'This load was awarded to your bid. Find the trip under Awards.'
+                : myBid?.status === 'rejected'
+                  ? 'The business selected another bid for this load.'
+                  : 'It may have closed or been awarded.'}
           </Text>
+          {myBid?.status === 'accepted' ? (
+            <Pressable
+              onPress={() =>
+                router.push(ROUTES.driverMarketAwards() as Parameters<typeof router.push>[0])
+              }
+              style={[styles.bidCta, { backgroundColor: Theme.buttonPrimary, borderColor: Theme.buttonPrimaryBorder }]}
+            >
+              <Text style={styles.bidCtaText}>View Awards</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : (
         <ScrollView

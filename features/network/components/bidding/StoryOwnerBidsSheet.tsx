@@ -82,6 +82,8 @@ function BidRowCard({ row }: { row: StoryOwnerBidRow }) {
     <View style={styles.bidCard}>
       <PartyAvatar
         name={row.bidderName}
+        avatarUrl={row.bidderAvatarUrl}
+        avatarSeed={row.bidderAvatarSeed}
         initialsColorSeed={row.bidderOrgId}
         entityType={isFleetOwnerBid ? "driver" : "supplier"}
         size={32}

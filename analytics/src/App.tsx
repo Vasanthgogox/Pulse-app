@@ -1,6 +1,8 @@
-import { useState } from 'react';
-import { Shield, Moon, Sun, ChevronRightSquare, Coins, Users, SlidersHorizontal, Rocket, UserRound } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { Shield, Moon, Sun, ChevronRightSquare, Coins, Users, SlidersHorizontal, Rocket, Ticket, UserRound, LogOut, Loader2, UserCog } from 'lucide-react';
 import { AdminDataProvider, useAdmin } from '@/context/AdminDataProvider';
+import { AdminAuthProvider, useAdminAuth } from '@/context/AdminAuthProvider';
+import { AdminLoginScreen } from '@/components/auth/AdminLoginScreen';
 import { ApplicationQueue } from '@/components/queue/ApplicationQueue';
 import { AuditTrail } from '@/components/queue/AuditTrail';
 import { OrgWorkspace } from '@/components/workspace/OrgWorkspace';
@@ -10,10 +12,26 @@ import { CreditsPanel } from '@/components/credits/CreditsPanel';
 import { ReferralsPanel } from '@/components/growth/ReferralsPanel';
 import { RewardRulesPanel } from '@/components/growth/RewardRulesPanel';
 import { BoostControlCenterPanel } from '@/components/growth/BoostControlCenterPanel';
+import { SupportPanel } from '@/components/support/SupportPanel';
+import { AdminUsersPanel } from '@/components/admin/AdminUsersPanel';
 import { Badge } from '@/components/ui/badge';
-import { supabaseConfigError } from '@/lib/supabase';
+import { supabase, supabaseConfigError } from '@/lib/supabase';
+import { supabaseAuthConfigError } from '@/lib/supabaseAuth';
+import {
+  countSupportTicketsNeedingAgentAttention,
+  fetchAllSupportTickets,
+  formatSupportUnreadBadge,
+} from '@/lib/supportTickets';
 
-type ConsoleView = 'verification' | 'driver-kyc' | 'credits' | 'referrals' | 'reward-rules' | 'boost-ops';
+type ConsoleView =
+  | 'verification'
+  | 'driver-kyc'
+  | 'credits'
+  | 'referrals'
+  | 'reward-rules'
+  | 'boost-ops'
+  | 'support'
+  | 'admin-users';
 
 // ─── Topbar ───────────────────────────────────────────────────────────────────
 
@@ -29,8 +47,32 @@ function Topbar({
   setView: (v: ConsoleView) => void;
 }) {
   const { applications } = useAdmin();
+  const { permissions } = useAdminAuth();
+  const canManageAdmins = permissions.includes('platform_admin.manage');
   const pendingCount   = applications.filter(a => ['Pending', 'Under Review'].includes(a.status)).length;
   const escalatedCount = applications.filter(a => a.status === 'Escalated').length;
+  const [supportUpdateCount, setSupportUpdateCount] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    const refresh = async () => {
+      const rows = await fetchAllSupportTickets();
+      if (!cancelled) setSupportUpdateCount(countSupportTicketsNeedingAgentAttention(rows));
+    };
+    void refresh();
+    const channel = supabase
+      .channel('support-nav-badge')
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'support_tickets' },
+        () => void refresh(),
+      )
+      .subscribe();
+    return () => {
+      cancelled = true;
+      void supabase.removeChannel(channel);
+    };
+  }, []);
 
   return (
     <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur-sm shadow-xs">
@@ -94,6 +136,29 @@ function Topbar({
           >
             <Rocket className="size-3" /> Boost · Control Center
           </button>
+          <button
+            onClick={() => setView('support')}
+            className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+              view === 'support' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
+            }`}
+          >
+            <Ticket className="size-3" /> Support
+            {supportUpdateCount > 0 ? (
+              <span className="ml-0.5 inline-flex min-w-[1.1rem] items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold leading-4 text-white">
+                {formatSupportUnreadBadge(supportUpdateCount)}
+              </span>
+            ) : null}
+          </button>
+          {canManageAdmins ? (
+            <button
+              onClick={() => setView('admin-users')}
+              className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
+                view === 'admin-users' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
+              }`}
+            >
+              <UserCog className="size-3" /> Admin Users
+            </button>
+          ) : null}
         </nav>
       </div>
 
@@ -104,6 +169,11 @@ function Topbar({
         {view === 'verification' && (
           <Badge variant="warning" appearance="light" size="sm">{pendingCount} pending</Badge>
         )}
+        {view === 'support' && supportUpdateCount > 0 && (
+          <Badge variant="warning" appearance="light" size="sm">
+            {supportUpdateCount} support update{supportUpdateCount === 1 ? '' : 's'}
+          </Badge>
+        )}
         <span className="rounded-md border border-border bg-muted/50 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-muted-foreground">
           INTERNAL
         </span>
@@ -113,8 +183,23 @@ function Topbar({
         >
           {dark ? <Sun className="size-3.5" /> : <Moon className="size-3.5" />}
         </button>
+        <AdminSessionBadge />
       </div>
     </header>
+  );
+}
+
+function AdminSessionBadge() {
+  const { session, signOut } = useAdminAuth();
+  if (!session) return null;
+  return (
+    <button
+      onClick={() => void signOut()}
+      title={session.user.email ?? undefined}
+      className="flex items-center gap-1 rounded-md p-1.5 text-muted-foreground hover:bg-accent"
+    >
+      <LogOut className="size-3.5" />
+    </button>
   );
 }
 
@@ -179,6 +264,10 @@ function AdminShell() {
           <RewardRulesPanel />
         ) : view === 'boost-ops' ? (
           <BoostControlCenterPanel />
+        ) : view === 'support' ? (
+          <SupportPanel />
+        ) : view === 'admin-users' ? (
+          <AdminUsersPanel />
         ) : (
           <div className="flex flex-1 overflow-hidden">
             {/* Left sidebar: queue (60%) + audit (40%) */}
@@ -205,6 +294,56 @@ function AdminShell() {
         )}
       </div>
     </div>
+  );
+}
+
+// ─── Admin Console auth gate (S3a) ─────────────────────────────────────────────
+// Authentication only: decides whether the console renders at all. Does not decide what any
+// panel is allowed to do once inside — every panel keeps its existing service-role data path
+// unchanged (see docs/SUPPORT_S3A_IMPLEMENTATION_PLAN.md).
+
+function AdminGate() {
+  const { status, signOut } = useAdminAuth();
+
+  if (status === 'loading') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background text-muted-foreground">
+        <Loader2 className="size-5 animate-spin" />
+      </div>
+    );
+  }
+
+  if (status === 'signed_out') {
+    return <AdminLoginScreen />;
+  }
+
+  if (status === 'signed_in_not_provisioned') {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
+        <div className="max-w-md space-y-3 rounded-xl border border-border bg-card p-6 shadow-sm">
+          <div className="flex items-center gap-2">
+            <Shield className="size-4 text-primary" />
+            <h1 className="text-sm font-bold">Admin Console access not set up</h1>
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">
+            You're signed in, but this account isn't provisioned as an Admin Console user yet.
+            Ask an existing platform admin to grant you access.
+          </p>
+          <button
+            onClick={() => void signOut()}
+            className="text-xs font-medium text-primary hover:underline"
+          >
+            Sign out
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <AdminDataProvider>
+      <AdminShell />
+    </AdminDataProvider>
   );
 }
 
@@ -238,9 +377,23 @@ export default function App() {
     );
   }
 
+  if (supabaseAuthConfigError) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
+        <div className="max-w-lg space-y-3 rounded-xl border border-border bg-card p-6 shadow-sm">
+          <div className="flex items-center gap-2">
+            <Shield className="size-4 text-primary" />
+            <h1 className="text-sm font-bold">Admin Console — login config required</h1>
+          </div>
+          <p className="text-xs leading-5 text-muted-foreground">{supabaseAuthConfigError}</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <AdminDataProvider>
-      <AdminShell />
-    </AdminDataProvider>
+    <AdminAuthProvider>
+      <AdminGate />
+    </AdminAuthProvider>
   );
 }

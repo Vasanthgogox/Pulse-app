@@ -63,14 +63,16 @@ function statusColor(status: MarketBidStatus, colors: ReturnType<typeof useDrive
   }
 }
 
-export default function MyBidsScreen() {
+/**
+ * Shared My Bids content — used both by the standalone My Bids route (kept,
+ * unlinked from primary nav) and inline as Market's "My Bids" segment.
+ * No header/root background here; the caller owns the shell.
+ */
+export function MyBidsContent({ uid }: { uid: string }) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
-  const { profile } = useAuth();
-  const uid = profile?.uid ?? '';
   const { isDark } = useDriverTheme();
   const colors = useDriverThemeColors();
-  const pageBg = driverDetailPageBackground(isDark, colors.background);
   const cardBorder = isDark ? colors.borderSubtle : 'rgba(226,232,240,0.95)';
 
   const { bids, isLoading, isRefetching, refetch, error } = useMyMarketBidsQuery(uid);
@@ -102,6 +104,114 @@ export default function MyBidsScreen() {
   }, [bids]);
 
   return (
+    <ScrollView
+      contentContainerStyle={{
+        paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
+        paddingBottom: Math.max(insets.bottom, 16) + 24,
+        paddingTop: 12,
+        gap: 16,
+      }}
+      refreshControl={
+        <RefreshControl
+          refreshing={isRefetching}
+          onRefresh={() => void refetch()}
+          tintColor={colors.emerald}
+        />
+      }
+    >
+      {error ? (
+        <Text style={styles.errorText}>
+          {error instanceof Error ? error.message : 'Could not load your bids.'}
+        </Text>
+      ) : null}
+
+      {isLoading ? (
+        <ActivityIndicator color={colors.emerald} style={{ marginTop: 28 }} />
+      ) : bids.length === 0 ? (
+        <View style={[styles.empty, { backgroundColor: colors.surface, borderColor: cardBorder }]}>
+          <Inbox size={22} color={colors.emerald} />
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>No bids yet</Text>
+          <Text style={[styles.emptyBody, { color: colors.textMuted }]}>
+            Bid on an open Market load and it will show up here.
+          </Text>
+        </View>
+      ) : (
+        <>
+          {groups.pending.length > 0 ? (
+            <Section title="Pending" count={groups.pending.length} colors={colors}>
+              {groups.pending.map((b) => (
+                <BidCard
+                  key={b.id}
+                  bid={b}
+                  colors={colors}
+                  isDark={isDark}
+                  cardBorder={cardBorder}
+                  onPress={() =>
+                    router.push(ROUTES.driverAvailableLoad(b.indent_id) as Href)
+                  }
+                />
+              ))}
+            </Section>
+          ) : null}
+
+          {groups.accepted.length > 0 ? (
+            <Section title="Accepted" count={groups.accepted.length} colors={colors}>
+              {groups.accepted.map((b) => {
+                const trip = awardByIndentId.get(b.indent_id);
+                return (
+                  <BidCard
+                    key={b.id}
+                    bid={b}
+                    colors={colors}
+                    isDark={isDark}
+                    cardBorder={cardBorder}
+                    trip={trip}
+                    onViewTrip={(tripId) =>
+                      router.push(`/(driver)/trip-history/${tripId}` as Href)
+                    }
+                    onPress={
+                      trip
+                        ? () => router.push(`/(driver)/trip-history/${trip.id}` as Href)
+                        : () => router.push(ROUTES.driverAvailableLoad(b.indent_id) as Href)
+                    }
+                  />
+                );
+              })}
+            </Section>
+          ) : null}
+
+          {groups.closed.length > 0 ? (
+            <Section title="Not selected" count={groups.closed.length} colors={colors}>
+              {groups.closed.map((b) => (
+                <BidCard
+                  key={b.id}
+                  bid={b}
+                  colors={colors}
+                  isDark={isDark}
+                  cardBorder={cardBorder}
+                  onPress={() =>
+                    router.push(ROUTES.driverAvailableLoad(b.indent_id) as Href)
+                  }
+                />
+              ))}
+            </Section>
+          ) : null}
+        </>
+      )}
+    </ScrollView>
+  );
+}
+
+/** Standalone route wrapper — kept, but unlinked from primary Market nav now that My Bids is a Market segment. */
+export default function MyBidsScreen() {
+  const router = useRouter();
+  const { profile } = useAuth();
+  const uid = profile?.uid ?? '';
+  const { isDark } = useDriverTheme();
+  const colors = useDriverThemeColors();
+  const pageBg = driverDetailPageBackground(isDark, colors.background);
+
+  return (
     <View style={[styles.root, { backgroundColor: pageBg }]}>
       <DriverSubScreenHeader
         title="My Bids"
@@ -112,76 +222,7 @@ export default function MyBidsScreen() {
             : router.replace(ROUTES.driverAvailableLoads() as Href)
         }
       />
-
-      <ScrollView
-        contentContainerStyle={{
-          paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
-          paddingBottom: Math.max(insets.bottom, 16) + 24,
-          paddingTop: 12,
-          gap: 16,
-        }}
-        refreshControl={
-          <RefreshControl
-            refreshing={isRefetching}
-            onRefresh={() => void refetch()}
-            tintColor={colors.emerald}
-          />
-        }
-      >
-        {error ? (
-          <Text style={styles.errorText}>
-            {error instanceof Error ? error.message : 'Could not load your bids.'}
-          </Text>
-        ) : null}
-
-        {isLoading ? (
-          <ActivityIndicator color={colors.emerald} style={{ marginTop: 28 }} />
-        ) : bids.length === 0 ? (
-          <View style={[styles.empty, { backgroundColor: colors.surface, borderColor: cardBorder }]}>
-            <Inbox size={22} color={colors.emerald} />
-            <Text style={[styles.emptyTitle, { color: colors.text }]}>No bids yet</Text>
-            <Text style={[styles.emptyBody, { color: colors.textMuted }]}>
-              Bid on an open Market load and it will show up here.
-            </Text>
-          </View>
-        ) : (
-          <>
-            {groups.pending.length > 0 ? (
-              <Section title="Pending" count={groups.pending.length} colors={colors}>
-                {groups.pending.map((b) => (
-                  <BidCard key={b.id} bid={b} colors={colors} isDark={isDark} cardBorder={cardBorder} />
-                ))}
-              </Section>
-            ) : null}
-
-            {groups.accepted.length > 0 ? (
-              <Section title="Accepted" count={groups.accepted.length} colors={colors}>
-                {groups.accepted.map((b) => (
-                  <BidCard
-                    key={b.id}
-                    bid={b}
-                    colors={colors}
-                    isDark={isDark}
-                    cardBorder={cardBorder}
-                    trip={awardByIndentId.get(b.indent_id)}
-                    onViewTrip={(tripId) =>
-                      router.push(`/(driver)/trip-history/${tripId}` as Href)
-                    }
-                  />
-                ))}
-              </Section>
-            ) : null}
-
-            {groups.closed.length > 0 ? (
-              <Section title="Not selected" count={groups.closed.length} colors={colors}>
-                {groups.closed.map((b) => (
-                  <BidCard key={b.id} bid={b} colors={colors} isDark={isDark} cardBorder={cardBorder} />
-                ))}
-              </Section>
-            ) : null}
-          </>
-        )}
-      </ScrollView>
+      {uid ? <MyBidsContent uid={uid} /> : null}
     </View>
   );
 }
@@ -214,6 +255,7 @@ function BidCard({
   cardBorder,
   trip,
   onViewTrip,
+  onPress,
 }: {
   bid: MarketBidRow;
   colors: ReturnType<typeof useDriverThemeColors>;
@@ -221,6 +263,7 @@ function BidCard({
   cardBorder: string;
   trip?: DriverTripRow;
   onViewTrip?: (tripId: string) => void;
+  onPress?: () => void;
 }) {
   const route =
     trip && (trip.pickup_location || trip.dropoff_location)
@@ -228,7 +271,14 @@ function BidCard({
       : null;
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.surface, borderColor: cardBorder }]}>
+    <Pressable
+      onPress={onPress}
+      disabled={!onPress}
+      style={({ pressed }) => [
+        styles.card,
+        { backgroundColor: colors.surface, borderColor: cardBorder, opacity: pressed && onPress ? 0.9 : 1 },
+      ]}
+    >
       <View style={styles.cardTop}>
         <Text style={[styles.amount, { color: colors.text }]}>
           {formatMarketBidAmount(bid.amount) || 'Rate hidden'}
@@ -272,7 +322,7 @@ function BidCard({
           <ChevronRight size={14} color={colors.emerald} />
         </Pressable>
       ) : null}
-    </View>
+    </Pressable>
   );
 }
 

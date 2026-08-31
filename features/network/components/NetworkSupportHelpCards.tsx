@@ -3,12 +3,21 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { useAuth } from "@/contexts/AuthContext";
 import { useLanguage } from "@/contexts/LanguageContext";
 import {
   NetworkHelpQuestionsIllustration,
   NetworkHelpSupportIllustration,
 } from "@/features/network/components/NetworkSupportHelpIllustrations";
+import {
+  countSupportTicketsWithUserUpdate,
+  formatSupportUnreadBadge,
+} from "@/features/support/utils/supportTicketUnread.util";
+import { useMySupportTicketsQuery } from "@/lib/queries/useMySupportTicketsQuery";
+import { ROUTES } from "@/lib/routes";
+import { useRouter, type Href } from "expo-router";
 import type { ReactNode } from "react";
+import { useMemo } from "react";
 import { Linking, Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 const STACK_BREAKPOINT = 768;
@@ -23,14 +32,33 @@ type HelpCardProps = {
   ctaLabel: string;
   onPress: () => void;
   illustration: ReactNode;
+  badgeCount?: number;
 };
 
-function HelpCard({ title, description, ctaLabel, onPress, illustration }: HelpCardProps) {
+function HelpCard({
+  title,
+  description,
+  ctaLabel,
+  onPress,
+  illustration,
+  badgeCount = 0,
+}: HelpCardProps) {
+  const badge = formatSupportUnreadBadge(badgeCount);
   return (
     <View style={styles.card}>
       <View style={styles.cardBody}>
         <View style={styles.cardTextCol}>
-          <Text style={styles.cardTitle}>{title}</Text>
+          <View style={styles.cardTitleRow}>
+            <Text style={styles.cardTitle}>{title}</Text>
+            {badge ? (
+              <View
+                style={styles.unreadBadge}
+                accessibilityLabel={`${badge} ticket updates available`}
+              >
+                <Text style={styles.unreadBadgeText}>{badge}</Text>
+              </View>
+            ) : null}
+          </View>
           <Text style={styles.cardDescription}>{description}</Text>
         </View>
         <View style={styles.cardIllustration}>{illustration}</View>
@@ -41,7 +69,14 @@ function HelpCard({ title, description, ctaLabel, onPress, illustration }: HelpC
         style={({ pressed }) => [styles.cardCtaRow, pressed && styles.cardCtaPressed]}
         accessibilityRole="link"
       >
-        <Text style={styles.cardCtaText}>{ctaLabel}</Text>
+        <View style={styles.cardCtaInner}>
+          <Text style={styles.cardCtaText}>{ctaLabel}</Text>
+          {badge ? (
+            <View style={styles.ctaBadge}>
+              <Text style={styles.ctaBadgeText}>{badge}</Text>
+            </View>
+          ) : null}
+        </View>
       </Pressable>
     </View>
   );
@@ -49,10 +84,17 @@ function HelpCard({ title, description, ctaLabel, onPress, illustration }: HelpC
 
 export function NetworkSupportHelpCards() {
   const { t } = useLanguage();
+  const { user } = useAuth();
   const { width } = useWindowDimensions();
+  const router = useRouter();
   const stacked = width < STACK_BREAKPOINT;
   const illusW = stacked ? 112 : 128;
   const illusH = stacked ? 92 : 104;
+  const ticketsQ = useMySupportTicketsQuery(user?.uid);
+  const updateCount = useMemo(
+    () => countSupportTicketsWithUserUpdate(ticketsQ.tickets),
+    [ticketsQ.tickets],
+  );
 
   const openHelpCenter = () => {
     const base = webBaseUrl();
@@ -61,9 +103,7 @@ export function NetworkSupportHelpCards() {
   };
 
   const openSupport = () => {
-    const base = webBaseUrl();
-    const url = base ? `${base}/support` : "mailto:support@qu.network";
-    void Linking.openURL(url).catch(() => {});
+    router.push(ROUTES.support({ sourceScreen: "network_hub" }) as Href);
   };
 
   return (
@@ -87,6 +127,7 @@ export function NetworkSupportHelpCards() {
         description={t("networkHelpSupportBody")}
         ctaLabel={t("networkHelpSupportCta")}
         onPress={openSupport}
+        badgeCount={updateCount}
         illustration={
           <NetworkHelpSupportIllustration width={illusW} height={illusH} />
         }
@@ -147,6 +188,12 @@ const styles = StyleSheet.create({
     gap: 10,
     paddingRight: 4,
   },
+  cardTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+  },
   cardTitle: {
     fontSize: 15,
     fontWeight: "600",
@@ -178,6 +225,12 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingVertical: 14,
     paddingHorizontal: 16,
+    minHeight: 44,
+  },
+  cardCtaInner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
   },
   cardCtaPressed: {
     backgroundColor: "rgba(79, 70, 229, 0.04)",
@@ -186,5 +239,33 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "400",
     color: Theme.primary,
+  },
+  unreadBadge: {
+    minWidth: 20,
+    height: 20,
+    borderRadius: 10,
+    paddingHorizontal: 6,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.destructive,
+  },
+  unreadBadgeText: {
+    fontSize: 11,
+    fontWeight: "800",
+    color: Theme.buttonDestructiveText,
+  },
+  ctaBadge: {
+    minWidth: 18,
+    height: 18,
+    borderRadius: 9,
+    paddingHorizontal: 5,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.warning,
+  },
+  ctaBadgeText: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: Theme.textOnPrimary,
   },
 });

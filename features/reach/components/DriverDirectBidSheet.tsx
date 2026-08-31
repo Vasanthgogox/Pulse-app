@@ -37,6 +37,7 @@ export function DriverDirectBidSheet({
   const [validationError, setValidationError] = useState<string | undefined>();
 
   const target = positiveMoneyOrNull(story?.snapshot_rate_offer);
+  const counter = positiveMoneyOrNull(story?.direct_bid_counter_amount);
   const isUpdate = story?.direct_bid_status === 'pending';
 
   const initialValue = useMemo(() => {
@@ -45,9 +46,10 @@ export function DriverDirectBidSheet({
     if (preexisting != null && Number.isFinite(Number(preexisting)) && Number(preexisting) > 0) {
       return toRawString(preexisting);
     }
+    if (counter != null) return toRawString(Math.round(counter));
     if (target != null) return toRawString(Math.round(target));
     return '';
-  }, [visible, story?.post_id, story?.direct_bid_amount, target]);
+  }, [visible, story?.post_id, story?.direct_bid_amount, counter, target]);
 
   const origin = cityPart(story?.snapshot_origin);
   const destination = cityPart(story?.snapshot_destination);
@@ -59,20 +61,32 @@ export function DriverDirectBidSheet({
     const parts: string[] = [];
     if (route) parts.push(route);
     if (vehicle) parts.push(vehicle);
-    if (target != null) parts.push(`Target ${formatINR(target)}`);
+    if (counter != null) parts.push(`Counter ${formatINR(counter)}`);
+    else if (target != null) parts.push(`Target ${formatINR(target)}`);
     return parts.length > 0 ? parts.join(' · ') : undefined;
-  }, [route, vehicle, target]);
+  }, [route, vehicle, counter, target]);
 
   const partyPreview = useMemo((): NumericEntryPartyPreview | undefined => {
     if (!story) return undefined;
     const name = (story.org_name ?? '').trim() || 'Shipper';
+    const detailParts: string[] = [];
+    if (vehicle) detailParts.push(vehicle);
+    if (counter != null) detailParts.push(`Counter ${formatINR(counter)}`);
+    else if (target != null) detailParts.push(`Target ${formatINR(target)}`);
     return {
       name,
       subtitle: partySubtitle,
+      heroLine: route || undefined,
+      detailLine: detailParts.length > 0 ? detailParts.join(' · ') : undefined,
       entityType: 'supplier',
       organizationImageUrl: story.org_logo_url ?? null,
     };
-  }, [story, partySubtitle]);
+  }, [story, partySubtitle, route, vehicle, counter, target]);
+
+  const matchCounterQuickFill = useMemo(() => {
+    if (counter == null) return null;
+    return { label: 'Match counter', amount: counter };
+  }, [counter]);
 
   const handleSubmit = useCallback(
     (raw: string) => {
@@ -114,6 +128,7 @@ export function DriverDirectBidSheet({
       }
       validationError={validationError}
       targetRate={target}
+      quickFill={matchCounterQuickFill}
     />
   );
 }

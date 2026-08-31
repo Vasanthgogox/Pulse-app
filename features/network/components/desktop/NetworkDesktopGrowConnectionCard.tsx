@@ -209,12 +209,6 @@ export function NetworkDesktopGrowConnectionCard({
                   : "No rating"
               }
             >
-              <Star
-                size={rating != null ? 14 : 12}
-                color={rating != null ? Theme.driverGold : Theme.textMuted}
-                fill={rating != null ? Theme.driverGold : "transparent"}
-                strokeWidth={rating != null ? 0 : 1.6}
-              />
               <Text
                 style={[
                   growStyles.avatarRatingBadgeText,
@@ -224,6 +218,13 @@ export function NetworkDesktopGrowConnectionCard({
               >
                 {rating != null ? formatConnectionRatingValue(rating) : "No rating"}
               </Text>
+              <Star
+                size={rating != null ? 14 : 12}
+                color={rating != null ? Theme.driverGold : Theme.textMuted}
+                fill={rating != null ? Theme.driverGold : "transparent"}
+                strokeWidth={rating != null ? 0 : 1.6}
+                style={growStyles.avatarRatingBadgeStar}
+              />
             </View>
           </View>
 

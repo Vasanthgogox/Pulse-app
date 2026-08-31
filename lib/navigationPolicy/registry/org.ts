@@ -527,6 +527,27 @@ export const ORG_POLICIES: readonly PolicyRecord[] = [
     onDeny: { type: 'sign_in' },
   },
   {
+    id: 'org.support',
+    pattern: '/support',
+    experience: 'org',
+    priority: 100,
+    onDeny: { type: 'sign_in' },
+  },
+  {
+    id: 'org.support-tickets',
+    pattern: '/support-tickets',
+    experience: 'org',
+    priority: 100,
+    onDeny: { type: 'sign_in' },
+  },
+  {
+    id: 'org.support-ticket-detail',
+    pattern: '/support-ticket/:id',
+    experience: 'org',
+    priority: 100,
+    onDeny: { type: 'sign_in' },
+  },
+  {
     id: 'org.modal',
     pattern: '/modal',
     experience: 'org',
