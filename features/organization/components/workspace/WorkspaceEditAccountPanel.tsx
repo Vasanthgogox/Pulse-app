@@ -64,9 +64,9 @@ export function WorkspaceEditAccountPanel({ onBack }: Props) {
   const [statusText, setStatusText] = useState(initialStatusText);
   const [selectedPresetSeed, setSelectedPresetSeed] = useState<string>(initialAvatarSeed);
   const [avatarUri, setAvatarUri] = useState<string>(() =>
-    avatarPresetStyle === "user-2d"
+    (avatarPresetStyle === "user-2d"
       ? getUser2DAvatarUriForSeed(initialAvatarSeed)
-      : getAvatarUriForSeed(initialAvatarSeed),
+      : getAvatarUriForSeed(initialAvatarSeed)) ?? "",
   );
   const [showAvatarActions, setShowAvatarActions] = useState(false);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
@@ -85,7 +85,7 @@ export function WorkspaceEditAccountPanel({ onBack }: Props) {
   const resolveAvatarUri = useCallback(
     async (avatarUrl: string | undefined | null, presetSeed: string) => {
       if (!avatarUrl?.trim()) {
-        setAvatarUri(getPresetUri(presetSeed));
+        setAvatarUri(getPresetUri(presetSeed) ?? "");
         return;
       }
       if (avatarUrl.startsWith("http://") || avatarUrl.startsWith("https://")) {
@@ -93,7 +93,7 @@ export function WorkspaceEditAccountPanel({ onBack }: Props) {
         return;
       }
       const signed = await getSignedAvatarUrl(avatarUrl.trim());
-      setAvatarUri(signed ?? getPresetUri(presetSeed));
+      setAvatarUri(signed ?? getPresetUri(presetSeed) ?? "");
     },
     [getPresetUri],
   );
@@ -181,7 +181,7 @@ export function WorkspaceEditAccountPanel({ onBack }: Props) {
       return;
     }
     setSelectedPresetSeed(seed);
-    setAvatarUri(getPresetUri(seed));
+    setAvatarUri(getPresetUri(seed) ?? "");
     await refreshSession();
     notice({ kind: "success", title: "Avatar updated" });
   };
@@ -207,7 +207,7 @@ export function WorkspaceEditAccountPanel({ onBack }: Props) {
       return;
     }
     setSelectedPresetSeed(initialAvatarSeed);
-    setAvatarUri(getPresetUri(initialAvatarSeed));
+    setAvatarUri(getPresetUri(initialAvatarSeed) ?? "");
     await refreshSession();
     notice({ kind: "success", title: "Profile photo removed" });
   };
@@ -222,9 +222,10 @@ export function WorkspaceEditAccountPanel({ onBack }: Props) {
     if (usesUploadedAvatar && avatarUri.trim()) {
       return { uri: avatarUri };
     }
-    return avatarPresetStyle === "user-2d"
+    const preset = avatarPresetStyle === "user-2d"
       ? getUser2DPresetImageSourceForSeed(selectedPresetSeed)
       : getPresetImageSourceForSeed(selectedPresetSeed);
+    return preset ?? { uri: "" };
   }, [usesUploadedAvatar, avatarUri, avatarPresetStyle, selectedPresetSeed]);
 
   const footerSlot = (

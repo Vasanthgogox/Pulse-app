@@ -106,7 +106,7 @@ export function HomePageHeader({
     return () => {
       mounted = false;
     };
-  }, [profile?.avatar_url, profile?.avatar_seed]);
+  }, [profile]);
 
   const profileDisplayName = (
     profile?.full_name ??

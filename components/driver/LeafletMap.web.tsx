@@ -439,6 +439,8 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
 
       mountMap();
 
+      const mkrById = markersByIdRef.current;
+
       return () => {
         cancelled = true;
         cancelAnimationFrame(rafId);
@@ -451,12 +453,12 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
         if (mapRef.current) {
           markersRef.current.forEach((m) => m.remove?.());
           markersRef.current = [];
-          markersByIdRef.current.clear();
+          mkrById.clear();
           mapRef.current.remove?.();
           mapRef.current = null;
         }
       };
-    }, []);
+    }, [center.latitude, center.longitude, lowPower, maxBounds, zoom]);
 
     useEffect(() => {
       applyMapInteractionLock(mapRef.current, interactionLocked);

@@ -31,8 +31,8 @@ const inFlightAvatarRequests = new Map<string, Promise<string | null>>();
 /** Driver: driver-* cartoons; user-*: same 2D pool as business PartyAvatar. */
 function driverDisplayPresetUri(seed: string): string {
   const s = seed.trim();
-  if (s.startsWith('user-')) return getUser2DAvatarUriForSeed(s);
-  return getAvatarUriForSeed(s);
+  if (s.startsWith('user-')) return getUser2DAvatarUriForSeed(s) ?? '';
+  return getAvatarUriForSeed(s) ?? '';
 }
 
 function base64ToUint8Array(base64: string): Uint8Array {

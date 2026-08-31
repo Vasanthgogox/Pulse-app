@@ -33,7 +33,7 @@ function AnimatedTabIcon({ selected, children }: { selected: boolean; children: 
     } else {
       scale.value = withSpring(1, springSettle);
     }
-  }, [selected]);
+  }, [selected, scale]);
   const animatedStyle = useAnimatedStyle(() => ({
     transform: [{ scale: scale.value }],
   }));

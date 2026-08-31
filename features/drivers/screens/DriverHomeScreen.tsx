@@ -5495,11 +5495,6 @@ export default function DriverRadarScreen() {
                   ? () => null
                   : undefined
               }
-              handleHeight={
-                shouldUseStaticMapSheetCard || canMinimizeMissionSheet
-                  ? 0
-                  : undefined
-              }
               backgroundStyle={{
                 backgroundColor:
                   canMinimizeMissionSheet && missionSheetCollapsed

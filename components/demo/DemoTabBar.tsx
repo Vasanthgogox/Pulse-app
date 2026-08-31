@@ -301,7 +301,7 @@ export function DemoTabBar({
     return () => {
       mounted = false;
     };
-  }, [profile?.avatar_url, profile?.avatar_seed]);
+  }, [profile]);
 
   useEffect(() => {
     setSeenRegistryOperationIds({});

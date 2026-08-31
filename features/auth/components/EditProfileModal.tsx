@@ -114,9 +114,9 @@ export function EditProfileModal({
   const defaultPresetSeed =
     avatarPresetStyle === 'user-2d' ? DEFAULT_USER_2D_AVATAR_SEED : DEFAULT_AVATAR_SEED;
   const [avatarUri, setAvatarUri] = useState<string>(() =>
-    avatarPresetStyle === 'user-2d'
+    (avatarPresetStyle === 'user-2d'
       ? getUser2DAvatarUriForSeed(defaultPresetSeed)
-      : getAvatarUriForSeed(defaultPresetSeed)
+      : getAvatarUriForSeed(defaultPresetSeed)) ?? ''
   );
   const [selectedPresetSeed, setSelectedPresetSeed] = useState<string>(initialAvatarSeed);
   const [showAvatarDropdown, setShowAvatarDropdown] = useState(false);
@@ -153,16 +153,17 @@ export function EditProfileModal({
     if (usesUploadedAvatar && avatarUri.trim()) {
       return { uri: avatarUri };
     }
-    return avatarPresetStyle === 'user-2d'
+    const preset = avatarPresetStyle === 'user-2d'
       ? getUser2DPresetImageSourceForSeed(selectedPresetSeed)
       : getPresetImageSourceForSeed(selectedPresetSeed);
+    return preset ?? { uri: '' };
   }, [usesUploadedAvatar, avatarUri, avatarPresetStyle, selectedPresetSeed]);
 
   /** Resolve display URI: uploaded (signed URL) or preset avatar. */
   const resolveAvatarUri = useCallback(
     async (avatarUrl: string | undefined, presetSeed: string) => {
       if (!avatarUrl?.trim()) {
-        setAvatarUri(getPresetUri(presetSeed));
+        setAvatarUri(getPresetUri(presetSeed) ?? '');
         return;
       }
       if (avatarUrl.startsWith('http://') || avatarUrl.startsWith('https://')) {
@@ -170,7 +171,7 @@ export function EditProfileModal({
         return;
       }
       const signed = await getSignedAvatarUrl(avatarUrl.trim());
-      setAvatarUri(signed ?? getPresetUri(presetSeed));
+      setAvatarUri(signed ?? getPresetUri(presetSeed) ?? '');
     },
     [getPresetUri]
   );
@@ -267,7 +268,7 @@ export function EditProfileModal({
       return;
     }
     setSelectedPresetSeed(seed);
-    setAvatarUri(getPresetUri(seed));
+    setAvatarUri(getPresetUri(seed) ?? '');
     onPresetSelected?.(seed);
     await onPhotoUpdated?.({
       avatarUri: getPresetUri(seed),
@@ -286,7 +287,7 @@ export function EditProfileModal({
       return;
     }
     setSelectedPresetSeed(initialAvatarSeed);
-    setAvatarUri(getPresetUri(initialAvatarSeed));
+    setAvatarUri(getPresetUri(initialAvatarSeed) ?? '');
     await onPhotoUpdated?.({
       avatarUri: getPresetUri(initialAvatarSeed),
       avatarPath: null,

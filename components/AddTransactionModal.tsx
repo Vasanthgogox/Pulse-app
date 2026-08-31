@@ -718,10 +718,10 @@ export function AddTransactionModal({
   /** Full-page ledger horizontal padding — tighter on phones so all cards stay readable. */
   const ledgerFullPagePadH =
     winW < 420 ? 14 : winW < LEDGER_STACK_TRIP_BAND_BREAKPOINT ? 16 : 20;
-  const safeClients = clients ?? [];
-  const safeSuppliers = suppliers ?? [];
-  const safeDrivers = drivers ?? [];
-  const baseSafeVehicles = vehicles ?? [];
+  const safeClients = useMemo(() => clients ?? [], [clients]);
+  const safeSuppliers = useMemo(() => suppliers ?? [], [suppliers]);
+  const safeDrivers = useMemo(() => drivers ?? [], [drivers]);
+  const baseSafeVehicles = useMemo(() => vehicles ?? [], [vehicles]);
   // When a vehicle is locked (e.g. opened from a Vehicle detail page), make sure it is present
   // in the vehicle list so the row can render its name even before the vehicles fetch settles.
   const safeVehicles = useMemo(() => {
@@ -733,7 +733,7 @@ export function AddTransactionModal({
     ];
   }, [baseSafeVehicles, lockedVehicleId, lockedVehicleNumber]);
   const isVehicleLocked = lockedVehicleId != null;
-  const safeTrips = trips ?? [];
+  const safeTrips = useMemo(() => trips ?? [], [trips]);
 
   const [type, setType] = useState<TransactionType>(
     () => defaultType ?? (partyContext === "customers" ? "in" : "out"),
@@ -977,8 +977,6 @@ export function AddTransactionModal({
     safeClients,
     safeSuppliers,
     safeDrivers,
-    isPartyLocked,
-    lockedPartyId,
     linkedClientIdByOrgId,
     linkedSupplierIdByOrgId,
     hidePartyForCashOut,
@@ -2051,13 +2049,11 @@ export function AddTransactionModal({
     safeDrivers,
     allParties,
     partyContext,
-    initialEntry?.contact_id,
-    initialEntry?.party_name,
+    initialEntry,
     defaultPartyId,
     defaultPartyName,
     viewerOrgId,
     linkedClientIdByOrgId,
-    linkedSupplierIdByOrgId,
     resolveLocalSupplierPartyIdFromTrip,
     lockedPartyId,
     lockedPartyName,
@@ -2472,7 +2468,7 @@ export function AddTransactionModal({
           is_integrated: party.is_integrated === true,
         };
       }),
-    [partyOptions, safeClients, safeSuppliers, safeDrivers],
+    [partyOptions, safeSuppliers, safeDrivers],
   );
 
   const ledgerPartyVisual = useMemo(() => {
@@ -2814,6 +2810,9 @@ export function AddTransactionModal({
     initialEntry?.contact_id,
     initialEntry?.trip_id,
     initialEntry?.description,
+    initialEntry,
+    lockedEntityTypeProp,
+    partyContext,
   ]);
 
   // Clear party when it is no longer in the filtered list (e.g. context or type/trip change). Skip when party is locked.
@@ -2922,7 +2921,7 @@ export function AddTransactionModal({
     ) {
       setPartyId(partyOptions[0].id);
     }
-  }, [visible, type, selectedTrip?.id, partyOptions, partyId, isPartyLocked]);
+  }, [visible, type, selectedTrip, partyOptions, partyId, isPartyLocked]);
 
   // When user selects Trip-based commission or Monthly salary, auto-fill amount from commission due or salary (payable).
   useEffect(() => {

@@ -58,7 +58,7 @@ export const OptimalRouteMap: React.FC<OptimalRouteMapProps> = ({
     }
 
     fetchRoute();
-  }, [from.latitude, from.longitude, to.latitude, to.longitude]);
+  }, [from, onRouteFetched, to]);
 
   const mapCenter = {
     latitude: (from.latitude + to.latitude) / 2,

@@ -75,9 +75,10 @@ export function LiveOperationsRegistryPanel({ style }: LiveOperationsRegistryPan
   }, [ledgerPulseAtMs, ledgerPulseTripId]);
 
   const glowActive = useMemo(() => {
+    void glowTick;
     const age = Date.now() - ledgerPulseAtMs;
     return Boolean(ledgerPulseTripId && age >= 0 && age < 4000);
-  }, [glowTick, ledgerPulseAtMs, ledgerPulseTripId]);
+  }, [ledgerPulseAtMs, ledgerPulseTripId, glowTick]);
 
   if (auth?.profile?.role === 'driver' || !orgId || bootstrapStatus !== 'ready') {
     return null;

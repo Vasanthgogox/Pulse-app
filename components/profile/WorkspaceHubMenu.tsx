@@ -158,7 +158,7 @@ export function WorkspaceHubMenu({
     return () => {
       mounted = false;
     };
-  }, [profile?.avatar_url, profile?.avatar_seed]);
+  }, [profile]);
 
   useEffect(() => {
     let mounted = true;

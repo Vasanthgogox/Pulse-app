@@ -433,12 +433,7 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
     props.defaultTripDueFilter ?? "all",
   );
 
-  const dueTotalInr = useMemo(() => resolveDueTotalInr(props), [
-    props.amountPlaceholder,
-    props.dueAmountInr,
-    props.selectedTripId,
-    props.trips,
-  ]);
+  const dueTotalInr = useMemo(() => resolveDueTotalInr(props), [props]);
 
   const amountPartyVisual = useMemo(() => {
     const fromOptions = props.partyId
@@ -465,18 +460,7 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
           ? props.entryContextLabel.trim()
           : props.tripDisplay?.trim() || null,
     };
-  }, [
-    props.partyId,
-    props.partyOptions,
-    props.partyDisplayName,
-    props.partyAvatarUrl,
-    props.partyAvatarSeed,
-    props.partyEntityType,
-    props.partyIsIntegrated,
-    props.entryContextLabel,
-    props.tripDisplay,
-    props.type,
-  ]);
+  }, [props]);
 
   const handleAmountChange = useCallback(
     (value: string) => {
@@ -487,7 +471,7 @@ export const LedgerMobileWizard = memo(function LedgerMobileWizard(props: Ledger
       }
       props.onAmountChange(formatLedgerAmountInput(parsed));
     },
-    [props.onAmountChange],
+    [props],
   );
 
   const lastSessionKeyRef = useRef(props.flowSessionKey ?? "");

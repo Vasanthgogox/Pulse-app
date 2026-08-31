@@ -773,11 +773,11 @@ export function LedgerReportModal({
                               {
                                 width: getCustomColumnWidth(col.key),
                                 textAlign:
-                                  col.align === 'right'
+                                  (col.align === 'right'
                                     ? 'right'
                                     : col.align === 'center'
                                       ? 'center'
-                                      : 'left',
+                                      : 'left') as 'left' | 'center' | 'right',
                                 color: valueColor,
                               },
                             ];

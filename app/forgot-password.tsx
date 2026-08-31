@@ -41,7 +41,7 @@ export default function ForgotPassword() {
 
   useEffect(() => {
     setEmail(getEmailFromParams(params));
-  }, [params.email]);
+  }, [params]);
 
   const onSubmit = async () => {
     setError(null);

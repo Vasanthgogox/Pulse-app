@@ -65,7 +65,7 @@ export function TeslaHeader({
     return () => {
       mounted = false;
     };
-  }, [profile?.avatar_url, profile?.avatar_seed]);
+  }, [profile]);
   return (
     <View style={styles.wrap}>
       <View style={styles.left}>

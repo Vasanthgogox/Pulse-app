@@ -1241,8 +1241,8 @@ function PartyRegistrationPortalInner(
     !layoutWide && (kind === "client" || kind === "supplier");
   const useContactCombinedDesktop =
     layoutWide && (kind === "client" || kind === "supplier");
-  const useDriverWizard = kind === "driver";
-  const useVehicleWizard = kind === "vehicle";
+  const useDriverWizard = !layoutWide && kind === "driver";
+  const useVehicleWizard = !layoutWide && kind === "vehicle";
   const isDriverReviewTone = kind === "driver";
   const driverCompensationBitsCount =
     (driverPayableAmount != null && driverPayableAmount > 0 ? 1 : 0) +

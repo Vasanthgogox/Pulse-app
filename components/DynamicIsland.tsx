@@ -98,7 +98,7 @@ export function DynamicIsland() {
     setPaymentFlashVisible(true);
     const id = setTimeout(() => setPaymentFlashVisible(false), 3000);
     return () => clearTimeout(id);
-  }, [ledgerPulseAtMs, ledgerPulseTripId, alert?.id, alert?.category, alert?.amount, alert?.trip_number]);
+  }, [ledgerPulseAtMs, ledgerPulseTripId, alert]);
 
   useEffect(() => {
     if (Platform.OS === 'web' || !ledgerBookSuccessAtMs) return;

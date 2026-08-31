@@ -123,12 +123,12 @@ export default function SignIn() {
   useEffect(() => {
     const next = getEmailFromParams(params);
     if (next) setEmail(next);
-  }, [params.email]);
+  }, [params]);
 
   useEffect(() => {
     const oauthError = getOAuthErrorFromParams(params);
     if (oauthError) setSignInError(oauthError);
-  }, [params.oauth_error]);
+  }, [params]);
 
   useEffect(() => {
     const v = params.password_reset;

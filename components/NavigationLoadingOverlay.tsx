@@ -101,7 +101,7 @@ function NativeNavigationLoadingOverlay() {
       interaction.cancel();
       if (hideTimer.current) clearTimeout(hideTimer.current);
     };
-  }, [pathname, segmentsKey]);
+  }, [pathname, segmentsKey, segments]);
 
   if (!visible) return null;
 

@@ -147,9 +147,11 @@ export function OperationsNotificationBell() {
   }, [ledgerPulseAtMs, ledgerPulseTripId]);
 
   const glowActive = useMemo(() => {
+    // glowTick forces re-evaluation after timeout to clear the glow
+    if (glowTick < 0) return false;
     const age = Date.now() - ledgerPulseAtMs;
     return ledgerPulseTripId && age >= 0 && age < 4000;
-  }, [glowTick, ledgerPulseAtMs, ledgerPulseTripId]);
+  }, [ledgerPulseAtMs, ledgerPulseTripId, glowTick]);
 
   const isDesktopWeb = Platform.OS === "web" && layoutWidth >= Layout.webDesktopMinWidth;
   const badgeTotal = items.length + pendingFeedbackTrips + lateMonitoringAlerts.length;

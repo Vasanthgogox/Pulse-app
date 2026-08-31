@@ -134,5 +134,5 @@ export function resolveDriverAvatarUriForSeed(seed?: string | null): string {
 
 /** @deprecated Use getAvatarUriForSeed. Kept for compatibility. */
 export function getAvatarUrl(seed: string): string {
-  return getAvatarUriForSeed(seed);
+  return getAvatarUriForSeed(seed) ?? '';
 }

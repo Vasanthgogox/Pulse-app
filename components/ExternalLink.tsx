@@ -14,8 +14,8 @@ export function ExternalLink(
     <Link
       target="_blank"
       {...props}
-      // @ts-expect-error: External URLs are not typed.
-      href={href}
+       
+      href={href as never}
       onPress={(e) => {
         if (Platform.OS !== 'web') {
           e.preventDefault();

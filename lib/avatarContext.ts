@@ -138,13 +138,13 @@ function initials(name: string): string {
 /** Stable fallback preset for a driver using driver cartoon pool. */
 function driverFallbackUri(name: string): string {
   const idx = hashStr(name || '?') % ALL_PRESET_AVATARS.length;
-  return getAvatarUriForSeed(ALL_PRESET_AVATARS[idx]!.seed);
+  return getAvatarUriForSeed(ALL_PRESET_AVATARS[idx]!.seed) ?? '';
 }
 
 /** Stable fallback preset for a user/org using user-2D pool. */
 function userFallbackUri(seed: string): string {
   const idx = hashStr(seed || '?') % USER_2D_AVATARS.length;
-  return getUser2DAvatarUriForSeed(USER_2D_AVATARS[idx]!.seed);
+  return getUser2DAvatarUriForSeed(USER_2D_AVATARS[idx]!.seed) ?? '';
 }
 
 /**
@@ -186,14 +186,14 @@ function publicHttpUrl(raw: string | null | undefined): string | null {
 /** Driver seeds use assets/drivers; legacy user-N seeds use assets/avatars. */
 function driverSeedSyncUri(seed: string): string {
   const s = seed.trim();
-  if (s.startsWith('user-')) return getUser2DAvatarUriForSeed(s);
-  return getAvatarUriForSeed(s);
+  if (s.startsWith('user-')) return getUser2DAvatarUriForSeed(s) ?? '';
+  return getAvatarUriForSeed(s) ?? '';
 }
 
 function driverSeedImageSource(seed: string | null | undefined): ImageSourcePropType {
   const s = (seed ?? '').trim();
-  if (s.startsWith('user-')) return getUser2DPresetImageSourceForSeed(s);
-  return getPresetImageSourceForSeed(s || undefined);
+  if (s.startsWith('user-')) return getUser2DPresetImageSourceForSeed(s) ?? { uri: '' };
+  return getPresetImageSourceForSeed(s || undefined) ?? { uri: '' };
 }
 
 function resolvePresetImageSource(
@@ -234,7 +234,7 @@ function resolveDriver(party: DriverParty): AvatarResolution {
   const seedUri = party.avatarSeed ? driverSeedSyncUri(party.avatarSeed) : null;
 
   return {
-    syncUri: seedUri ?? directUrl ?? driverFallbackUri(party.name),
+    syncUri: (seedUri ?? directUrl ?? driverFallbackUri(party.name)) ?? '',
     storagePath: privatePath,
     initials: initials(party.name),
     initialsBackground: initialsBackground(party.name),
@@ -261,7 +261,7 @@ function resolveOrg(party: OrgParty): AvatarResolution {
   const storagePath = logoPath ?? ownerPath ?? null;
 
   return {
-    syncUri,
+    syncUri: syncUri ?? '',
     storagePath,
     initials: initials(party.name),
     initialsBackground: initialsBackground(colorSeed),
@@ -274,7 +274,7 @@ function resolveUserPersonal(party: UserParty): AvatarResolution {
   const seedUri = party.avatarSeed ? getUser2DAvatarUriForSeed(party.avatarSeed) : null;
 
   return {
-    syncUri: seedUri ?? directUrl ?? userFallbackUri(party.name),
+    syncUri: (seedUri ?? directUrl ?? userFallbackUri(party.name)) ?? '',
     storagePath: privatePath,
     initials: initials(party.name),
     initialsBackground: initialsBackground(party.name),
@@ -304,7 +304,7 @@ function resolveUserBusiness(party: UserParty): AvatarResolution {
   const storagePath = logoPath ?? personalPath ?? null;
 
   return {
-    syncUri,
+    syncUri: syncUri ?? '',
     storagePath,
     initials: initials(party.name),
     initialsBackground: initialsBackground(party.name),

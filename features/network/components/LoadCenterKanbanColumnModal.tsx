@@ -160,9 +160,10 @@ function StageBookmarkArrow({
   return (
     <Pressable
       onPress={handlePress}
-      // @ts-expect-error web mouse events
-      onMouseEnter={() => setHovered(true)}
-      onMouseLeave={() => {
+      
+      // @ts-expect-error Web-only mouse events not in React Native types
+      onMouseEnter={(e: any) => setHovered(true)}
+      onMouseLeave={(e: any) => {
         setHovered(false);
         setPeeked(false);
       }}

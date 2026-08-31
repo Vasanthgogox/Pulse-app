@@ -4,7 +4,6 @@ import { StyleSheet } from "react-native";
 /** Shared Metronic connection / grow profile tile chrome. */
 export const connectionCardStyles = StyleSheet.create({
   card: {
-    alignItems: "center",
     paddingVertical: 16,
     paddingHorizontal: 10,
     borderRadius: 12,

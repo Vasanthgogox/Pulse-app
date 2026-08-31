@@ -112,9 +112,9 @@ export function FullscreenNumericEntry({
     return () => vv.removeEventListener('resize', update);
   }, [visible]);
 
-  const keypadOpts: KeypadOptions = {
+  const keypadOpts: KeypadOptions = useMemo(() => ({
     maxDecimalPlaces: allowDecimal === false ? 0 : (maxDecimalPlaces ?? 2),
-  };
+  }), [allowDecimal, maxDecimalPlaces]);
 
   // Sync initial value each time the modal opens
   useEffect(() => {

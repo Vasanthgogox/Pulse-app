@@ -333,7 +333,7 @@ const styles = StyleSheet.create({
     minWidth: 0,
     fontSize: 13,
     fontWeight: "700",
-    color: LEDGER_RECEIPT.headline,
+    color: LEDGER_RECEIPT.title,
     textAlign: "left",
     lineHeight: 17,
   },

@@ -81,5 +81,5 @@ export function useIndianVehiclePhysicalKeypad({
 
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
-  }, [enabled, kind, allowed?.letters, allowed?.digits, onKey]);
+  }, [enabled, kind, allowed, allowed?.letters, allowed?.digits, onKey]);
 }

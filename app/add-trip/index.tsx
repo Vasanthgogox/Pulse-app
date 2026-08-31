@@ -24,7 +24,6 @@ import { Text, View } from 'react-native';
 import { showAppAlert } from '@/lib/appAlert';
 
 export default function AddTripPage() {
-  const router = useRouter();
   const { can: canSurface, isLoading: isMemberAccessLoading } = useMemberAccess();
   const canAddTrip =
     canSurface('tripops.trips.create_asset') ||

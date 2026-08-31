@@ -101,7 +101,7 @@ export function TeslaHeader({
     return () => {
       mounted = false;
     };
-  }, [profile?.avatar_url, profile?.avatar_seed]);
+  }, [profile]);
 
   const insets = useSafeAreaInsets();
   const isDark = variant === 'dark';
