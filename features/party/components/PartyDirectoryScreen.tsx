@@ -3,6 +3,7 @@
  * No profile hero — compact chrome + tab strip + card grid only.
  */
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { FAB } from "@/components/FAB";
 import Layout from "@/constants/Layout";
 import { PartyDirectoryPartyCard } from "@/features/party/components/PartyDirectoryPartyCard";
 import {
@@ -24,6 +25,7 @@ import {
   canAccessPartyKind,
 } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
+import { useMemberAccess } from "@/lib/useMemberAccess";
 import {
   useClientsQuery,
   useDriversQuery,
@@ -92,6 +94,7 @@ export function PartyDirectoryScreen({ kind, onBack }: Props) {
       : PARTY_GRID_COLUMNS;
   const router = useRouter();
   const capabilities = useCapabilities();
+  const { can: canSurface } = useMemberAccess();
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
   const [query, setQuery] = useState("");
@@ -349,6 +352,21 @@ export function PartyDirectoryScreen({ kind, onBack }: Props) {
           </View>
         )}
       </ScrollView>
+
+      {kind === "customers" && canSurface("sales.clients.create") ? (
+        <FAB
+          label="Add Customer"
+          onPress={() => router.push("/(modals)/add-client" as const)}
+          LucideIconComponent={Building2}
+        />
+      ) : null}
+      {kind === "suppliers" && canSurface("sales.suppliers.create") ? (
+        <FAB
+          label="Add Supplier"
+          onPress={() => router.push("/(modals)/add-supplier" as const)}
+          LucideIconComponent={Truck}
+        />
+      ) : null}
     </View>
   );
 }
