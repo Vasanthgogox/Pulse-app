@@ -768,15 +768,16 @@ export function useStaffHandshake({
         return;
       }
 
-      const { error: assignAggErr } = await assignAggregateTripDriverByPhone(
-        trip.id,
-        orgId,
-        phoneTrimmed,
-        regNum || null,
-        null,
-        null,
-        nameTrimmed,
-      );
+      const { error: assignAggErr, driverLinked } =
+        await assignAggregateTripDriverByPhone(
+          trip.id,
+          orgId,
+          phoneTrimmed,
+          regNum || null,
+          null,
+          null,
+          nameTrimmed,
+        );
       if (assignAggErr) {
         await saveSubcontract();
         await updateIndent(load.id, { status: "completed" });
@@ -794,37 +795,48 @@ export function useStaffHandshake({
         return;
       }
 
-      const {
-        error: otpErr,
-        code,
-        expires_at,
-      } = await generateTripOtp(trip.id);
-      if (otpErr || !code) {
-        await saveSubcontract();
-        await updateIndent(load.id, { status: "completed" });
-        refreshAfterDeploy(orgId);
-        setCurrentLoad(null);
-        setIsDeploying(false);
-        Alert.alert(
-          "Trip created",
-          "OTP could not be generated. Get OTP from the trip detail screen.",
-        );
-        setInitialTripForDetail(trip);
-        router.push(
-          `/trip/${trip.id}?entryContext=supplier` as import("expo-router").Href,
-        );
-        return;
-      }
+      // A driver who already has a linked account (e.g. used the app on a
+      // prior trip) has nothing left to prove — the OTP exists solely to
+      // link a phone number to a real person. Skip generating/showing one
+      // here so the dispatcher isn't shown a code that will never be
+      // consumed and looks like a pending step that doesn't actually apply.
+      if (!driverLinked) {
+        const {
+          error: otpErr,
+          code,
+          expires_at,
+        } = await generateTripOtp(trip.id);
+        if (otpErr || !code) {
+          await saveSubcontract();
+          await updateIndent(load.id, { status: "completed" });
+          refreshAfterDeploy(orgId);
+          setCurrentLoad(null);
+          setIsDeploying(false);
+          Alert.alert(
+            "Trip created",
+            "OTP could not be generated. Get OTP from the trip detail screen.",
+          );
+          setInitialTripForDetail(trip);
+          router.push(
+            `/trip/${trip.id}?entryContext=supplier` as import("expo-router").Href,
+          );
+          return;
+        }
 
-      setDeployOtpCode(code);
-      setDeployOtpExpiresAt(expires_at ?? null);
-      setDeployTripIdForOtp(trip.id);
+        setDeployOtpCode(code);
+        setDeployOtpExpiresAt(expires_at ?? null);
+        setDeployTripIdForOtp(trip.id);
+      }
 
       await saveSubcontract();
 
       await updateIndent(load.id, { status: "completed" });
       refreshAfterDeploy(orgId);
-      onSuccess("OTP generated");
+      if (driverLinked) {
+        setCurrentLoad(null);
+        setIsDeploying(false);
+      }
+      onSuccess(driverLinked ? "Trip created" : "OTP generated");
     } catch (e) {
       const msg = e instanceof Error ? e.message : "Unknown error.";
       Alert.alert("Could not deploy", msg);

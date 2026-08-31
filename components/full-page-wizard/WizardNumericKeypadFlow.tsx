@@ -328,7 +328,12 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
               <View style={styles.wizardKeypadDesktopSwitch}>{fieldSwitch}</View>
             ) : null}
             <View style={styles.wizardKeypadDesktopRow}>
-              <View style={styles.wizardKeypadAmountPane}>{payoutStage}</View>
+              <View style={styles.wizardKeypadAmountPane}>
+                {payoutStage}
+                {accessory ? (
+                  <View style={styles.wizardKeypadAccessory}>{accessory}</View>
+                ) : null}
+              </View>
               <View style={styles.wizardKeypadKeysPane}>
                 <View style={styles.wizardKeypadKeysCard}>
                   <KeypadDock

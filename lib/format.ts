@@ -199,17 +199,24 @@ export function formatMobileNumber(raw: string | null | undefined): string {
 
 /**
  * Format as user types in vehicle number input.
- * Fixed mask spacing: "TN17AS2202" → "TN 17 AS 2202".
+ * Mask spacing, series segment flexes to 1 or 2 letters:
+ *   "TN17AS2202" → "TN 17 AS 2202"
+ *   "TN05C9811"  → "TN 05 C 9811"
  */
 export function formatIndianVehicleNumberInput(next: string): string {
-  const normalized = normalizeRawVehicleInput(next).slice(0, 10);
+  const raw = normalizeRawVehicleInput(next);
+  // Cap total length at 10 (2-letter series) rather than assuming it — a
+  // fixed .slice(0, 10) is still correct for both 9- and 10-char plates
+  // since neither exceeds 10, it only needs to stop growing past it.
+  const normalized = raw.slice(0, 10);
   if (!normalized) return "";
-  const parts = [
-    normalized.slice(0, 2),
-    normalized.slice(2, 4),
-    normalized.slice(4, 6),
-    normalized.slice(6, 10),
-  ].filter((p) => p.length > 0);
+  const state = normalized.slice(0, 2);
+  const district = normalized.slice(2, 4);
+  const afterDistrict = normalized.slice(4);
+  const seriesMatch = afterDistrict.match(/^[A-Z]{0,2}/);
+  const series = seriesMatch ? seriesMatch[0] : "";
+  const number = afterDistrict.slice(series.length);
+  const parts = [state, district, series, number].filter((p) => p.length > 0);
   return parts.join(" ");
 }
 

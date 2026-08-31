@@ -2375,10 +2375,10 @@ export async function assignAggregateTripDriverByPhone(
   driverName?: string | null,
   /** Explicit own-asset vs third-party choice (Issue B). Omitted/undefined = NULL, preserving legacy AGGREGATE-default behavior. */
   executionType?: "ASSET" | "AGGREGATE" | null,
-): Promise<{ error: Error | null; trip: TripRow | null }> {
+): Promise<{ error: Error | null; trip: TripRow | null; driverLinked: boolean }> {
   const normalized = (phone ?? "").trim().replace(/\s+/g, "");
   if (!normalized) {
-    return { error: new Error("Phone is required"), trip: null };
+    return { error: new Error("Phone is required"), trip: null, driverLinked: false };
   }
   const { error: availabilityError, result: availability } =
     await getDriverAvailabilityByPhoneGlobal(normalized, {
@@ -2386,13 +2386,14 @@ export async function assignAggregateTripDriverByPhone(
       anyOpenTripBlocks: true,
       requireAuthoritativeRpc: true,
     });
-  if (availabilityError) return { error: availabilityError, trip: null };
+  if (availabilityError) return { error: availabilityError, trip: null, driverLinked: false };
   if (availability.isBusy) {
     return {
       error: new Error(
         `Driver is already assigned to ${availability.ongoingTripLabel ?? "another ongoing trip"}. Complete or unassign that trip first.`,
       ),
       trip: null,
+      driverLinked: false,
     };
   }
 
@@ -2478,7 +2479,7 @@ export async function assignAggregateTripDriverByPhone(
       /trip_display_trip_id/i.test(msg);
 
     // Backward-compatible fallback for environments with stale RPC definition.
-    if (!missingDisplayColumn) return { error: new Error(msg), trip: null };
+    if (!missingDisplayColumn) return { error: new Error(msg), trip: null, driverLinked: false };
 
     const { error: assignError, trip } = await assignTripDriverByPhone(
       tripId,
@@ -2498,25 +2499,30 @@ export async function assignAggregateTripDriverByPhone(
             "Assignment failed via RPC and fallback. Please contact support.",
           ),
         trip: null,
+        driverLinked: false,
       };
     }
+    // Stale-RPC fallback path forces an OTP claim (forceOtpClaim: true above),
+    // so treat the driver as unlinked here regardless of its real state.
     if (trimmedVehicleDisplay) {
       const { error: vehicleError, trip: updatedTrip } =
         await updateTripAssignment(tripId, {
           vehicle_display_number: trimmedVehicleDisplay,
         });
-      if (vehicleError) return { error: vehicleError, trip: null };
-      return { error: null, trip: updatedTrip ?? trip };
+      if (vehicleError) return { error: vehicleError, trip: null, driverLinked: false };
+      return { error: null, trip: updatedTrip ?? trip, driverLinked: false };
     }
-    return { error: null, trip };
+    return { error: null, trip, driverLinked: false };
   }
-  const obj = data as { ok?: boolean; error?: string; trip?: TripRow } | null;
+  const obj = data as { ok?: boolean; error?: string; trip?: TripRow; driver_linked?: boolean } | null;
   if (!obj || obj.ok !== true) {
     return {
       error: new Error(obj?.error ?? "Assignment failed"),
       trip: null,
+      driverLinked: false,
     };
   }
+  const driverLinked = obj.driver_linked === true;
   const resultTrip = (obj.trip ?? null) as TripRow | null;
   if (resultTrip && usableDriverName) {
     resultTrip.driver_display_name = usableDriverName;
@@ -2533,7 +2539,7 @@ export async function assignAggregateTripDriverByPhone(
       },
     );
   }
-  return { error: null, trip: resultTrip };
+  return { error: null, trip: resultTrip, driverLinked };
 }
 
 /** Trip status values allowed by DB (public.trips.status CHECK). */
