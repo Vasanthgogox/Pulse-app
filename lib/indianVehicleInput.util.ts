@@ -3,6 +3,7 @@ import type { TextInputProps } from "react-native";
 import {
   formatIndianVehicleNumberInput,
   normalizeVehicleNumberForMatch,
+  parsePlate,
 } from "@/lib/format";
 
 /**
@@ -36,30 +37,6 @@ export function isIndianVehiclePlateComplete(display: string): boolean {
 }
 
 export type IndianVehicleKeyboardKind = "letters" | "numbers";
-
-type PlateShape = {
-  state: string;
-  district: string;
-  series: string;
-  number: string;
-};
-
-/**
- * Parse progressive input, letting the series segment (index 4) run 1 or 2
- * letters before the number segment starts. `raw` (not yet uppercased-only
- * filtered) is needed to tell whether index 5 was typed as a letter or a
- * digit — normalized alone can't distinguish "series done at 1 letter" from
- * "2nd series letter not typed yet".
- */
-function parsePlate(normalized: string): PlateShape {
-  const state = normalized.slice(0, 2);
-  const district = normalized.slice(2, 4);
-  const afterDistrict = normalized.slice(4);
-  const seriesMatch = afterDistrict.match(/^[A-Z]{0,2}/);
-  const series = seriesMatch ? seriesMatch[0] : "";
-  const number = afterDistrict.slice(series.length);
-  return { state, district, series, number };
-}
 
 /** Segment chips under the field (AA · 00 · A(A) · 0000). */
 export function getIndianVehicleSegmentGuide(

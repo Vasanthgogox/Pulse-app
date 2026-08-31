@@ -197,6 +197,26 @@ export function formatMobileNumber(raw: string | null | undefined): string {
   return digits.slice(0, 10);
 }
 
+export type PlateShape = {
+  state: string;
+  district: string;
+  series: string;
+  number: string;
+};
+
+/**
+ * Parse progressive input, letting the series segment run 1 or 2 letters.
+ */
+export function parsePlate(normalized: string): PlateShape {
+  const state = normalized.slice(0, 2);
+  const district = normalized.slice(2, 4);
+  const afterDistrict = normalized.slice(4);
+  const seriesMatch = afterDistrict.match(/^[A-Z]{0,2}/);
+  const series = seriesMatch ? seriesMatch[0] : "";
+  const number = afterDistrict.slice(series.length);
+  return { state, district, series, number };
+}
+
 /**
  * Format as user types in vehicle number input.
  * Mask spacing, series segment flexes to 1 or 2 letters:
@@ -210,13 +230,8 @@ export function formatIndianVehicleNumberInput(next: string): string {
   // since neither exceeds 10, it only needs to stop growing past it.
   const normalized = raw.slice(0, 10);
   if (!normalized) return "";
-  const state = normalized.slice(0, 2);
-  const district = normalized.slice(2, 4);
-  const afterDistrict = normalized.slice(4);
-  const seriesMatch = afterDistrict.match(/^[A-Z]{0,2}/);
-  const series = seriesMatch ? seriesMatch[0] : "";
-  const number = afterDistrict.slice(series.length);
-  const parts = [state, district, series, number].filter((p) => p.length > 0);
+  const p = parsePlate(normalized);
+  const parts = [p.state, p.district, p.series, p.number].filter((seg) => seg.length > 0);
   return parts.join(" ");
 }
 
