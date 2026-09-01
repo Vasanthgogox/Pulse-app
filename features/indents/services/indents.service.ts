@@ -4,6 +4,7 @@
  */
 import { getClientById } from "@/features/clients/services/clients.service";
 import { findIndentInMarketList } from "@/features/indents/utils/findIndentInList.util";
+import { createSharedIndentCopiesWithOps } from "@/features/indents/utils/indentShareCopies.util";
 import {
   deactivatePostsForIndent,
   ensureIndentStory,
@@ -1049,4 +1050,33 @@ export async function cancelIndent(
   }
 
   return { error: null };
+}
+
+/**
+ * Share N identical indent rows (one per vehicle). Invalid counts are rejected
+ * (not clamped). Partial creates are cancelled so the result is N or 0.
+ *
+ * Each copy calls `ensureIndentStory` via `createIndent` / `shareDraftIndent`.
+ * Stories are one live LOAD reel per indent (`ensureIndentStory` comment:
+ * "One live 24h LOAD story per indent"). Bid visibility is indent-status based,
+ * but Pulse/reel state is keyed per indent, so each copy keeps its own story.
+ */
+export async function createSharedIndentCopies(
+  orgId: string,
+  data: CreateIndentInput,
+  count: number,
+  options?: { existingDraftId?: string | null },
+): Promise<{ error: Error | null; indents: IndentRow[] }> {
+  return createSharedIndentCopiesWithOps(
+    {
+      createIndent,
+      updateIndentDraft,
+      shareDraftIndent,
+      cancelIndent,
+    },
+    orgId,
+    data,
+    count,
+    options,
+  );
 }

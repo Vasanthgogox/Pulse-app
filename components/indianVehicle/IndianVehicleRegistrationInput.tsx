@@ -1,5 +1,5 @@
 /**
- * Indian plate input: XX NN LL NNNN with segment-aware keyboard and format guide.
+ * Indian plate input: AA 00 A(A) 0000 with segment-aware keyboard and format guide.
  * Used in Create Trip aggregate wizard and indent allocation deploy flow.
  */
 import { memo, useMemo, useRef, type RefObject } from "react";
@@ -20,7 +20,7 @@ import { assignmentShellStyles } from "@/features/trips/styles/assignmentShellSh
 import {
   applyIndianVehicleKeystroke,
   getIndianVehicleFormatHint,
-  getIndianVehicleKeyboardType,
+  getIndianVehicleTextInputKeyboardType,
   getIndianVehicleSegmentGuide,
 } from "@/lib/indianVehicleInput.util";
 
@@ -60,7 +60,7 @@ export const IndianVehicleRegistrationInput = memo(
     const isWizard = variant === "wizard";
 
     const keyboardType = useMemo(
-      () => getIndianVehicleKeyboardType(value),
+      () => getIndianVehicleTextInputKeyboardType(value),
       [value],
     );
     const formatHint = useMemo(() => getIndianVehicleFormatHint(value), [value]);
@@ -114,16 +114,17 @@ export const IndianVehicleRegistrationInput = memo(
             <Truck size={20} color={Theme.iconMuted} style={styles.leadingIcon} />
           ) : null}
           <TextInput
-            key={keyboardType}
             ref={inputRef}
             style={inputStyles}
-            placeholder="e.g. TN 12 AB 3456"
+            placeholder="e.g. TN 18 D 2522"
             placeholderTextColor={isWizard ? Theme.textMuted : Theme.textMuted}
             value={value}
             onChangeText={handleChange}
-            keyboardType={keyboardType}
-            autoCapitalize={keyboardType === "number-pad" ? "none" : "characters"}
+            keyboardType={Platform.OS === "web" ? "default" : keyboardType}
+            autoCapitalize="characters"
             autoCorrect={false}
+            autoComplete="off"
+            inputMode="text"
             autoFocus={autoFocus}
             inputAccessoryViewID={inputAccessoryViewID}
             onFocus={onFocus}

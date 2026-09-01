@@ -10,7 +10,7 @@ import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { createOwnerVehicle } from '@/features/driver/services/ownerVehicles.service';
-import { formatIndianVehicleNumberInput } from '@/lib/format';
+import { applyIndianVehicleKeystroke } from '@/lib/indianVehicleInput.util';
 import { useDriverFleetOwnerQuery } from '@/lib/queries/useDriverFleetOwnerQuery';
 import { useOwnerVehiclesQuery } from '@/lib/queries/useOwnerVehiclesQuery';
 import { ROUTES } from '@/lib/routes';
@@ -131,8 +131,8 @@ export default function AddOwnerVehicleScreen() {
             <Text style={[styles.label, { color: colors.textMuted }]}>Vehicle number</Text>
             <TextInput
               value={vehicleNumber}
-              onChangeText={(t) => setVehicleNumber(formatIndianVehicleNumberInput(t))}
-              placeholder="TN 38 AB 1234"
+              onChangeText={(t) => setVehicleNumber(applyIndianVehicleKeystroke(t))}
+              placeholder="e.g. TN 18 D 2522"
               placeholderTextColor={colors.textMuted}
               autoCapitalize="characters"
               style={[

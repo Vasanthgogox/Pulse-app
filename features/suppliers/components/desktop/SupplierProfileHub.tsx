@@ -20,10 +20,11 @@ import {
   hubStyles as styles,
   supplierStyles,
 } from "@/features/suppliers/components/desktop/supplierProfileHub.styles";
-import type {
-  SupplierManagementBundle,
-  SupplierProfileTab,
-  SupplierKycDocType,
+import {
+  type SupplierManagementBundle,
+  type SupplierProfileTab,
+  type SupplierKycDocType,
+  SUPPLIER_KYC_DOC_LABELS,
 } from "@/features/suppliers/types/supplierManagement.types";
 import {
   ProfileHubChatSplitLayout,
@@ -46,8 +47,12 @@ import { useMemberAccess } from "@/lib/useMemberAccess";
 import { ROUTES } from "@/lib/routes";
 import { EditSupplierModal } from "@/features/suppliers/components/EditSupplierModal";
 import { getLinkedOrgProfileForSupplier, updateSupplier } from "@/features/suppliers/services/suppliers.service";
-import { Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
+import {
+  pickAndUploadSupplierKycDocument,
+  notifySupplierKycUser,
+} from "@/features/suppliers/utils/supplierKycUpload.util";
 import { useEffect, useMemo, useState } from "react";
+import { Alert, Linking, Pressable, ScrollView, Text, View } from "react-native";
 import { useRouter } from "expo-router";
 import { FileText, Plus } from "lucide-react-native";
 
@@ -324,11 +329,21 @@ export function SupplierProfileHub({
   const perfScore = performance?.overall_score ?? 0;
 
   const handleUploadDoc = (type: SupplierKycDocType) => {
-    Alert.alert(
-      "Upload document",
-      `Upload ${type.replace(/_/g, " ")} — document storage integration coming soon.`,
-      [{ text: "OK" }],
-    );
+    void (async () => {
+      const result = await pickAndUploadSupplierKycDocument({
+        orgId: supplier.organization_id,
+        supplierId: supplier.id,
+        docType: type,
+        docLabel: SUPPLIER_KYC_DOC_LABELS[type],
+        isMandatory: true,
+      });
+      if (result.status === "cancelled") return;
+      if (result.status === "error") {
+        notifySupplierKycUser("Upload failed", result.error.message);
+        return;
+      }
+      onRefresh?.();
+    })();
   };
 
   const orgId = supplier.organization_id;

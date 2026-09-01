@@ -58,7 +58,7 @@ export function indentAllocationStepSubtitle(
       case "driverName":
         return "Step 4 · Driver name for tracking";
       case "vehicleReg":
-        return "Step 5 · Vehicle number (AA 00 AA 0000, e.g. TN 17 AS 2202)";
+        return "Step 5 · Vehicle number (e.g. TN 18 D 2522 or TN 17 AS 2202)";
       case "commodity":
         return "Final · Confirm allocation and vehicle arrival date";
       default:

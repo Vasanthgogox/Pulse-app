@@ -42,8 +42,8 @@ import { useClientWarehousesQuery } from "@/lib/queries/useClientWarehousesQuery
 import { createIndent, type CreateIndentInput } from "@/features/indents/services/indents.service";
 import { LOAD_TYPES } from "@/features/indents/constants";
 import {
+    createSharedIndentCopies,
     getIndentById,
-    shareDraftIndent,
     updateIndentDraft,
 } from "@/features/indents/services/indents.service";
 import {
@@ -53,6 +53,23 @@ import {
   type IndentWizardStep,
 } from "@/features/indents/components/create-indent/createIndentWizardSteps";
 import type { FormState } from "@/features/indents/components/create-indent/createIndentForm.types";
+import {
+  INDENT_VEHICLE_COUNT_ERROR,
+  isValidIndentVehicleCount,
+  parseIndentVehicleCount,
+} from "@/features/indents/components/create-indent/createIndentForm.types";
+import {
+  draftVehicleCountStorageKey,
+  indentShareSuccessPath,
+  resolvedDraftVehicleCount,
+} from "@/features/indents/utils/indentVehicleCount.util";
+import {
+  acquireSubmitLock,
+  beginConfirmOnce,
+  releaseSubmitLock,
+  shouldSkipLockedSubmit,
+  type ConfirmInFlight,
+} from "@/features/indents/utils/indentShareSubmitGuard.util";
 import { IndentWizardMobileStep } from "@/features/indents/components/create-indent/IndentWizardMobileStep";
 import { CreateIndentNetworkTargetStep } from "@/features/indents/components/create-indent/CreateIndentNetworkTargetStep";
 import { SmartInput } from "@/components/mobile-input";
@@ -163,6 +180,9 @@ function validateForm(state: FormState): Record<string, string> {
       errors.weight = "Enter a valid weight (tons).";
     else if (w > 999999) errors.weight = "Weight must be at most 999,999 tons.";
   }
+  if (!isValidIndentVehicleCount(state.vehicle_count)) {
+    errors.vehicle_count = INDENT_VEHICLE_COUNT_ERROR;
+  }
   if ((state.pickup_date ?? "").trim()) {
     const pickupDateErr = dateISO()(state.pickup_date ?? "");
     if (pickupDateErr) errors.pickup_date = pickupDateErr;
@@ -211,6 +231,7 @@ function indentTicketFieldsFromForm(form: FormState): IndentShareTicketFields {
     loadType: (form.load_type ?? "").trim(),
     clientPrice: (form.client_price ?? "").trim(),
     supplierTarget: (form.supplier_target ?? "").trim(),
+    vehicleCount: String(parseIndentVehicleCount(form.vehicle_count) ?? 1),
   };
 }
 
@@ -244,6 +265,20 @@ const INDENT_TICKET_CONFIRM_COPY: Record<
   },
 };
 
+function indentShareTicketCopy(
+  kind: IndentTicketConfirmKind,
+  vehicleCount: number,
+): (typeof INDENT_TICKET_CONFIRM_COPY)[IndentTicketConfirmKind] {
+  const base = INDENT_TICKET_CONFIRM_COPY[kind];
+  if (kind !== "share" || vehicleCount <= 1) return base;
+  return {
+    ...base,
+    title: `Share ${vehicleCount} loads?`,
+    stubFinePrint: `Once shared, ${vehicleCount} matching indents will be created. Each becomes read-only and cannot be edited.`,
+    confirmText: `Share ${vehicleCount} now`,
+  };
+}
+
 const initialFormState: FormState = {
   client_name: "",
   client_id: null,
@@ -252,6 +287,7 @@ const initialFormState: FormState = {
   vehicle_type: "",
   load_type: "",
   weight: "",
+  vehicle_count: "1",
   client_price: "",
   supplier_target: "",
   pickup_date: getToday(),
@@ -298,6 +334,10 @@ export default function CreateIndentScreen() {
   const [form, setForm] = useState<FormState>(initialFormState);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
+  const submitLockRef = useRef(false);
+  const ticketConfirmInFlightRef = useRef<
+    ConfirmInFlight<IndentTicketConfirmKind>
+  >(null);
   const [draftIndentId, setDraftIndentId] = useState<string | null>(null);
   const [lastSavedForm, setLastSavedForm] =
     useState<FormState>(initialFormState);
@@ -543,8 +583,10 @@ export default function CreateIndentScreen() {
 
   const requestIndentTicketConfirm = useCallback(
     (kind: IndentTicketConfirmKind): Promise<boolean> => {
-      return new Promise((resolve) => {
-        setTicketConfirmState({ visible: true, kind, resolve });
+      return beginConfirmOnce(ticketConfirmInFlightRef, kind, () => {
+        return new Promise((resolve) => {
+          setTicketConfirmState({ visible: true, kind, resolve });
+        });
       });
     },
     [],
@@ -603,10 +645,15 @@ export default function CreateIndentScreen() {
                 ? String(Number(indent.supplier_target))
                 : "",
             pickup_date: String(indent.pickup_date ?? getToday()),
+            vehicle_count: resolvedDraftVehicleCount(
+              await AsyncStorage.getItem(
+                draftVehicleCountStorageKey(indent.id),
+              ),
+            ),
           };
-          setDraftIndentId(indent.id);
           setForm(nextForm);
           setLastSavedForm(nextForm);
+          setDraftIndentId(indent.id);
           if (nextForm.client_id?.trim()) {
             setClientListExpanded(false);
           } else {
@@ -924,6 +971,7 @@ export default function CreateIndentScreen() {
   }, [form, profile, user]);
 
   const persistDraft = useCallback(async () => {
+    if (shouldSkipLockedSubmit(submitting, submitLockRef)) return;
     if (!orgId) {
       showDialog(
         "Organization required",
@@ -938,12 +986,19 @@ export default function CreateIndentScreen() {
       );
       return;
     }
-    const shouldSaveDraft = await requestIndentTicketConfirm("draft");
-    if (!shouldSaveDraft) return;
-
-    const payload = buildPayload();
+    if (!acquireSubmitLock(submitLockRef)) return;
     setSubmitting(true);
     try {
+      const shouldSaveDraft = await requestIndentTicketConfirm("draft");
+      if (!shouldSaveDraft) return;
+
+      const payload = buildPayload();
+      const rememberVehicleCount = async (indentId: string) => {
+        await AsyncStorage.setItem(
+          draftVehicleCountStorageKey(indentId),
+          form.vehicle_count,
+        );
+      };
       if (isUuid(draftIndentId)) {
         const { error, indent } = await updateIndentDraft(
           draftIndentId,
@@ -952,6 +1007,7 @@ export default function CreateIndentScreen() {
         if (!error) {
           setLastSavedForm(form);
           invalidateIndents(orgId, { bustPartnerSupplierMarket: true });
+          await rememberVehicleCount(indent?.id ?? draftIndentId);
           if (indent?.id) {
             router.replace({
               pathname: ROUTES.TABS.NETWORK,
@@ -981,6 +1037,7 @@ export default function CreateIndentScreen() {
       if (indent) {
         setDraftIndentId(indent.id);
         await AsyncStorage.setItem(`indent_draft_id_${orgId}`, indent.id);
+        await rememberVehicleCount(indent.id);
         router.replace({
           pathname: ROUTES.TABS.NETWORK,
           params: { tab: "load", indentId: indent.id },
@@ -994,6 +1051,7 @@ export default function CreateIndentScreen() {
         "This indent stays editable until you share it.",
       );
     } finally {
+      releaseSubmitLock(submitLockRef);
       setSubmitting(false);
     }
   }, [
@@ -1005,9 +1063,12 @@ export default function CreateIndentScreen() {
     router,
     showDialog,
     requestIndentTicketConfirm,
+    submitting,
   ]);
 
   const handleSubmit = useCallback(async () => {
+    if (submitting) return;
+    if (shouldSkipLockedSubmit(submitting, submitLockRef)) return;
     if (!orgId) {
       showDialog(
         "Organization required",
@@ -1015,56 +1076,54 @@ export default function CreateIndentScreen() {
       );
       return;
     }
-    const errs = validateForm(form);
-    setErrors(errs);
-    if (Object.keys(errs).length > 0) return;
-    const shouldShare = await requestIndentTicketConfirm("share");
-    if (!shouldShare) return;
-
-    const payload = buildPayload();
+    if (!acquireSubmitLock(submitLockRef)) return;
     setSubmitting(true);
     try {
-      if (draftIndentId) {
-        const { error: draftError } = await updateIndentDraft(
-          draftIndentId,
-          payload,
-        );
-        if (draftError) {
-          showDialog("Could not update draft", draftError.message);
-          return;
-        }
-        const { error: shareError, indent } =
-          await shareDraftIndent(draftIndentId);
-        if (shareError) {
-          showDialog("Could not share indent", shareError.message);
-          return;
-        }
-        if (indent) {
-          await AsyncStorage.removeItem(`indent_draft_${orgId}`);
-          await AsyncStorage.removeItem(`indent_draft_id_${orgId}`);
-          invalidateIndents(orgId, { bustPartnerSupplierMarket: true });
-          router.replace(
-            `/indent/${indent.id}` as import("expo-router").Href,
-          );
-        }
+      const errs = validateForm(form);
+      setErrors(errs);
+      if (Object.keys(errs).length > 0) return;
+      const vehicleCount = parseIndentVehicleCount(form.vehicle_count);
+      if (vehicleCount == null || !isValidIndentVehicleCount(form.vehicle_count)) {
+        setErrors({ ...errs, vehicle_count: INDENT_VEHICLE_COUNT_ERROR });
         return;
       }
-      const { error, indent } = await createIndent(orgId, payload, {
-        action: "share",
-      });
-      if (error) {
-        showDialog("Could not create indent", error.message);
-        return;
-      }
-      if (indent) {
+      const shouldShare = await requestIndentTicketConfirm("share");
+      if (!shouldShare) return;
+
+      const payload = buildPayload();
+      const { error, indents } = await createSharedIndentCopies(
+        orgId,
+        payload,
+        vehicleCount,
+        { existingDraftId: draftIndentId },
+      );
+      if (indents.length > 0) {
         await AsyncStorage.removeItem(`indent_draft_${orgId}`);
         await AsyncStorage.removeItem(`indent_draft_id_${orgId}`);
         invalidateIndents(orgId, { bustPartnerSupplierMarket: true });
-        router.replace(
-          `/indent/${indent.id}` as import("expo-router").Href,
-        );
       }
+      if (error) {
+        showDialog(
+          vehicleCount > 1 && indents.length > 0
+            ? "Could not complete share"
+            : "Could not create indent",
+          error.message,
+        );
+        if (vehicleCount > 1 && indents.length > 0) {
+          router.replace(ROUTES.PULSE_LOADS as import("expo-router").Href);
+        }
+        return;
+      }
+      const first = indents[0];
+      if (!first) return;
+      if (draftIndentId) {
+        await AsyncStorage.removeItem(draftVehicleCountStorageKey(draftIndentId));
+      }
+      router.replace(
+        indentShareSuccessPath(vehicleCount, first.id) as import("expo-router").Href,
+      );
     } finally {
+      releaseSubmitLock(submitLockRef);
       setSubmitting(false);
     }
   }, [
@@ -1076,6 +1135,7 @@ export default function CreateIndentScreen() {
     draftIndentId,
     showDialog,
     requestIndentTicketConfirm,
+    submitting,
   ]);
 
   const canSubmit =
@@ -1088,6 +1148,7 @@ export default function CreateIndentScreen() {
     (form.load_type ?? "").trim().length > 0 &&
     (form.weight ?? "").trim().length > 0 &&
     parseFloat((form.weight ?? "").replace(/,/g, "")) > 0 &&
+    isValidIndentVehicleCount(form.vehicle_count) &&
     (form.client_price ?? "").trim().length > 0 &&
     parseFloat(String(form.client_price ?? "").replace(/,/g, "")) > 0 &&
     (form.supplier_target ?? "").trim().length > 0 &&
@@ -1109,6 +1170,15 @@ export default function CreateIndentScreen() {
         label: indentWizardStepLabel(id),
       })),
     [],
+  );
+
+  const shareTicketCopy = useMemo(
+    () =>
+      indentShareTicketCopy(
+        ticketConfirmState.kind,
+        parseIndentVehicleCount(form.vehicle_count) ?? 1,
+      ),
+    [form.vehicle_count, ticketConfirmState.kind],
   );
 
   const showWizardStep = useCallback(
@@ -1405,6 +1475,12 @@ export default function CreateIndentScreen() {
                 vehicleTypeError={Boolean(errors.vehicle_type)}
                 loadTypeError={Boolean(errors.load_type)}
                 tonsError={Boolean(errors.weight)}
+                vehicleCount={form.vehicle_count}
+                onVehicleCountChange={(value) =>
+                  update({ vehicle_count: value })
+                }
+                vehicleCountError={Boolean(errors.vehicle_count)}
+                vehicleCountErrorMessage={errors.vehicle_count}
               />
             ) : null}
             {wizardStep === "prices" ? (
@@ -1481,19 +1557,11 @@ export default function CreateIndentScreen() {
           visible={ticketConfirmState.visible}
           ticketRef={draftIndentId}
           fields={indentTicketFieldsFromForm(form)}
-          title={INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].title}
-          headerKicker={
-            INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].headerKicker
-          }
-          headerCaption={
-            INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].headerCaption
-          }
-          stubFinePrint={
-            INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].stubFinePrint
-          }
-          confirmText={
-            INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].confirmText
-          }
+          title={shareTicketCopy.title}
+          headerKicker={shareTicketCopy.headerKicker}
+          headerCaption={shareTicketCopy.headerCaption}
+          stubFinePrint={shareTicketCopy.stubFinePrint}
+          confirmText={shareTicketCopy.confirmText}
           onCancel={() => {
             ticketConfirmState.resolve?.(false);
             setTicketConfirmState({
@@ -2953,19 +3021,11 @@ export default function CreateIndentScreen() {
         visible={ticketConfirmState.visible}
         ticketRef={draftIndentId}
         fields={indentTicketFieldsFromForm(form)}
-        title={INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].title}
-        headerKicker={
-          INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].headerKicker
-        }
-        headerCaption={
-          INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].headerCaption
-        }
-        stubFinePrint={
-          INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].stubFinePrint
-        }
-        confirmText={
-          INDENT_TICKET_CONFIRM_COPY[ticketConfirmState.kind].confirmText
-        }
+        title={shareTicketCopy.title}
+        headerKicker={shareTicketCopy.headerKicker}
+        headerCaption={shareTicketCopy.headerCaption}
+        stubFinePrint={shareTicketCopy.stubFinePrint}
+        confirmText={shareTicketCopy.confirmText}
         onCancel={() => {
           if (ticketConfirmState.resolve) ticketConfirmState.resolve(false);
           setTicketConfirmState({

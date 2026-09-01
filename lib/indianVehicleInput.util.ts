@@ -100,9 +100,28 @@ export function getIndianVehicleKeyboardKind(
   return letters ? "letters" : "numbers";
 }
 
+/**
+ * System TextInput keyboard. When letters and digits are both legal (1- vs
+ * 2-letter series), stay on `default` so a plate like TN18D2522 can accept
+ * digits without remounting into number-pad (which drops the letters).
+ */
+export function getIndianVehicleTextInputKeyboardType(
+  display: string,
+): TextInputProps["keyboardType"] {
+  const { letters, digits } = allowedNext(
+    normalizeVehicleNumberForMatch(display),
+  );
+  if (letters) return "default";
+  if (digits) return "number-pad";
+  return "default";
+}
+
 export function getIndianVehicleKeyboardType(
   normalizedLenOrValue: number | string,
 ): TextInputProps["keyboardType"] {
+  if (typeof normalizedLenOrValue === "string") {
+    return getIndianVehicleTextInputKeyboardType(normalizedLenOrValue);
+  }
   return getIndianVehicleKeyboardKind(normalizedLenOrValue) === "numbers"
     ? "number-pad"
     : "default";

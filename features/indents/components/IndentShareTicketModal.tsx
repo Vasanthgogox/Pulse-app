@@ -48,6 +48,8 @@ export interface IndentShareTicketFields {
   loadType: string;
   clientPrice: string;
   supplierTarget: string;
+  /** How many matching indents will be created (shown when > 1). */
+  vehicleCount?: string;
 }
 
 export interface IndentShareTicketModalProps {
@@ -266,12 +268,14 @@ export function IndentShareTicketModal({
               />
             </View>
 
-            {/* Vehicle (full-width) */}
-            <View style={styles.statRowFull}>
-              <Text style={styles.fieldLabel}>VEHICLE</Text>
-              <Text style={styles.fieldValue} numberOfLines={2}>
-                {fields.vehicle || "—"}
-              </Text>
+            {/* Vehicle + count */}
+            <View style={styles.statRow}>
+              <TicketStatRow label="VEHICLE" value={fields.vehicle} />
+              <TicketStatRow
+                label="VEHICLES"
+                value={fields.vehicleCount?.trim() || "1"}
+                align="right"
+              />
             </View>
 
             {/* Commercials pill block */}

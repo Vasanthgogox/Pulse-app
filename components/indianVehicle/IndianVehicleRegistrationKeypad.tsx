@@ -341,6 +341,22 @@ export const IndianVehicleRegistrationKeypad = memo(
             />
           </View>
 
+          {canToggleMode ? (
+            <View style={[styles.row, compact && styles.rowCompact]}>
+              {["1", "2", "3", "4", "5", "6", "7", "8", "9", "0"].map((digit) => (
+                <KeyCell
+                  key={`mix-${digit}`}
+                  label={digit}
+                  onPress={() => handlePress(digit)}
+                  disabled={inputLocked}
+                  variant="char"
+                  compact={compact}
+                  accessibilityLabel={`Digit ${digit}`}
+                />
+              ))}
+            </View>
+          ) : null}
+
           <ModeFooter
             kind={kind}
             canToggleMode={canToggleMode}

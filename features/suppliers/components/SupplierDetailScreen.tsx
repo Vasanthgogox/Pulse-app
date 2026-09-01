@@ -46,6 +46,8 @@ import { getProfileImageBatch } from "@/features/finance/services/finance.servic
 import type { FinancePeriodFilter } from "@/features/finance/types";
 import { allocateAmountsToLargestDueTrips } from "@/features/finance/utils/allocateToLargestDue";
 import { EditSupplierModal } from "@/features/suppliers/components/EditSupplierModal";
+import { getSupplierKycDocuments } from "@/features/suppliers/services/supplierKycDocuments.service";
+import { mapSupplierVerificationVaultDocs } from "@/features/suppliers/utils/supplierVerificationVault.util";
 import {
     getShipperDisplayNamesForSupplierTrips,
     getTripDisplayNumber,
@@ -195,6 +197,9 @@ export default function SupplierDetailScreen({
   const isRefreshingRef = useRef(false);
   const [showEditModal, setShowEditModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
+  const [vaultKycDocs, setVaultKycDocs] = useState(() =>
+    mapSupplierVerificationVaultDocs([]),
+  );
   const [detailSubTab, setDetailSubTab] = useState<"trips" | "cash">(
     initialDetailSubTab ?? "trips",
   );
@@ -245,6 +250,21 @@ export default function SupplierDetailScreen({
   const { disputesByTripId: _disputesByTripId } = useDisputeMapQuery(
     currentOrganization?.id ?? null,
   );
+
+  const loadVaultKyc = useCallback(async () => {
+    const orgId = currentOrganization?.id;
+    if (!orgId || !supplierId) {
+      setVaultKycDocs(mapSupplierVerificationVaultDocs([]));
+      return;
+    }
+    const { documents } = await getSupplierKycDocuments(orgId, supplierId);
+    setVaultKycDocs(mapSupplierVerificationVaultDocs(documents));
+  }, [currentOrganization?.id, supplierId]);
+
+  useEffect(() => {
+    if (!showProfileModal) return;
+    void loadVaultKyc();
+  }, [showProfileModal, loadVaultKyc]);
 
   useEffect(() => {
     const collectDriverIds = (rows: LedgerRow[]) => {
@@ -2180,30 +2200,12 @@ export default function SupplierDetailScreen({
             entityDisplayId={supplier?.id?.slice(0, 8) ?? null}
             organizationId={currentOrganization?.id}
             supplierId={supplierId}
-            kycDocs={[
-              {
-                id: "gst",
-                documentType: "GST REGISTRATION",
-                status: normalizeContactDisplay(supplier?.gstin)
-                  ? "Verified"
-                  : "Pending",
-                dateLabel: "—",
-              },
-              {
-                id: "pan",
-                documentType: "PAN IDENTITY",
-                status: supplier?.is_verified ? "Verified" : "Pending",
-                dateLabel: "—",
-              },
-              {
-                id: "bank",
-                documentType: "BANK PROOF",
-                status: supplier?.is_verified ? "Verified" : "Pending",
-                dateLabel: "—",
-              },
-            ]}
+            kycDocs={vaultKycDocs}
             onClose={() => setShowProfileModal(false)}
             canEdit={canSurface("sales.suppliers.edit")}
+            onProfileEntitiesChange={() => {
+              void loadVaultKyc();
+            }}
             onEditPress={() => {
               setShowProfileModal(false);
               setShowEditModal(true);

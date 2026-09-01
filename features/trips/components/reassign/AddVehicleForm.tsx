@@ -1,9 +1,7 @@
 import Theme from '@/constants/Theme';
 import { createVehicle } from '@/features/vehicles/services/vehicles.service';
-import {
-  formatIndianVehicleNumber,
-  formatIndianVehicleNumberInput,
-} from '@/lib/format';
+import { formatIndianVehicleNumber } from '@/lib/format';
+import { applyIndianVehicleKeystroke } from '@/lib/indianVehicleInput.util';
 import { useInvalidateVehicles } from '@/lib/queries/useVehiclesQuery';
 import { useCallback, useState } from 'react';
 import {
@@ -59,8 +57,8 @@ export function AddVehicleForm({ organizationId, onCreated }: Props) {
         <TextInput
           style={s.input}
           value={vehicleNumber}
-          onChangeText={(t) => setVehicleNumber(formatIndianVehicleNumberInput(t))}
-          placeholder="e.g. TN 01 AB 1234"
+          onChangeText={(t) => setVehicleNumber(applyIndianVehicleKeystroke(t))}
+          placeholder="e.g. TN 18 D 2522"
           placeholderTextColor={Theme.textMuted}
           autoCapitalize="characters"
         />

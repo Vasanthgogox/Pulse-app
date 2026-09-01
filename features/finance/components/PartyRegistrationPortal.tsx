@@ -2654,7 +2654,7 @@ function PartyRegistrationPortalInner(
                         />
                         <TextInput
                           style={[styles.input, styles.inputPadded]}
-                          placeholder="TN 01 CM 2026"
+                          placeholder="e.g. TN 18 D 2522"
                           placeholderTextColor={Theme.textMuted}
                           autoCapitalize="characters"
                           value={vehicleReg}

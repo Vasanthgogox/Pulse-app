@@ -2,7 +2,7 @@ import Theme from '@/constants/Theme';
 import { SearchBar } from '@/components/SearchBar';
 import type { VehicleRow } from '@/features/vehicles/services/vehicles.service';
 import { useDebouncedValue } from '@/lib/hooks/useDebouncedValue';
-import { formatIndianVehicleNumberInput } from '@/lib/format';
+import { applyIndianVehicleKeystroke } from '@/lib/indianVehicleInput.util';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useMemo, useState } from 'react';
 import {
@@ -173,8 +173,8 @@ export function VehicleReassignSection({
           <TextInput
             style={s.input}
             value={adHocPlate}
-            onChangeText={(t) => onAdHocPlateChange(formatIndianVehicleNumberInput(t))}
-            placeholder="e.g. TN 01 AB 1234"
+            onChangeText={(t) => onAdHocPlateChange(applyIndianVehicleKeystroke(t))}
+            placeholder="e.g. TN 18 D 2522"
             placeholderTextColor={Theme.textMuted}
             autoCapitalize="characters"
           />

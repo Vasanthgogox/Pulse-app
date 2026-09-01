@@ -161,7 +161,7 @@ export const IndianVehicleRegistrationKeypadFlow = memo(
             <Truck size={20} color={Theme.iconMuted} style={styles.leadingIcon} />
             <KeypadDisplayValueWithCaret
               value={displayValue}
-              placeholder="TN 17 AS 2202"
+              placeholder="e.g. TN 18 D 2522"
               showCaret={showCursor}
               valueStyle={[
                 styles.displayValue,

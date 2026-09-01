@@ -28,7 +28,7 @@ import {
   isTripReassignStaleError,
   tripReassignStaleUserMessage,
 } from '@/features/trips/utils/tripReassignConflict.util';
-import { isIndianVehiclePlateComplete } from '@/lib/indianVehicleInput.util';
+import { applyIndianVehicleKeystroke, isIndianVehiclePlateComplete } from '@/lib/indianVehicleInput.util';
 import { validatePhone } from '@/lib/phoneValidation';
 import { formatIndianVehicleNumber, formatMobileNumber } from '@/lib/format';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
@@ -1024,7 +1024,7 @@ export function ReassignSheet({
         onDriverPhoneChange={handleAggregatePhoneChange}
         vehicleText={adHocPlate}
         onVehicleTextChange={(value) =>
-          setAdHocPlate(formatIndianVehicleNumber(value))
+          setAdHocPlate(applyIndianVehicleKeystroke(value))
         }
         invalid={aggregateTrackingInvalid}
         driverPhoneMatches={aggregatePhoneLookup.matches}
@@ -1228,7 +1228,7 @@ export function ReassignSheet({
                         onDriverPhoneChange={handleAggregatePhoneChange}
                         vehicleText={adHocPlate}
                         onVehicleTextChange={(value) =>
-                          setAdHocPlate(formatIndianVehicleNumber(value))
+                          setAdHocPlate(applyIndianVehicleKeystroke(value))
                         }
                         invalid={aggregateTrackingInvalid}
                         driverPhoneMatches={aggregatePhoneLookup.matches}
@@ -1248,7 +1248,7 @@ export function ReassignSheet({
                         onDriverPhoneChange={handleAggregatePhoneChange}
                         vehicleText={adHocPlate}
                         onVehicleTextChange={(value) =>
-                          setAdHocPlate(formatIndianVehicleNumber(value))
+                          setAdHocPlate(applyIndianVehicleKeystroke(value))
                         }
                         invalid={aggregateTrackingInvalid}
                         driverPhoneMatches={aggregatePhoneLookup.matches}
@@ -1265,7 +1265,7 @@ export function ReassignSheet({
                         onDriverPhoneChange={handleAggregatePhoneChange}
                         vehicleText={adHocPlate}
                         onVehicleTextChange={(value) =>
-                          setAdHocPlate(formatIndianVehicleNumber(value))
+                          setAdHocPlate(applyIndianVehicleKeystroke(value))
                         }
                         invalid={aggregateTrackingInvalid}
                         testIDPrefix="reassign-aggregate"
