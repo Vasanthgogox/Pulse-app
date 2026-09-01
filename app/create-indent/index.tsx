@@ -291,6 +291,7 @@ const initialFormState: FormState = {
   client_price: "",
   supplier_target: "",
   pickup_date: getToday(),
+  circulation_target: "integrated_supplier",
 };
 
 function currencyFieldToRaw(value: string): string {
@@ -650,6 +651,11 @@ export default function CreateIndentScreen() {
                 draftVehicleCountStorageKey(indent.id),
               ),
             ),
+            circulation_target:
+              indent.circulation_target === "marketplace" ||
+              indent.circulation_target === "both"
+                ? indent.circulation_target
+                : "integrated_supplier",
           };
           setForm(nextForm);
           setLastSavedForm(nextForm);
@@ -962,7 +968,7 @@ export default function CreateIndentScreen() {
       load_type: form.load_type.trim(),
       weight: (parseFloat((form.weight ?? "").replace(/,/g, "")) || 0) * 1000,
       pickup_date: form.pickup_date.trim() || null,
-      circulation_target: "integrated_supplier",
+      circulation_target: form.circulation_target,
       owner_user_id: profile?.uid ?? user?.uid ?? undefined,
       created_by_user_id: profile?.uid ?? user?.uid ?? undefined,
     };
@@ -1489,6 +1495,10 @@ export default function CreateIndentScreen() {
                 supplierTarget={form.supplier_target}
                 onSupplierTargetChange={(value) =>
                   update({ supplier_target: value })
+                }
+                circulationTarget={form.circulation_target}
+                onCirculationTargetChange={(value) =>
+                  update({ circulation_target: value })
                 }
                 clientPrice={form.client_price}
                 errorMessage={errors.supplier_target}

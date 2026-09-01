@@ -210,6 +210,46 @@ function PulseButton({
   );
 }
 
+/** A2 — contextual Marketplace distribution toggle for an existing indent.
+ * Modifies the existing circulation_target (integrated_supplier <-> both) —
+ * no new Marketplace entity. Mirrors PulseButton's live/inactive visual
+ * language for consistency with the adjacent Reach control. */
+function MarketplaceShareButton({
+  isShared,
+  busy,
+  onPress,
+}: {
+  isShared: boolean;
+  busy?: boolean;
+  onPress: () => void;
+}) {
+  const color = isShared ? Theme.positive : Theme.textMuted;
+  return (
+    <TouchableOpacity
+      style={[
+        styles.marketplaceBtn,
+        isShared ? styles.marketplaceBtnLive : styles.marketplaceBtnInactive,
+        busy && { opacity: 0.7 },
+      ]}
+      onPress={onPress}
+      activeOpacity={0.85}
+      disabled={busy}
+      accessibilityLabel={
+        isShared
+          ? "Shared to Marketplace — tap to stop sharing"
+          : "Share this load to Marketplace"
+      }
+      accessibilityState={{ disabled: busy, selected: isShared }}
+      hitSlop={TOOLBAR_HIT_SLOP}
+    >
+      <Package size={11} color={color} strokeWidth={2.2} />
+      <Text style={[styles.marketplaceBtnText, { color }]} numberOfLines={1}>
+        {isShared ? "Marketplace · Live" : "Share to Marketplace"}
+      </Text>
+    </TouchableOpacity>
+  );
+}
+
 function CommerceLinkCta({
   label,
   onPress,
@@ -538,6 +578,9 @@ export type GiveLoadIndentCardActionsProps = LoadCenterIndentCardActionsLayout &
   onOpenAwardModal: (load: IndentRow) => void;
   awardedAmountLabel?: string | null;
   awardedAmount?: number | null;
+  /** A2: toggle this indent's Marketplace distribution. Omit to hide the control entirely. */
+  onToggleMarketplace?: (load: IndentRow) => void;
+  marketplaceBusy?: boolean;
 };
 
 export function GiveLoadIndentCardActions({
@@ -561,10 +604,18 @@ export function GiveLoadIndentCardActions({
   dense,
   commerceRow = true,
   style,
+  onToggleMarketplace,
+  marketplaceBusy = false,
 }: GiveLoadIndentCardActionsProps) {
   const shareOpensDetail = isDone || isAwardedPendingTrip;
   const pulseHandler = onPulseStory ?? onShareToNetwork;
   const showPulse = showPulseToNetwork && Boolean(pulseHandler);
+  const circulationTarget = load.circulation_target ?? "integrated_supplier";
+  const isMarketplaceShared =
+    circulationTarget === "marketplace" || circulationTarget === "both";
+  // Distribution only matters while the load can still gain new offers.
+  const showMarketplaceToggle =
+    Boolean(onToggleMarketplace) && !isDraft && !isDone && !isAwardedPendingTrip;
 
   const onPrimary = () => {
     if (isDraft) {
@@ -579,7 +630,17 @@ export function GiveLoadIndentCardActions({
       isDraft ? "Broadcast" : "Review Hub",
     );
     return (
-      <CommerceActionRow style={style}>
+      <View style={style}>
+        {showMarketplaceToggle ? (
+          <View style={styles.marketplaceRow}>
+            <MarketplaceShareButton
+              isShared={isMarketplaceShared}
+              busy={marketplaceBusy}
+              onPress={() => onToggleMarketplace!(load)}
+            />
+          </View>
+        ) : null}
+        <CommerceActionRow>
         <CommerceIconButton
           label={shareOpensDetail ? "View detail" : "Share indent"}
           onPress={() =>
@@ -612,7 +673,8 @@ export function GiveLoadIndentCardActions({
         ) : (
           <CommerceLinkCta label={ctaLabel} onPress={onPrimary} />
         )}
-      </CommerceActionRow>
+        </CommerceActionRow>
+      </View>
     );
   }
 
@@ -1108,6 +1170,35 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     color: Theme.textMuted,
+  },
+  marketplaceRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    marginBottom: 6,
+  },
+  marketplaceBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    height: 22,
+    paddingHorizontal: 8,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  marketplaceBtnInactive: {
+    backgroundColor: Theme.surface,
+    borderColor: Theme.borderMedium,
+  },
+  marketplaceBtnLive: {
+    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.positive,
+  },
+  marketplaceBtnText: {
+    fontSize: 10,
+    fontWeight: "700",
+    letterSpacing: 0.1,
   },
   pulseBtn: {
     flexDirection: "row",

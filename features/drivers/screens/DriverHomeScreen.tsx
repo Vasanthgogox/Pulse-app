@@ -5695,6 +5695,24 @@ export default function DriverRadarScreen() {
           style={[styles.fullMapModal, { backgroundColor: colors.background }]}
         >
           {renderDriverMap(fullMapRef, { fullScreen: true })}
+          <View
+            style={[styles.fullMapCloseWrap, { top: insets.top + 10 }]}
+            pointerEvents="box-none"
+          >
+            <TouchableOpacity
+              style={[
+                styles.mapTopIconBtn,
+                { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+              onPress={() => setIsFullMapVisible(false)}
+              activeOpacity={0.85}
+              accessibilityRole="button"
+              accessibilityLabel="Close map"
+              hitSlop={Layout.touchTargetHitSlop}
+            >
+              <FontAwesome name="times" size={16} color={colors.text} />
+            </TouchableOpacity>
+          </View>
         </View>
       </Modal>
 
@@ -7200,6 +7218,12 @@ const styles = withWebSafeShadows(
   },
   fullMapModal: {
     flex: 1,
+  },
+  fullMapCloseWrap: {
+    position: "absolute",
+    left: Layout.screenPaddingHorizontal,
+    zIndex: 80,
+    elevation: 12,
   },
   fullMapContainer: {
     flex: 1,

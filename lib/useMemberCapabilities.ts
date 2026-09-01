@@ -10,6 +10,8 @@
  * assigns one — see docs/RBAC_OPERATING_MODEL.md.
  */
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
+import { useAuth } from "@/contexts/AuthContext";
+import { useOptionalOrganization } from "@/contexts/OrganizationContext";
 import {
   domainsFromPlatformRole,
   functionalRoleFromPlatformRole,
@@ -80,8 +82,13 @@ function resolveMemberDomains(
 
 export function useMemberCapabilities(): MemberDomainAccess {
   const capabilities = useCapabilities();
+  const { status: authStatus } = useAuth();
+  const org = useOptionalOrganization();
   const { memberRole, memberPlatformRole, memberDomains, isLoading } =
     useActiveWorkspace();
+
+  const accessLoading =
+    isLoading || authStatus === "restoring" || Boolean(org?.isLoading);
 
   return useMemo(() => {
     const isOwnerOrAdmin = memberRole === "owner" || memberRole === "admin";
@@ -102,7 +109,7 @@ export function useMemberCapabilities(): MemberDomainAccess {
         finance: orgAllowsFinance,
         sales: orgAllowsSales,
         tripops: orgAllowsTripOps,
-        isLoading,
+        isLoading: accessLoading,
       };
     }
 
@@ -112,7 +119,7 @@ export function useMemberCapabilities(): MemberDomainAccess {
         finance: orgAllowsFinance,
         sales: orgAllowsSales,
         tripops: orgAllowsTripOps,
-        isLoading,
+        isLoading: accessLoading,
       };
     }
 
@@ -121,7 +128,13 @@ export function useMemberCapabilities(): MemberDomainAccess {
       finance: orgAllowsFinance && domains.finance,
       sales: orgAllowsSales && domains.sales,
       tripops: orgAllowsTripOps && domains.tripops,
-      isLoading,
+      isLoading: accessLoading,
     };
-  }, [capabilities, memberRole, memberPlatformRole, memberDomains, isLoading]);
+  }, [
+    capabilities,
+    memberRole,
+    memberPlatformRole,
+    memberDomains,
+    accessLoading,
+  ]);
 }

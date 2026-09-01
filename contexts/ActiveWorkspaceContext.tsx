@@ -154,6 +154,52 @@ function workspaceToCurrentOrganization(
   };
 }
 
+const ACTIVE_MEMBERSHIP_SELECT = `
+  role,
+  status,
+  permissions,
+  organizations (
+    id, name, slug, logo_url, operating_model,
+    address_line, locality, pincode, city, state, zone,
+    business_pan, gstin, cin,
+    verification_status, verified_at, kyc_rejected_reason
+  )
+`;
+
+async function waitForSupabaseAccessToken(
+  signal: { cancelled: boolean },
+  maxAttempts = 10,
+): Promise<string | null> {
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    if (signal.cancelled) return null;
+    const { data } = await supabase().auth.getSession();
+    const token = data.session?.access_token ?? null;
+    if (token) return token;
+    await new Promise((resolve) => setTimeout(resolve, 120 * (attempt + 1)));
+  }
+  return null;
+}
+
+async function fetchActiveMembershipRows(
+  uid: string,
+): Promise<{ rows: WorkspaceMemberRow[]; error: Error | null }> {
+  const { data, error: dbError } = await Promise.race([
+    supabase()
+      .from('organization_members')
+      .select(ACTIVE_MEMBERSHIP_SELECT)
+      .eq('user_id', uid)
+      .eq('status', 'active'),
+    new Promise<{ data: null; error: { message: string } }>((resolve) =>
+      setTimeout(() => resolve({ data: null, error: { message: 'timeout' } }), 15_000),
+    ),
+  ]);
+
+  if (dbError) {
+    return { rows: [], error: new Error(dbError.message) };
+  }
+  return { rows: (data ?? []) as unknown as WorkspaceMemberRow[], error: null };
+}
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Context (global singleton — Metro can duplicate modules across async chunks)
 // ─────────────────────────────────────────────────────────────────────────────
@@ -241,37 +287,48 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
         setError(null);
       }
 
-      try {
-        const { data, error: dbError } = await Promise.race([
-          supabase()
-            .from('organization_members')
-            .select(`
-              role,
-              status,
-              permissions,
-              organizations (
-                id, name, slug, logo_url, operating_model,
-                address_line, locality, pincode, city, state, zone,
-                business_pan, gstin, cin,
-                verification_status, verified_at, kyc_rejected_reason
-              )
-            `)
-            .eq('user_id', currentUser.uid)
-            .eq('status', 'active'),
-          new Promise<{ data: null; error: { message: string } }>((resolve) =>
-            setTimeout(() => resolve({ data: null, error: { message: 'timeout' } }), 15_000),
-          ),
-        ]);
+      let shouldFinishLoading = true;
 
+      try {
+        const accessToken = await waitForSupabaseAccessToken(signal);
+        if (stale()) return;
+        if (!accessToken) {
+          shouldFinishLoading = false;
+          if (!stale()) {
+            setTimeout(() => {
+              void loadWorkspaces(sessionSignalRef.current);
+            }, 400);
+          }
+          return;
+        }
+
+        let { rows, error: fetchError } = await fetchActiveMembershipRows(currentUser.uid);
         if (stale()) return;
 
-        if (dbError) {
-          setError(new Error(dbError.message));
+        if (fetchError) {
+          setError(fetchError);
           setIsLoading(false);
           return;
         }
 
-        const rows = (data ?? []) as unknown as WorkspaceMemberRow[];
+        // Cold web boot: authenticated UI can mount before the Supabase client
+        // attaches the JWT to PostgREST — RLS then returns zero rows, and
+        // MemberDomainGate briefly shows "No workspace access yet". Retry briefly.
+        if (rows.length === 0) {
+          for (let attempt = 0; attempt < 2; attempt++) {
+            await new Promise((resolve) => setTimeout(resolve, 350 * (attempt + 1)));
+            if (stale()) return;
+            ({ rows, error: fetchError } = await fetchActiveMembershipRows(currentUser.uid));
+            if (stale()) return;
+            if (fetchError || rows.length > 0) break;
+          }
+          if (fetchError) {
+            setError(fetchError);
+            setIsLoading(false);
+            return;
+          }
+        }
+
         const mapped = rows
           .map(mapRowToWorkspace)
           .filter((r): r is NonNullable<ReturnType<typeof mapRowToWorkspace>> => r !== null);
@@ -324,7 +381,7 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
         setMemberSurfaces(
           targetWorkspace ? (newSurfacesMap.get(targetWorkspace.id) ?? null) : null,
         );
-        setCurrentOrganization(
+        setCurrentOrganizationRef.current(
           targetWorkspace ? workspaceToCurrentOrganization(targetWorkspace) : null,
         );
         if (targetWorkspace) {
@@ -341,7 +398,7 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
           setError(e instanceof Error ? e : new Error(String(e)));
         }
       } finally {
-        if (!stale()) {
+        if (!stale() && shouldFinishLoading) {
           setIsLoading(false);
         }
       }
@@ -354,14 +411,21 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
   // re-firing when the auth object reference changes but the uid is the same.
 
   useEffect(() => {
-    if (authStatus === 'restoring') return; // auth not confirmed yet — do not query
+    if (authStatus !== 'authenticated' || !userId) {
+      if (authStatus === 'unauthenticated' || authStatus === 'expired') {
+        const signal = { cancelled: false };
+        sessionSignalRef.current = signal;
+        void loadWorkspaces(signal);
+      }
+      return;
+    }
     const signal = { cancelled: false };
     sessionSignalRef.current = signal;
     void loadWorkspaces(signal);
     return () => {
       signal.cancelled = true;
     };
-  }, [userId, authStatus, loadWorkspaces]); // authStatus guard prevents ghost requests during startup race
+  }, [userId, authStatus, loadWorkspaces]);
 
   // ── Live permission/role updates ────────────────────────────────────────────
   // Revokes (e.g. removing "create indent") are enforced server-side via RLS

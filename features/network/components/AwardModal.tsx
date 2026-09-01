@@ -17,7 +17,16 @@ import {
 import { resolveCommercialOpportunity } from "@/features/marketplace/domain";
 import { type AwardQuoteResult } from "@/features/network/hooks/useAwardQuote";
 import { submitDriverDirectBidCounterOffer } from "@/features/network/services/bids.service";
+import { MarketBidCard } from "@/features/network/components/MarketBidCard";
+import {
+  acceptMarketBid,
+  rejectMarketBid,
+} from "@/features/network/services/marketBids.service";
+import { useMarketBidsForIndentQuery } from "@/lib/queries/useBidsQuery";
+import { useInvalidateIndents } from "@/lib/queries";
+import { queryKeys } from "@/lib/queryKeys";
 import { showAppAlert } from "@/lib/appAlert";
+import { confirmDialog } from "@/lib/confirmDialog";
 import { formatINR } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useQueryClient } from "@tanstack/react-query";
@@ -66,6 +75,80 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
 
   const [counterQuoteId, setCounterQuoteId] = useState<string | null>(null);
   const [submittingCounter, setSubmittingCounter] = useState(false);
+  const [marketBidActionId, setMarketBidActionId] = useState<string | null>(null);
+  const invalidateIndents = useInvalidateIndents();
+
+  const {
+    data: marketBids = [],
+    isLoading: marketBidsLoading,
+  } = useMarketBidsForIndentQuery(currentLoad?.id ?? null);
+
+  const handleAcceptMarketBid = useCallback(
+    async (bidId: string, amount: number, bidderLabel: string) => {
+      const confirmed = await confirmDialog({
+        title: "Accept Market bid",
+        message: `Accept this bid from ${bidderLabel} for ₹${Number(amount ?? 0).toLocaleString("en-IN")}? This creates a trip and rejects any other pending offers on this load.`,
+        confirmLabel: "Accept",
+        destructive: false,
+      });
+      if (!confirmed) return;
+      try {
+        setMarketBidActionId(bidId);
+        const { error } = await acceptMarketBid(bidId);
+        if (error) {
+          showAppAlert("Could not accept bid", error.message);
+          return;
+        }
+        if (currentLoad?.id) {
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.bids.marketForIndent(currentLoad.id),
+          });
+        }
+        if (currentLoad?.organization_id) {
+          invalidateIndents(currentLoad.organization_id);
+        }
+        queryClient.invalidateQueries({ queryKey: ["indents", "offer-counts"] });
+        showAppAlert("Bid accepted", "Trip created from this Market bid.");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Unknown error.";
+        showAppAlert("Could not accept bid", msg);
+      } finally {
+        setMarketBidActionId(null);
+      }
+    },
+    [currentLoad?.id, currentLoad?.organization_id, queryClient, invalidateIndents],
+  );
+
+  const handleRejectMarketBid = useCallback(
+    async (bidId: string, bidderLabel: string) => {
+      const confirmed = await confirmDialog({
+        title: "Reject Market bid",
+        message: `Reject this bid from ${bidderLabel}?`,
+        confirmLabel: "Reject",
+        destructive: true,
+      });
+      if (!confirmed) return;
+      try {
+        setMarketBidActionId(bidId);
+        const { error } = await rejectMarketBid(bidId);
+        if (error) {
+          showAppAlert("Could not reject bid", error.message);
+          return;
+        }
+        if (currentLoad?.id) {
+          queryClient.invalidateQueries({
+            queryKey: queryKeys.bids.marketForIndent(currentLoad.id),
+          });
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Unknown error.";
+        showAppAlert("Could not reject bid", msg);
+      } finally {
+        setMarketBidActionId(null);
+      }
+    },
+    [currentLoad?.id, queryClient],
+  );
 
   const opportunity = useMemo(() => {
     if (!currentLoad) return null;
@@ -231,7 +314,8 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
                   {quotesLoading
                     ? "—"
                     : String(
-                        opportunity?.pricing.bidCount ?? sortedQuotes.length,
+                        (opportunity?.pricing.bidCount ?? sortedQuotes.length) +
+                          marketBids.length,
                       )}
                 </Text>
               </View>
@@ -285,19 +369,19 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
           </View>
         ) : null}
 
-        {quotesLoading ? (
+        {quotesLoading || marketBidsLoading ? (
           <View style={styles.bidEmptyWrap}>
             <ActivityIndicator size="small" color={Theme.primary} />
             <Text style={styles.bidEmptyText}>Loading offers…</Text>
           </View>
-        ) : sortedQuotes.length === 0 ? (
+        ) : sortedQuotes.length === 0 && marketBids.length === 0 ? (
           <View style={styles.bidEmptyWrap}>
             <View style={styles.bidEmptyIcon}>
               <FontAwesome name="inbox" size={22} color={Theme.textMuted} />
             </View>
             <Text style={styles.bidEmptyText}>No offers yet</Text>
             <Text style={styles.bidEmptySubtext}>
-              Share this load to get offers from your network.
+              Offers from drivers and your network will appear here.
             </Text>
           </View>
         ) : (
@@ -308,20 +392,58 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
               showsVerticalScrollIndicator
               keyboardShouldPersistTaps="handled"
             >
-              <IndentLiveBidsPanel
-                quotes={sortedQuotes}
-                clientPriceInr={Number(currentLoad?.client_price ?? 0)}
-                targetRateInr={Number(targetRateInr ?? 0)}
-                pickupDateIso={currentLoad?.pickup_date}
-                selectedQuoteId={selectedQuoteId}
-                onSelectQuote={award.selectQuote}
-                canSelect={canActOnBids}
-                connectedSupplierOrgIds={connectedSupplierOrgIds}
-                awarding={awarding}
-                onCounterOffer={
-                  canActOnBids ? openCounterOffer : undefined
-                }
-              />
+              {sortedQuotes.length > 0 ? (
+                <IndentLiveBidsPanel
+                  quotes={sortedQuotes}
+                  clientPriceInr={Number(currentLoad?.client_price ?? 0)}
+                  targetRateInr={Number(targetRateInr ?? 0)}
+                  pickupDateIso={currentLoad?.pickup_date}
+                  selectedQuoteId={selectedQuoteId}
+                  onSelectQuote={award.selectQuote}
+                  canSelect={canActOnBids}
+                  connectedSupplierOrgIds={connectedSupplierOrgIds}
+                  awarding={awarding}
+                  onCounterOffer={
+                    canActOnBids ? openCounterOffer : undefined
+                  }
+                />
+              ) : null}
+
+              {marketBids.length > 0 ? (
+                <View style={styles.marketSection}>
+                  {sortedQuotes.length > 0 ? (
+                    <Text style={styles.marketSectionLabel}>MARKET</Text>
+                  ) : null}
+                  <View style={styles.marketList}>
+                    {marketBids.map((bid) => (
+                      <MarketBidCard
+                        key={bid.id}
+                        bid={bid}
+                        busy={marketBidActionId === bid.id}
+                        onAccept={
+                          bid.status === "pending"
+                            ? () =>
+                                void handleAcceptMarketBid(
+                                  bid.id,
+                                  bid.amount,
+                                  bid.bidder_display_name,
+                                )
+                            : undefined
+                        }
+                        onReject={
+                          bid.status === "pending"
+                            ? () =>
+                                void handleRejectMarketBid(
+                                  bid.id,
+                                  bid.bidder_display_name,
+                                )
+                            : undefined
+                        }
+                      />
+                    ))}
+                  </View>
+                </View>
+              ) : null}
             </ScrollView>
             {pendingCount === 0 ? (
               <Text style={styles.footerHint}>
@@ -527,6 +649,20 @@ const styles = StyleSheet.create({
     ...indentReviewHubText.bodyMuted,
     textAlign: "center",
     maxWidth: 280,
+  },
+  marketSection: {
+    marginTop: 12,
+    gap: 8,
+  },
+  marketSectionLabel: {
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.8,
+    textTransform: "uppercase",
+    color: Theme.textMuted,
+  },
+  marketList: {
+    gap: 8,
   },
   footerHint: {
     ...indentReviewHubText.bodyMuted,

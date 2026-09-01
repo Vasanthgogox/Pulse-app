@@ -155,3 +155,56 @@ export function isMilestoneInProgress(
     level > progress.highestCompletedLevel
   );
 }
+
+export function formatExperienceMilestoneTitle(
+  config: Pick<ExperienceLevelConfig, "level" | "name">,
+): string {
+  return `L${config.level} ${config.name}`;
+}
+
+export function formatExperienceTierSubtitle(
+  config: Pick<ExperienceLevelConfig, "tier" | "privilege">,
+): string {
+  return `${config.tier} tier · Unlocks ${config.privilege}`;
+}
+
+/** Label for the active milestone bar (never the *next* level name). */
+export function formatMilestoneProgressLabel(
+  progress: ExperienceProgress,
+): string {
+  const maxLevel = progress.levels[progress.levels.length - 1]?.level ?? 1;
+  if (progress.highestCompletedLevel >= maxLevel) {
+    return "All milestones complete";
+  }
+  return `Progress on ${progress.currentLevelConfig.name}`;
+}
+
+/** One-line status for the current milestone goal (type-aware metrics). */
+export function formatMilestoneStatusLine(
+  level: Pick<ExperienceLevelConfig, "type" | "goalText">,
+  count: MilestoneCount,
+  metrics: ExperienceMetrics,
+  options?: { audience?: "business" | "driver" },
+): string {
+  const audience = options?.audience ?? "driver";
+  switch (level.type) {
+    case "signup":
+      return count.done >= count.target ? "Signup complete" : "Complete signup to continue";
+    case "trips":
+      return `${count.done}/${count.target} trips completed`;
+    case "verification":
+      return metrics.isVerified
+        ? audience === "business"
+          ? "Business identity verified"
+          : "Identity verified"
+        : audience === "business"
+          ? "Complete business verification"
+          : "Complete identity verification";
+    case "ratings":
+      return audience === "business"
+        ? `${count.done}/${count.target} five-star partner ratings`
+        : `${count.done}/${count.target} five-star ratings`;
+    default:
+      return level.goalText;
+  }
+}

@@ -259,6 +259,9 @@ export const queryKeys = {
     directForPost: (postId: string) => ["q", "bids", "direct-post", postId] as const,
     myBid: (postId: string, orgId: string) =>
       ["q", "bids", "mine", postId, orgId] as const,
+    /** Business Review Hub: market_bids on one indent (list_market_bids_for_indent). */
+    marketForIndent: (indentId: string) =>
+      ["q", "bids", "market-indent", indentId] as const,
   },
 
   storyViews: {

@@ -5,6 +5,8 @@
 import {
   computeExperienceProgress,
   countFiveStarRatings,
+  formatMilestoneProgressLabel,
+  formatMilestoneStatusLine,
   getMilestoneCount,
   isMilestoneCompleted,
   isMilestoneInProgress,
@@ -58,5 +60,32 @@ describe("experienceProgress", () => {
     expect(p.currentLevel).toBe(8);
     expect(p.experiencePct).toBe(100);
     expect(isMilestoneInProgress(8, p)).toBe(false);
+  });
+
+  it("labels progress for the active milestone, not the next level", () => {
+    const p = computeExperienceProgress({
+      hasSignedUp: true,
+      completedTrips: 5,
+      isVerified: true,
+      fiveStarCount: 0,
+    });
+    expect(p.currentLevelConfig.name).toBe("Trusted");
+    expect(formatMilestoneProgressLabel(p)).toBe("Progress on Trusted");
+    expect(
+      formatMilestoneStatusLine(p.currentLevelConfig, p.currentCount, p.metrics, {
+        audience: "business",
+      }),
+    ).toBe("0/2 five-star partner ratings");
+  });
+
+  it("blocks business orgs on verification until KYC is approved", () => {
+    const p = computeExperienceProgress({
+      hasSignedUp: true,
+      completedTrips: 5,
+      isVerified: false,
+      fiveStarCount: 0,
+    });
+    expect(p.currentLevel).toBe(3);
+    expect(p.currentLevelConfig.type).toBe("verification");
   });
 });

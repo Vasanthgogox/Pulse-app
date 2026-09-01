@@ -64,7 +64,7 @@ import { formatINR, positiveMoneyOrNull } from '@/lib/format';
 import { queryKeys } from '@/lib/queryKeys';
 import { splitLocationParts } from '@/features/network/utils/storyDisplay';
 import { useQueryClient } from '@tanstack/react-query';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ArrowRight,
   BadgeCheck,
@@ -101,7 +101,7 @@ const REASON_ORDER: ReachReferralReason[] = [
   'other',
 ];
 
-function cityOf(value: string | null | undefined): string {
+export function cityOf(value: string | null | undefined): string {
   const city = splitLocationParts(value).city;
   return !city || city === '—' ? '' : city;
 }
@@ -171,11 +171,24 @@ function FilterChip({
  * unified Market "Find Work" surface can embed it unchanged. No lifecycle,
  * sorting, or query logic differs from the standalone route.
  */
+/**
+ * Shared feed controls -- one filter row covers both Reach and Marketplace so the two read as
+ * one work surface with two arrival mechanisms, not two screens stacked. pickup/drop/fitsFleet
+ * apply to both sources identically; bidStatus is Reach-specific vocabulary (open/quoted/counter
+ * has no Market equivalent -- market_bids is pending/accepted/rejected/withdrawn), so it's passed
+ * through but the Marketplace side is free to ignore it.
+ */
+export interface SharedFeedFilters {
+  pickup: string | null;
+  drop: string | null;
+  fitsFleet: boolean;
+}
+
 export function StoriesContent({
   footer,
   onRefreshExtra,
 }: {
-  footer?: React.ReactNode;
+  footer?: (filters: SharedFeedFilters) => React.ReactNode;
   onRefreshExtra?: () => void;
 } = {}) {
   const router = useRouter();
@@ -205,10 +218,36 @@ export function StoriesContent({
   const [bidTarget, setBidTarget] = useState<DriverReachStoryRow | null>(null);
   const [viewerStartPostId, setViewerStartPostId] = useState<string | null>(null);
   const [capacityViewer, setCapacityViewer] = useState<FleetOwnerCapacityStory | null>(null);
-  const [pickupFilter, setPickupFilter] = useState<string | null>(null);
-  const [dropFilter, setDropFilter] = useState<string | null>(null);
-  const [source, setSource] = useState<'all' | 'reach' | 'market'>('all');
-  const [bidStatusFilter, setBidStatusFilter] = useState<BidStatusFilter>('all');
+  // Feed filters live in this screen's own URL params, not local useState. On web, Expo Router's
+  // back-navigation can remount this component fresh (confirmed via visual QA: local useState here
+  // was silently reset after Find Work -> Load Detail -> Back) -- params round-trip through browser
+  // history independent of component mount lifecycle, so they survive that remount. router.setParams
+  // updates the current screen's params in place (no new history entry), which is the existing
+  // navigation mechanism already used elsewhere in this app for this exact purpose.
+  const filterParams = useLocalSearchParams<{
+    source?: string;
+    pickup?: string;
+    drop?: string;
+    status?: string;
+    fitsFleet?: string;
+  }>();
+  const source: 'all' | 'reach' | 'market' =
+    filterParams.source === 'reach' || filterParams.source === 'market'
+      ? filterParams.source
+      : 'all';
+  const pickupFilter = filterParams.pickup || null;
+  const dropFilter = filterParams.drop || null;
+  const bidStatusFilter: BidStatusFilter =
+    filterParams.status === 'open' || filterParams.status === 'quoted' || filterParams.status === 'counter'
+      ? filterParams.status
+      : 'all';
+  const fitsFleetFilter = filterParams.fitsFleet === '1';
+
+  const setSource = (v: 'all' | 'reach' | 'market') => router.setParams({ source: v });
+  const setPickupFilter = (v: string | null) => router.setParams({ pickup: v ?? '' });
+  const setDropFilter = (v: string | null) => router.setParams({ drop: v ?? '' });
+  const setBidStatusFilter = (v: BidStatusFilter) => router.setParams({ status: v });
+  const setFitsFleetFilter = (v: boolean) => router.setParams({ fitsFleet: v ? '1' : '0' });
 
   useEffect(() => {
     let cancelled = false;
@@ -279,6 +318,13 @@ export function StoriesContent({
         if (dest.toLowerCase() !== dropFilter.toLowerCase()) return false;
       }
       if (!matchesBidStatusFilter(s, bidStatusFilter)) return false;
+      if (
+        fitsFleetFilter &&
+        fleetVehicleTypes.length > 0 &&
+        !fleetVehicleTypes.some((vt) => vehicleTypesMatch(vt, s.snapshot_vehicle_type))
+      ) {
+        return false;
+      }
       return true;
     });
 
@@ -293,7 +339,7 @@ export function StoriesContent({
     scored.sort(compareLoadOpportunities);
 
     return scored;
-  }, [stories, pickupFilter, dropFilter, bidStatusFilter, fleetVehicleTypes]);
+  }, [stories, pickupFilter, dropFilter, bidStatusFilter, fitsFleetFilter, fleetVehicleTypes]);
 
   /**
    * Action Needed — counter/quoted items needing a driver response, independent
@@ -483,7 +529,7 @@ export function StoriesContent({
 
   const cardBg = isDark ? colors.surface : Theme.cardWhite;
   const hasActiveFilters =
-    pickupFilter != null || dropFilter != null || bidStatusFilter !== 'all';
+    pickupFilter != null || dropFilter != null || bidStatusFilter !== 'all' || fitsFleetFilter;
   const BID_STATUS_FILTERS: BidStatusFilter[] = ['all', 'open', 'quoted', 'counter'];
 
   return (
@@ -580,6 +626,102 @@ export function StoriesContent({
           })}
         </View>
 
+        {/* Shared feed controls -- one row, above both Reach and Marketplace, so pickup/drop/
+            fits-my-fleet filter the combined work surface rather than reading as belonging to
+            just one source. Status is Reach-specific vocabulary (Market has no quoted/counter
+            equivalent), so it's hidden when only Marketplace is showing. */}
+        <View style={styles.filtersBlock}>
+          <View style={styles.filterRow}>
+            <MapPin size={11} color={Theme.textMuted} strokeWidth={2.2} />
+            <Text style={styles.filterLabel}>Pickup</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterChips}
+            >
+              <FilterChip
+                label="Any"
+                selected={pickupFilter == null}
+                onPress={() => setPickupFilter(null)}
+              />
+              {pickupOptions.map((city) => (
+                <FilterChip
+                  key={`p-${city}`}
+                  label={city}
+                  selected={pickupFilter === city}
+                  onPress={() => setPickupFilter(city)}
+                />
+              ))}
+            </ScrollView>
+          </View>
+          <View style={styles.filterRow}>
+            <MapPin size={11} color={Theme.textMuted} strokeWidth={2.2} />
+            <Text style={styles.filterLabel}>Drop</Text>
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              contentContainerStyle={styles.filterChips}
+            >
+              <FilterChip
+                label="Any"
+                selected={dropFilter == null}
+                onPress={() => setDropFilter(null)}
+              />
+              {dropOptions.map((city) => (
+                <FilterChip
+                  key={`d-${city}`}
+                  label={city}
+                  selected={dropFilter === city}
+                  onPress={() => setDropFilter(city)}
+                />
+              ))}
+            </ScrollView>
+          </View>
+          {source !== 'market' ? (
+            <View style={styles.filterRow}>
+              <BadgeCheck size={11} color={Theme.textMuted} strokeWidth={2.2} />
+              <Text style={styles.filterLabel}>Status</Text>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                contentContainerStyle={styles.filterChips}
+              >
+                {BID_STATUS_FILTERS.map((f) => (
+                  <FilterChip
+                    key={f}
+                    label={bidStatusFilterLabel(f)}
+                    selected={bidStatusFilter === f}
+                    onPress={() => setBidStatusFilter(f)}
+                  />
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
+          {fleetVehicleTypes.length > 0 ? (
+            <View style={styles.filterRow}>
+              <FilterChip
+                label="Fits my fleet"
+                selected={fitsFleetFilter}
+                onPress={() => setFitsFleetFilter(!fitsFleetFilter)}
+              />
+            </View>
+          ) : null}
+          {hasActiveFilters ? (
+            <Pressable
+              onPress={() => {
+                setPickupFilter(null);
+                setDropFilter(null);
+                setBidStatusFilter('all');
+                setFitsFleetFilter(false);
+              }}
+              hitSlop={8}
+              style={styles.clearFilters}
+            >
+              <Text style={styles.clearFiltersText}>Clear filters</Text>
+            </Pressable>
+          ) : null}
+        </View>
+
         {source !== 'market' ? (
           <>
             <DriverPulseStoryReel
@@ -608,88 +750,6 @@ export function StoriesContent({
                 : 'Find work for your vehicle — bid on open loads. Awarded jobs stay in History.'}
             </Text>
           </View>
-
-          {stories.length > 0 || (capacityQ.activeStories?.length ?? 0) > 0 ? (
-            <View style={styles.filtersBlock}>
-              <View style={styles.filterRow}>
-                <MapPin size={11} color={Theme.textMuted} strokeWidth={2.2} />
-                <Text style={styles.filterLabel}>Pickup</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.filterChips}
-                >
-                  <FilterChip
-                    label="Any"
-                    selected={pickupFilter == null}
-                    onPress={() => setPickupFilter(null)}
-                  />
-                  {pickupOptions.map((city) => (
-                    <FilterChip
-                      key={`p-${city}`}
-                      label={city}
-                      selected={pickupFilter === city}
-                      onPress={() => setPickupFilter(city)}
-                    />
-                  ))}
-                </ScrollView>
-              </View>
-              <View style={styles.filterRow}>
-                <MapPin size={11} color={Theme.textMuted} strokeWidth={2.2} />
-                <Text style={styles.filterLabel}>Drop</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.filterChips}
-                >
-                  <FilterChip
-                    label="Any"
-                    selected={dropFilter == null}
-                    onPress={() => setDropFilter(null)}
-                  />
-                  {dropOptions.map((city) => (
-                    <FilterChip
-                      key={`d-${city}`}
-                      label={city}
-                      selected={dropFilter === city}
-                      onPress={() => setDropFilter(city)}
-                    />
-                  ))}
-                </ScrollView>
-              </View>
-              <View style={styles.filterRow}>
-                <BadgeCheck size={11} color={Theme.textMuted} strokeWidth={2.2} />
-                <Text style={styles.filterLabel}>Status</Text>
-                <ScrollView
-                  horizontal
-                  showsHorizontalScrollIndicator={false}
-                  contentContainerStyle={styles.filterChips}
-                >
-                  {BID_STATUS_FILTERS.map((f) => (
-                    <FilterChip
-                      key={f}
-                      label={bidStatusFilterLabel(f)}
-                      selected={bidStatusFilter === f}
-                      onPress={() => setBidStatusFilter(f)}
-                    />
-                  ))}
-                </ScrollView>
-              </View>
-              {hasActiveFilters ? (
-                <Pressable
-                  onPress={() => {
-                    setPickupFilter(null);
-                    setDropFilter(null);
-                    setBidStatusFilter('all');
-                  }}
-                  hitSlop={8}
-                  style={styles.clearFilters}
-                >
-                  <Text style={styles.clearFiltersText}>Clear filters</Text>
-                </Pressable>
-              ) : null}
-            </View>
-          ) : null}
 
           {storiesQ.isError ? (
             <View style={[styles.emptyCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
@@ -1001,7 +1061,9 @@ export function StoriesContent({
           </>
         ) : null}
 
-        {source !== 'reach' ? footer : null}
+        {source !== 'reach' && footer
+          ? footer({ pickup: pickupFilter, drop: dropFilter, fitsFleet: fitsFleetFilter })
+          : null}
       </ScrollView>
 
       <Modal

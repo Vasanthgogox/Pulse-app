@@ -11,6 +11,7 @@ import {
   withdrawBid,
 } from '@/features/network/services/bids.service';
 import { recordStoryView } from '@/features/network/services/story-views.service';
+import { listMarketBidsForIndent } from '@/features/network/services/marketBids.service';
 import { queryKeys } from '@/lib/queryKeys';
 
 function invalidateIndentOfferCounts(qc: QueryClient) {
@@ -70,6 +71,20 @@ export function useDriverDirectBidsForPostQuery(postId: string | null) {
       return res.bids;
     },
     enabled: !!postId,
+    staleTime: STALE.moderate,
+  });
+}
+
+/** Business Review Hub: market_bids on one indent (DCO bids directly on a load). */
+export function useMarketBidsForIndentQuery(indentId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.bids.marketForIndent(indentId ?? ''),
+    queryFn: async () => {
+      const res = await listMarketBidsForIndent(indentId!);
+      if (res.error) throw res.error;
+      return res.bids;
+    },
+    enabled: !!indentId,
     staleTime: STALE.moderate,
   });
 }

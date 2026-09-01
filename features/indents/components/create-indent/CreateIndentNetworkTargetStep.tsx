@@ -61,6 +61,8 @@ function activeMarginPct(
   return null;
 }
 
+export type IndentDistributionChoice = "integrated_supplier" | "marketplace" | "both";
+
 export type CreateIndentNetworkTargetStepProps = {
   supplierTarget: string;
   onSupplierTargetChange: (value: string) => void;
@@ -71,7 +73,84 @@ export type CreateIndentNetworkTargetStepProps = {
   /** Billing client chip above the keypad on mobile. */
   partyPreview?: NumericEntryPartyPreview;
   onPartyPress?: () => void;
+  /** Who receives this load. Defaults to integrated_supplier if omitted. */
+  circulationTarget?: IndentDistributionChoice;
+  onCirculationTargetChange?: (value: IndentDistributionChoice) => void;
 };
+
+const DISTRIBUTION_OPTIONS: Array<{
+  value: IndentDistributionChoice;
+  label: string;
+  hint: string;
+}> = [
+  {
+    value: "integrated_supplier",
+    label: "Integrated suppliers",
+    hint: "Send to my connected supplier network",
+  },
+  {
+    value: "marketplace",
+    label: "Marketplace",
+    hint: "Make this load available to verified DCO / fleet owners",
+  },
+  {
+    value: "both",
+    label: "Both",
+    hint: "Send to suppliers + Marketplace",
+  },
+];
+
+function DistributionTargetSelector({
+  value,
+  onChange,
+}: {
+  value: IndentDistributionChoice;
+  onChange: (value: IndentDistributionChoice) => void;
+}) {
+  return (
+    <View style={styles.distributionWrap}>
+      <Text style={styles.distributionLabel}>Who should receive this load?</Text>
+      <View style={styles.distributionOptions}>
+        {DISTRIBUTION_OPTIONS.map((opt) => {
+          const selected = value === opt.value;
+          return (
+            <Pressable
+              key={opt.value}
+              onPress={() => onChange(opt.value)}
+              style={[
+                styles.distributionOption,
+                selected && styles.distributionOptionSelected,
+              ]}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selected }}
+              accessibilityLabel={opt.label}
+            >
+              <View
+                style={[
+                  styles.distributionRadio,
+                  selected && styles.distributionRadioSelected,
+                ]}
+              >
+                {selected ? <View style={styles.distributionRadioDot} /> : null}
+              </View>
+              <View style={styles.distributionCopy}>
+                <Text
+                  style={[
+                    styles.distributionOptionLabel,
+                    selected && styles.distributionOptionLabelSelected,
+                  ]}
+                >
+                  {opt.label}
+                </Text>
+                <Text style={styles.distributionOptionHint}>{opt.hint}</Text>
+              </View>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
+  );
+}
 
 function MarginPresetChips({
   clientPrice,
@@ -135,6 +214,8 @@ export const CreateIndentNetworkTargetStep = memo(
     compact = false,
     partyPreview,
     onPartyPress,
+    circulationTarget = "integrated_supplier",
+    onCirculationTargetChange,
   }: CreateIndentNetworkTargetStepProps) {
     const raw = fieldToRaw(supplierTarget);
 
@@ -175,6 +256,13 @@ export const CreateIndentNetworkTargetStep = memo(
       />
     );
 
+    const distributionSelector = onCirculationTargetChange ? (
+      <DistributionTargetSelector
+        value={circulationTarget}
+        onChange={onCirculationTargetChange}
+      />
+    ) : null;
+
     if (compact) {
       return (
         <View style={s.saleMobileKeypadRoot}>
@@ -185,7 +273,12 @@ export const CreateIndentNetworkTargetStep = memo(
             compact
             hint="Required network estimate. Tap a margin % above the keypad to auto-fill."
             accessory={marginStrip}
-            dockAccessory={marginChips}
+            dockAccessory={
+              <View style={styles.dockStack}>
+                {marginChips}
+                {distributionSelector}
+              </View>
+            }
           />
         </View>
       );
@@ -215,6 +308,7 @@ export const CreateIndentNetworkTargetStep = memo(
             {marginStrip}
             {marginChips}
           </View>
+          {distributionSelector}
         </View>
       </View>
     );
@@ -283,5 +377,78 @@ const styles = StyleSheet.create({
   },
   presetChipTextDisabled: {
     color: Theme.textMuted,
+  },
+  dockStack: {
+    width: "100%",
+    gap: 10,
+  },
+  distributionWrap: {
+    width: "100%",
+    maxWidth: 320,
+    alignSelf: "center",
+    gap: 8,
+  },
+  distributionLabel: {
+    fontSize: 9,
+    fontWeight: "700",
+    letterSpacing: 0.5,
+    textTransform: "uppercase",
+    color: Theme.textMuted,
+  },
+  distributionOptions: {
+    gap: 8,
+  },
+  distributionOption: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 10,
+    padding: 10,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+  },
+  distributionOptionSelected: {
+    borderColor: Theme.accentBrownBorder,
+    backgroundColor: Theme.accentBrownMuted,
+  },
+  distributionRadio: {
+    width: 16,
+    height: 16,
+    borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: Theme.borderMedium,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 1,
+    flexShrink: 0,
+  },
+  distributionRadioSelected: {
+    borderColor: Theme.accentBrownDeep,
+  },
+  distributionRadioDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Theme.accentBrownDeep,
+  },
+  distributionCopy: {
+    flex: 1,
+    minWidth: 0,
+    gap: 2,
+  },
+  distributionOptionLabel: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  distributionOptionLabelSelected: {
+    color: Theme.accentBrownDeep,
+  },
+  distributionOptionHint: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+    lineHeight: 14,
   },
 });
