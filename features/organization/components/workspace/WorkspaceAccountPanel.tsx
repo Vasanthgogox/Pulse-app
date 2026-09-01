@@ -557,7 +557,9 @@ export function WorkspaceAccountPanel({
           <ManagementRow
             label="Support"
             icon={<HelpCircle size={15} color={PURPLE} strokeWidth={1.8} />}
-            onPress={() => onOpenRoute(ROUTES.CHAT)}
+            onPress={() =>
+              onOpenRoute(ROUTES.support({ sourceScreen: "my_account" }))
+            }
           />
         </View>
       ) : null}

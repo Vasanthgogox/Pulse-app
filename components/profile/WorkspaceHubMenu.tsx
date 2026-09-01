@@ -559,7 +559,7 @@ export function WorkspaceHubMenu({
               style={({ pressed }) => [hubStyles.quickAction, pressed && { opacity: 0.85 }]}
               onPress={() => {
                 onExit?.();
-                navigate(ROUTES.CHAT);
+                navigate(ROUTES.support({ sourceScreen: "workspace_hub" }));
               }}
               accessibilityRole="button"
               accessibilityLabel="Support"
