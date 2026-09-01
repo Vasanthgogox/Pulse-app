@@ -13,7 +13,7 @@ export function buildYourRoleTiles(type: string): ConnectionOfferTile[] {
   const tiles: ConnectionOfferTile[] = [];
   if (upper.includes('CLIENT')) {
     tiles.push({
-      label: 'In your workspace',
+      label: "They'll be your",
       value: 'Client',
       hint: 'Listed under Customers — you run trips and manifests as their transporter',
       icon: 'client',
@@ -21,7 +21,7 @@ export function buildYourRoleTiles(type: string): ConnectionOfferTile[] {
   }
   if (upper.includes('SUPPLIER')) {
     tiles.push({
-      label: 'In your workspace',
+      label: "They'll be your",
       value: 'Supplier',
       hint: 'Listed under Suppliers — you book loads and assign their fleet on your indents',
       icon: 'supplier',
@@ -29,7 +29,7 @@ export function buildYourRoleTiles(type: string): ConnectionOfferTile[] {
   }
   if (tiles.length === 0) {
     tiles.push({
-      label: 'In your workspace',
+      label: "They'll be your",
       value: 'Partner',
       hint: 'Share trips, indents, and ledger with this organization',
       icon: 'partner',

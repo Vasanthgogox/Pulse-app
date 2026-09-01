@@ -522,7 +522,7 @@ export function BusinessConnectionRequestModal({
             </View>
 
             <View style={styles.sectionHeader}>
-              <Text style={styles.sectionLabel}>YOUR ROLE</Text>
+              <Text style={styles.sectionLabel}>WHAT THEY'LL BE TO YOU</Text>
               <View
                 style={[
                   styles.offerPill,
@@ -557,16 +557,19 @@ export function BusinessConnectionRequestModal({
                     <View style={[styles.payTileIconWrap, i === 0 && styles.payTileIconPrimary]}>
                       {offerIcon(tile.icon, palette.accent, 14)}
                     </View>
-                    <View style={styles.payTileCopy}>
-                      <Text style={styles.payTileAmount} numberOfLines={1}>
-                        {tile.value}
-                      </Text>
-                      <Text style={styles.payTileSep} accessibilityElementsHidden>
-                        ·
-                      </Text>
-                      <Text style={[styles.payTileLabel, { color: palette.accent }]} numberOfLines={1}>
-                        {tile.label}
-                      </Text>
+                    <View style={styles.payTileTextCol}>
+                      <View style={styles.payTileCopy}>
+                        <Text style={styles.payTileAmount} numberOfLines={1}>
+                          {tile.value}
+                        </Text>
+                        <Text style={styles.payTileSep} accessibilityElementsHidden>
+                          ·
+                        </Text>
+                        <Text style={[styles.payTileLabel, { color: palette.accent }]} numberOfLines={1}>
+                          {tile.label}
+                        </Text>
+                      </View>
+                      <Text style={styles.payTileHint}>{tile.hint}</Text>
                     </View>
                   </View>
                 </View>
@@ -1044,12 +1047,21 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 8,
   },
-  payTileCopy: {
+  payTileTextCol: {
     flex: 1,
+    minWidth: 0,
+  },
+  payTileCopy: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 5,
     minWidth: 0,
+  },
+  payTileHint: {
+    marginTop: 2,
+    fontSize: 10,
+    lineHeight: 13,
+    color: Theme.textMuted,
   },
   payTileFull: {
     width: '100%',

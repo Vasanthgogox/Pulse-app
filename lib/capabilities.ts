@@ -248,9 +248,11 @@ export function canAccessPartyKind(
  * Which connection roles this org may offer another org, given both operating
  * models. Direction is from *my* perspective:
  *   - "client": the other org gives me loads (they are my client, I carry) —
- *     valid when I can carry (asset/hybrid) and they can give load (aggregate/hybrid).
+ *     valid when I can carry (asset/hybrid/aggregate) and they can give load (aggregate/hybrid).
  *   - "supplier": the other org carries my loads (they are my fleet provider) —
- *     valid when I can give load (aggregate/hybrid) and they can carry (asset/hybrid).
+ *     valid when I can give load (aggregate/hybrid) and they can carry (asset/hybrid/aggregate).
+ * "Carry" includes aggregate-only orgs, since they fulfil loads via subcontracted
+ * fleet rather than owned fleet.
  * A missing/unknown counterparty model falls back to both (no over-restriction).
  */
 export function allowedConnectionRoles(
@@ -258,12 +260,12 @@ export function allowedConnectionRoles(
   counterpartyModel: OperatingModelForCapabilities | string | null | undefined,
 ): Array<"client" | "supplier"> {
   const iCanGiveLoad = canUseAggregateSupply(myCapabilities);
-  const iCanCarry = canUseAssetSupply(myCapabilities);
+  const iCanCarry = canUseAssetSupply(myCapabilities) || iCanGiveLoad;
 
   const other = flagsFromOperatingModel(counterpartyModel);
   // Unknown counterparty → don't over-restrict; gate only by my own model.
   const otherCanGiveLoad = other ? other.aggregated : true;
-  const otherCanCarry = other ? other.asset : true;
+  const otherCanCarry = other ? other.asset || other.aggregated : true;
 
   const roles: Array<"client" | "supplier"> = [];
   if (iCanCarry && otherCanGiveLoad) roles.push("client");
