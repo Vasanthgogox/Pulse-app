@@ -27,10 +27,10 @@ export default function Root({ children }: { children: React.ReactNode }) {
           property="og:description"
           content="Manage fleets, drivers, trips, and logistics from one platform."
         />
-        <meta property="og:image" content="https://gx-pulse.netlify.app/og-image.png" />
+        <meta property="og:image" content="https://gogopulse.com/og-image.png" />
         <meta property="og:image:width" content="1200" />
         <meta property="og:image:height" content="630" />
-        <meta property="og:url" content="https://gx-pulse.netlify.app" />
+        <meta property="og:url" content="https://gogopulse.com" />
         <meta property="og:type" content="website" />
         <meta property="og:site_name" content="Pulse" />
         <meta name="twitter:card" content="summary_large_image" />
@@ -39,7 +39,7 @@ export default function Root({ children }: { children: React.ReactNode }) {
           name="twitter:description"
           content="Manage fleets, drivers, trips, and logistics from one platform."
         />
-        <meta name="twitter:image" content="https://gx-pulse.netlify.app/og-image.png" />
+        <meta name="twitter:image" content="https://gogopulse.com/og-image.png" />
 
         {/*
           Disable body scrolling on web. This makes ScrollView components work closer to how they do on native.

@@ -206,6 +206,18 @@ export const queryKeys = {
     /** Phase 3B.1: FO capacity Stories authored by this driver. */
     capacityStories: (userId: string) =>
       ["q", "driver-app", userId, "capacity-stories"] as const,
+    /** Phase A/B: this bidder's own market_bids rows (My Bids). */
+    myMarketBids: (userId: string) =>
+      ["q", "driver-app", userId, "my-market-bids"] as const,
+    /** Phase A/B: this bidder's own bid on one indent (Load detail Bid state). */
+    myMarketBidForIndent: (userId: string, indentId: string) =>
+      ["q", "driver-app", userId, "my-market-bid", indentId] as const,
+    /** Phase A/B: awarded Market trips (trips.source = 'market_bid'), keyed by driver-ids set. */
+    myMarketAwards: (driverIdsKey: string) =>
+      ["q", "driver-app", "my-market-awards", driverIdsKey] as const,
+    /** Phase A5: active/upcoming trip counts for the Pilot relationship summary. */
+    pilotWorkSummary: (driverIdsKey: string) =>
+      ["q", "driver-app", "pilot-work-summary", driverIdsKey] as const,
   },
 
   salaryRequests: (orgId: string, status?: string) =>
@@ -237,6 +249,9 @@ export const queryKeys = {
     detail: (postId: string) => ["q", "posts", "detail", postId] as const,
     indentStories: (orgId: string, indentIdsKey: string) =>
       ["q", "posts", orgId, "indent-stories", indentIdsKey] as const,
+    /** Live indent-linked LOAD stories for Mine / own story preview queue. */
+    liveOwnLoadStories: (orgId: string) =>
+      ["q", "posts", orgId, "live-own-load-stories"] as const,
   },
 
   bids: {
@@ -276,6 +291,12 @@ export const queryKeys = {
   discover: {
     search: (orgId: string, search: string) =>
       ["q", "discover", orgId, search] as const,
+  },
+
+  support: {
+    myTickets: (uid: string) => ["q", "support", "my-tickets", uid] as const,
+    ticketDetail: (ticketId: string) =>
+      ["q", "support", "ticket-detail", ticketId] as const,
   },
 
   mutualConnections: (viewerOrgId: string, targetOrgId: string) =>

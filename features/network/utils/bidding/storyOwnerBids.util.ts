@@ -21,6 +21,8 @@ export type StoryOwnerBidRow = {
   quoteId: string | null;
   /** Set for driver_direct_bids rows. */
   directBidId?: string | null;
+  bidderAvatarUrl?: string | null;
+  bidderAvatarSeed?: string | null;
 };
 
 function shortIdentifier(prefix: string, id: string): string {
@@ -114,6 +116,8 @@ export function buildStoryOwnerBidRows(
       bidId: null,
       quoteId: null,
       directBidId: bid.id,
+      bidderAvatarUrl: bid.driver_avatar_url,
+      bidderAvatarSeed: bid.driver_avatar_seed,
     });
   }
 

@@ -1,6 +1,8 @@
 /**
  * useAwardQuote — owns all state and logic for the Award (Offer Hub) modal.
  * FSM-style: open(load) → select/award → auto-closes on success.
+ *
+ * Offers = org direct_quotes ∪ Pilot / FO driver_direct_bids on the linked story.
  */
 
 import {
@@ -9,16 +11,59 @@ import {
   type DirectQuoteRow,
   type IndentRow,
 } from "@/features/indents";
+import type { DriverDirectBidRow } from "@/features/network/services/bids.service";
 import { useIndentDirectQuotesQuery, useInvalidateIndents } from "@/lib/queries";
+import { useDriverDirectBidsForPostQuery } from "@/lib/queries/useBidsQuery";
 import { useInvalidatePosts } from "@/lib/queries/usePostsQuery";
 import { showAppAlert } from "@/lib/appAlert";
 import { confirmDialog } from "@/lib/confirmDialog";
-import { type QueryClient } from "@tanstack/react-query";
+import { type QueryClient, useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useState } from "react";
 
 /** Lazy: keeps the connections service out of the Load Center entry chunk. */
 const loadConnectionRequestsService = () =>
   import("@/features/connections/services/connectionRequests.service");
+
+const loadBidsService = () => import("@/features/network/services/bids.service");
+
+function driverDirectBidToHubQuote(
+  bid: DriverDirectBidRow,
+  indentId: string,
+): DirectQuoteRow {
+  const name = bid.driver_display_name.trim() || "Driver";
+  return {
+    id: bid.id,
+    indent_id: indentId,
+    bidder_organization_id: "",
+    bidder_organization_name: bid.is_fleet_owner
+      ? `Fleet owner (${name})`
+      : `Driver (${name})`,
+    amount: bid.amount,
+    notes: bid.note,
+    status: bid.status,
+    created_at: bid.created_at,
+    updated_at: bid.updated_at,
+    counter_amount: bid.counter_amount,
+    offer_source: "driver_direct_bid",
+    bidder_avatar_url: bid.driver_avatar_url,
+    bidder_avatar_seed: bid.driver_avatar_seed,
+  };
+}
+
+function sortHubOffers(list: DirectQuoteRow[]): DirectQuoteRow[] {
+  return [...list].sort((a, b) => {
+    const sa = (a.status || "").toLowerCase();
+    const sb = (b.status || "").toLowerCase();
+    if (sa === "pending" && sb === "pending") {
+      return Number(a.amount ?? 0) - Number(b.amount ?? 0);
+    }
+    if (sa === "pending") return -1;
+    if (sb === "pending") return 1;
+    if (sa === "rejected" && sb === "accepted") return -1;
+    if (sa === "accepted" && sb === "rejected") return 1;
+    return 0;
+  });
+}
 
 interface UseAwardQuoteParams {
   orgId: string | null;
@@ -72,13 +117,31 @@ export function useAwardQuote({
   const [currentLoad, setCurrentLoad] = useState<IndentRow | null>(null);
   const [selectedQuoteId, setSelectedQuoteId] = useState<string | null>(null);
   const [awarding, setAwarding] = useState(false);
-  const [lastAwardedByIndentId, setLastAwardedByIndentId] = useState<Record<string, string>>({});
+  const [lastAwardedByIndentId, setLastAwardedByIndentId] = useState<
+    Record<string, string>
+  >({});
 
   const {
     data: awardModalQuotes = [],
     isLoading: quotesLoading,
     refetch: refetchAwardModalQuotes,
   } = useIndentDirectQuotesQuery(currentLoad?.id ?? null);
+
+  const linkedPostQ = useQuery({
+    queryKey: ["q", "posts", "latest-load-for-indent", currentLoad?.id ?? ""],
+    queryFn: async () => {
+      const { getLatestLoadPostIdForIndent } = await loadBidsService();
+      const res = await getLatestLoadPostIdForIndent(currentLoad!.id);
+      if (res.error) throw res.error;
+      return res.postId;
+    },
+    enabled: Boolean(currentLoad?.id),
+    staleTime: 30_000,
+  });
+
+  const driverDirectBidsQ = useDriverDirectBidsForPostQuery(
+    linkedPostQ.data ?? null,
+  );
 
   // Refetch quotes when a new load is opened
   useEffect(() => {
@@ -87,38 +150,35 @@ export function useAwardQuote({
     }
   }, [currentLoad?.id, refetchAwardModalQuotes]);
 
+  const hubQuotes = useMemo(() => {
+    const indentId = currentLoad?.id ?? "";
+    const fromQuotes = awardModalQuotes.map((q) => ({
+      ...q,
+      offer_source: q.offer_source ?? ("direct_quote" as const),
+    }));
+    const fromDrivers = (driverDirectBidsQ.data ?? []).map((b) =>
+      driverDirectBidToHubQuote(b, indentId),
+    );
+    return [...fromQuotes, ...fromDrivers];
+  }, [awardModalQuotes, driverDirectBidsQ.data, currentLoad?.id]);
+
   /** Sorted: pending by amount (lowest first), then rejected, then accepted. */
-  const sortedQuotes = useMemo(() => {
-    const list = [...awardModalQuotes];
-    return list.sort((a, b) => {
-      const sa = (a.status || "").toLowerCase();
-      const sb = (b.status || "").toLowerCase();
-      if (sa === "pending" && sb === "pending") {
-        return Number(a.amount ?? 0) - Number(b.amount ?? 0);
-      }
-      if (sa === "pending") return -1;
-      if (sb === "pending") return 1;
-      if (sa === "rejected" && sb === "accepted") return -1;
-      if (sa === "accepted" && sb === "rejected") return 1;
-      return 0;
-    });
-  }, [awardModalQuotes]);
+  const sortedQuotes = useMemo(() => sortHubOffers(hubQuotes), [hubQuotes]);
 
   const pendingCount = useMemo(
     () =>
-      awardModalQuotes.filter(
-        (q) => (q.status || "").toLowerCase() === "pending",
-      ).length,
-    [awardModalQuotes],
+      hubQuotes.filter((q) => (q.status || "").toLowerCase() === "pending")
+        .length,
+    [hubQuotes],
   );
 
   const lowestPendingAmount = useMemo(() => {
-    const pending = awardModalQuotes.filter(
+    const pending = hubQuotes.filter(
       (q) => (q.status || "").toLowerCase() === "pending",
     );
     if (pending.length === 0) return null;
     return Math.min(...pending.map((q) => Number(q.amount ?? 0)));
-  }, [awardModalQuotes]);
+  }, [hubQuotes]);
 
   /**
    * Single pending offer — preselect it. There is nothing to choose between, so
@@ -130,11 +190,11 @@ export function useAwardQuote({
    * deselecting the only bid is not immediately undone by this effect.
    */
   const soloPendingQuoteId = useMemo(() => {
-    const pending = awardModalQuotes.filter(
+    const pending = hubQuotes.filter(
       (q) => (q.status || "").toLowerCase() === "pending",
     );
     return pending.length === 1 ? pending[0]!.id : null;
-  }, [awardModalQuotes]);
+  }, [hubQuotes]);
 
   useEffect(() => {
     if (soloPendingQuoteId) setSelectedQuoteId(soloPendingQuoteId);
@@ -146,12 +206,20 @@ export function useAwardQuote({
    * supplier invite first — approving it fires on_connection_request_approved,
    * which creates the organization_relations + suppliers rows, after which the
    * bidder counts as connected and the normal award path applies.
+   * Pilot / FO driver_direct_bids skip this gate (award creates the driver link).
    */
-  const selectedBidderOrgId = useMemo(() => {
+  const selectedOffer = useMemo(() => {
     if (!selectedQuoteId) return null;
-    const q = awardModalQuotes.find((x) => x.id === selectedQuoteId);
-    return q?.bidder_organization_id ?? null;
-  }, [selectedQuoteId, awardModalQuotes]);
+    return hubQuotes.find((x) => x.id === selectedQuoteId) ?? null;
+  }, [selectedQuoteId, hubQuotes]);
+
+  const selectedIsDriverDirect =
+    selectedOffer?.offer_source === "driver_direct_bid";
+
+  const selectedBidderOrgId = useMemo(() => {
+    if (!selectedOffer || selectedIsDriverDirect) return null;
+    return selectedOffer.bidder_organization_id || null;
+  }, [selectedOffer, selectedIsDriverDirect]);
 
   const selectedBidderNeedsInvite = useMemo(
     () =>
@@ -195,7 +263,7 @@ export function useAwardQuote({
 
   const inviteSelectedBidder = useCallback(async () => {
     if (!orgId || !selectedBidderOrgId) return;
-    const winner = awardModalQuotes.find((q) => q.id === selectedQuoteId);
+    const winner = hubQuotes.find((q) => q.id === selectedQuoteId);
     const name = winner?.bidder_organization_name ?? "this supplier";
     setInviteStatusByOrgId((m) => ({ ...m, [selectedBidderOrgId]: "sending" }));
     const { createConnectionRequest, looksLikeConnectionRateLimitError } =
@@ -226,13 +294,7 @@ export function useAwardQuote({
         ? `${name} already has a pending supplier invite.`
         : `Supplier invite sent to ${name}. You can award once they accept.`,
     );
-  }, [
-    orgId,
-    selectedBidderOrgId,
-    selectedQuoteId,
-    awardModalQuotes,
-    onSuccess,
-  ]);
+  }, [orgId, selectedBidderOrgId, selectedQuoteId, hubQuotes, onSuccess]);
 
   const open = useCallback((load: IndentRow) => {
     setCurrentLoad(load);
@@ -248,77 +310,121 @@ export function useAwardQuote({
     setSelectedQuoteId(id);
   }, []);
 
-  const award = useCallback(async (quoteIdOverride?: string) => {
-    if (!orgId || !currentLoad) return;
-    const winnerId = quoteIdOverride ?? selectedQuoteId;
-    if (!winnerId) return;
-    if (quoteIdOverride) setSelectedQuoteId(quoteIdOverride);
-    const load = currentLoad;
-    const currentStatus = (load.status || "").toLowerCase();
-    if (currentStatus === "awarded" || currentStatus === "completed") {
-      showAppAlert(
-        "Already awarded",
-        "This load has already been awarded. Closing.",
-      );
-      setCurrentLoad(null);
-      setSelectedQuoteId(null);
-      invalidateIndents(orgId);
-      return;
-    }
-    if (currentStatus === "cancelled" || currentStatus === "closed") {
-      showAppAlert(
-        "Load unavailable",
-        "This load has been cancelled or closed.",
-      );
-      setCurrentLoad(null);
-      setSelectedQuoteId(null);
-      invalidateIndents(orgId);
-      return;
-    }
-    const pendingQuotes = awardModalQuotes.filter(
-      (q) => (q.status || "").toLowerCase() === "pending",
-    );
-    const winner = pendingQuotes.find((q) => q.id === winnerId);
-    if (!winner) {
-      showAppAlert(
-        "Invalid selection",
-        "Please select a pending offer to award.",
-      );
-      return;
-    }
-    // Enforce the supplier-link gate here as well as in the UI: the modal hides
-    // the Award button for unconnected bidders, but a stale render or a
-    // connection revoked mid-flow must not slip an unlinked award through.
-    if (
-      winner.bidder_organization_id &&
-      !connectedSupplierOrgIds.has(winner.bidder_organization_id)
-    ) {
-      showAppAlert(
-        "Supplier not connected",
-        `${winner.bidder_organization_name ?? "This bidder"} is not in your supplier network yet. Send a supplier invite and award once they accept.`,
-      );
-      return;
-    }
-    const confirmed = await confirmDialog({
-      title: "Confirm Award",
-      message: `Award this load to ${winner.bidder_organization_name ?? "this supplier"} for ₹${Number(winner.amount ?? 0).toLocaleString("en-IN")}?`,
-      confirmLabel: "Award",
-      destructive: true,
-    });
-    if (!confirmed) return;
-
-    try {
-      setAwarding(true);
-      const { error: acceptErr } = await updateDirectQuoteStatus(
-        winner.id,
-        "accepted",
-      );
-      if (acceptErr) {
-        showAppAlert("Could not award", acceptErr.message);
+  const award = useCallback(
+    async (quoteIdOverride?: string) => {
+      if (!orgId || !currentLoad) return;
+      const winnerId = quoteIdOverride ?? selectedQuoteId;
+      if (!winnerId) return;
+      if (quoteIdOverride) setSelectedQuoteId(quoteIdOverride);
+      const load = currentLoad;
+      const currentStatus = (load.status || "").toLowerCase();
+      if (currentStatus === "awarded" || currentStatus === "completed") {
+        showAppAlert(
+          "Already awarded",
+          "This load has already been awarded. Closing.",
+        );
+        setCurrentLoad(null);
+        setSelectedQuoteId(null);
+        invalidateIndents(orgId);
         return;
       }
-      for (const q of pendingQuotes) {
-        if (q.id !== winner.id) {
+      if (currentStatus === "cancelled" || currentStatus === "closed") {
+        showAppAlert(
+          "Load unavailable",
+          "This load has been cancelled or closed.",
+        );
+        setCurrentLoad(null);
+        setSelectedQuoteId(null);
+        invalidateIndents(orgId);
+        return;
+      }
+      const pendingQuotes = hubQuotes.filter(
+        (q) => (q.status || "").toLowerCase() === "pending",
+      );
+      const winner = pendingQuotes.find((q) => q.id === winnerId);
+      if (!winner) {
+        showAppAlert(
+          "Invalid selection",
+          "Please select a pending offer to award.",
+        );
+        return;
+      }
+
+      const isDriverDirect = winner.offer_source === "driver_direct_bid";
+
+      // Org quotes need a supplier link; Pilot / FO awards create the driver row.
+      if (
+        !isDriverDirect &&
+        winner.bidder_organization_id &&
+        !connectedSupplierOrgIds.has(winner.bidder_organization_id)
+      ) {
+        showAppAlert(
+          "Supplier not connected",
+          `${winner.bidder_organization_name ?? "This bidder"} is not in your supplier network yet. Send a supplier invite and award once they accept.`,
+        );
+        return;
+      }
+      const confirmed = await confirmDialog({
+        title: "Confirm Award",
+        message: `Award this load to ${winner.bidder_organization_name ?? "this bidder"} for ₹${Number(winner.amount ?? 0).toLocaleString("en-IN")}?`,
+        confirmLabel: "Award",
+        destructive: true,
+      });
+      if (!confirmed) return;
+
+      try {
+        setAwarding(true);
+
+        if (isDriverDirect) {
+          const { acceptDriverDirectBid, rejectDriverDirectBid } =
+            await loadBidsService();
+          const { error: acceptErr } = await acceptDriverDirectBid(winner.id);
+          if (acceptErr) {
+            showAppAlert("Could not award", acceptErr.message);
+            return;
+          }
+          // Reject competing org quotes; competing driver bids are closed by
+          // the indent-terminal trigger after accept awards the indent.
+          for (const q of pendingQuotes) {
+            if (q.id === winner.id) continue;
+            if (q.offer_source === "driver_direct_bid") {
+              await rejectDriverDirectBid(q.id);
+              continue;
+            }
+            await updateDirectQuoteStatus(q.id, "rejected");
+          }
+          if (winner.bidder_organization_name?.trim()) {
+            setLastAwardedByIndentId((m) => ({
+              ...m,
+              [load.id]: winner.bidder_organization_name!.trim(),
+            }));
+          }
+          setSelectedQuoteId(null);
+          setCurrentLoad(null);
+          invalidateIndents(orgId);
+          invalidatePosts();
+          queryClient.invalidateQueries({
+            queryKey: ["indents", "offer-counts"],
+          });
+          onSuccess("Load awarded — trip created from Pilot bid.");
+          return;
+        }
+
+        const { error: acceptErr } = await updateDirectQuoteStatus(
+          winner.id,
+          "accepted",
+        );
+        if (acceptErr) {
+          showAppAlert("Could not award", acceptErr.message);
+          return;
+        }
+        for (const q of pendingQuotes) {
+          if (q.id === winner.id) continue;
+          if (q.offer_source === "driver_direct_bid") {
+            const { rejectDriverDirectBid } = await loadBidsService();
+            await rejectDriverDirectBid(q.id);
+            continue;
+          }
           const { error: rejectErr } = await updateDirectQuoteStatus(
             q.id,
             "rejected",
@@ -335,58 +441,63 @@ export function useAwardQuote({
             break;
           }
         }
-      }
-      const { error: indentErr } = await updateIndent(load.id, {
-        status: "awarded",
-      });
-      if (indentErr) {
-        const friendlyMessage =
-          indentErr.message &&
-          (indentErr.message.includes("check constraint") ||
-            indentErr.message.includes("indents_status_check"))
-            ? "Indent status could not be updated. Please refresh the app and try again."
-            : indentErr.message;
-        showAppAlert(
-          "Award saved but indent status could not be updated",
-          friendlyMessage,
-        );
-        queryClient.invalidateQueries({
-          queryKey: ["indents", load.id, "direct-quotes"],
+        const { error: indentErr } = await updateIndent(load.id, {
+          status: "awarded",
         });
-      }
-      if (winner.bidder_organization_name?.trim()) {
-        setLastAwardedByIndentId((m) => ({
-          ...m,
-          [load.id]: winner.bidder_organization_name!.trim(),
-        }));
-      }
-      setSelectedQuoteId(null);
-      setCurrentLoad(null);
-      invalidateIndents(orgId);
-      invalidatePosts();
-      onSuccess("Load awarded — supplier can allocate from Action required.");
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : "Unknown error.";
-      showAppAlert("Could not award", msg);
-      if (currentLoad?.id) {
+        if (indentErr) {
+          const friendlyMessage =
+            indentErr.message &&
+            (indentErr.message.includes("check constraint") ||
+              indentErr.message.includes("indents_status_check"))
+              ? "Indent status could not be updated. Please refresh the app and try again."
+              : indentErr.message;
+          showAppAlert(
+            "Award saved but indent status could not be updated",
+            friendlyMessage,
+          );
+          queryClient.invalidateQueries({
+            queryKey: ["indents", load.id, "direct-quotes"],
+          });
+        }
+        if (winner.bidder_organization_name?.trim()) {
+          setLastAwardedByIndentId((m) => ({
+            ...m,
+            [load.id]: winner.bidder_organization_name!.trim(),
+          }));
+        }
+        setSelectedQuoteId(null);
+        setCurrentLoad(null);
+        invalidateIndents(orgId);
+        invalidatePosts();
         queryClient.invalidateQueries({
-          queryKey: ["indents", currentLoad.id, "direct-quotes"],
+          queryKey: ["indents", "offer-counts"],
         });
+        onSuccess("Load awarded — supplier can allocate from Action required.");
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : "Unknown error.";
+        showAppAlert("Could not award", msg);
+        if (currentLoad?.id) {
+          queryClient.invalidateQueries({
+            queryKey: ["indents", currentLoad.id, "direct-quotes"],
+          });
+        }
+        invalidateIndents(orgId);
+      } finally {
+        setAwarding(false);
       }
-      invalidateIndents(orgId);
-    } finally {
-      setAwarding(false);
-    }
-  }, [
-    orgId,
-    currentLoad,
-    selectedQuoteId,
-    awardModalQuotes,
-    queryClient,
-    invalidateIndents,
-    invalidatePosts,
-    onSuccess,
-  ]);
+    },
+    [
+      orgId,
+      currentLoad,
+      selectedQuoteId,
+      hubQuotes,
+      connectedSupplierOrgIds,
+      queryClient,
+      invalidateIndents,
+      invalidatePosts,
+      onSuccess,
+    ],
+  );
 
   return {
     isOpen: currentLoad !== null,
@@ -396,7 +507,7 @@ export function useAwardQuote({
     sortedQuotes,
     pendingCount,
     lowestPendingAmount,
-    quotesLoading,
+    quotesLoading: quotesLoading || linkedPostQ.isLoading || driverDirectBidsQ.isLoading,
     connectedSupplierOrgIds,
     selectedBidderNeedsInvite,
     selectedBidderInviteStatus,

@@ -83,10 +83,14 @@ export const ROUTES = {
   driverMyFleetAdd: () => '/(driver)/my-fleet/add' as const,
   driverMyFleetVehicle: (vehicleId: string) =>
     `/(driver)/my-fleet/${encodeURIComponent(vehicleId)}` as const,
-  /** Phase 3A: open marketplace loads (Fleet Owner, read-only). */
+  /** Market: open marketplace loads for Fleet Owner / DCO bidding. */
   driverAvailableLoads: () => '/(driver)/available-loads' as const,
   driverAvailableLoad: (indentId: string) =>
     `/(driver)/available-loads/${encodeURIComponent(indentId)}` as const,
+  /** Phase A/B: this bidder's own market_bids rows. */
+  driverMyBids: () => '/(driver)/my-bids' as const,
+  /** Phase A/B: awarded Market trips (source='market_bid'). */
+  driverMarketAwards: () => '/(driver)/market-awards' as const,
   /** Phase 3B.1: FO capacity Story composer (optional vehicleId). */
   driverCapacityStory: (vehicleId?: string) =>
     vehicleId
@@ -249,6 +253,29 @@ export const ROUTES = {
   /** Trip detail (operations hub). */
   tripDetail: (tripId: string, options?: TripDetailRouteOptions) =>
     `/trip/${encodeURIComponent(tripId)}${tripDetailRouteQuery(options)}` as const,
+  /** Contact Support — Create Ticket. Optional context params, only set when the
+   * originating screen actually has them (trip/indent/vehicle/market-bid). */
+  support: (context?: {
+    tripId?: string;
+    indentId?: string;
+    ownerVehicleId?: string;
+    marketBidId?: string;
+    sourceScreen?: string;
+  }) => {
+    const params = new URLSearchParams();
+    if (context?.tripId) params.set('tripId', context.tripId);
+    if (context?.indentId) params.set('indentId', context.indentId);
+    if (context?.ownerVehicleId) params.set('ownerVehicleId', context.ownerVehicleId);
+    if (context?.marketBidId) params.set('marketBidId', context.marketBidId);
+    if (context?.sourceScreen) params.set('sourceScreen', context.sourceScreen);
+    const qs = params.toString();
+    return qs ? (`/support?${qs}` as const) : ('/support' as const);
+  },
+  /** My Support Tickets — list of the current user's own tickets. */
+  SUPPORT_TICKETS: '/support-tickets' as const,
+  /** Support Ticket Detail — conversation + reply. */
+  supportTicket: (ticketId: string) =>
+    `/support-ticket/${encodeURIComponent(ticketId)}` as const,
   /** Customer Track & Trace — simplified read-only view for the linked client org. */
   trackTrip: (tripId: string) => `/track/${encodeURIComponent(tripId)}` as const,
   /** Fleet-wide operations dashboard (active alerts, dwell/transit outliers, stage distribution). */

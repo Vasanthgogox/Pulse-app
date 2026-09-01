@@ -598,6 +598,11 @@ export const growConnectionCardStyles = StyleSheet.create({
     letterSpacing: -0.3,
     includeFontPadding: false,
     lineHeight: 16,
+    textAlignVertical: "center",
+  },
+  avatarRatingBadgeStar: {
+    marginTop: 0.5,
+    flexShrink: 0,
   },
   avatarRatingBadgeTextEmpty: {
     fontSize: 9,

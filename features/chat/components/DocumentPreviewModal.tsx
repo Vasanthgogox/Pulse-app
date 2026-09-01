@@ -12,7 +12,6 @@ import {
   Modal,
   Platform,
   Pressable,
-  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -46,14 +45,17 @@ export interface DocumentPreviewProps {
   onClose: () => void;
 }
 
-/** Full-screen image lightbox — natural aspect ratio, centered, never upscaled. */
+/** Full-screen image lightbox — scales to fill viewport (contain, max size). */
 function ImageLightbox({ url, fileName, onClose }: DocumentPreviewProps) {
   const [naturalSize, setNaturalSize] = useState<{ width: number; height: number } | null>(
     null,
   );
   const { width: windowW, height: windowH } = useWindowDimensions();
   const insets = useSafeAreaInsets();
+  const chrome = { horizontal: 12, top: 56, bottom: 20 };
   const viewportHeight = Math.max(1, windowH - insets.top - insets.bottom);
+  const maxW = Math.max(1, windowW - chrome.horizontal * 2);
+  const maxH = Math.max(1, viewportHeight - chrome.top - chrome.bottom);
 
   const applyNaturalSize = useCallback((w: number, h: number) => {
     if (w > 0 && h > 0) {
@@ -74,10 +76,8 @@ function ImageLightbox({ url, fileName, onClose }: DocumentPreviewProps) {
   }, [url, applyNaturalSize]);
 
   const imageLayout = naturalSize
-    ? resolveFitImageLayout(naturalSize, windowW, viewportHeight, {
-        horizontal: 20,
-        top: 64,
-        bottom: 28,
+    ? resolveFitImageLayout(naturalSize, windowW, viewportHeight, chrome, {
+        allowUpscale: true,
       })
     : null;
 
@@ -88,6 +88,8 @@ function ImageLightbox({ url, fileName, onClose }: DocumentPreviewProps) {
         style={{
           width: imageLayout.width,
           height: imageLayout.height,
+          maxWidth: maxW,
+          maxHeight: maxH,
         }}
         contentFit="contain"
         transition={180}
@@ -104,16 +106,21 @@ function ImageLightbox({ url, fileName, onClose }: DocumentPreviewProps) {
       visible
       animationType="fade"
       statusBarTranslucent
+      presentationStyle="fullScreen"
       onRequestClose={onClose}
     >
-      <SafeAreaView
+      <View
         style={[
           s.fullScreen,
+          {
+            paddingTop: insets.top,
+            paddingBottom: insets.bottom,
+          },
           Platform.OS === "web" ? (WEB_APP_VIEWPORT_STYLE as object) : null,
         ]}
       >
         <Pressable
-          style={s.closeBtn}
+          style={[s.closeBtn, { top: insets.top + 8 }]}
           onPress={onClose}
           hitSlop={12}
           accessibilityRole="button"
@@ -122,7 +129,7 @@ function ImageLightbox({ url, fileName, onClose }: DocumentPreviewProps) {
           <X size={22} color="#fff" strokeWidth={2.2} />
         </Pressable>
         {fileName ? (
-          <Text style={s.fileName} numberOfLines={1}>
+          <Text style={[s.fileName, { top: insets.top + 12 }]} numberOfLines={1}>
             {fileName}
           </Text>
         ) : null}
@@ -136,8 +143,8 @@ function ImageLightbox({ url, fileName, onClose }: DocumentPreviewProps) {
               s.previewScrollContent,
               {
                 minHeight: viewportHeight,
-                paddingTop: 64,
-                paddingBottom: 28,
+                paddingTop: chrome.top,
+                paddingBottom: chrome.bottom,
               },
             ]}
             showsVerticalScrollIndicator
@@ -161,11 +168,11 @@ function ImageLightbox({ url, fileName, onClose }: DocumentPreviewProps) {
               if (w > 0 && h > 0) applyNaturalSize(w, h);
             }}
             onError={() => {
-              applyNaturalSize(Math.max(1, windowW - 40), Math.max(1, viewportHeight - 92));
+              applyNaturalSize(maxW, maxH);
             }}
           />
         ) : null}
-      </SafeAreaView>
+      </View>
     </Modal>
   );
 }
@@ -238,7 +245,6 @@ const s = StyleSheet.create({
   },
   closeBtn: {
     position: "absolute",
-    top: 52,
     right: 16,
     zIndex: 10,
     width: 38,
@@ -250,7 +256,6 @@ const s = StyleSheet.create({
   },
   fileName: {
     position: "absolute",
-    top: 56,
     left: 16,
     right: 64,
     zIndex: 10,
@@ -269,7 +274,7 @@ const s = StyleSheet.create({
   previewScrollContent: {
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 20,
+    paddingHorizontal: 12,
     flexGrow: 1,
   },
   previewCenter: {
@@ -277,9 +282,9 @@ const s = StyleSheet.create({
     width: "100%",
     alignItems: "center",
     justifyContent: "center",
-    paddingHorizontal: 20,
-    paddingTop: 64,
-    paddingBottom: 28,
+    paddingHorizontal: 12,
+    paddingTop: 56,
+    paddingBottom: 20,
   },
   measureImage: {
     width: 1,

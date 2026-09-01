@@ -65,6 +65,23 @@ export function useIndentStoryStatesQuery(
   });
 }
 
+/** Live own LOAD stories (Load Center green Pulse) for Mine queue + story segments. */
+export function useLiveOwnLoadStoriesQuery(orgId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.posts.liveOwnLoadStories(orgId ?? ''),
+    queryFn: async () => {
+      const { listLiveOwnLoadStories } = await import(
+        '@/features/network/services/indentStoryPosts.service'
+      );
+      const res = await listLiveOwnLoadStories(orgId!);
+      if (res.error) throw res.error;
+      return res.posts;
+    },
+    enabled: !!orgId,
+    staleTime: STALE.frequent,
+  });
+}
+
 /**
  * After a post is deactivated/deleted: remove it from cached feed immediately, then refetch.
  * Ensures Network / Discover UI updates without waiting on background invalidation (important on web).

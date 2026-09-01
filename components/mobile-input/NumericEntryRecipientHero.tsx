@@ -21,6 +21,38 @@ export interface NumericEntryRecipientHeroProps {
   onPress?: () => void;
 }
 
+/** Split corridor-style subtitle into hero route + quieter detail. */
+function resolveHeroDetail(party: NumericEntryPartyPreview): {
+  hero: string | null;
+  detail: string | null;
+} {
+  const explicitHero = (party.heroLine ?? "").trim() || null;
+  const explicitDetail = (party.detailLine ?? "").trim() || null;
+  if (explicitHero) {
+    return {
+      hero: explicitHero,
+      detail: explicitDetail,
+    };
+  }
+
+  const subtitle = (party.subtitle ?? "").trim();
+  if (!subtitle) return { hero: null, detail: null };
+
+  if (subtitle.includes("→") || subtitle.includes("->")) {
+    const parts = subtitle
+      .split(" · ")
+      .map((p) => p.trim())
+      .filter(Boolean);
+    if (parts.length === 0) return { hero: null, detail: null };
+    return {
+      hero: parts[0] ?? null,
+      detail: parts.slice(1).join(" · ") || null,
+    };
+  }
+
+  return { hero: null, detail: subtitle };
+}
+
 /**
  * Centered recipient block (Google Pay payout) above the amount field.
  */
@@ -35,6 +67,7 @@ export function NumericEntryRecipientHero({
   const avatarSize = dense ? 36 : compact ? 44 : 64;
   const title =
     caption && nameInline ? `${caption} ${party.name}`.trim() : party.name;
+  const { hero, detail } = resolveHeroDetail(party);
 
   const content = (
     <View
@@ -78,12 +111,26 @@ export function NumericEntryRecipientHero({
           />
         ) : null}
       </View>
-      {party.subtitle ? (
+      {hero ? (
         <Text
-          style={[styles.subtitle, dense && styles.subtitleDense]}
-          numberOfLines={3}
+          style={[
+            styles.heroLine,
+            compact && styles.heroLineCompact,
+            dense && styles.heroLineDense,
+          ]}
+          numberOfLines={2}
+          adjustsFontSizeToFit
+          minimumFontScale={0.72}
         >
-          {party.subtitle}
+          {hero}
+        </Text>
+      ) : null}
+      {detail ? (
+        <Text
+          style={[styles.detailLine, dense && styles.detailLineDense]}
+          numberOfLines={2}
+        >
+          {detail}
         </Text>
       ) : null}
     </View>
@@ -108,7 +155,7 @@ export function NumericEntryRecipientHero({
 const styles = StyleSheet.create({
   root: {
     alignItems: "center",
-    paddingHorizontal: 24,
+    paddingHorizontal: 20,
     paddingTop: 10,
     paddingBottom: 6,
     gap: 6,
@@ -149,8 +196,8 @@ const styles = StyleSheet.create({
   },
   name: {
     fontSize: 20,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    fontWeight: "500",
+    color: Theme.textMuted,
     textAlign: "center",
     letterSpacing: -0.3,
     flexShrink: 1,
@@ -160,24 +207,49 @@ const styles = StyleSheet.create({
   },
   nameDense: {
     fontSize: 14,
-    fontWeight: "700",
+    fontWeight: "500",
     letterSpacing: -0.2,
   },
   chevron: {
     marginTop: 2,
     flexShrink: 0,
   },
-  subtitle: {
-    fontSize: 14,
-    fontWeight: "400",
+  heroLine: {
+    marginTop: 2,
+    width: "100%",
+    maxWidth: 340,
+    paddingHorizontal: 4,
+    fontSize: 22,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    textAlign: "center",
+    letterSpacing: -0.55,
+    lineHeight: 28,
+  },
+  heroLineCompact: {
+    fontSize: 18,
+    lineHeight: 24,
+    letterSpacing: -0.4,
+  },
+  heroLineDense: {
+    fontSize: 15,
+    lineHeight: 20,
+    letterSpacing: -0.3,
+    maxWidth: 280,
+  },
+  detailLine: {
+    fontSize: 12,
+    fontWeight: "500",
     color: Theme.textMuted,
     textAlign: "center",
-    lineHeight: 20,
+    lineHeight: 16,
+    letterSpacing: 0.1,
     maxWidth: 320,
+    paddingHorizontal: 8,
   },
-  subtitleDense: {
+  detailLineDense: {
     fontSize: 11,
-    lineHeight: 15,
+    lineHeight: 14,
     maxWidth: 280,
   },
 });

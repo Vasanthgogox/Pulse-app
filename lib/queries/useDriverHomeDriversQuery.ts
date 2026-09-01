@@ -87,6 +87,10 @@ export function useDriverHomeDriversQuery(userId: string | null) {
     refetch: query.refetch,
     drivers: query.data ?? EMPTY_DRIVERS,
     activeLinkedDrivers,
+    /** Every active real-fleet-relationship row, not just the first — a person can
+     * simultaneously work for more than one org. Prefer this over `primaryDriver`
+     * for any relationship-aware UI that must not silently pick employer #1. */
+    employerLinkedDrivers,
     primaryDriver: employerLinkedDrivers[0] ?? null,
     driverIdsKey,
     refreshLinkedDrivers,

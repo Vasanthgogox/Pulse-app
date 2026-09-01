@@ -56,7 +56,7 @@ import { confirmDialog } from "@/lib/confirmDialog";
 import { useIndentDirectQuotesQuery, useMyDirectQuotesQuery } from "@/lib/queries";
 import { useBidsForPostQuery, useDriverDirectBidsForPostQuery, useMyBidQuery } from "@/lib/queries/useBidsQuery";
 import { useInvalidateIndents } from "@/lib/queries/useIndentsQuery";
-import { useAfterPostDeleted, useInvalidatePosts, useNetworkFeedQuery } from "@/lib/queries/usePostsQuery";
+import { useAfterPostDeleted, useInvalidatePosts, useLiveOwnLoadStoriesQuery, useNetworkFeedQuery } from "@/lib/queries/usePostsQuery";
 import { useMarkReachCampaignSourceDeletedMutation, useReachCampaignsQuery } from "@/lib/queries/useReachCampaignsQuery";
 import { useRecordStoryViewMutation, useStoryViewsQuery } from "@/lib/queries/useStoryViewsQuery";
 import { ROUTES, buildPulseStoryPublicUrl } from "@/lib/routes";
@@ -215,6 +215,12 @@ export default function StoryDetailScreen() {
   const isBusinessPost = (p: PostRow) => p.type === "LOAD" || p.type === "VEHICLE_AVAILABILITY";
 
   const targetOrgId = params.orgId ?? "";
+  const viewingOwnOrg = Boolean(myOrgId && targetOrgId && myOrgId === targetOrgId);
+  const viewingOwnLoads =
+    viewingOwnOrg &&
+    (params.storyType === "LOAD" || params.storyType === "UPDATE" || !params.storyType);
+  const liveOwnLoadsQ = useLiveOwnLoadStoriesQuery(viewingOwnLoads ? myOrgId : null);
+
   const queueIds = useMemo(
     () => (params.queue ?? "").split(",").map((s) => s.trim()).filter(Boolean),
     [params.queue],
@@ -231,11 +237,23 @@ export default function StoryDetailScreen() {
     return queueIds.map((id) => byId.get(id)).filter((p): p is PostRow => !!p && isBusinessPost(p));
   }, [queueIds, allPosts]);
   const seedPost = allPosts.find((p) => p.id === params.postId && isBusinessPost(p));
+
+  /**
+   * Own LOAD preview: prefer live indent stories (same as green Pulse), not the
+   * network-feed subset — feed can miss a live post or drop sponsored rows from
+   * the Mine queue, which made 2 green icons collapse to 1 progress segment.
+   */
+  const liveOwnLoads = liveOwnLoadsQ.data ?? [];
   const storyList: PostRow[] =
-    storiesFromQueue.length > 0 ? storiesFromQueue
-    : storiesByOrgType.length > 0 ? storiesByOrgType
-    : seedPost ? [seedPost]
-    : [];
+    viewingOwnLoads && liveOwnLoads.length > 0
+      ? liveOwnLoads
+      : storiesFromQueue.length > 0
+        ? storiesFromQueue
+        : storiesByOrgType.length > 0
+          ? storiesByOrgType
+          : seedPost
+            ? [seedPost]
+            : [];
 
   // Direct fetch by postId when feed cache is empty (e.g. opened via shared URL).
   const directPostQ = useQuery({
@@ -249,7 +267,9 @@ export default function StoryDetailScreen() {
   });
   const directPost = directPostQ.data ?? null;
   const resolvedStoryList: PostRow[] = storyList.length > 0 ? storyList : directPost ? [directPost] : [];
-  const isLoadingPost = storyList.length === 0 && directPostQ.isLoading;
+  const isLoadingPost =
+    (storyList.length === 0 && directPostQ.isLoading) ||
+    (viewingOwnLoads && liveOwnLoadsQ.isLoading && liveOwnLoads.length === 0 && storyList.length === 0);
 
   const [current, setCurrent] = useState(0);
   const [bidPost, setBidPost] = useState<PostRow | null>(null);

@@ -1,14 +1,13 @@
 /**
- * Driver Story tab — boosted loads distributed to the driver channel.
+ * Driver Story / Loads tab — boosted loads for getting new work.
  *
  * Layout: pulse-story reel on top (Mine / Fleet availability + Boosted LOADs),
- * then pickup/drop filters, then elegant recommendation cards ranked by
- * vehicle-type relevance for fleet owners.
+ * then pickup/drop filters, then recommendation cards ranked by vehicle-type
+ * relevance for fleet owners.
  *
- * Lifecycle (per product spec): a story is visible while the load is still
- * open; it disappears the moment the load is assigned to someone else (server
- * rule in get_driver_reach_stories). Award/acceptance of a direct bid is a
- * separate surface; this screen only covers submission and status.
+ * Lifecycle: show open / quoted / counter opportunities only. Awarded and
+ * completed jobs are excluded here (History / trip surfaces). Deduped by
+ * post_id so reboosts and RPC joins cannot double the same load.
  */
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import { DriverBrandMark } from '@/components/driver/DriverBrandMark';
@@ -33,12 +32,15 @@ import { DriverCapacityStoryViewer } from '@/features/reach/screens/DriverCapaci
 import { DriverDirectBidSheet } from '@/features/reach/components/DriverDirectBidSheet';
 import { DriverPulseStoryReel } from '@/features/reach/components/DriverPulseStoryReel';
 import { DriverReferralEarningsCard } from '@/features/reach/components/DriverReferralEarningsCard';
+import { ShipperCounterHighlight } from '@/features/reach/components/ShipperCounterHighlight';
 import {
   deactivateFleetOwnerCapacityStory,
   type FleetOwnerCapacityStory,
 } from '@/features/driver/services/fleetOwnerCapacityStory.service';
 import {
   bidStatusFilterLabel,
+  compareLoadOpportunities,
+  dedupeDriverReachStories,
   directBidUiBucket,
   matchesBidStatusFilter,
   type BidStatusFilter,
@@ -163,7 +165,19 @@ function FilterChip({
   );
 }
 
-export default function DriverStoriesScreen() {
+/**
+ * Presentation-only content adapter — the same Reach reel/filters/cards/
+ * modals rendered by `DriverStoriesScreen` below, minus its header, so the
+ * unified Market "Find Work" surface can embed it unchanged. No lifecycle,
+ * sorting, or query logic differs from the standalone route.
+ */
+export function StoriesContent({
+  footer,
+  onRefreshExtra,
+}: {
+  footer?: React.ReactNode;
+  onRefreshExtra?: () => void;
+} = {}) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const { theme } = useDriverTheme();
@@ -193,6 +207,7 @@ export default function DriverStoriesScreen() {
   const [capacityViewer, setCapacityViewer] = useState<FleetOwnerCapacityStory | null>(null);
   const [pickupFilter, setPickupFilter] = useState<string | null>(null);
   const [dropFilter, setDropFilter] = useState<string | null>(null);
+  const [source, setSource] = useState<'all' | 'reach' | 'market'>('all');
   const [bidStatusFilter, setBidStatusFilter] = useState<BidStatusFilter>('all');
 
   useEffect(() => {
@@ -215,7 +230,10 @@ export default function DriverStoriesScreen() {
     }
   }, [storiesQ.data]);
 
-  const stories = storiesQ.data ?? [];
+  const stories = useMemo(
+    () => dedupeDriverReachStories(storiesQ.data ?? []),
+    [storiesQ.data],
+  );
 
   const fleetVehicleTypes = useMemo(() => {
     if (!isFleetOwner) return [] as string[];
@@ -272,22 +290,30 @@ export default function DriverStoriesScreen() {
       return { story: s, matchesFleet, bucket };
     });
 
-    scored.sort((a, b) => {
-      const rank = (bucket: typeof a.bucket) => {
-        if (bucket === 'awarded') return 0;
-        if (bucket === 'counter') return 1;
-        if (bucket === 'quoted') return 2;
-        return 3;
-      };
-      const ra = rank(a.bucket);
-      const rb = rank(b.bucket);
-      if (ra !== rb) return ra - rb;
-      if (a.matchesFleet !== b.matchesFleet) return a.matchesFleet ? -1 : 1;
-      return 0;
-    });
+    scored.sort(compareLoadOpportunities);
 
     return scored;
   }, [stories, pickupFilter, dropFilter, bidStatusFilter, fleetVehicleTypes]);
+
+  /**
+   * Action Needed — counter/quoted items needing a driver response, independent
+   * of whatever pickup/drop/status filters are applied to the discovery list
+   * below. Same bucket classification and ranking as `recommendedStories`
+   * (directBidUiBucket / compareLoadOpportunities), just unfiltered and
+   * narrowed to the two actionable buckets.
+   */
+  const actionNeededItems = useMemo(() => {
+    const scored = stories.map((s) => {
+      const matchesFleet =
+        fleetVehicleTypes.length > 0 &&
+        fleetVehicleTypes.some((vt) => vehicleTypesMatch(vt, s.snapshot_vehicle_type));
+      const bucket = directBidUiBucket(s);
+      return { story: s, matchesFleet, bucket };
+    });
+    const actionable = scored.filter(({ bucket }) => bucket === 'counter' || bucket === 'quoted');
+    actionable.sort(compareLoadOpportunities);
+    return actionable;
+  }, [stories, fleetVehicleTypes]);
 
   /** Filtered loads for the pulse reel (same route/status filters as cards). */
   const filteredReelLoads = useMemo(
@@ -458,46 +484,10 @@ export default function DriverStoriesScreen() {
   const cardBg = isDark ? colors.surface : Theme.cardWhite;
   const hasActiveFilters =
     pickupFilter != null || dropFilter != null || bidStatusFilter !== 'all';
-  const BID_STATUS_FILTERS: BidStatusFilter[] = ['all', 'quoted', 'counter', 'awarded'];
+  const BID_STATUS_FILTERS: BidStatusFilter[] = ['all', 'open', 'quoted', 'counter'];
 
   return (
-    <View
-      style={[
-        styles.root,
-        { backgroundColor: isDark ? colors.background : Theme.surfaceGray },
-      ]}
-    >
-      <View
-        style={[
-          styles.header,
-          {
-            paddingTop: insets.top + Layout.driverHeaderTopOffset,
-            paddingHorizontal: Layout.driverHeaderHorizontalPadding,
-            paddingBottom: Layout.driverHeaderBottomPadding,
-            backgroundColor: isDark ? colors.surface : Theme.surfaceGray,
-            borderBottomColor: colors.border,
-          },
-        ]}
-      >
-        <View style={styles.headerLeft}>
-          <TouchableOpacity
-            onPress={() => router.push('/(driver)/profile')}
-            style={styles.avatarBtn}
-            activeOpacity={0.8}
-            accessibilityRole="button"
-            accessibilityLabel="Open profile"
-          >
-            <DriverSelfAvatar size={36} uri={avatarUri} borderColor={colors.emerald} />
-          </TouchableOpacity>
-          <View style={styles.headerTextWrap}>
-            <DriverBrandMark color={colors.textMuted} />
-            <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>
-              load
-            </Text>
-          </View>
-        </View>
-      </View>
-
+    <>
       <ScrollView
         style={styles.list}
         contentContainerStyle={[
@@ -516,36 +506,106 @@ export default function DriverStoriesScreen() {
               void earningsQ.refetch();
               void capacityQ.refetch();
               void vehiclesQ.refetch();
+              onRefreshExtra?.();
             }}
             tintColor={Theme.primary}
           />
         }
         showsVerticalScrollIndicator={false}
       >
-        <DriverPulseStoryReel
-          isFleetOwner={isFleetOwner}
-          avatarUri={avatarUri}
-          displayName={user?.displayName}
-          capacityStories={filteredCapacityStories}
-          loads={filteredReelLoads}
-          onAddCapacity={() => openCapacityComposer()}
-          onPressCapacity={openCapacityViewer}
-          onPressLoad={openStoryViewer}
-        />
-
-        {userId && earningsQ.data ? (
-          <View style={styles.earningsWrap}>
-            <DriverReferralEarningsCard userId={userId} earnings={earningsQ.data} />
+        {actionNeededItems.length > 0 ? (
+          <View style={styles.actionNeededWrap}>
+            <Text style={[styles.actionNeededHeader, { color: colors.textMuted }]}>
+              ACTION NEEDED · {actionNeededItems.length}
+            </Text>
+            {actionNeededItems.map(({ story, bucket }) => {
+              const counterRate = positiveMoneyOrNull(story.direct_bid_counter_amount);
+              const quotedAmount = positiveMoneyOrNull(story.direct_bid_amount);
+              return (
+                <Pressable
+                  key={story.post_id}
+                  onPress={() => openBid(story)}
+                  style={[styles.actionCard, { backgroundColor: cardBg }]}
+                >
+                  <Text style={styles.actionCardKicker}>
+                    {bucket === 'counter' ? 'Counter offer received' : 'Your bid is pending'}
+                  </Text>
+                  <Text style={[styles.actionCardOrg, { color: colors.text }]} numberOfLines={1}>
+                    {story.org_name}
+                  </Text>
+                  {bucket === 'counter' && counterRate != null ? (
+                    <ShipperCounterHighlight
+                      counterAmountInr={counterRate}
+                      yourQuoteInr={quotedAmount}
+                    />
+                  ) : quotedAmount != null ? (
+                    <Text style={[styles.actionCardAmount, { color: colors.text }]}>
+                      {formatINR(quotedAmount)}
+                    </Text>
+                  ) : null}
+                  <View style={styles.actionCardCta}>
+                    <Text style={styles.actionCardCtaText}>
+                      {bucket === 'counter' ? 'Review counter' : 'View your bid'}
+                    </Text>
+                  </View>
+                </Pressable>
+              );
+            })}
           </View>
         ) : null}
 
-        <View style={styles.sectionPad}>
-          <View style={styles.sectionHeader}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>
-              {fleetVehicleTypes.length > 0 ? 'Recommended for your fleet' : 'Boosted loads'}
-            </Text>
-            <Text style={[styles.sectionSub, { color: colors.textMuted }]}>
-              Tap Full view for the story. Bid or revise from the card.
+        <View style={[styles.sourceRow, { borderColor: colors.border }]}>
+          {(
+            [
+              { id: 'all' as const, label: 'All Work' },
+              { id: 'reach' as const, label: 'Reach' },
+              { id: 'market' as const, label: 'Market' },
+            ] as const
+          ).map((opt) => {
+            const on = source === opt.id;
+            return (
+              <Pressable
+                key={opt.id}
+                onPress={() => setSource(opt.id)}
+                style={[
+                  styles.sourceChip,
+                  on && { backgroundColor: isDark ? colors.surfaceElevated : Theme.cardWhite, borderColor: colors.border },
+                ]}
+              >
+                <Text style={[styles.sourceChipText, { color: on ? colors.text : colors.textMuted }]}>
+                  {opt.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+
+        {source !== 'market' ? (
+          <>
+            <DriverPulseStoryReel
+              isFleetOwner={isFleetOwner}
+              avatarUri={avatarUri}
+              displayName={user?.displayName}
+              capacityStories={filteredCapacityStories}
+              loads={filteredReelLoads}
+              onAddCapacity={() => openCapacityComposer()}
+              onPressCapacity={openCapacityViewer}
+              onPressLoad={openStoryViewer}
+            />
+
+            {userId && earningsQ.data ? (
+              <View style={styles.earningsWrap}>
+                <DriverReferralEarningsCard userId={userId} earnings={earningsQ.data} />
+              </View>
+            ) : null}
+
+            <View style={styles.sectionPad}>
+              <View style={styles.sectionHeader}>
+                <Text style={[styles.sectionTitle, { color: colors.text }]}>Reach</Text>
+                <Text style={[styles.sectionSub, { color: colors.textMuted }]}>
+              {fleetVehicleTypes.length > 0
+                ? 'Recommended for your fleet — bid on open loads. Awarded jobs stay in History.'
+                : 'Find work for your vehicle — bid on open loads. Awarded jobs stay in History.'}
             </Text>
           </View>
 
@@ -650,9 +710,11 @@ export default function DriverStoriesScreen() {
           ) : recommendedStories.length === 0 ? (
             <View style={[styles.emptyCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
               <MapPin size={22} color={colors.textMuted} strokeWidth={1.8} />
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>No loads on this route</Text>
+              <Text style={[styles.emptyTitle, { color: colors.text }]}>No open loads right now</Text>
               <Text style={[styles.emptyBody, { color: colors.textMuted }]}>
-                Try another pickup or drop, or clear filters to see all boosted loads.
+                {pickupFilter || dropFilter
+                  ? 'Try another pickup or drop, or clear filters to see available loads.'
+                  : 'Awarded and completed jobs are not listed here — use History for those. Pull to refresh for new boosted loads.'}
               </Text>
             </View>
           ) : (
@@ -680,11 +742,12 @@ export default function DriverStoriesScreen() {
 
               return (
                 <View
-                  key={story.campaign_id}
+                  key={story.post_id || story.campaign_id}
                   style={[
                     styles.recCard,
                     { backgroundColor: Theme.cardWhite },
                     isAwardedJob && styles.jobCard,
+                    bucket === 'counter' && styles.counterCard,
                   ]}
                 >
                   <View style={styles.recCardBody}>
@@ -702,13 +765,13 @@ export default function DriverStoriesScreen() {
                           <Text style={styles.orgName} numberOfLines={1}>
                             {story.org_name}
                           </Text>
-                          <Text style={[styles.recKicker, isAwardedJob && styles.jobKicker]}>
+                          <Text style={[styles.recKicker, isAwardedJob && styles.jobKicker, bucket === 'counter' && styles.counterKicker]}>
                             {isAwardedJob
                               ? 'Job · Awarded'
                               : bucket === 'quoted'
                                 ? 'Quoted bid'
                                 : bucket === 'counter'
-                                  ? 'Counter received'
+                                  ? 'Counter — your move'
                                   : 'Sponsored load'}
                           </Text>
                         </View>
@@ -774,10 +837,10 @@ export default function DriverStoriesScreen() {
                         <Text style={styles.targetValue}>{formatINR(quotedAmount)}</Text>
                       </View>
                     ) : bucket === 'counter' && counterRate != null ? (
-                      <View style={styles.targetRow}>
-                        <Text style={styles.targetLabel}>Shipper counter</Text>
-                        <Text style={styles.targetValue}>{formatINR(counterRate)}</Text>
-                      </View>
+                      <ShipperCounterHighlight
+                        counterAmountInr={counterRate}
+                        yourQuoteInr={quotedAmount}
+                      />
                     ) : bucket === 'quoted' && quotedAmount != null ? (
                       <View style={styles.targetRow}>
                         <Text style={styles.targetLabel}>Your quote</Text>
@@ -857,24 +920,29 @@ export default function DriverStoriesScreen() {
                         </View>
                       ) : showRevise ? (
                         <TouchableOpacity
-                          style={bucket === 'quoted' ? styles.quotedCtaBtn : styles.ctaBtn}
+                          style={[
+                            bucket === 'quoted' ? styles.quotedCtaBtn : styles.ctaBtn,
+                            bucket === 'counter' && styles.counterCtaBtn,
+                          ]}
                           activeOpacity={0.88}
                           onPress={() => openBid(story)}
                         >
                           <Text
-                            style={
-                              bucket === 'quoted' ? styles.quotedCtaBtnText : styles.ctaBtnText
-                            }
+                            style={[
+                              bucket === 'quoted' ? styles.quotedCtaBtnText : styles.ctaBtnText,
+                              bucket === 'counter' && styles.counterCtaBtnText,
+                            ]}
                             numberOfLines={1}
                           >
                             {bucket === 'counter'
-                              ? `Revise bid${counterRate != null ? ` · ${formatINR(counterRate)}` : ''}`
+                              ? `Respond to counter${counterRate != null ? ` · ${formatINR(counterRate)}` : ''}`
                               : `Revise bid${quotedAmount != null ? ` · ${formatINR(quotedAmount)}` : ''}`}
                           </Text>
                           <Text
-                            style={
-                              bucket === 'quoted' ? styles.quotedCtaBtnHint : styles.ctaBtnHint
-                            }
+                            style={[
+                              bucket === 'quoted' ? styles.quotedCtaBtnHint : styles.ctaBtnHint,
+                              bucket === 'counter' && styles.counterCtaBtnHint,
+                            ]}
                             numberOfLines={1}
                           >
                             {bucket === 'counter'
@@ -930,6 +998,10 @@ export default function DriverStoriesScreen() {
             })
           )}
         </View>
+          </>
+        ) : null}
+
+        {source !== 'reach' ? footer : null}
       </ScrollView>
 
       <Modal
@@ -1031,7 +1103,7 @@ export default function DriverStoriesScreen() {
 
       {viewerStartPostId ? (
         <DriverPulseStoryViewer
-          stories={stories}
+          stories={filteredReelLoads}
           initialPostId={viewerStartPostId}
           onClose={() => setViewerStartPostId(null)}
           resolveFooterAction={resolveViewerFooterAction}
@@ -1067,6 +1139,63 @@ export default function DriverStoriesScreen() {
           }}
         />
       ) : null}
+    </>
+  );
+}
+
+/**
+ * Standalone route wrapper for the existing `stories` route (kept, now
+ * unlinked from the primary tab bar). Owns only the header; all Reach
+ * content/logic lives in `StoriesContent`, reused unchanged inside the
+ * unified Market "Find Work" surface.
+ */
+export default function DriverStoriesScreen() {
+  const router = useRouter();
+  const insets = useSafeAreaInsets();
+  const { theme } = useDriverTheme();
+  const colors = useDriverThemeColors();
+  const isDark = theme === 'dark';
+  const { avatarUri } = useDriverAvatarUri();
+
+  return (
+    <View
+      style={[
+        styles.root,
+        { backgroundColor: isDark ? colors.background : Theme.surfaceGray },
+      ]}
+    >
+      <View
+        style={[
+          styles.header,
+          {
+            paddingTop: insets.top + Layout.driverHeaderTopOffset,
+            paddingHorizontal: Layout.driverHeaderHorizontalPadding,
+            paddingBottom: Layout.driverHeaderBottomPadding,
+            backgroundColor: isDark ? colors.surface : Theme.surfaceGray,
+            borderBottomColor: colors.border,
+          },
+        ]}
+      >
+        <View style={styles.headerLeft}>
+          <TouchableOpacity
+            onPress={() => router.push('/(driver)/profile')}
+            style={styles.avatarBtn}
+            activeOpacity={0.8}
+            accessibilityRole="button"
+            accessibilityLabel="Open profile"
+          >
+            <DriverSelfAvatar size={36} uri={avatarUri} borderColor={colors.emerald} />
+          </TouchableOpacity>
+          <View style={styles.headerTextWrap}>
+            <DriverBrandMark color={colors.textMuted} />
+            <Text style={[styles.welcomeTitle, { color: colors.text }]} numberOfLines={1}>
+              load
+            </Text>
+          </View>
+        </View>
+      </View>
+
+      <StoriesContent />
     </View>
   );
 }
@@ -1105,6 +1234,57 @@ const styles = StyleSheet.create({
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 10,
   },
+  actionNeededWrap: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 12,
+    gap: 8,
+  },
+  actionNeededHeader: {
+    fontSize: 11,
+    fontWeight: '800',
+    letterSpacing: 0.5,
+    textTransform: 'uppercase',
+  },
+  actionCard: {
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: Theme.accentGoldBorder,
+    padding: 12,
+    gap: 6,
+  },
+  actionCardKicker: {
+    fontSize: 10,
+    fontWeight: '800',
+    color: Theme.warning,
+    textTransform: 'uppercase',
+    letterSpacing: 0.3,
+  },
+  actionCardOrg: { fontSize: 14, fontWeight: '800' },
+  actionCardAmount: { fontSize: 16, fontWeight: '800', letterSpacing: -0.2 },
+  actionCardCta: {
+    alignSelf: 'flex-start',
+    marginTop: 2,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: Theme.accentGold,
+  },
+  actionCardCtaText: { fontSize: 12, fontWeight: '800', color: Theme.textPrimaryDark },
+  sourceRow: {
+    flexDirection: 'row',
+    gap: 8,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 12,
+    paddingBottom: 4,
+  },
+  sourceChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'transparent',
+  },
+  sourceChipText: { fontSize: 12, fontWeight: '700' },
   sectionPad: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 12,
@@ -1192,6 +1372,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     backgroundColor: Theme.positiveMuted,
   },
+  counterCard: {
+    borderColor: Theme.accentGoldBorder,
+    borderWidth: 1.5,
+  },
   recCardBody: { gap: 10 },
   cardActionsRow: {
     flexDirection: 'row',
@@ -1239,6 +1423,10 @@ const styles = StyleSheet.create({
   jobKicker: {
     color: Theme.darkGreen,
     fontWeight: '700',
+  },
+  counterKicker: {
+    color: Theme.warning,
+    fontWeight: '800',
   },
   boostedPill: {
     paddingHorizontal: 7,
@@ -1417,6 +1605,18 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: '600',
     color: Theme.textMuted,
+  },
+  counterCtaBtn: {
+    backgroundColor: Theme.accentGold,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.accentGoldPressed,
+  },
+  counterCtaBtnText: {
+    color: Theme.textPrimaryDark,
+  },
+  counterCtaBtnHint: {
+    color: Theme.accentBrownDeep,
+    opacity: 0.85,
   },
   walletBtn: {
     flexDirection: 'row',

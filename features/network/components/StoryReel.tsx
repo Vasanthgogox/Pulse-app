@@ -8,8 +8,10 @@ import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { type PostRow } from "@/features/network/services/posts.service";
+import { isIndentStoryLive } from "@/features/network/utils/indentStoryWindow.util";
 import { splitLocationParts } from "@/features/network/utils/storyDisplay";
 import { recordReachEvent } from "@/features/reach/services/events.service";
+import { useLiveOwnLoadStoriesQuery } from "@/lib/queries/usePostsQuery";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { LinearGradient } from "expo-linear-gradient";
 import { useRouter } from "expo-router";
@@ -412,6 +414,8 @@ export function StoryReel({
   const router = useRouter();
   const { profile } = useAuth();
   const { currentOrganization } = useOrganization();
+  /** Same source as Load Center green Pulse — not limited to network-feed rows. */
+  const liveOwnLoadsQ = useLiveOwnLoadStoriesQuery(orgId ?? null);
   const [seenKeys, setSeenKeys] = useState<Record<string, true>>({});
   const seenStorageKey = `q:stories:seen:${orgId ?? "global"}`;
   /** Impression (v1): sponsored story rendered into this strip — NOT "seen
@@ -470,8 +474,17 @@ export function StoryReel({
   const ownStories: PostRow[] = [];
   const otherStories: PostRow[] = [];
   for (const p of businessOnly) {
-    if (p.organization_id === orgId) ownStories.push(p);
-    else otherStories.push(p);
+    if (p.organization_id === orgId) {
+      // Network feed still returns own awarded LOADs for shipper history —
+      // never put those in the Mine story queue.
+      if (p.type === "LOAD" && p.source_indent_id && !isIndentStoryLive(p)) {
+        continue;
+      }
+      if (p.type === "LOAD" && p.source_indent_id && p.is_active === false) {
+        continue;
+      }
+      ownStories.push(p);
+    } else otherStories.push(p);
   }
   const ordered = [...otherStories];
   for (const p of ordered) {
@@ -482,22 +495,30 @@ export function StoryReel({
     }
     if (stories.length >= 24) break;
   }
-  const ownStoryQueue = [...ownStories]
-    // Own strip is one "Mine" bubble — don't duplicate sponsored twins there.
-    .filter((p) => !p.is_sponsored)
-    .sort(
+  /**
+   * Mine queue = every live indent LOAD (green Pulse) + own capacity stories from
+   * the feed. Do not drop sponsored loads — a boosted indent is still a live story.
+   * Prefer `listLiveOwnLoadStories` over feed rows so missing feed entries still
+   * produce multiple progress segments in story preview.
+   */
+  const ownStoryQueueResolved = useMemo(() => {
+    const byId = new Map<string, PostRow>();
+    for (const p of liveOwnLoadsQ.data ?? []) {
+      byId.set(p.id, p);
+    }
+    for (const p of ownStories) {
+      if (p.type === "LOAD" && p.source_indent_id) {
+        // Live query is authoritative for indent LOADs; skip stale feed-only rows.
+        if ((liveOwnLoadsQ.data?.length ?? 0) > 0) continue;
+      }
+      if (!byId.has(p.id)) byId.set(p.id, p);
+    }
+    return [...byId.values()].sort(
       (a, b) =>
-        new Date(b.created_at ?? 0).getTime() - new Date(a.created_at ?? 0).getTime(),
+        new Date(b.created_at ?? 0).getTime() -
+        new Date(a.created_at ?? 0).getTime(),
     );
-  // If the only own posts are sponsored, still surface them.
-  const ownStoryQueueResolved =
-    ownStoryQueue.length > 0
-      ? ownStoryQueue
-      : [...ownStories].sort(
-          (a, b) =>
-            new Date(b.created_at ?? 0).getTime() -
-            new Date(a.created_at ?? 0).getTime(),
-        );
+  }, [liveOwnLoadsQ.data, ownStories]);
   const latestOwnStory = ownStoryQueueResolved[0];
   const storyQueueIds = stories.map((s) => s.id).join(",");
   const ownStoryQueueIds = ownStoryQueueResolved.map((s) => s.id).join(",");

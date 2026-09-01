@@ -52,18 +52,19 @@ export function NetworkProfileAvatarRating({
         accessibilityRole="text"
         accessibilityLabel={empty ? "No rating" : `${label} rating`}
       >
-        <Star
-          size={starSize}
-          color={empty ? Theme.borderMedium : Theme.driverGold}
-          fill={empty ? "transparent" : Theme.driverGold}
-          strokeWidth={empty ? 1.8 : 0}
-        />
         <Text
           style={[styles.singleScore, empty && styles.noRatingLabel]}
           numberOfLines={empty ? 2 : 1}
         >
           {empty ? "No rating" : label}
         </Text>
+        <Star
+          size={starSize}
+          color={empty ? Theme.borderMedium : Theme.driverGold}
+          fill={empty ? "transparent" : Theme.driverGold}
+          strokeWidth={empty ? 1.8 : 0}
+          style={styles.singleStar}
+        />
       </View>
     );
   }
@@ -119,7 +120,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 6,
+    gap: 5,
     minWidth: 0,
   },
   singleChipEmpty: {
@@ -127,6 +128,10 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     maxWidth: "100%",
+  },
+  singleStar: {
+    marginTop: 1,
+    flexShrink: 0,
   },
   singleScore: {
     fontSize: 20,
@@ -136,6 +141,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.4,
     includeFontPadding: false,
     lineHeight: 22,
+    textAlignVertical: "center",
   },
   noRatingLabel: {
     fontSize: 11,

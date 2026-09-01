@@ -16,6 +16,7 @@ import {
 } from "@/features/indents/styles/indentReviewHubStyles";
 import { resolveCommercialOpportunity } from "@/features/marketplace/domain";
 import { type AwardQuoteResult } from "@/features/network/hooks/useAwardQuote";
+import { submitDriverDirectBidCounterOffer } from "@/features/network/services/bids.service";
 import { showAppAlert } from "@/lib/appAlert";
 import { formatINR } from "@/lib/format";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -120,12 +121,14 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
   const handleSubmitCounter = useCallback(
     async (amount: number): Promise<boolean> => {
       if (!counterQuoteId || !currentLoad) return false;
+      const offer =
+        sortedQuotes.find((q) => q.id === counterQuoteId) ?? null;
       try {
         setSubmittingCounter(true);
-        const { error } = await submitDirectQuoteCounterOffer(
-          counterQuoteId,
-          amount,
-        );
+        const { error } =
+          offer?.offer_source === "driver_direct_bid"
+            ? await submitDriverDirectBidCounterOffer(counterQuoteId, amount)
+            : await submitDirectQuoteCounterOffer(counterQuoteId, amount);
         if (error) {
           showAppAlert("Could not send counter", error.message);
           return false;
@@ -134,6 +137,11 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
         queryClient.invalidateQueries({
           queryKey: ["indents", currentLoad.id, "direct-quotes"],
         });
+        if (offer?.offer_source === "driver_direct_bid") {
+          queryClient.invalidateQueries({
+            queryKey: ["q", "bids", "direct-post"],
+          });
+        }
         return true;
       } catch (e) {
         const msg = e instanceof Error ? e.message : "Unknown error.";
@@ -143,7 +151,7 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
         setSubmittingCounter(false);
       }
     },
-    [counterQuoteId, currentLoad, queryClient],
+    [counterQuoteId, currentLoad, queryClient, sortedQuotes],
   );
 
   // Single source for the gate so the `disabled` prop and the dimmed style can

@@ -319,7 +319,7 @@ export default function DriverTripsScreen() {
   const [pressedCardId, setPressedCardId] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState("");
   const [tripView, setTripView] = useState<"active" | "history">("active");
-  const [tripsSubTab, setTripsSubTab] = useState<"all" | "fleet" | "open" | "attributed">("all");
+  const [tripsSubTab, setTripsSubTab] = useState<"all" | "fleet" | "open" | "attributed" | "market">("all");
   const [salaryRequests, setSalaryRequests] = useState<salaryRequestsService.SalaryRequestRow[]>([]);
   const historyParams = useLocalSearchParams<{ type?: string }>();
 
@@ -829,6 +829,7 @@ export default function DriverTripsScreen() {
         const isFleet = isFleetDispatchedTrip(trip);
         if (tripsSubTab === "fleet") return isFleet;
         if (tripsSubTab === "open") return !isFleet;
+        if (tripsSubTab === "market") return trip.source === "market_bid";
         return fleetAttributedApprovedTripIds.has(trip.id);
       });
     }
@@ -893,6 +894,10 @@ export default function DriverTripsScreen() {
         .length,
     [tripsInHistoryView, fleetAttributedApprovedTripIds],
   );
+  const marketTripsCount = useMemo(
+    () => tripsInHistoryView.filter((trip) => trip.source === "market_bid").length,
+    [tripsInHistoryView],
+  );
   const poolCountForTab =
     tripView === "active"
       ? activeTripsCount
@@ -902,7 +907,9 @@ export default function DriverTripsScreen() {
           ? fleetTripsCount
           : tripsSubTab === "open"
             ? openTripsCount
-            : attributedTripsCount;
+            : tripsSubTab === "market"
+              ? marketTripsCount
+              : attributedTripsCount;
 
   const renderItem = ({ item }: { item: tripsService.TripRow }) => {
     const completed = isCompleted(item.status);
@@ -1280,6 +1287,12 @@ export default function DriverTripsScreen() {
                   icon: "check-circle" as const,
                   count: attributedTripsCount,
                 },
+                {
+                  id: "market" as const,
+                  label: "Market",
+                  icon: "shopping-bag" as const,
+                  count: marketTripsCount,
+                },
               ] as const
             ).map((tab) => {
               const active = tripsSubTab === tab.id;
@@ -1446,7 +1459,9 @@ export default function DriverTripsScreen() {
                         ? "No open trips found"
                         : tripsSubTab === "attributed"
                           ? "No attributed trips found"
-                          : "No trips found"}
+                          : tripsSubTab === "market"
+                            ? "No Market trips found"
+                            : "No trips found"}
                 </Text>
               </View>
             )

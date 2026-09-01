@@ -4,7 +4,10 @@
  * Get Load / bid visibility stays on indent status (Marketplace P0.1).
  * `posts.expires_at` is only the story-reel clock; we do not hide the indent from bids.
  */
-import { createPost } from '@/features/network/services/posts.service';
+import {
+  createPost,
+  type PostRow,
+} from '@/features/network/services/posts.service';
 import {
   indentStoryExpiresAt,
   isIndentStoryLive,
@@ -16,6 +19,8 @@ export { indentStoryExpiresAt, isIndentStoryLive } from '@/features/network/util
 /** Indent statuses that should remove linked stories from the network feed. */
 export const INDENT_TERMINAL_STORY_STATUSES = [
   'awarded',
+  'assigned',
+  'deployed',
   'completed',
   'cancelled',
   'closed',
@@ -117,7 +122,9 @@ export async function getIndentStoryStates(
 
   const { data, error } = await supabase()
     .from('posts')
-    .select('id, source_indent_id, is_active, expires_at, created_at')
+    .select(
+      'id, source_indent_id, is_active, expires_at, created_at, indents!posts_source_indent_id_fkey(status)',
+    )
     .eq('organization_id', orgId)
     .eq('type', 'LOAD')
     .in('source_indent_id', ids)
@@ -129,13 +136,83 @@ export async function getIndentStoryStates(
   for (const row of data ?? []) {
     const indentId = (row as { source_indent_id?: string | null }).source_indent_id;
     if (!indentId || byIndentId[indentId]) continue;
+    const indent = (row as { indents?: { status?: string | null } | { status?: string | null }[] | null })
+      .indents;
+    const indentRow = Array.isArray(indent) ? indent[0] : indent;
+    const live =
+      isIndentStoryLive(row) && !isIndentTerminalForStory(indentRow?.status);
     byIndentId[indentId] = {
       postId: row.id,
-      isLive: isIndentStoryLive(row),
+      isLive: live,
       expiresAt: row.expires_at ?? null,
     };
   }
   return { error: null, byIndentId };
+}
+
+/**
+ * All live indent-linked LOAD stories for an org — same clock as the Load Center
+ * green Pulse icon (`isIndentStoryLive`) AND indent still open for bids.
+ * Awarded / trip-converted indents never appear in Mine / story preview.
+ */
+export async function listLiveOwnLoadStories(
+  orgId: string,
+): Promise<{ error: Error | null; posts: PostRow[] }> {
+  if (!orgId) return { error: null, posts: [] };
+
+  const { data, error } = await supabase()
+    .from('posts')
+    .select(
+      'id, organization_id, author_user_id, type, content, origin, destination, load_date, vehicle_type, weight_tonnes, rate_offer, material, expires_at, is_active, view_count, created_at, source_indent_id, organizations(name, avatar_seed, logo_url), indents!posts_source_indent_id_fkey(status)',
+    )
+    .eq('organization_id', orgId)
+    .eq('type', 'LOAD')
+    .not('source_indent_id', 'is', null)
+    .eq('is_active', true)
+    .order('created_at', { ascending: false });
+
+  if (error) return { error: new Error(error.message), posts: [] };
+
+  type OrgJoin = {
+    name?: string | null;
+    avatar_seed?: string | null;
+    logo_url?: string | null;
+  };
+  type IndentJoin = { status?: string | null };
+
+  const posts: PostRow[] = [];
+  for (const raw of data ?? []) {
+    if (!isIndentStoryLive(raw)) continue;
+    const indent = (raw as { indents?: IndentJoin | IndentJoin[] | null }).indents;
+    const indentRow = Array.isArray(indent) ? indent[0] : indent;
+    if (isIndentTerminalForStory(indentRow?.status)) continue;
+    const org = (raw as { organizations?: OrgJoin | null }).organizations;
+    posts.push({
+      id: raw.id,
+      organization_id: raw.organization_id,
+      org_name: org?.name ?? '',
+      org_avatar_seed: org?.avatar_seed ?? null,
+      org_avatar_url: org?.logo_url ?? null,
+      author_user_id: raw.author_user_id,
+      type: 'LOAD',
+      content: raw.content,
+      origin: raw.origin,
+      destination: raw.destination,
+      load_date: raw.load_date,
+      vehicle_type: raw.vehicle_type,
+      weight_tonnes: raw.weight_tonnes,
+      rate_offer: raw.rate_offer,
+      material: raw.material,
+      expires_at: raw.expires_at,
+      is_active: raw.is_active,
+      view_count: raw.view_count ?? 0,
+      bid_count: 0,
+      created_at: raw.created_at,
+      source_indent_id: raw.source_indent_id,
+    });
+  }
+
+  return { error: null, posts };
 }
 
 async function reactivateStory(

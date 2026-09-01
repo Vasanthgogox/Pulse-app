@@ -14,6 +14,7 @@ import {
   splitLocationParts,
 } from "@/features/network/utils/storyDisplay";
 import type { DriverReachStoryRow } from "@/features/reach/services/driverReferrals.service";
+import { isLoadOpportunity } from "@/features/reach/utils/directBidLifecycle";
 import { positiveMoneyOrNull } from "@/lib/format";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -249,13 +250,21 @@ function buildQueue(
   postId: string | undefined,
   story: DriverReachStoryRow | null | undefined,
 ): DriverReachStoryRow[] {
-  if (stories && stories.length > 0) {
-    if (story?.post_id && !stories.some((s) => s.post_id === story.post_id)) {
-      return [story, ...stories];
+  /** Never page through awarded / rejected / rewarded history in the reel. */
+  const opportunities = (stories ?? []).filter(isLoadOpportunity);
+  if (opportunities.length > 0) {
+    if (
+      story?.post_id &&
+      isLoadOpportunity(story) &&
+      !opportunities.some((s) => s.post_id === story.post_id)
+    ) {
+      return [story, ...opportunities];
     }
-    return stories;
+    return opportunities;
   }
-  if (story?.post_id) return [story];
+  // Single-story deep link: still refuse inactive / awarded history.
+  if (story?.post_id && isLoadOpportunity(story)) return [story];
+  if (postId && story && !isLoadOpportunity(story)) return [];
   if (postId) {
     return [
       {
@@ -317,6 +326,12 @@ export function DriverPulseStoryViewer({
     () => buildQueue(stories, postId, story),
     [stories, postId, story],
   );
+
+  useEffect(() => {
+    if (queue.length === 0 && (stories?.length || story || postId)) {
+      onCloseRef.current();
+    }
+  }, [queue.length, stories, story, postId]);
 
   const initialIndex = useMemo(() => {
     const target = initialPostId ?? postId ?? story?.post_id ?? null;
