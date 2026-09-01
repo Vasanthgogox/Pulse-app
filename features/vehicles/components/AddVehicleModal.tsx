@@ -397,7 +397,7 @@ export function AddVehicleModal({
               </Text>
               <TextInput
                 style={[inputStyle, { textTransform: "uppercase" }]}
-                placeholder="e.g. TN 25 CM 7892"
+                placeholder="e.g. TN 18 D 2522"
                 placeholderTextColor={Theme.placeholder}
                 value={vehicleNumber}
                 onChangeText={(v) => setVehicleNumber(applyIndianVehicleKeystroke(v))}
@@ -484,7 +484,7 @@ export function AddVehicleModal({
             <Text style={labelStyle}>Vehicle Registration Number</Text>
             <TextInput
               style={[inputStyle, { textTransform: "uppercase" }]}
-              placeholder="e.g. TN 25 CM 7892"
+              placeholder="e.g. TN 18 D 2522"
               placeholderTextColor={Theme.placeholder}
               value={vehicleNumber}
               onChangeText={(v) => setVehicleNumber(applyIndianVehicleKeystroke(v))}

@@ -78,7 +78,7 @@ export function tripPhoneWizardSubtitle(
       return `${stepPrefix}${
         opts.isReassign
           ? "Edit vehicle number — or keep the current plate"
-          : "Vehicle number (XX NN LL NNNN)"
+          : "Vehicle number (e.g. TN 18 D 2522)"
       }`;
     case "review":
       return `${stepPrefix}Review ${

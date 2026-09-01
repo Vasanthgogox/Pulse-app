@@ -3,6 +3,7 @@
  * Each panel receives the SupplierManagementBundle and renders its section.
  */
 import { formatINR, formatRelative, formatMobileNumber } from "@/lib/format";
+import { applyIndianVehicleKeystroke } from "@/lib/indianVehicleInput.util";
 import Theme from "@/constants/Theme";
 import {
   METRONIC,
@@ -1119,7 +1120,7 @@ export function SupplierProfileFleetPanel({ bundle, orgId, supplierId, onRefresh
           <View style={spStyles.formGrid}>
             <View style={spStyles.fieldGroup}>
               <Text style={spStyles.fieldLabel}>Vehicle number *</Text>
-              <TextInput style={spStyles.fieldInput} value={form.vehicle_number} onChangeText={(v) => setForm((f) => ({ ...f, vehicle_number: v }))} placeholder="e.g. MH01AB1234" placeholderTextColor={METRONIC.muted} autoCapitalize="characters" />
+              <TextInput style={spStyles.fieldInput} value={form.vehicle_number} onChangeText={(v) => setForm((f) => ({ ...f, vehicle_number: applyIndianVehicleKeystroke(v) }))} placeholder="e.g. TN 18 D 2522" placeholderTextColor={METRONIC.muted} autoCapitalize="characters" />
             </View>
             <View style={spStyles.fieldGroup}>
               <Text style={spStyles.fieldLabel}>Vehicle type</Text>

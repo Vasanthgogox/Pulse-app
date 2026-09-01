@@ -5,6 +5,7 @@ import {
   getIndianVehicleFormatHint,
   getIndianVehicleKeyboardKind,
   getIndianVehicleSegmentGuide,
+  getIndianVehicleTextInputKeyboardType,
   isIndianVehiclePlateValid,
 } from "@/lib/indianVehicleInput.util";
 import {
@@ -23,32 +24,62 @@ function typeOut(plate: string): string {
   return value;
 }
 
-/** Fixed AA 00 AA 0000 plates only (e.g. TN 17 AS 2202). */
-const VALID_PLATES = [
+/** Two-letter series: AA 00 AA 0000 */
+const VALID_TWO_LETTER = [
   "TN17AS2202",
   "TN01CM2026",
   "MH12DE1433",
   "KA05MG1234",
   "HR26DK8337",
   "UP32AB1234",
-];
+  "TN18DC2522",
+] as const;
 
-describe("Indian vehicle plate entry (fixed AA 00 AA 0000)", () => {
-  it.each(VALID_PLATES)("types %s without dropping characters", (plate) => {
-    const typed = typeOut(plate);
-    expect(normalizeVehicleNumberForMatch(typed)).toBe(plate);
-    expect(isIndianVehiclePlateValid(typed)).toBe(true);
+/** One-letter series: AA 00 A 0000 (e.g. TN 18 D 2522) */
+const VALID_ONE_LETTER = ["TN18D2522", "TN17A2202", "TN01C2026", "TN05C9811"] as const;
+
+describe("Indian vehicle plate entry", () => {
+  it.each([...VALID_TWO_LETTER, ...VALID_ONE_LETTER])(
+    "types %s without dropping characters",
+    (plate) => {
+      const typed = typeOut(plate);
+      expect(normalizeVehicleNumberForMatch(typed)).toBe(plate);
+      expect(isIndianVehiclePlateValid(typed)).toBe(true);
+    },
+  );
+
+  it.each([...VALID_TWO_LETTER, ...VALID_ONE_LETTER])(
+    "accepts %s pasted in one go",
+    (plate) => {
+      const pasted = applyIndianVehicleKeystroke(plate);
+      expect(normalizeVehicleNumberForMatch(pasted)).toBe(plate);
+      expect(isIndianVehiclePlateValid(pasted)).toBe(true);
+    },
+  );
+
+  it.each([...VALID_TWO_LETTER, ...VALID_ONE_LETTER])(
+    "validateIndianVehicleNumber accepts %s",
+    (plate) => {
+      expect(validateIndianVehicleNumber(plate)).toBeNull();
+      expect(
+        validateIndianVehicleNumber(formatIndianVehicleNumber(plate)),
+      ).toBeNull();
+    },
+  );
+
+  it("formats TN18D2522 as a 1-letter series, not TN 18 D2 522", () => {
+    expect(formatIndianVehicleNumberInput("TN18D2522")).toBe("TN 18 D 2522");
+    expect(formatIndianVehicleNumber("TN18D2522")).toBe("TN 18 D 2522");
+    expect(formatIndianVehicleNumberInput("TN18DC2522")).toBe("TN 18 DC 2522");
   });
 
-  it.each(VALID_PLATES)("accepts %s pasted in one go", (plate) => {
-    const pasted = applyIndianVehicleKeystroke(plate);
-    expect(normalizeVehicleNumberForMatch(pasted)).toBe(plate);
-    expect(isIndianVehiclePlateValid(pasted)).toBe(true);
-  });
-
-  it.each(VALID_PLATES)("validateIndianVehicleNumber accepts %s", (plate) => {
-    expect(validateIndianVehicleNumber(plate)).toBeNull();
-    expect(validateIndianVehicleNumber(formatIndianVehicleNumber(plate))).toBeNull();
+  it("keeps the system keyboard on letters after the first series character so digits still type", () => {
+    expect(getIndianVehicleTextInputKeyboardType("TN 18 D")).toBe("default");
+    expect(getIndianVehicleAllowedNext("TN 18 D")).toEqual({
+      letters: true,
+      digits: true,
+    });
+    expect(appendIndianVehicleChar("TN 18 D", "2")).toBe("TN 18 D 2");
   });
 
   it.each([
@@ -58,13 +89,11 @@ describe("Indian vehicle plate entry (fixed AA 00 AA 0000)", () => {
     "TN17AS",
     "TN17AS220",
     "TN1AS2202",
-    "TN17A2202",
     "ABCD",
     "12345",
     "22BH1234AB",
-    "TN01C2026",
     "TN091234",
-  ])("treats incomplete or non-fixed %s as invalid", (partial) => {
+  ])("treats incomplete or non-standard %s as invalid", (partial) => {
     expect(isIndianVehiclePlateValid(partial)).toBe(false);
     if (partial.length === 0) {
       expect(validateIndianVehicleNumber(partial)).toBe("Required");
@@ -73,10 +102,11 @@ describe("Indian vehicle plate entry (fixed AA 00 AA 0000)", () => {
     }
   });
 
-  it("formats input with fixed spacing", () => {
+  it("formats input with flexible series spacing", () => {
     expect(formatIndianVehicleNumberInput("tn17as2202")).toBe("TN 17 AS 2202");
     expect(formatIndianVehicleNumberInput("TN17")).toBe("TN 17");
     expect(formatIndianVehicleNumberInput("TN17AS")).toBe("TN 17 AS");
+    expect(formatIndianVehicleNumberInput("TN18D")).toBe("TN 18 D");
   });
 
   it("formats stored plates for display and leaves non-Indian values alone", () => {
@@ -85,13 +115,18 @@ describe("Indian vehicle plate entry (fixed AA 00 AA 0000)", () => {
     expect(formatIndianVehicleNumber("TRK-SEED-001")).toBe("TRK-SEED-001");
   });
 
-  it("marks every segment done for a complete plate", () => {
+  it("marks every segment done for a complete 2-letter plate", () => {
     const guide = getIndianVehicleSegmentGuide("TN 17 AS 2202");
-    expect(guide.map((s) => s.label)).toEqual(["AA", "00", "AA", "0000"]);
+    expect(guide.map((s) => s.label)).toEqual(["AA", "00", "A(A)", "0000"]);
     expect(guide.every((s) => s.done)).toBe(true);
   });
 
-  it("switches keypad by fixed segment", () => {
+  it("marks series done for a complete 1-letter plate", () => {
+    const guide = getIndianVehicleSegmentGuide("TN 18 D 2522");
+    expect(guide.every((s) => s.done)).toBe(true);
+  });
+
+  it("switches keypad by segment", () => {
     expect(getIndianVehicleKeyboardKind("")).toBe("letters");
     expect(getIndianVehicleKeyboardKind("TN")).toBe("numbers");
     expect(getIndianVehicleKeyboardKind("TN17")).toBe("letters");
@@ -115,7 +150,7 @@ describe("Indian vehicle plate entry (fixed AA 00 AA 0000)", () => {
     expect(appendIndianVehicleChar("TN 17", "A")).toBe("TN 17 A");
   });
 
-  it("hints match the fixed mask", () => {
+  it("hints match the flexible series mask", () => {
     expect(getIndianVehicleFormatHint("")).toMatch(/state code/i);
     expect(getIndianVehicleFormatHint("TN")).toMatch(/district/i);
     expect(getIndianVehicleFormatHint("TN17")).toMatch(/series/i);

@@ -117,13 +117,12 @@ export function formatRelative(dateStr: string): string {
   return `${Math.floor(diffDays / 365)} year(s) ago`;
 }
 /**
- * Indian vehicle registration — fixed civilian layout used for entry:
- * AA 00 AA 0000 (e.g. TN 17 AS 2202).
+ * Indian vehicle registration — civilian layouts used for entry:
+ * AA 00 A 0000 (e.g. TN 18 D 2522) and AA 00 AA 0000 (e.g. TN 17 AS 2202).
  * Display of legacy / BH plates still uses a flexible fallback below.
  */
-const INDIAN_VEHICLE_FIXED =
-  /^([A-Z]{0,2})([0-9]{0,2})([A-Z]{0,2})([0-9]{0,4})$/;
-const INDIAN_VEHICLE_FIXED_FULL = /^[A-Z]{2}[0-9]{2}[A-Z]{2}[0-9]{4}$/;
+const INDIAN_VEHICLE_STANDARD =
+  /^[A-Z]{2}[0-9]{2}[A-Z]{0,2}[0-9]{0,4}$/;
 
 /**
  * Legacy / Bharat layouts for display of stored values only
@@ -134,12 +133,12 @@ const BH_VEHICLE_PARTIAL = /^([0-9]{1,2})(BH?)?([0-9]{0,4})([A-Z]{0,2})$/;
 
 /** Split a normalized plate into display segments, or null if it is not an Indian layout. */
 function splitIndianVehicleSegments(normalized: string): string[] | null {
-  if (INDIAN_VEHICLE_FIXED_FULL.test(normalized) || normalized.length <= 10) {
-    const fixed = normalized.match(INDIAN_VEHICLE_FIXED);
-    if (fixed) {
-      const parts = [fixed[1], fixed[2], fixed[3], fixed[4]].filter(Boolean);
-      if (parts.length > 0) return parts as string[];
-    }
+  if (INDIAN_VEHICLE_STANDARD.test(normalized) && normalized.length <= 10) {
+    const p = parsePlate(normalized);
+    const parts = [p.state, p.district, p.series, p.number].filter(
+      (seg) => seg.length > 0,
+    );
+    if (parts.length > 0) return parts;
   }
   if (/^[0-9]/.test(normalized)) {
     const bh = normalized.match(BH_VEHICLE_PARTIAL);

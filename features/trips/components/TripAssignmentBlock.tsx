@@ -41,6 +41,7 @@ import {
     formatIndianVehicleNumber,
     formatMobileNumber,
 } from "@/lib/format";
+import { applyIndianVehicleKeystroke } from "@/lib/indianVehicleInput.util";
 import { validatePhone } from "@/lib/phoneValidation";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Check, ChevronRight, Circle, Plus, Star } from "lucide-react-native";
@@ -2072,8 +2073,10 @@ export function TripAssignmentBlock({
                         <TextInput
                           style={styles.assignAdhocVehicleInput}
                           value={pickerVehicleInput}
-                          onChangeText={setPickerVehicleInput}
-                          placeholder="e.g. TN 23 AB 1234"
+                          onChangeText={(t) =>
+                            setPickerVehicleInput(applyIndianVehicleKeystroke(t))
+                          }
+                          placeholder="e.g. TN 18 D 2522"
                           placeholderTextColor={Theme.textMuted}
                         />
                         <TouchableOpacity

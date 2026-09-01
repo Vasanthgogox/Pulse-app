@@ -20,7 +20,7 @@ import { Shield } from "lucide-react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Layout from "@/constants/Layout";
-import { isIndianVehiclePlateComplete } from "@/lib/indianVehicleInput.util";
+import { isIndianVehiclePlateComplete, applyIndianVehicleKeystroke } from "@/lib/indianVehicleInput.util";
 import Theme from "@/constants/Theme";
 import { AddTripWizardProgress } from "@/features/trips/components/add-trip/AddTripWizardProgress";
 import { AggregateTrackingMobileStep } from "@/features/trips/components/add-trip/AggregateTrackingMobileStep";
@@ -381,7 +381,7 @@ export function TripPhoneAssignmentWizard({
 
   const handleVehicleChange = useCallback(
     (value: string) => {
-      onVehiclePlateChange(formatIndianVehicleNumber(value));
+      onVehiclePlateChange(applyIndianVehicleKeystroke(value));
     },
     [onVehiclePlateChange],
   );
@@ -509,7 +509,7 @@ export function TripPhoneAssignmentWizard({
       if (!lookup.phoneComplete) return "Enter a complete 10-digit mobile number.";
       if (driverName.trim().length < 2) return "Enter the driver name (at least 2 characters).";
       if (effectiveVehicleRequired && !isIndianVehiclePlateComplete(vehiclePlate)) {
-        return "Enter the full vehicle number (XX NN LL NNNN).";
+        return "Enter the full vehicle number (e.g. TN 18 D 2522 or TN 17 AS 2202).";
       }
     }
     if (useSteppedWizard && !canContinue) {
@@ -836,7 +836,7 @@ export function TripPhoneAssignmentWizard({
                           ]}
                           value={vehiclePlate}
                           onChangeText={handleVehicleChange}
-                          placeholder="XX NN LL NNNN"
+                          placeholder="e.g. TN 18 D 2522"
                           placeholderTextColor={Theme.textMuted}
                           autoCapitalize="characters"
                         />

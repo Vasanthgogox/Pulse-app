@@ -10,7 +10,7 @@ import { DriverPhoneRecommendations } from "@/features/trips/components/add-trip
 import { normalizeIndianMobileLast10 } from "@/features/trips/utils/driverPhoneLookup.util";
 import {
   applyIndianVehicleKeystroke,
-  getIndianVehicleKeyboardType,
+  getIndianVehicleTextInputKeyboardType,
 } from "@/lib/indianVehicleInput.util";
 import { formatMobileNumber } from "@/lib/format";
 import type { AddTripIssueField } from "./useAddTripForm";
@@ -83,7 +83,7 @@ export const CreateTripDesktopAggregateFields = memo(
   }: CreateTripDesktopAggregateFieldsProps) {
     const phoneLast10 = normalizeIndianMobileLast10(driverPhone);
     const phoneComplete = phoneLast10.length >= 10;
-    const vehicleKeyboard = getIndianVehicleKeyboardType(vehicleText);
+    const vehicleKeyboard = getIndianVehicleTextInputKeyboardType(vehicleText);
 
     const currencyInputProps = Platform.select({
       web: { outlineStyle: "none" } as object,
@@ -230,13 +230,15 @@ export const CreateTripDesktopAggregateFields = memo(
           <DesktopInputShell error={invalid("vehicleNumber")}>
             <TextInput
               style={s.desktopPlainInput}
-              placeholder="e.g. TN 12 AB 3456"
+              placeholder="e.g. TN 18 D 2522"
               placeholderTextColor={Theme.placeholder}
               value={vehicleText}
               onChangeText={(v) => onVehicleTextChange(applyIndianVehicleKeystroke(v))}
-              keyboardType={vehicleKeyboard}
-              autoCapitalize={vehicleKeyboard === "number-pad" ? "none" : "characters"}
+              keyboardType={Platform.OS === "web" ? "default" : vehicleKeyboard}
+              autoCapitalize="characters"
               autoCorrect={false}
+              autoComplete="off"
+              inputMode="text"
               {...currencyInputProps}
             />
           </DesktopInputShell>

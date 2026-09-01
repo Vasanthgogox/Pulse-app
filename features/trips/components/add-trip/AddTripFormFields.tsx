@@ -54,7 +54,7 @@ import {
 import {
   applyIndianVehicleKeystroke,
   getIndianVehicleFormatHint,
-  getIndianVehicleKeyboardType,
+  getIndianVehicleTextInputKeyboardType,
 } from "@/lib/indianVehicleInput.util";
 import { validatePhone } from "@/lib/phoneValidation";
 import {
@@ -3364,9 +3364,6 @@ export function AddTripFormFields({
                                 ]}
                               />
                               <TextInput
-                                key={getIndianVehicleKeyboardType(
-                                  state.aggregateVehicleText,
-                                )}
                                 style={[
                                   ...iconFieldInputStyle,
                                   outlineErr("vehicleNumber"),
@@ -3375,7 +3372,7 @@ export function AddTripFormFields({
                                     Platform.OS === "web" &&
                                     styles.mobileWebNoZoomInput,
                                 ]}
-                                placeholder="e.g. TN 12 AB 3456"
+                                placeholder="e.g. TN 18 D 2522"
                                 placeholderTextColor={Theme.placeholder}
                                 value={state.aggregateVehicleText}
                                 onChangeText={(v) => {
@@ -3383,17 +3380,17 @@ export function AddTripFormFields({
                                     applyIndianVehicleKeystroke(v),
                                   );
                                 }}
-                                keyboardType={getIndianVehicleKeyboardType(
-                                  state.aggregateVehicleText,
-                                )}
-                                autoCapitalize={
-                                  getIndianVehicleKeyboardType(
-                                    state.aggregateVehicleText,
-                                  ) === "number-pad"
-                                    ? "none"
-                                    : "characters"
+                                keyboardType={
+                                  Platform.OS === "web"
+                                    ? "default"
+                                    : getIndianVehicleTextInputKeyboardType(
+                                        state.aggregateVehicleText,
+                                      )
                                 }
+                                autoCapitalize="characters"
                                 autoCorrect={false}
+                                autoComplete="off"
+                                inputMode="text"
                                 ref={aggregateVehicleInputRef}
                                 inputAccessoryViewID={kbAccessoryId}
                                 onFocus={() => {

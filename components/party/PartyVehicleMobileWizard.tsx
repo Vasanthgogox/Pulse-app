@@ -115,7 +115,7 @@ export const PartyVehicleMobileWizard = memo(function PartyVehicleMobileWizard({
   const stepHint = (() => {
     switch (wizardStep) {
       case "registration":
-        return "Indian registration format, e.g. TN 01 CM 2026.";
+        return "Indian registration, e.g. TN 18 D 2522 or TN 01 CM 2026.";
       case "category":
         return "Pick the category that best matches this truck.";
       case "model":
