@@ -11,6 +11,10 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import {
   computeExperienceProgress,
   countFiveStarRatings,
+  formatExperienceMilestoneTitle,
+  formatExperienceTierSubtitle,
+  formatMilestoneProgressLabel,
+  formatMilestoneStatusLine,
   getMilestoneCount,
   isMilestoneCompleted,
   isMilestoneInProgress,
@@ -175,90 +179,146 @@ function FleetStars({ value }: { value: number }) {
 type RoadmapPanelProps = {
   experience: ExperienceProgress;
   onBack: () => void;
+  embedded?: boolean;
+  topInset?: number;
 };
 
-function BusinessRoadmapPanel({ experience, onBack }: RoadmapPanelProps) {
+function BusinessRoadmapPanel({
+  experience,
+  onBack,
+  embedded = false,
+  topInset = 0,
+}: RoadmapPanelProps) {
   const {
     currentLevelConfig,
     nextLevelConfig,
     experiencePct,
-    metrics,
+    currentCount,
   } = experience;
+  const progressLabel = formatMilestoneProgressLabel(experience);
+  const statusLine = formatMilestoneStatusLine(
+    currentLevelConfig,
+    currentCount,
+    experience.metrics,
+    { audience: "business" },
+  );
+  const maxLevel = experience.levels[experience.levels.length - 1]?.level ?? 1;
+  const allMilestonesComplete = experience.highestCompletedLevel >= maxLevel;
 
   return (
-    <View style={styles.roadmapWrap}>
+    <View
+      style={[
+        styles.roadmapWrap,
+        embedded ? styles.roadmapWrapEmbedded : { paddingTop: topInset + 8 },
+      ]}
+    >
       <View style={styles.roadmapHeader}>
         <Pressable
           onPress={onBack}
           style={({ pressed }) => [styles.roadmapBack, pressed && { opacity: 0.85 }]}
-          hitSlop={10}
+          hitSlop={Layout.touchTargetHitSlop}
+          accessibilityRole="button"
+          accessibilityLabel="Back to organization profile"
         >
           <ChevronLeft size={22} color={Theme.textPrimary} />
         </Pressable>
-        <Text style={styles.roadmapTitle}>Experience roadmap</Text>
-        <View style={{ width: 40 }} />
+        <View style={styles.roadmapHeaderTitleWrap}>
+          <Text style={styles.roadmapTitle} numberOfLines={1}>
+            Experience roadmap
+          </Text>
+        </View>
+        <View style={styles.roadmapHeaderSpacer} />
       </View>
       <LinearGradient
         colors={[Theme.accentBrownDeep, "#3f2c2c"]}
         start={{ x: 0, y: 0 }}
         end={{ x: 1, y: 1 }}
-        style={styles.roadmapHero}
+        style={[styles.roadmapHero, embedded && styles.roadmapHeroEmbedded]}
       >
-        <View style={styles.roadmapWatermark}>
-          <MapPin size={100} color="rgba(255,255,255,0.05)" />
+        <View style={styles.roadmapWatermark} pointerEvents="none">
+          <MapPin size={88} color="rgba(255,255,255,0.05)" />
         </View>
         <View style={styles.rankRow}>
           <LinearGradient colors={[AMBER_500, "#d97706"]} style={styles.crownBox}>
-            <Crown size={26} color="#fff" />
+            <Crown size={24} color="#fff" />
           </LinearGradient>
-          <View>
+          <View style={styles.rankCopy}>
             <Text style={styles.roadmapEyebrow}>CURRENT MILESTONE</Text>
-            <Text style={styles.roadmapTierName}>
-              {currentLevelConfig.tier} · {currentLevelConfig.name}
+            <Text style={styles.roadmapTierName} numberOfLines={1}>
+              {formatExperienceMilestoneTitle(currentLevelConfig)}
+            </Text>
+            <Text style={styles.roadmapTierSub} numberOfLines={2}>
+              {formatExperienceTierSubtitle(currentLevelConfig)}
             </Text>
           </View>
         </View>
         <View style={styles.roadmapProgBlock}>
           <View style={styles.roadmapProgLabels}>
-            <Text style={styles.roadmapProgLeft}>
-              {nextLevelConfig
-                ? `Progress to ${nextLevelConfig.name}`
-                : "Final milestone"}
+            <Text style={styles.roadmapProgLeft} numberOfLines={2}>
+              {progressLabel}
             </Text>
-            <Text style={styles.roadmapProgPct}>{experiencePct}%</Text>
+            <Text style={styles.roadmapProgPct}>
+              {allMilestonesComplete ? "100%" : `${experiencePct}%`}
+            </Text>
           </View>
           <View style={styles.roadmapTrack}>
             <View
-              style={[styles.roadmapFill, { width: `${experiencePct}%` }]}
+              style={[
+                styles.roadmapFill,
+                {
+                  width: `${allMilestonesComplete ? 100 : Math.max(experiencePct, experiencePct > 0 ? 4 : 0)}%`,
+                },
+              ]}
             />
           </View>
-          <Text style={styles.roadmapSmall}>
-            {currentLevelConfig.goalText} · {metrics.completedTrips} trips ·{" "}
-            {metrics.fiveStarCount}× 5★
-          </Text>
+          <Text style={styles.roadmapSmall}>{statusLine}</Text>
+          {nextLevelConfig && !allMilestonesComplete ? (
+            <Text style={styles.roadmapNextHint} numberOfLines={2}>
+              Next up: L{nextLevelConfig.level} {nextLevelConfig.name} ·{" "}
+              {nextLevelConfig.goalText}
+            </Text>
+          ) : null}
         </View>
+        <View style={styles.roadmapDivider} />
         <View style={styles.roadmapSteps}>
-          {experience.levels.map((step) => {
+          {experience.levels.map((step, index) => {
             const past = isMilestoneCompleted(step.level, experience);
             const active = isMilestoneInProgress(step.level, experience);
             const count = getMilestoneCount(step, experience.metrics);
+            const isLast = index === experience.levels.length - 1;
             return (
               <View key={step.level} style={styles.roadmapStepRow}>
-                <View
-                  style={[
-                    styles.roadmapDot,
-                    past && { backgroundColor: "#10b981" },
-                    active && { backgroundColor: AMBER_400 },
-                    !past && !active && { backgroundColor: "#475569" },
-                  ]}
-                />
+                <View style={styles.roadmapDotColumn}>
+                  <View
+                    style={[
+                      styles.roadmapDot,
+                      past && styles.roadmapDotDone,
+                      active && styles.roadmapDotActive,
+                      !past && !active && styles.roadmapDotUpcoming,
+                    ]}
+                  />
+                  {!isLast ? <View style={styles.roadmapStepLine} /> : null}
+                </View>
                 <View style={styles.roadmapStepText}>
-                  <Text style={styles.roadmapStepTitle}>
-                    L{step.level} {step.name}
-                  </Text>
-                  <Text style={styles.roadmapStepSub}>
+                  <View style={styles.roadmapStepTitleRow}>
+                    <Text
+                      style={[
+                        styles.roadmapStepTitle,
+                        active && styles.roadmapStepTitleActive,
+                        past && styles.roadmapStepTitleDone,
+                      ]}
+                      numberOfLines={1}
+                    >
+                      L{step.level} {step.name}
+                    </Text>
+                    {active ? (
+                      <Text style={styles.roadmapStepCount}>
+                        {count.done}/{count.target}
+                      </Text>
+                    ) : null}
+                  </View>
+                  <Text style={styles.roadmapStepSub} numberOfLines={2}>
                     {step.goalText}
-                    {active ? ` · ${count.done}/${count.target}` : ""}
                   </Text>
                 </View>
               </View>
@@ -360,19 +420,33 @@ export default function ProfileScreen({
     [trips],
   );
 
+  const { data: verificationStatus } = useQuery({
+    queryKey: queryKeys.workspace.verificationBanner(orgId ?? ""),
+    queryFn: async () => {
+      if (!orgId) return "unverified" as const;
+      const { fields, error } = await getOrgVerificationBannerFields(orgId);
+      if (error) throw error;
+      return fields?.verification_status ?? "unverified";
+    },
+    enabled: !!orgId,
+    staleTime: 60_000,
+  });
+
+  const orgKycVerified = verificationStatus === "verified";
+
   const experience = useMemo(
     () =>
       computeExperienceProgress({
         hasSignedUp: Boolean(user?.uid || profile?.uid),
         completedTrips,
-        isVerified: Boolean(orgId),
+        isVerified: orgKycVerified,
         fiveStarCount: receivedCustomerRatingData?.fiveStarCount ?? 0,
       }),
     [
       user?.uid,
       profile?.uid,
       completedTrips,
-      orgId,
+      orgKycVerified,
       receivedCustomerRatingData?.fiveStarCount,
     ],
   );
@@ -408,17 +482,6 @@ export default function ProfileScreen({
     capabilities.includes("dispatch") ||
     capabilities.includes("dispatch_for_own_fleet");
 
-  const { data: verificationStatus } = useQuery({
-    queryKey: queryKeys.workspace.verificationBanner(orgId ?? ""),
-    queryFn: async () => {
-      if (!orgId) return "unverified" as const;
-      const { fields, error } = await getOrgVerificationBannerFields(orgId);
-      if (error) throw error;
-      return fields?.verification_status ?? "unverified";
-    },
-    enabled: !!orgId,
-    staleTime: 60_000,
-  });
   const verificationCopy = orgHubStatusCopy(verificationStatus ?? "unverified");
 
   const handleClose = () => {
@@ -660,12 +723,12 @@ export default function ProfileScreen({
         }
       >
         {viewMode === "roadmap" ? (
-          <View style={{ paddingTop: embedded ? 8 : insets.top + 8, paddingBottom: 8 }}>
-            <BusinessRoadmapPanel
-              experience={experience}
-              onBack={() => setViewMode("main")}
-            />
-          </View>
+          <BusinessRoadmapPanel
+            experience={experience}
+            embedded={embedded}
+            topInset={insets.top}
+            onBack={() => setViewMode("main")}
+          />
         ) : null}
 
         {viewMode === "main" ? (
@@ -739,9 +802,7 @@ export default function ProfileScreen({
                   <View style={styles.tierBadge}>
                     <Trophy size={9} color={AMBER_400} />
                     <Text style={styles.tierBadgeText}>
-                      {currentLevelConfig.tier === currentLevelConfig.name
-                        ? currentLevelConfig.name
-                        : `${currentLevelConfig.tier} · ${currentLevelConfig.name}`}
+                      {formatExperienceMilestoneTitle(currentLevelConfig)}
                     </Text>
                   </View>
                 </View>
@@ -794,7 +855,10 @@ export default function ProfileScreen({
                         : `L${currentLevel} ${currentLevelConfig.name}`}
                     </Text>
                     <Text style={styles.xpFooterTxt}>
-                      {nextLevelConfig?.name ?? "Max"} next · tap roadmap
+                      {nextLevelConfig
+                        ? `${formatExperienceMilestoneTitle(nextLevelConfig)} next`
+                        : "Max tier"}{" "}
+                      · tap roadmap
                     </Text>
                   </View>
                 </Pressable>
@@ -1676,11 +1740,29 @@ const styles = StyleSheet.create({
     color: Theme.textOnDark,
   },
 
-  roadmapWrap: { paddingHorizontal: Layout.screenPaddingHorizontal, gap: 10 },
+  roadmapWrap: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingBottom: Layout.sectionSpacing,
+    gap: 12,
+  },
+  roadmapWrapEmbedded: {
+    paddingTop: 10,
+    paddingBottom: Layout.sectionSpacing + 8,
+  },
   roadmapHeader: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    minHeight: Layout.minTouchTargetSize,
+  },
+  roadmapHeaderTitleWrap: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 8,
+  },
+  roadmapHeaderSpacer: {
+    width: 40,
+    height: 40,
   },
   roadmapBack: {
     width: 40,
@@ -1691,46 +1773,186 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     borderWidth: 1,
     borderColor: Theme.border,
+    flexShrink: 0,
   },
   roadmapTitle: {
     fontSize: 13,
     fontWeight: "900",
     color: Theme.textPrimaryDark,
-    letterSpacing: 2,
+    letterSpacing: 1.6,
+    textAlign: "center",
   },
   roadmapHero: {
     borderRadius: 28,
-    padding: 20,
+    paddingHorizontal: 18,
+    paddingTop: 18,
+    paddingBottom: 18,
     overflow: "hidden",
+  },
+  roadmapHeroEmbedded: {
+    borderRadius: 20,
+    marginHorizontal: 0,
   },
   roadmapWatermark: {
     position: "absolute",
-    right: 8,
-    top: 8,
-    opacity: 0.4,
+    right: 12,
+    top: 52,
+    opacity: 0.35,
   },
-  rankRow: { flexDirection: "row", alignItems: "center", gap: 12, marginBottom: 16 },
-  crownBox: { width: 48, height: 48, borderRadius: 16, alignItems: "center", justifyContent: "center" },
-  roadmapEyebrow: { fontSize: 8, fontWeight: "900", color: "rgba(148,163,184,0.95)", letterSpacing: 2 },
-  roadmapTierName: { fontSize: 22, fontWeight: "900", color: "#fff", marginTop: 2 },
-  roadmapProgBlock: { marginBottom: 16 },
-  roadmapProgLabels: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
-  roadmapProgLeft: { fontSize: 10, fontWeight: "700", color: "rgba(255,255,255,0.7)" },
-  roadmapProgPct: { fontSize: 10, fontWeight: "900", color: AMBER_400 },
+  rankRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 14,
+    marginBottom: 18,
+    zIndex: 1,
+  },
+  rankCopy: {
+    flex: 1,
+    minWidth: 0,
+    paddingTop: 2,
+  },
+  crownBox: {
+    width: 52,
+    height: 52,
+    borderRadius: 16,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  roadmapEyebrow: {
+    fontSize: 8,
+    fontWeight: "900",
+    color: "rgba(148,163,184,0.95)",
+    letterSpacing: 2,
+  },
+  roadmapTierName: {
+    fontSize: 22,
+    fontWeight: "900",
+    color: "#fff",
+    marginTop: 4,
+    lineHeight: 26,
+  },
+  roadmapTierSub: {
+    fontSize: 10,
+    fontWeight: "700",
+    color: "rgba(251,191,36,0.85)",
+    marginTop: 4,
+    letterSpacing: 0.3,
+    lineHeight: 14,
+  },
+  roadmapNextHint: {
+    fontSize: 9,
+    color: "rgba(148,163,184,0.85)",
+    marginTop: 6,
+    lineHeight: 13,
+  },
+  roadmapProgBlock: {
+    marginBottom: 14,
+    zIndex: 1,
+  },
+  roadmapProgLabels: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    marginBottom: 8,
+  },
+  roadmapProgLeft: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 10,
+    fontWeight: "700",
+    color: "rgba(255,255,255,0.78)",
+    lineHeight: 14,
+  },
+  roadmapProgPct: {
+    flexShrink: 0,
+    fontSize: 11,
+    fontWeight: "900",
+    color: AMBER_400,
+    minWidth: 34,
+    textAlign: "right",
+  },
   roadmapTrack: {
-    height: 6,
+    height: 8,
     borderRadius: 999,
     backgroundColor: "rgba(0,0,0,0.35)",
     overflow: "hidden",
   },
   roadmapFill: { height: "100%", backgroundColor: AMBER_400, borderRadius: 999 },
-  roadmapSmall: { fontSize: 10, color: "rgba(255,255,255,0.5)", marginTop: 6 },
-  roadmapSteps: { gap: 8 },
-  roadmapStepRow: { flexDirection: "row", alignItems: "center", gap: 10 },
-  roadmapDot: { width: 10, height: 10, borderRadius: 5 },
-  roadmapStepText: { flex: 1 },
-  roadmapStepTitle: { fontSize: 12, fontWeight: "800", color: "#e2e8f0" },
-  roadmapStepSub: { fontSize: 9, color: "rgba(148,163,184,0.9)", marginTop: 2 },
+  roadmapSmall: {
+    fontSize: 10,
+    color: "rgba(255,255,255,0.58)",
+    marginTop: 8,
+    lineHeight: 14,
+  },
+  roadmapDivider: {
+    height: StyleSheet.hairlineWidth,
+    backgroundColor: "rgba(255,255,255,0.12)",
+    marginBottom: 12,
+  },
+  roadmapSteps: { gap: 0 },
+  roadmapStepRow: {
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 12,
+    minHeight: 52,
+  },
+  roadmapDotColumn: {
+    width: 20,
+    alignItems: "center",
+    alignSelf: "stretch",
+  },
+  roadmapDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    marginTop: 4,
+  },
+  roadmapDotDone: { backgroundColor: "#10b981" },
+  roadmapDotActive: { backgroundColor: AMBER_400 },
+  roadmapDotUpcoming: { backgroundColor: "#475569" },
+  roadmapStepLine: {
+    width: 2,
+    flex: 1,
+    minHeight: 18,
+    marginTop: 4,
+    borderRadius: 1,
+    backgroundColor: "rgba(255,255,255,0.12)",
+  },
+  roadmapStepText: {
+    flex: 1,
+    minWidth: 0,
+    paddingBottom: 12,
+  },
+  roadmapStepTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+  },
+  roadmapStepTitle: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 12,
+    fontWeight: "800",
+    color: "rgba(226,232,240,0.72)",
+    lineHeight: 16,
+  },
+  roadmapStepTitleActive: { color: "#fff" },
+  roadmapStepTitleDone: { color: "#e2e8f0" },
+  roadmapStepCount: {
+    fontSize: 10,
+    fontWeight: "800",
+    color: AMBER_400,
+    flexShrink: 0,
+  },
+  roadmapStepSub: {
+    fontSize: 9,
+    color: "rgba(148,163,184,0.9)",
+    marginTop: 3,
+    lineHeight: 13,
+  },
 
   // ── Org DP (hero) ──────────────────────────────────────────────
   heroDpWrap: {

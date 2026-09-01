@@ -37,8 +37,10 @@ import { useOptionalAwardedIndentDeployModal } from "@/contexts/AwardedIndentDep
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
     getIndentDisplayNumber,
+    updateIndent,
     type IndentRow,
 } from "@/features/indents";
+import { confirmDialog } from "@/lib/confirmDialog";
 import { shareDraftIndent } from "@/features/indents/services/indents.service";
 import { resolveMarketIndentShipperLabel } from "@/features/indents/utils/indentPartyDisplay.util";
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
@@ -1033,6 +1035,48 @@ export function LoadCenterView({
     setBoostSheetVisible(true);
   }, []);
 
+  // A2: contextual Marketplace distribution toggle on an existing indent.
+  // Modifies the existing circulation_target only -- no new Marketplace entity.
+  const [marketplaceToggleBusyId, setMarketplaceToggleBusyId] = useState<
+    string | null
+  >(null);
+
+  const handleToggleMarketplace = useCallback(
+    async (load: IndentRow) => {
+      if (!orgId) return;
+      const target = load.circulation_target ?? "integrated_supplier";
+      const isShared = target === "marketplace" || target === "both";
+      const confirmed = await confirmDialog({
+        title: isShared ? "Stop sharing to Marketplace?" : "Share to Marketplace?",
+        message: isShared
+          ? "This load will stop appearing to DCO / fleet owners in the open Marketplace. Your integrated supplier network is unaffected."
+          : "This load will also become visible to verified DCO / fleet owners in the open Marketplace, alongside your integrated supplier network.",
+        confirmLabel: isShared ? "Stop sharing" : "Share",
+        destructive: isShared,
+      });
+      if (!confirmed) return;
+      try {
+        setMarketplaceToggleBusyId(load.id);
+        const { error } = await updateIndent(load.id, {
+          circulation_target: isShared ? "integrated_supplier" : "both",
+        });
+        if (error) {
+          Alert.alert("Could not update distribution", error.message);
+          return;
+        }
+        invalidateIndents(orgId);
+        triggerSuccess(
+          isShared
+            ? "Stopped sharing to Marketplace."
+            : "Shared to Marketplace.",
+        );
+      } finally {
+        setMarketplaceToggleBusyId(null);
+      }
+    },
+    [orgId, invalidateIndents, triggerSuccess],
+  );
+
   const handleShareIndent = async (load: IndentRow) => {
     const routeLabel = `${(load.pickup_area || "—").toUpperCase()} → ${(load.drop_location || "—").toUpperCase()}`;
     const dateLabel = load.pickup_date
@@ -1297,6 +1341,8 @@ export function LoadCenterView({
                 onPulseStory={handlePulseStory}
                 onIndentPress={handleCardIndentPress}
                 onShareIndent={handleShareIndent}
+                onToggleMarketplace={handleToggleMarketplace}
+                marketplaceBusy={marketplaceToggleBusyId === load.id}
                 onBroadcastDraft={handleBroadcastDraft}
                 onOpenAwardModal={awardModal.open}
                 dense={layout.dense}

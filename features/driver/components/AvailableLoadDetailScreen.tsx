@@ -92,10 +92,25 @@ export default function AvailableLoadDetailScreen() {
   const inputBg = isDark ? colors.surfaceElevated : Theme.surfaceGray;
   const rate = load ? formatFleetOwnerRateOffer(load.rate_offer) : null;
 
+  // amountText holds digits only -- see handleAmountChange. The input's displayed `value` is a
+  // separately-computed formatted string (formatMarketBidAmount), so the RPC always gets a clean
+  // number regardless of what's shown on screen.
+  const parsedAmount = amountText ? Number(amountText) : NaN;
+  const amountValid = Number.isFinite(parsedAmount) && parsedAmount > 0;
+
+  /**
+   * Strips anything that isn't a digit on every change -- covers typed input AND pasted text
+   * identically, since paste fires this same handler with the full new value. Non-numeric
+   * characters never make it into state, so there's nothing left to validate away later; the
+   * only remaining invalid state is "empty" or "0", both handled by amountValid.
+   */
+  const handleAmountChange = (text: string) => {
+    setAmountText(text.replace(/[^0-9]/g, ''));
+  };
+
   const handleSubmitBid = async () => {
-    const amount = Number(amountText.replace(/,/g, '').trim());
-    if (!Number.isFinite(amount) || amount <= 0) {
-      setSubmitError('Enter a valid bid amount.');
+    if (!amountValid) {
+      setSubmitError('Enter a bid amount greater than ₹0.');
       return;
     }
     setBusy(true);
@@ -103,7 +118,7 @@ export default function AvailableLoadDetailScreen() {
     try {
       const { error: bidError } = await submitMarketBid({
         indentId,
-        amount,
+        amount: parsedAmount,
         note,
         ownerVehicleId: vehicleId,
       });
@@ -196,7 +211,7 @@ export default function AvailableLoadDetailScreen() {
                       month: 'short',
                       year: 'numeric',
                     })
-                  : null,
+                  : 'Date TBA',
               ]
                 .filter(Boolean)
                 .join(' · ')}
@@ -247,16 +262,23 @@ export default function AvailableLoadDetailScreen() {
                   Your amount
                 </Text>
                 <TextInput
-                  value={amountText}
-                  onChangeText={setAmountText}
-                  placeholder={load.rate_offer ? String(load.rate_offer) : 'e.g. 18500'}
+                  value={amountText ? formatMarketBidAmount(parsedAmount) : ''}
+                  onChangeText={handleAmountChange}
+                  placeholder={rate ? `e.g. ${rate}` : 'e.g. ₹18,500'}
                   keyboardType="numeric"
                   placeholderTextColor={colors.textMuted}
                   style={[
                     styles.input,
-                    { color: colors.text, backgroundColor: inputBg, borderColor: cardBorder },
+                    {
+                      color: colors.text,
+                      backgroundColor: inputBg,
+                      borderColor: amountText.length > 0 && !amountValid ? Theme.negative : cardBorder,
+                    },
                   ]}
                 />
+                {amountText.length > 0 && !amountValid ? (
+                  <Text style={styles.error}>Enter a bid amount greater than ₹0.</Text>
+                ) : null}
 
                 <Text style={[styles.label, { color: colors.textMuted, marginTop: 10 }]}>
                   Note (optional)
@@ -312,19 +334,36 @@ export default function AvailableLoadDetailScreen() {
                       {vehicleId ? 'Tap again to skip vehicle.' : 'No vehicle selected — that’s fine.'}
                     </Text>
                   </>
-                ) : null}
+                ) : (
+                  <View style={[styles.noVehicleWrap, { borderColor: cardBorder, backgroundColor: inputBg }]}>
+                    <Text style={[styles.label, { color: colors.textMuted }]}>Vehicle</Text>
+                    <Text style={[styles.body, { color: colors.textMuted }]}>
+                      No active vehicles. Add or activate a vehicle to place a bid on this load.
+                    </Text>
+                    <Pressable
+                      onPress={() =>
+                        router.push(ROUTES.driverMyFleet() as Parameters<typeof router.push>[0])
+                      }
+                      hitSlop={6}
+                    >
+                      <Text style={[styles.manageFleetLink, { color: colors.emerald }]}>
+                        Manage my fleet
+                      </Text>
+                    </Pressable>
+                  </View>
+                )}
 
                 {submitError ? <Text style={styles.error}>{submitError}</Text> : null}
 
                 <Pressable
                   onPress={() => void handleSubmitBid()}
-                  disabled={busy}
+                  disabled={busy || !amountValid}
                   style={[
                     styles.bidCta,
                     {
                       backgroundColor: Theme.buttonPrimary,
                       borderColor: Theme.buttonPrimaryBorder,
-                      opacity: busy ? 0.65 : 1,
+                      opacity: busy || !amountValid ? 0.65 : 1,
                     },
                   ]}
                 >
@@ -402,6 +441,14 @@ const styles = StyleSheet.create({
   vehicleTitle: { fontSize: 12, fontWeight: '700' },
   vehicleSub: { fontSize: 10, fontWeight: '500' },
   hint: { fontSize: 11, fontWeight: '500', marginTop: 4 },
+  noVehicleWrap: {
+    marginTop: 10,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 10,
+    gap: 6,
+  },
+  manageFleetLink: { fontSize: 12, fontWeight: '700' },
   error: { fontSize: 12, fontWeight: '600', color: Theme.negative, marginTop: 8 },
   bidCta: {
     marginTop: 12,
