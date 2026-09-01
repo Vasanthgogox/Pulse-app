@@ -2,73 +2,73 @@
  * Supplier profile panels — all 10 tab content components.
  * Each panel receives the SupplierManagementBundle and renders its section.
  */
-import { formatINR, formatRelative, formatMobileNumber } from "@/lib/format";
-import { applyIndianVehicleKeystroke } from "@/lib/indianVehicleInput.util";
 import Theme from "@/constants/Theme";
-import {
-  METRONIC,
-  hubStyles as styles,
-  spStyles as _spStyles,
-  supplierStyles,
-} from "@/features/suppliers/components/desktop/supplierProfileHub.styles";
-
-// Merge client profile atoms with supplier-specific extensions
-const spStyles = { ..._spStyles, ...supplierStyles };
-import type { SupplierManagementBundle } from "@/features/suppliers/types/supplierManagement.types";
-import {
-  SUPPLIER_KYC_DOC_LABELS,
-  MANDATORY_SUPPLIER_KYC_TYPES,
-  type SupplierKycDocType,
-} from "@/features/suppliers/types/supplierManagement.types";
-import {
-  Activity,
-  AlertCircle,
-  AlertTriangle,
-  Award,
-  Bell,
-  Building2,
-  CheckCircle2,
-  Clock,
-  Download,
-  FileCheck,
-  FileText,
-  Plus,
-  ShieldAlert,
-  Truck,
-  Upload,
-  User,
-  Users,
-  Wallet,
-  Zap,
-} from "lucide-react-native";
-import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
-import {
-  ProfileHubLottieIcon,
-  type ProfileHubLottieKey,
-} from "@/features/party/components/ProfileHubAnimatedIcons";
 import { PartyProfileIntelSections } from "@/features/party/components/PartyProfileIntelSections";
-import { supplierToPublicEntity } from "@/features/public-profile/mappers";
-import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
 import {
-  updateSupplierOnboarding,
-  type OnboardingAgreementStatus,
-} from "@/features/suppliers/services/supplierProfile.service";
-import { upsertSupplierKycDocument, updateSupplierKycDocumentStatus } from "@/features/suppliers/services/supplierKycDocuments.service";
+    ProfileHubLottieIcon,
+    type ProfileHubLottieKey,
+} from "@/features/party/components/ProfileHubAnimatedIcons";
+import { profileHubLayoutStyles as mobile } from "@/features/party/components/profileHubLayout.styles";
+import { useProfileHubCompact } from "@/features/party/hooks/useProfileHubCompact";
+import { supplierToPublicEntity } from "@/features/public-profile/mappers";
+import {
+    spStyles as _spStyles,
+    METRONIC,
+    hubStyles as styles,
+    supplierStyles,
+} from "@/features/suppliers/components/desktop/supplierProfileHub.styles";
 import { createSupplierComplianceDoc, deleteSupplierComplianceDoc, type SupplierComplianceDocType } from "@/features/suppliers/services/supplierComplianceDocs.service";
 import { createSupplierContract } from "@/features/suppliers/services/supplierContracts.service";
 import { createSupplierVehicle } from "@/features/suppliers/services/supplierFleet.service";
+import { updateSupplierKycDocumentStatus, upsertSupplierKycDocument } from "@/features/suppliers/services/supplierKycDocuments.service";
+import {
+    updateSupplierOnboarding,
+    type OnboardingAgreementStatus,
+} from "@/features/suppliers/services/supplierProfile.service";
 import { createSupplierWarehouse } from "@/features/suppliers/services/supplierWarehouses.service";
 import { updateSupplier } from "@/features/suppliers/services/suppliers.service";
+import type { SupplierManagementBundle } from "@/features/suppliers/types/supplierManagement.types";
+import {
+    MANDATORY_SUPPLIER_KYC_TYPES,
+    SUPPLIER_KYC_DOC_LABELS,
+    type SupplierKycDocType,
+} from "@/features/suppliers/types/supplierManagement.types";
+import { formatINR, formatMobileNumber, formatRelative } from "@/lib/format";
+import { applyIndianVehicleKeystroke } from "@/lib/indianVehicleInput.util";
+import {
+    Activity,
+    AlertCircle,
+    AlertTriangle,
+    Award,
+    Bell,
+    Building2,
+    CheckCircle2,
+    Clock,
+    Download,
+    FileCheck,
+    FileText,
+    Plus,
+    ShieldAlert,
+    Truck,
+    Upload,
+    User,
+    Users,
+    Wallet,
+    Zap,
+} from "lucide-react-native";
 import { useMemo, useState } from "react";
 import {
-  ActivityIndicator,
-  Alert,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
+    ActivityIndicator,
+    Alert,
+    Pressable,
+    StyleSheet,
+    Text,
+    TextInput,
+    View,
 } from "react-native";
+
+// Merge client profile atoms with supplier-specific extensions
+const spStyles = { ..._spStyles, ...supplierStyles };
 
 type BundleProps = {
   bundle: SupplierManagementBundle;

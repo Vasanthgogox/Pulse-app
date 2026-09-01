@@ -3,7 +3,7 @@ import Theme from "@/constants/Theme";
 import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
-  Alert,
+  ActivityIndicator,
   PanResponder,
   Platform,
   ScrollView,
@@ -14,6 +14,12 @@ import {
   View,
   useWindowDimensions,
 } from "react-native";
+import {
+  notifySupplierKycUser,
+  openSupplierKycDocument,
+  pickAndUploadSupplierKycDocument,
+} from "@/features/suppliers/utils/supplierKycUpload.util";
+import { resolveSupplierVaultDocType } from "@/features/suppliers/utils/supplierVerificationVault.util";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { ClientProfileHubsEditSection } from "@/features/clients/components/ClientProfileHubsEditSection";
@@ -69,6 +75,9 @@ export type ProfileKycDoc = {
   documentType: string;
   status: "Verified" | "Pending";
   dateLabel?: string | null;
+  docType?: string | null;
+  storagePath?: string | null;
+  fileName?: string | null;
 };
 
 export type CounterpartyProfileSystemCardProps = {
@@ -194,6 +203,84 @@ function Badge({
   );
 }
 
+function VerificationVaultCards({
+  docs,
+  uploadingId,
+  canUpload,
+  error,
+  onUpdate,
+  onView,
+}: {
+  docs: ProfileKycDoc[];
+  uploadingId: string | null;
+  canUpload: boolean;
+  error: string | null;
+  onUpdate: (doc: ProfileKycDoc) => void;
+  onView: (doc: ProfileKycDoc) => void;
+}) {
+  return (
+    <>
+      {error ? <Text style={styles.kycVaultError}>{error}</Text> : null}
+      {docs.map((doc) => {
+        const uploading = uploadingId === doc.id;
+        const hasFile = Boolean((doc.storagePath ?? "").trim());
+        return (
+          <View key={doc.id} style={styles.kycVaultCard}>
+            <View style={styles.kycVaultLeft}>
+              <View
+                style={[
+                  styles.kycVaultIcon,
+                  doc.status === "Verified" ? styles.kycVaultIconOk : styles.kycVaultIconPending,
+                ]}
+              >
+                <FontAwesome
+                  name={doc.status === "Verified" || hasFile ? "clipboard" : "cloud-upload"}
+                  size={22}
+                  color={doc.status === "Verified" ? Theme.positive : Theme.textMuted}
+                />
+              </View>
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.kycVaultTitle}>{doc.documentType}</Text>
+                <View style={styles.kycVaultMeta}>
+                  <Badge variant={doc.status === "Verified" ? "green" : "orange"}>{doc.status}</Badge>
+                  <Text style={styles.kycVaultDate}>
+                    Modified: {(doc.dateLabel ?? "").trim() || "—"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+            <View style={styles.kycVaultActions}>
+              {hasFile ? (
+                <TouchableOpacity
+                  style={styles.kycViewBtn}
+                  onPress={() => onView(doc)}
+                  accessibilityLabel={`View ${doc.documentType}`}
+                >
+                  <Text style={styles.kycViewBtnText}>View</Text>
+                </TouchableOpacity>
+              ) : null}
+              <TouchableOpacity
+                style={[styles.kycUpdateBtn, (!canUpload || uploading) && styles.kycUpdateBtnDisabled]}
+                onPress={() => onUpdate(doc)}
+                disabled={!canUpload || uploading}
+                accessibilityLabel={`${hasFile ? "Replace" : "Update"} ${doc.documentType}`}
+              >
+                {uploading ? (
+                  <ActivityIndicator size="small" color={Theme.textOnPrimary} />
+                ) : (
+                  <Text style={styles.kycUpdateBtnText}>
+                    {hasFile ? "Replace File" : "Update File"}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        );
+      })}
+    </>
+  );
+}
+
 export function CounterpartyProfileSystemCard({
   visible,
   presentation = "sheet",
@@ -304,11 +391,15 @@ export function CounterpartyProfileSystemCard({
   const [draftBilling, setDraftBilling] = useState((billingAddress ?? "").trim());
   const [contractWarehouseFilter, setContractWarehouseFilter] = useState<string>("all");
   const [contractPage, setContractPage] = useState(0);
+  const [kycUploadingId, setKycUploadingId] = useState<string | null>(null);
+  const [kycUploadError, setKycUploadError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!visible) {
       setMode("view");
       setEditPanel("BASIC");
+      setKycUploadingId(null);
+      setKycUploadError(null);
     }
   }, [visible]);
 
@@ -410,6 +501,58 @@ export function CounterpartyProfileSystemCard({
   const handleSynchronize = () => {
     onEditPress?.();
   };
+
+  const canUploadSupplierKyc =
+    type === "supplier" && canEdit && Boolean(organizationId && supplierId);
+
+  const handleUpdateKycFile = useCallback(
+    async (doc: ProfileKycDoc) => {
+      if (type !== "supplier") {
+        setMode("edit");
+        return;
+      }
+      if (!canEdit) {
+        notifySupplierKycUser("Cannot update", "You do not have permission to edit this vendor.");
+        return;
+      }
+      if (!organizationId || !supplierId) {
+        notifySupplierKycUser("Upload failed", "Vendor profile is missing organization details.");
+        return;
+      }
+      const docType = resolveSupplierVaultDocType(doc);
+      if (!docType) {
+        notifySupplierKycUser("Upload failed", "Unknown document type.");
+        return;
+      }
+      setKycUploadingId(doc.id);
+      setKycUploadError(null);
+      try {
+        const result = await pickAndUploadSupplierKycDocument({
+          orgId: organizationId,
+          supplierId,
+          docType,
+          docLabel: doc.documentType,
+          isMandatory: true,
+        });
+        if (result.status === "cancelled") return;
+        if (result.status === "error") {
+          setKycUploadError(result.error.message);
+          notifySupplierKycUser("Upload failed", result.error.message);
+          return;
+        }
+        onProfileEntitiesChange?.();
+      } finally {
+        setKycUploadingId(null);
+      }
+    },
+    [type, canEdit, organizationId, supplierId, onProfileEntitiesChange],
+  );
+
+  const handleViewKycFile = useCallback(async (doc: ProfileKycDoc) => {
+    const path = (doc.storagePath ?? "").trim();
+    if (!path) return;
+    await openSupplierKycDocument(path);
+  }, []);
 
   const canEditEntities = Boolean(
     type === "client" && organizationId && clientId && onProfileEntitiesChange,
@@ -755,39 +898,14 @@ export function CounterpartyProfileSystemCard({
                 <View style={styles.editSectionBarEmerald} />
                 <Text style={styles.editSectionTitle}>Verification Vault</Text>
                 <Text style={styles.editSectionHint}>Supplier regulatory compliance records</Text>
-                {kycDocs.map((doc) => (
-                  <View key={doc.id} style={styles.kycVaultCard}>
-                    <View style={styles.kycVaultLeft}>
-                      <View
-                        style={[
-                          styles.kycVaultIcon,
-                          doc.status === "Verified" ? styles.kycVaultIconOk : styles.kycVaultIconPending,
-                        ]}
-                      >
-                        <FontAwesome
-                          name={doc.status === "Verified" ? "clipboard" : "cloud-upload"}
-                          size={22}
-                          color={doc.status === "Verified" ? Theme.positive : Theme.textMuted}
-                        />
-                      </View>
-                      <View style={{ flex: 1 }}>
-                        <Text style={styles.kycVaultTitle}>{doc.documentType}</Text>
-                        <View style={styles.kycVaultMeta}>
-                          <Badge variant={doc.status === "Verified" ? "green" : "orange"}>{doc.status}</Badge>
-                          <Text style={styles.kycVaultDate}>
-                            Modified: {(doc.dateLabel ?? "").trim() || "—"}
-                          </Text>
-                        </View>
-                      </View>
-                    </View>
-                    <TouchableOpacity
-                      style={styles.kycUpdateBtn}
-                      onPress={() => Alert.alert("Update file", "Document upload will use supplier KYC storage when live.")}
-                    >
-                      <Text style={styles.kycUpdateBtnText}>Update File</Text>
-                    </TouchableOpacity>
-                  </View>
-                ))}
+                <VerificationVaultCards
+                  docs={kycDocs}
+                  uploadingId={kycUploadingId}
+                  canUpload={canUploadSupplierKyc}
+                  error={kycUploadError}
+                  onUpdate={(doc) => void handleUpdateKycFile(doc)}
+                  onView={(doc) => void handleViewKycFile(doc)}
+                />
               </View>
             )}
           </ScrollView>
@@ -1416,37 +1534,14 @@ export function CounterpartyProfileSystemCard({
                 <Text style={styles.emptyMuted}>No KYC documents on file.</Text>
               </View>
             ) : (
-              kycDocs.map((doc) => (
-                <View key={doc.id} style={styles.kycVaultCard}>
-                  <View style={styles.kycVaultLeft}>
-                    <View
-                      style={[
-                        styles.kycVaultIcon,
-                        doc.status === "Verified" ? styles.kycVaultIconOk : styles.kycVaultIconPending,
-                      ]}
-                    >
-                      <FontAwesome
-                        name={doc.status === "Verified" ? "clipboard" : "cloud-upload"}
-                        size={22}
-                        color={doc.status === "Verified" ? Theme.positive : Theme.textMuted}
-                      />
-                    </View>
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.kycVaultTitle}>{doc.documentType}</Text>
-                      <View style={styles.kycVaultMeta}>
-                        <Badge variant={doc.status === "Verified" ? "green" : "orange"}>{doc.status}</Badge>
-                        <Text style={styles.kycVaultDate}>Modified: {(doc.dateLabel ?? "").trim() || "—"}</Text>
-                      </View>
-                    </View>
-                  </View>
-                  <TouchableOpacity
-                    style={styles.kycUpdateBtn}
-                    onPress={() => setMode("edit")}
-                  >
-                    <Text style={styles.kycUpdateBtnText}>Update File</Text>
-                  </TouchableOpacity>
-                </View>
-              ))
+              <VerificationVaultCards
+                docs={kycDocs}
+                uploadingId={kycUploadingId}
+                canUpload={canUploadSupplierKyc || type === "client"}
+                error={kycUploadError}
+                onUpdate={(doc) => void handleUpdateKycFile(doc)}
+                onView={(doc) => void handleViewKycFile(doc)}
+              />
             )}
           </View>
         )}
@@ -2839,11 +2934,40 @@ const styles = StyleSheet.create({
   },
   kycVaultMeta: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   kycVaultDate: { fontSize: 9, fontWeight: "800", color: Theme.textSection, textTransform: "uppercase" },
+  kycVaultError: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.negative,
+    marginBottom: 10,
+  },
+  kycVaultActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
+  },
+  kycViewBtn: {
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    borderRadius: 20,
+    borderWidth: 1,
+    borderColor: Theme.surfaceBorder,
+    backgroundColor: Theme.cardWhite,
+  },
+  kycViewBtnText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+  },
   kycUpdateBtn: {
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderRadius: 20,
     backgroundColor: Theme.textPrimaryDark,
+    minWidth: 88,
+    alignItems: "center",
   },
+  kycUpdateBtnDisabled: { opacity: 0.5 },
   kycUpdateBtnText: { fontSize: 10, fontWeight: "900", color: Theme.textOnPrimary, textTransform: "uppercase" },
 });

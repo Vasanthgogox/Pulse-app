@@ -53,6 +53,7 @@ export type SupplierKycDocType =
   | "aadhaar_front"
   | "aadhaar_back"
   | "msme"
+  | "cancelled_cheque"
   | "other";
 
 export const SUPPLIER_KYC_DOC_LABELS: Record<SupplierKycDocType, string> = {
@@ -65,6 +66,7 @@ export const SUPPLIER_KYC_DOC_LABELS: Record<SupplierKycDocType, string> = {
   aadhaar_front: "Aadhaar Front",
   aadhaar_back: "Aadhaar Back",
   msme: "MSME Certificate",
+  cancelled_cheque: "Bank Proof",
   other: "Other",
 };
 
@@ -75,13 +77,18 @@ export const MANDATORY_SUPPLIER_KYC_TYPES: SupplierKycDocType[] = [
 export type SupplierKycDocument = {
   id: string;
   doc_type: SupplierKycDocType;
+  doc_label?: string | null;
   storage_path?: string | null;
+  file_name?: string | null;
+  mime_type?: string | null;
   status: "pending" | "uploaded" | "verified" | "rejected";
   verified_by?: string | null;
   verified_at?: string | null;
   expiry_date?: string | null;
   remarks?: string | null;
   version_number: number;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
 // ── Compliance ────────────────────────────────────────────────────────────────

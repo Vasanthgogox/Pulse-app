@@ -4,7 +4,6 @@
 import {
   CounterpartyProfileSystemCard,
   type ProfileContract,
-  type ProfileKycDoc,
   type ProfileWarehouse,
 } from "@/components/CounterpartyProfileSystemCard";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
@@ -13,7 +12,7 @@ import Theme from "@/constants/Theme";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useSupplierManagementBundleQuery } from "@/features/suppliers/hooks/useSupplierManagementBundleQuery";
 import type { SupplierManagementBundle } from "@/features/suppliers/types/supplierManagement.types";
-import { SUPPLIER_KYC_DOC_LABELS } from "@/features/suppliers/types/supplierManagement.types";
+import { mapSupplierVerificationVaultDocs } from "@/features/suppliers/utils/supplierVerificationVault.util";
 import { formatINR } from "@/lib/format";
 import { useMemo } from "react";
 import { View } from "react-native";
@@ -50,15 +49,6 @@ function mapContracts(bundle: SupplierManagementBundle): ProfileContract[] {
   return rows;
 }
 
-function mapKycDocs(bundle: SupplierManagementBundle): ProfileKycDoc[] {
-  return bundle.kyc_documents.map((doc) => ({
-    id: doc.id,
-    documentType: SUPPLIER_KYC_DOC_LABELS[doc.doc_type] || doc.doc_type,
-    status: doc.status === "verified" ? "Verified" : "Pending",
-    dateLabel: doc.verified_at ?? null,
-  }));
-}
-
 export function SupplierProfileScreen({ supplierId, onBack }: Props) {
   const insets = useSafeAreaInsets();
   const { currentOrganization } = useOrganization();
@@ -76,7 +66,10 @@ export function SupplierProfileScreen({ supplierId, onBack }: Props) {
     () => (bundle ? mapContracts(bundle) : []),
     [bundle],
   );
-  const kycDocs = useMemo(() => (bundle ? mapKycDocs(bundle) : []), [bundle]);
+  const kycDocs = useMemo(
+    () => mapSupplierVerificationVaultDocs(bundle?.kyc_documents ?? []),
+    [bundle],
+  );
   const networkTrustLabel = useMemo(() => {
     if (!bundle) return "—";
     const total = bundle.kyc_documents.length;
