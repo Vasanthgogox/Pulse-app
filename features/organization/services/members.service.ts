@@ -262,55 +262,36 @@ export async function inviteTeamMember(
   member: OrgMember | null;
   alreadyMember?: boolean;
   alreadyInvited?: boolean;
+  belongsToOtherOrg?: boolean;
 }> {
   const role = orgMemberRoleForPlatformRole(platformRole);
   const permissions = buildTeamInvitePermissions(platformRole);
   try {
-    // Check for existing membership
-    const { data: existing } = await supabase()
-      .from("organization_members")
-      .select("id, status, role")
-      .eq("organization_id", orgId)
-      .eq("user_id", userId)
-      .maybeSingle();
+    const { data, error } = await supabase().rpc("invite_existing_user_to_org", {
+      p_org_id: orgId,
+      p_user_id: userId,
+      p_role: role,
+      p_permissions: permissions,
+    });
 
-    if (existing) {
-      if (existing.status === "active") {
+    if (error) {
+      if (error.message.includes("already_member")) {
         return { error: null, member: null, alreadyMember: true };
       }
-      if (existing.status === "pending") {
+      if (error.message.includes("already_invited")) {
         return { error: null, member: null, alreadyInvited: true };
       }
-      // Inactive → re-activate
-      const { data: updated, error: updateErr } = await supabase()
-        .from("organization_members")
-        .update({
-          status: "pending",
-          role,
-          permissions,
-          joined_at: new Date().toISOString(),
-        })
-        .eq("id", existing.id)
-        .select()
-        .maybeSingle();
-      if (updateErr) return { error: friendlyMemberWriteError(updateErr.message), member: null };
-      return { error: null, member: updated as OrgMember };
+      if (error.message.includes("belongs_to_other_org")) {
+        return {
+          error: new Error(
+            "This person already belongs to another organization on Pulse and cannot be added here.",
+          ),
+          member: null,
+          belongsToOtherOrg: true,
+        };
+      }
+      return { error: friendlyMemberWriteError(error.message), member: null };
     }
-
-    const { data, error } = await supabase()
-      .from("organization_members")
-      .insert({
-        organization_id: orgId,
-        user_id: userId,
-        role,
-        status: "pending",
-        permissions,
-        joined_at: new Date().toISOString(),
-      })
-      .select()
-      .maybeSingle();
-
-    if (error) return { error: friendlyMemberWriteError(error.message), member: null };
     return { error: null, member: data as OrgMember };
   } catch (e) {
     return { error: e instanceof Error ? e : new Error(String(e)), member: null };
@@ -419,6 +400,18 @@ export async function inviteTeamMemberByContact(
           precheckAction: check.recommendedAction,
         };
       }
+      if (check.recommendedAction === "belongs_to_other_org") {
+        return {
+          error: new Error(
+            check.message ??
+              "This person already belongs to another organization on Pulse and cannot be added here.",
+          ),
+          kind: null,
+          member: null,
+          pendingInvite: null,
+          precheckAction: check.recommendedAction,
+        };
+      }
       if (
         check.recommendedAction === "invite_existing_user" ||
         check.recommendedAction === "email_registered"
@@ -433,7 +426,7 @@ export async function inviteTeamMemberByContact(
             pendingInvite: null,
             alreadyMember: res.alreadyMember,
             alreadyInvited: res.alreadyInvited,
-            precheckAction: check.recommendedAction,
+            precheckAction: res.belongsToOtherOrg ? "belongs_to_other_org" : check.recommendedAction,
           };
         }
         if (check.recommendedAction === "email_registered") {

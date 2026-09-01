@@ -425,6 +425,13 @@ export function InviteMemberFlow({
       setSearchError("An invitation has already been sent to this person.");
       return;
     }
+    if (check?.recommendedAction === "belongs_to_other_org") {
+      setSearchError(
+        check.message ??
+          "This person already belongs to another organization on Pulse and cannot be added here.",
+      );
+      return;
+    }
 
     const profileFromPrecheck = check ? precheckToProfile(check) : null;
     if (profile) {
@@ -467,6 +474,13 @@ export function InviteMemberFlow({
     }
     if (result.alreadyInvited) {
       setSubmitError("An invitation has already been sent to this person.");
+      return;
+    }
+    if (result.precheckAction === "belongs_to_other_org") {
+      setSubmitError(
+        result.error?.message ??
+          "This person already belongs to another organization on Pulse and cannot be added here.",
+      );
       return;
     }
     if (result.precheckAction === "invite_existing_user" && result.kind === "member") {
@@ -637,20 +651,15 @@ export function InviteMemberFlow({
             </View>
           ) : null}
 
-          {!liveChecking &&
-          liveCheck?.otherOrgs &&
-          liveCheck.otherOrgs.length > 0 &&
-          liveCheck.recommendedAction !== "already_member" &&
-          liveCheck.recommendedAction !== "already_invited" ? (
+          {!liveChecking && liveCheck?.recommendedAction === "belongs_to_other_org" ? (
             <View style={ui.conflictBanner}>
               <Text style={ui.conflictTitle}>Already on Pulse</Text>
               <Text style={ui.conflictBody}>
-                {liveCheck.userName || "This number"} is already active in{" "}
+                {liveCheck.userName || "This person"} already belongs to{" "}
                 {liveCheck.otherOrgs.length > 1
                   ? `${liveCheck.otherOrgs.length} other workspaces`
-                  : "another workspace"}
-                . They can join your workspace after signing in — no new account or
-                duplicate signup.
+                  : "another workspace"}{" "}
+                on Pulse and cannot be added here.
               </Text>
             </View>
           ) : null}

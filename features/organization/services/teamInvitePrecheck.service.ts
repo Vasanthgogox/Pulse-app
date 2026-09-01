@@ -9,7 +9,8 @@ export type TeamInvitePrecheckAction =
   | "invite_existing_user"
   | "already_member"
   | "already_invited"
-  | "email_registered";
+  | "email_registered"
+  | "belongs_to_other_org";
 
 export type TeamInviteOtherOrg = {
   id: string;
