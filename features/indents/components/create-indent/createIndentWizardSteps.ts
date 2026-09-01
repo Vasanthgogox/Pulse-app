@@ -1,4 +1,7 @@
-import type { FormState } from "./createIndentForm.types";
+import {
+  isValidIndentVehicleCount,
+  type FormState,
+} from "./createIndentForm.types";
 
 export type IndentWizardStep =
   | "route"
@@ -71,7 +74,8 @@ export function indentStepCanAdvance(
           Number.isFinite(
             parseFloat(String(form.weight ?? "").replace(/,/g, "")),
           ) &&
-          parseFloat(String(form.weight ?? "").replace(/,/g, "")) > 0,
+          parseFloat(String(form.weight ?? "").replace(/,/g, "")) > 0 &&
+          isValidIndentVehicleCount(form.vehicle_count),
       );
     case "loadType":
       return Boolean(t(form.load_type));
