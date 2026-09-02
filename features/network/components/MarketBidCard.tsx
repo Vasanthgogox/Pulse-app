@@ -67,9 +67,13 @@ export const MarketBidCard = memo(function MarketBidCard({
   const amountDisplay = stripCurrencyPrefix(formatINR(Number(bid.amount ?? 0)));
   const submitted = timeAgo(bid.created_at);
   const vehicle = vehicleSummary(bid);
-  const bidderLabel = bid.is_fleet_owner
-    ? `Fleet owner (${bid.bidder_display_name})`
-    : `Driver (${bid.bidder_display_name})`;
+  const isOrgBidder = bid.bidder_type === "organization";
+  const bidderLabel = isOrgBidder
+    ? bid.bidder_organization_name ?? "Business"
+    : bid.is_fleet_owner
+      ? `Fleet owner (${bid.bidder_display_name})`
+      : `Driver (${bid.bidder_display_name})`;
+  const phoneDisplay = bid.bidder_phone ?? bid.bidder_masked_phone;
 
   return (
     <View
@@ -82,11 +86,11 @@ export const MarketBidCard = memo(function MarketBidCard({
     >
       <View style={styles.topRow}>
         <EntityAvatar
-          name={bid.bidder_display_name}
+          name={isOrgBidder ? (bid.bidder_organization_name ?? "Business") : bid.bidder_display_name}
           avatarUrl={null}
-          avatarSeed={bid.bidder_user_id}
-          initialsColorSeed={bid.bidder_user_id}
-          entityType="driver"
+          avatarSeed={isOrgBidder ? bid.bidder_organization_id : bid.bidder_user_id}
+          initialsColorSeed={isOrgBidder ? bid.bidder_organization_id : bid.bidder_user_id}
+          entityType={isOrgBidder ? "supplier" : "driver"}
           showIntegrationBadge={false}
           size={28}
         />
@@ -95,6 +99,11 @@ export const MarketBidCard = memo(function MarketBidCard({
             <Text style={styles.partyName} numberOfLines={1}>
               {bidderLabel}
             </Text>
+            {isOrgBidder ? (
+              <View style={styles.sourcePill}>
+                <Text style={styles.sourcePillText}>BUSINESS</Text>
+              </View>
+            ) : null}
             <View style={styles.sourcePill}>
               <Text style={styles.sourcePillText}>MARKET</Text>
             </View>
@@ -102,6 +111,12 @@ export const MarketBidCard = memo(function MarketBidCard({
           {vehicle ? (
             <Text style={styles.vehicleText} numberOfLines={1}>
               {vehicle}
+            </Text>
+          ) : null}
+          {phoneDisplay ? (
+            <Text style={styles.vehicleText} numberOfLines={1}>
+              {phoneDisplay}
+              {!bid.bidder_phone ? " · revealed after award" : ""}
             </Text>
           ) : null}
         </View>

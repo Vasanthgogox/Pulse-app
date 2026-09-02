@@ -2,6 +2,7 @@
  * Phase 3A — sanitized open marketplace loads for Fleet Owners (read-only).
  */
 import { supabase } from '@/lib/supabase';
+import { isVehicleTypeCompatibleWithFleet } from '@/features/marketplace/utils/fleetFit.util';
 
 export type FleetOwnerOpenLoad = {
   id: string;
@@ -52,19 +53,5 @@ export function isLoadCompatibleWithFleet(
   load: FleetOwnerOpenLoad,
   fleetVehicleTypes: Array<string | null | undefined>,
 ): boolean {
-  const need = (load.vehicle_type ?? '').trim().toLowerCase();
-  if (!need) return true;
-  const owned = fleetVehicleTypes
-    .map((t) => (t ?? '').trim().toLowerCase())
-    .filter(Boolean);
-  if (owned.length === 0) return true;
-  return owned.some(
-    (t) => t.includes(need) || need.includes(t) || shareToken(t, need),
-  );
-}
-
-function shareToken(a: string, b: string): boolean {
-  const ta = new Set(a.split(/[^a-z0-9]+/).filter((x) => x.length >= 3));
-  const tb = b.split(/[^a-z0-9]+/).filter((x) => x.length >= 3);
-  return tb.some((x) => ta.has(x));
+  return isVehicleTypeCompatibleWithFleet(load.vehicle_type, fleetVehicleTypes);
 }

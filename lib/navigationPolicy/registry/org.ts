@@ -96,6 +96,19 @@ export const ORG_POLICIES: readonly PolicyRecord[] = [
     softDeny: true,
   },
   {
+    // A4.3: same gate as Load Center for this first version (see
+    // docs/MARKETPLACE_DOMAIN.md "Distribution vs monetization" — discovery
+    // is membership-only in principle; this route-level gate is an MVP
+    // simplification, not a new capability).
+    id: 'org.find-loads',
+    pattern: '/find-loads',
+    experience: 'org',
+    priority: 100,
+    grants: { anyOf: ['dispatch', 'dispatch_for_own_fleet'] },
+    onDeny: { type: 'sign_in' },
+    softDeny: true,
+  },
+  {
     id: 'org.create-indent',
     pattern: '/create-indent',
     experience: 'org',

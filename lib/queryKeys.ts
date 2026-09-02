@@ -268,6 +268,14 @@ export const queryKeys = {
     forPost: (postId: string) => ["q", "story-views", postId] as const,
   },
 
+  /** A4 — Business Find Loads: open Marketplace/both discovery for an org. */
+  findLoadsForOrg: {
+    list: (orgId: string) => ["q", "find-loads", orgId] as const,
+    postIds: (orgId: string, indentIdsKey: string) =>
+      ["q", "find-loads", orgId, "post-ids", indentIdsKey] as const,
+    myBids: (orgId: string) => ["q", "find-loads", orgId, "my-bids"] as const,
+  },
+
   reach: {
     plans: () => ["q", "reach", "plans"] as const,
     campaignsForOrg: (orgId: string) => ["q", "reach", "campaigns", orgId] as const,

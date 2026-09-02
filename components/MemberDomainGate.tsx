@@ -5,6 +5,7 @@
  */
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { useOptionalLanguage } from "@/contexts/LanguageContext";
 import { ROUTES } from "@/lib/routes";
 import {
@@ -14,7 +15,7 @@ import {
 } from "@/lib/useMemberCapabilities";
 import { useIsFocused } from "@react-navigation/native";
 import { useRouter } from "expo-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useRef, type ReactNode } from "react";
 import { StyleSheet, Text, View } from "react-native";
 
 export type MemberDomainKind = keyof MemberDomainAccess;
@@ -27,6 +28,7 @@ type Props = {
 export function MemberDomainGate({ kind, children }: Props) {
   const router = useRouter();
   const access = useMemberCapabilities();
+  const { membershipResolved, refresh } = useActiveWorkspace();
   const { t } = useOptionalLanguage();
   // On desktop web the tab layout mounts all three tab scenes at once
   // (`lazy: false`), so an unfocused denied gate must NOT fire a redirect or
@@ -38,18 +40,28 @@ export function MemberDomainGate({ kind, children }: Props) {
   // bounce them there instead of parking them on a neutral dead-end. `null` =
   // no functional role at all → nowhere to send them, show the notice below.
   const home = memberHomeRouteFromAccess(access);
+  const softRefreshAttempted = useRef(false);
 
   useEffect(() => {
     // Hold while the workspace/role is still resolving — bouncing here would
     // eject a legitimately-allowed member before their functional role loads.
-    if (!isFocused || isLoading || allowed) return;
+    if (!isFocused || isLoading || !membershipResolved || allowed) return;
     if (!home || home === ROUTES.TABS[kindToTab(kind)]) return;
     // Always replace() (not back()): on a hard web load / deep-link the
     // navigator has no history and back() dispatches an unhandled GO_BACK.
     router.replace(home as "/");
-  }, [isFocused, isLoading, allowed, home, kind, router]);
+  }, [isFocused, isLoading, membershipResolved, allowed, home, kind, router]);
 
-  if (isLoading) {
+  // One soft re-fetch when a focused scene would otherwise show the empty
+  // notice — recovers from a false-empty membership race without a full reload.
+  useEffect(() => {
+    if (!isFocused || isLoading || !membershipResolved || allowed || home) return;
+    if (softRefreshAttempted.current) return;
+    softRefreshAttempted.current = true;
+    void refresh();
+  }, [isFocused, isLoading, membershipResolved, allowed, home, refresh]);
+
+  if (isLoading || !membershipResolved) {
     // Inert placeholder — NOT the branded AppLoadingSplash (canvas-based, crashes
     // when mounted in this pre-nav route window in prod). A gate only needs to
     // hold a blank frame for the few ms until access resolves or the redirect fires.

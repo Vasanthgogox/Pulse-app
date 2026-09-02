@@ -154,12 +154,15 @@ export function NumericDisplay({
             },
             isEmpty && styles.amountPlaceholder,
             isEmpty && isLarge && styles.amountPlaceholderHero,
-            isEmpty && styles.amountFlexible,
+            // Only let the empty placeholder flex-shrink — valued amounts must
+            // keep hero/wizard size. adjustsFontSizeToFit on a flex-shrunk Text
+            // collapses the digits to a speck on RN Web.
+            isEmpty && !isLarge && styles.amountFlexible,
             toneColor ? { color: toneColor } : null,
           ]}
           numberOfLines={1}
-          adjustsFontSizeToFit
-          minimumFontScale={0.55}
+          adjustsFontSizeToFit={!isLarge && !isEmpty}
+          minimumFontScale={0.65}
           allowFontScaling={false}
         >
           {display}
@@ -227,21 +230,24 @@ const styles = StyleSheet.create({
   },
   row: {
     flexDirection: 'row',
-    alignItems: 'baseline',
+    alignItems: 'center',
     justifyContent: 'center',
     maxWidth: '100%',
     paddingHorizontal: 4,
   },
   rowHero: {
     alignSelf: 'center',
+    width: '100%',
     maxWidth: '96%',
   },
   rowWizard: {
     alignSelf: 'center',
+    width: '100%',
     maxWidth: '96%',
   },
   rowWizardCompact: {
     alignSelf: 'center',
+    width: '100%',
     maxWidth: '96%',
   },
   prefix: {
@@ -274,6 +280,7 @@ const styles = StyleSheet.create({
     letterSpacing: -0.5,
     lineHeight: 48,
     flexShrink: 0,
+    flexGrow: 0,
     textAlign: 'center',
   },
   amountFlexible: {

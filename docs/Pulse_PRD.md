@@ -653,6 +653,8 @@ IndentRow {
 | `broadcast` | No | Yes (if `circulation_target` includes marketplace) |
 | `completed` | No | No |
 
+`circulation_target` governs **distribution** (who can discover the indent), not monetization or promotion. Reach (sponsored/boosted attention) is orthogonal to this field — it does not add a value here, it boosts an indent that already has one. See `docs/MARKETPLACE_DOMAIN.md` § "Distribution vs monetization" for the full channel/monetization split (Network vs Reach vs Marketplace).
+
 ### 2.6.4 Create Indent Requirements
 
 | ID | Requirement |
