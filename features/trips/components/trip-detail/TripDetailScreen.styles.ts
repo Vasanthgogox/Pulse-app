@@ -942,6 +942,8 @@ export const neoStyles = StyleSheet.create({
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 1.6,
+    flex: 1,
+    minWidth: 0,
   },
   timelineStatusMobile: {
     fontSize: 11,
@@ -954,6 +956,9 @@ export const neoStyles = StyleSheet.create({
     color: "#94a3b8",
     fontSize: 13,
     fontWeight: "700",
+    textAlign: "right",
+    flexShrink: 1,
+    maxWidth: "52%",
   },
   timelineTimeMobile: {
     fontSize: 11,

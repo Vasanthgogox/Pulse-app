@@ -117,7 +117,7 @@ export function TripDetailTrackingHub({
           {driverLastPing.recordedAtLabel ? (
             <View style={styles.pingTimeRow}>
               <Feather name="clock" size={8} color={Theme.textMuted} />
-              <Text style={styles.pingTime} numberOfLines={1}>
+              <Text style={styles.pingTime}>
                 {driverLastPing.recordedAtLabel}
               </Text>
             </View>

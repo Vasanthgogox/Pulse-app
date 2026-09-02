@@ -14,7 +14,7 @@ import { useMemo } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import Theme from '@/constants/Theme';
-import { formatTime } from '@/lib/format';
+import { formatTrackingDateTime } from '@/features/trips/utils/formatTrackingTimestamp.util';
 import { useTripTimelineQuery } from '@/lib/queries/useTripTimelineQuery';
 import type { TripRow } from '../services/trips.service';
 
@@ -54,7 +54,7 @@ function buildMissionLog(trip: TripRow): LogEntry[] {
 
   if (trip.created_at) {
     entries.push({
-      time: formatTime(trip.created_at),
+      time: formatTrackingDateTime(trip.created_at),
       status: 'ASSIGNED',
       loc: trip.pickup_area || '—',
       sortKey: trip.created_at,
@@ -64,7 +64,7 @@ function buildMissionLog(trip: TripRow): LogEntry[] {
     const pickupTime = trip.started_at ?? trip.updated_at ?? trip.created_at ?? '';
     if (pickupTime) {
       entries.push({
-        time: formatTime(pickupTime),
+        time: formatTrackingDateTime(pickupTime),
         status: 'PICKUP',
         loc: trip.pickup_area || '—',
         sortKey: pickupTime,
@@ -74,7 +74,7 @@ function buildMissionLog(trip: TripRow): LogEntry[] {
   if (linehaul && trip.started_at) {
     const transitTime = trip.updated_at ?? trip.started_at;
     entries.push({
-      time: formatTime(transitTime),
+      time: formatTrackingDateTime(transitTime),
       status: 'IN-TRANSIT',
       loc: trip.drop_location || trip.pickup_area || '—',
       sortKey: transitTime,
@@ -82,7 +82,7 @@ function buildMissionLog(trip: TripRow): LogEntry[] {
   }
   if (trip.completed_at) {
     entries.push({
-      time: formatTime(trip.completed_at),
+      time: formatTrackingDateTime(trip.completed_at),
       status: 'DELIVERED',
       loc: trip.drop_location || '—',
       sortKey: trip.completed_at,
@@ -90,7 +90,7 @@ function buildMissionLog(trip: TripRow): LogEntry[] {
   }
   if (entries.length === 0 && trip.created_at) {
     entries.push({
-      time: formatTime(trip.created_at),
+      time: formatTrackingDateTime(trip.created_at),
       status: 'ASSIGNED',
       loc: trip.pickup_area || '—',
       sortKey: trip.created_at,
@@ -133,7 +133,7 @@ export function TripTrackingBlock({ trip, driverName, vehicleLabel, driverRating
     // Real event-sourced timeline takes priority once it has anything to show.
     if (!timelineLoading && !timelineError && timelineEvents.length > 0) {
       const fromEvents = timelineEvents.map((e) => ({
-        time: formatTime(e.occurredAt),
+        time: formatTrackingDateTime(e.occurredAt),
         status: e.title.toUpperCase(),
         loc: e.description ?? '—',
         sortKey: e.occurredAt,
@@ -389,8 +389,18 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: Theme.textPrimaryDark,
     textTransform: 'uppercase',
+    flex: 1,
+    minWidth: 0,
+    marginRight: 8,
   },
-  logTime: { fontSize: 9, fontWeight: '700', color: Theme.textMutedDemo },
+  logTime: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: Theme.textMutedDemo,
+    textAlign: 'right',
+    flexShrink: 1,
+    maxWidth: '52%',
+  },
   locRow: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   locIcon: { marginRight: 6 },
   locText: {

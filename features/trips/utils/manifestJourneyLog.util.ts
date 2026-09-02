@@ -1,4 +1,4 @@
-import { formatTime } from "@/lib/format";
+import { formatTrackingDateTime } from "@/features/trips/utils/formatTrackingTimestamp.util";
 import type { TripAssignmentAuditRow } from "@/features/trips/services/trip-assignment-audit.service";
 import type { TripRow } from "@/features/trips/services/trips.service";
 
@@ -418,7 +418,7 @@ export function buildManifestJourneyLogs(input: {
       stepKey: "assigned",
       status: "Assigned",
       atIso: assignedAtIso,
-      time: assignedAtIso ? formatTime(assignedAtIso) : "—",
+      time: assignedAtIso ? formatTrackingDateTime(assignedAtIso) : "—",
       location: resolveStepLocation(
         [
           locationFromSim(assignedSim, simLocationByKey),
@@ -456,7 +456,7 @@ export function buildManifestJourneyLogs(input: {
         stepKey: "driver_accepted" as const,
         status: pending ? "Awaiting Driver Acceptance" : "Driver Accepted",
         atIso: driverAcceptedAtIso,
-        time: driverAcceptedAtIso ? formatTime(driverAcceptedAtIso) : "—",
+        time: driverAcceptedAtIso ? formatTrackingDateTime(driverAcceptedAtIso) : "—",
         location: acceptLoc.location,
         locationCoords: acceptLoc.locationCoords,
         details: acceptLoc.details,
@@ -467,9 +467,9 @@ export function buildManifestJourneyLogs(input: {
       status: "Pickup",
       atIso: tr.started_at ?? pickupSim?.timestamp ?? null,
       time: tr.started_at
-        ? formatTime(tr.started_at)
+        ? formatTrackingDateTime(tr.started_at)
         : pickupSim?.timestamp
-          ? formatTime(pickupSim.timestamp)
+          ? formatTrackingDateTime(pickupSim.timestamp)
           : "—",
       location: resolveStepLocation(
         [
@@ -496,7 +496,7 @@ export function buildManifestJourneyLogs(input: {
           transitSim?.timestamp ??
           input.driverLocation?.recorded_at ??
           tr.started_at;
-        return iso ? formatTime(iso) : "—";
+        return iso ? formatTrackingDateTime(iso) : "—";
       })(),
       location: resolveStepLocation(
         [
@@ -526,9 +526,9 @@ export function buildManifestJourneyLogs(input: {
       status: "Delivered",
       atIso: tr.completed_at ?? deliveredSim?.timestamp ?? null,
       time: tr.completed_at
-        ? formatTime(tr.completed_at)
+        ? formatTrackingDateTime(tr.completed_at)
         : deliveredSim?.timestamp
-          ? formatTime(deliveredSim.timestamp)
+          ? formatTrackingDateTime(deliveredSim.timestamp)
           : "—",
       location: resolveStepLocation(
         [

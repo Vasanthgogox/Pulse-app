@@ -31,8 +31,34 @@ export function getSecondsSince(recordedAt: string): number {
 }
 
 /**
+ * Date + time in IST for tracking timelines (journey log, live tracking, track & trace).
+ * Uses `toLocaleString` — `toLocaleDateString` with hour options drops the date
+ * in Hermes / some web Intl implementations and shows time only.
+ * e.g. "02 Sept 2026, 5:07 pm"
+ */
+export function formatTrackingDateTime(iso: string | null | undefined): string {
+  const raw = (iso ?? '').trim();
+  if (!raw) return '—';
+  try {
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return '—';
+    return d.toLocaleString('en-IN', {
+      timeZone: 'Asia/Kolkata',
+      day: '2-digit',
+      month: 'short',
+      year: 'numeric',
+      hour: 'numeric',
+      minute: '2-digit',
+      hour12: true,
+    });
+  } catch {
+    return raw.slice(0, 16).replace('T', ' ') || '—';
+  }
+}
+
+/**
  * Absolute IST time string for checkpoint popup display.
- * e.g. "12 May, 14:32:05"
+ * e.g. "12 May 2026, 14:32:05"
  */
 export function formatCheckpointTime(recordedAt: string): string {
   try {

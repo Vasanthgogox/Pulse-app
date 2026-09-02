@@ -1,5 +1,5 @@
+import { formatTrackingDateTime } from "@/features/trips/utils/formatTrackingTimestamp.util";
 import { DRIVER_LOCATION_STALE_MS } from "@/features/trips/utils/tripTrackingStatus.util";
-import { formatCheckpointTime } from "@/features/trips/utils/formatTrackingTimestamp.util";
 
 export function formatDriverCoordinateLabel(lat: number, lng: number): string {
   const latHem = lat >= 0 ? "N" : "S";
@@ -32,19 +32,9 @@ export type DriverLastPingDisplay = {
   hasPing: boolean;
 };
 
-/** Compact ping time for trip hub cards (IST). */
+/** Compact ping time for trip hub cards (IST) — date and time. */
 export function formatHubPingTimeLabel(recordedAt: string): string {
-  try {
-    return new Date(recordedAt).toLocaleString("en-IN", {
-      timeZone: "Asia/Kolkata",
-      day: "2-digit",
-      month: "short",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return recordedAt.slice(0, 16).replace("T", " ");
-  }
+  return formatTrackingDateTime(recordedAt);
 }
 
 /** Red offline line on hub cards — days when stale ≥ 1d, else hours/minutes. */
@@ -143,7 +133,7 @@ export function buildDriverLastPingDisplay(params: {
     ? formatDriverCoordinateLabel(lat!, lng!)
     : null;
   const recordedAtLabel = params.recordedAt
-    ? formatCheckpointTime(params.recordedAt)
+    ? formatTrackingDateTime(params.recordedAt)
     : null;
   return {
     locationLabel,

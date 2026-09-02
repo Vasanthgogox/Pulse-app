@@ -33,6 +33,14 @@ type ConsoleView =
   | 'support'
   | 'admin-users';
 
+function navTabClass(active: boolean) {
+  return `inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2.5 text-xs font-medium transition-colors ${
+    active
+      ? 'bg-[#00A884] text-white'
+      : 'text-muted-foreground hover:bg-[#00A884]/12 hover:text-[#075E54]'
+  }`;
+}
+
 // ─── Topbar ───────────────────────────────────────────────────────────────────
 
 function Topbar({
@@ -75,76 +83,62 @@ function Topbar({
   }, []);
 
   return (
-    <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center justify-between border-b border-border bg-card/95 px-4 backdrop-blur-sm shadow-xs">
-      <div className="flex items-center gap-3">
-        <div className="flex size-7 items-center justify-center rounded-lg bg-primary">
+    <header className="sticky top-0 z-20 flex h-12 shrink-0 items-center gap-3 border-b border-border bg-card/95 px-4 backdrop-blur-sm shadow-xs">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <div className="flex size-7 shrink-0 items-center justify-center rounded-lg bg-[#00A884]">
           <Shield className="size-3.5 text-primary-foreground" />
         </div>
-        <div className="flex items-baseline gap-2">
+        <div className="hidden shrink-0 items-baseline gap-2 sm:flex">
           <span className="text-sm font-bold text-foreground">Admin Console</span>
-          <span className="text-[10px] font-medium uppercase tracking-widest text-muted-foreground">
+          <span className="hidden text-[10px] font-medium uppercase tracking-widest text-muted-foreground xl:inline">
             Org &amp; User Management
           </span>
         </div>
 
-        <nav className="ml-4 flex items-center gap-1 border-l border-border pl-4">
+        <nav className="ml-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto border-l border-border pl-3 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
           <button
             onClick={() => setView('verification')}
-            className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-              view === 'verification' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
-            }`}
+            className={navTabClass(view === 'verification')}
           >
             Verification
           </button>
           <button
             onClick={() => setView('driver-kyc')}
-            className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-              view === 'driver-kyc' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
-            }`}
+            className={navTabClass(view === 'driver-kyc')}
           >
-            <UserRound className="size-3" /> Driver KYC
+            <UserRound className="size-3 shrink-0" /> Driver KYC
           </button>
           <button
             onClick={() => setView('credits')}
-            className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-              view === 'credits' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
-            }`}
+            className={navTabClass(view === 'credits')}
           >
-            <Coins className="size-3" /> Growth · Credits
+            <Coins className="size-3 shrink-0" /> Growth · Credits
           </button>
           <button
             onClick={() => setView('referrals')}
-            className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-              view === 'referrals' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
-            }`}
+            className={navTabClass(view === 'referrals')}
           >
-            <Users className="size-3" /> Growth · Referrals
+            <Users className="size-3 shrink-0" /> Growth · Referrals
           </button>
           <button
             onClick={() => setView('reward-rules')}
-            className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-              view === 'reward-rules' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
-            }`}
+            className={navTabClass(view === 'reward-rules')}
           >
-            <SlidersHorizontal className="size-3" /> Growth · Reward Rules
+            <SlidersHorizontal className="size-3 shrink-0" /> Growth · Reward Rules
           </button>
           <button
             onClick={() => setView('boost-ops')}
-            className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-              view === 'boost-ops' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
-            }`}
+            className={navTabClass(view === 'boost-ops')}
           >
-            <Rocket className="size-3" /> Boost · Control Center
+            <Rocket className="size-3 shrink-0" /> Boost · Control Center
           </button>
           <button
             onClick={() => setView('support')}
-            className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-              view === 'support' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
-            }`}
+            className={navTabClass(view === 'support')}
           >
-            <Ticket className="size-3" /> Support
+            <Ticket className="size-3 shrink-0" /> Support
             {supportUpdateCount > 0 ? (
-              <span className="ml-0.5 inline-flex min-w-[1.1rem] items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold leading-4 text-white">
+              <span className="inline-flex min-w-[1.1rem] shrink-0 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold leading-4 text-white">
                 {formatSupportUnreadBadge(supportUpdateCount)}
               </span>
             ) : null}
@@ -152,17 +146,15 @@ function Topbar({
           {canManageAdmins ? (
             <button
               onClick={() => setView('admin-users')}
-              className={`flex items-center gap-1 rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${
-                view === 'admin-users' ? 'bg-primary text-primary-foreground' : 'text-muted-foreground hover:bg-accent'
-              }`}
+              className={navTabClass(view === 'admin-users')}
             >
-              <UserCog className="size-3" /> Admin Users
+              <UserCog className="size-3 shrink-0" /> Admin Users
             </button>
           ) : null}
         </nav>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex shrink-0 items-center gap-2">
         {view === 'verification' && escalatedCount > 0 && (
           <Badge variant="destructive" appearance="light" size="sm">{escalatedCount} escalated</Badge>
         )}
