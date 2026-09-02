@@ -1793,6 +1793,8 @@ export function DriverTripFlowCard({
         onUpload={uploadLr}
         onCancelUpload={cancelLrUpload}
         onSkip={() => setLrSkipped(true)}
+        lrNumber={lrNumber}
+        onChangeLrNumber={setLrNumber}
         onResolvePreview={resolveLrPreviewUrl}
         onDelete={confirmDeleteLr}
         onConfirmAction={() => { void engageTransit(); }}

@@ -358,8 +358,8 @@ export function DriverPodCompletionPage({
             <View style={styles.lrNumberField}>
               <Text style={styles.lrNumberLabel}>LR NUMBER</Text>
               <TextInput
-                value={lrNumber}
-                onChangeText={onChangeLrNumber}
+                value={lrNumber ?? ''}
+                onChangeText={onChangeLrNumber ?? (() => {})}
                 placeholder="Enter LR number (optional)"
                 placeholderTextColor={Theme.textMuted}
                 style={styles.lrNumberInput}
