@@ -40,7 +40,6 @@ import { useClientLaneRatesQuery } from "@/lib/queries/useClientLaneRatesQuery";
 import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { useClientWarehousesQuery } from "@/lib/queries/useClientWarehousesQuery";
 import { createIndent, type CreateIndentInput } from "@/features/indents/services/indents.service";
-import { LOAD_TYPES } from "@/features/indents/constants";
 import {
     createSharedIndentCopies,
     getIndentById,
@@ -82,16 +81,12 @@ import { CreateTripDesktopRouteStep } from "@/features/trips/components/add-trip
 import { CreateTripDesktopStepper } from "@/features/trips/components/add-trip/CreateTripDesktopStepper";
 import { createTripDesktopStyles as createTripStyles } from "@/features/trips/components/add-trip/createTripDesktop.styles";
 import { LocationSearchField } from "@/features/trips/components/add-trip/LocationSearchField";
+import { useUserCommodityTypes } from "@/features/trips/hooks/useUserCommodityTypes";
 import {
   buildPickupRecommendations,
   preferredPickupRecommendation,
 } from "@/features/trips/components/add-trip/pickupRecommendations.util";
-import {
-    BODY_LENGTH_SELECT_OPTIONS,
-    normalizeBodyLengthKey,
-    OTHER_LABEL,
-    VEHICLE_CATEGORY_LABELS,
-} from "@/features/vehicles/utils/vehicleFormOptions.util";
+import { OTHER_LABEL } from "@/features/vehicles/utils/vehicleFormOptions.util";
 import {
     getEffectivePermissions } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
@@ -170,7 +165,7 @@ function validateForm(state: FormState): Record<string, string> {
   const supplierTargetErr = positiveAmount()(state.supplier_target);
   if (supplierTargetErr) errors.supplier_target = supplierTargetErr;
   r("vehicle_type", required("Vehicle is required"), maxLength(100));
-  r("load_type", required("Load type is required"), maxLength(100));
+  r("load_type", required("Product type is required"), maxLength(100));
   const weightStr = (state.weight ?? "").trim();
   if (!weightStr) {
     errors.weight = "Weight is required.";
@@ -416,6 +411,11 @@ export default function CreateIndentScreen() {
   const isDesktopEnterprise = isDesktopWizardForm(windowWidth);
   const isMobileWizard = WIZARD_FULL_PAGE_STEPPED;
 
+  const { vehicleOptions, productOptions } = useUserCommodityTypes(
+    form.vehicle_type,
+    form.load_type,
+  );
+
   const isWide = windowWidth >= 720;
   const isCompactMobile = windowWidth < 480;
   /** Stepped wizard — no multi-card desktop grid. */
@@ -426,25 +426,18 @@ export default function CreateIndentScreen() {
   const pickerCardMaxW = Math.min(windowWidth - 32, 440);
 
   const vehicleQueryNorm = vehiclePickerQuery.trim().toLowerCase();
-  const filteredVehicleCategories = useMemo(() => {
-    if (!vehicleQueryNorm) return VEHICLE_CATEGORY_LABELS;
-    return VEHICLE_CATEGORY_LABELS.filter((c) =>
-      c.toLowerCase().includes(vehicleQueryNorm),
-    );
-  }, [vehicleQueryNorm]);
-
-  const filteredBodyLengthOptions = useMemo(() => {
-    if (!vehicleQueryNorm) return BODY_LENGTH_SELECT_OPTIONS;
-    return BODY_LENGTH_SELECT_OPTIONS.filter((opt) =>
+  const filteredVehicleTypes = useMemo(() => {
+    if (!vehicleQueryNorm) return vehicleOptions;
+    return vehicleOptions.filter((opt) =>
       opt.toLowerCase().includes(vehicleQueryNorm),
     );
-  }, [vehicleQueryNorm]);
+  }, [vehicleOptions, vehicleQueryNorm]);
 
   const filteredLoadTypes = useMemo(() => {
     const q = loadTypePickerQuery.trim().toLowerCase();
-    if (!q) return LOAD_TYPES;
-    return LOAD_TYPES.filter((t) => t.toLowerCase().includes(q));
-  }, [loadTypePickerQuery]);
+    if (!q) return productOptions;
+    return productOptions.filter((t) => t.toLowerCase().includes(q));
+  }, [loadTypePickerQuery, productOptions]);
 
   useEffect(() => {
     if (vehicleTypePickerOpen) setVehiclePickerQuery("");
@@ -1278,9 +1271,9 @@ export default function CreateIndentScreen() {
         : wizardStep === "prices"
           ? "Set a supplier target (or pick a margin %) before sharing."
           : wizardStep === "vehicle"
-            ? "Vehicle type, load type and tonnage."
+            ? "Vehicle type, product type and tonnage."
             : wizardStep === "loadType"
-              ? "Commodity / load type."
+              ? "Product type."
               : "Weight in tons."
     : "Share load details to your network.";
 
@@ -2399,7 +2392,7 @@ export default function CreateIndentScreen() {
                     step="loadType"
                     mode="picker"
                     value={form.load_type}
-                    placeholder="Select load category"
+                    placeholder="Select product type"
                     onPressPicker={openLoadTypePicker}
                     hasError={Boolean(errors.load_type)}
                   />
@@ -2522,7 +2515,7 @@ export default function CreateIndentScreen() {
                       !isWide && styles.sheetFieldStacked,
                     ]}
                   >
-                    <Text style={styles.sheetLabel}>Load Type</Text>
+                    <Text style={styles.sheetLabel}>Product type</Text>
                     <TouchableOpacity
                       style={[
                         styles.sheetInput,
@@ -2541,7 +2534,7 @@ export default function CreateIndentScreen() {
                         }
                         numberOfLines={1}
                       >
-                        {form.load_type || "Select load category"}
+                        {form.load_type || "Select product type"}
                       </Text>
                     </TouchableOpacity>
                     {errors.load_type ? (
@@ -2671,10 +2664,10 @@ export default function CreateIndentScreen() {
                         <View style={styles.pickerSheetHead}>
                           <View style={styles.pickerSheetTitles}>
                             <Text style={styles.pickerSheetTitle}>
-                              Select Vehicle
+                              Vehicle type
                             </Text>
                             <Text style={styles.pickerSheetSubtitle}>
-                              Categories, presets, or custom entry
+                              Same options as Add Trip
                             </Text>
                           </View>
                           <TouchableOpacity
@@ -2695,7 +2688,7 @@ export default function CreateIndentScreen() {
                         <CreateTripSheetSearchInput
                           value={vehiclePickerQuery}
                           onChangeText={setVehiclePickerQuery}
-                          placeholder="Search categories or presets…"
+                          placeholder="Search vehicle type…"
                           shellStyle={styles.pickerSearchShell}
                           compactChat
                           accessibilityLabel="Search vehicle types"
@@ -2707,126 +2700,61 @@ export default function CreateIndentScreen() {
                           keyboardShouldPersistTaps="handled"
                           showsVerticalScrollIndicator
                         >
-                          {vehicleQueryNorm &&
-                            filteredVehicleCategories.length === 0 &&
-                            filteredBodyLengthOptions.length === 0 && (
-                              <Text style={styles.pickerEmptyText}>
-                                No matching categories or presets. Try another
-                                search or use custom below.
-                              </Text>
-                            )}
-                          {filteredVehicleCategories.length > 0 ? (
-                            <>
-                              <Text style={styles.pickerSectionLabel}>
-                                Categories
-                              </Text>
-                              {filteredVehicleCategories.map((opt) => {
-                                const selected =
-                                  form.vehicle_type === opt &&
-                                  !vehicleTypeIsOther;
-                                return (
-                                  <TouchableOpacity
-                                    key={opt}
+                          {vehicleQueryNorm && filteredVehicleTypes.length === 0 ? (
+                            <Text style={styles.pickerEmptyText}>
+                              No vehicle types match your search. Try another
+                              search or use custom below.
+                            </Text>
+                          ) : (
+                            filteredVehicleTypes.map((opt) => {
+                              const selected =
+                                form.vehicle_type === opt &&
+                                !vehicleTypeIsOther;
+                              return (
+                                <TouchableOpacity
+                                  key={opt}
+                                  style={[
+                                    styles.pickerRow,
+                                    selected && styles.pickerRowSelected,
+                                    webCursor,
+                                  ]}
+                                  onPress={() => {
+                                    setVehicleTypeIsOther(false);
+                                    update({ vehicle_type: opt });
+                                    setVehicleTypePickerOpen(false);
+                                    if (!selected) openLoadTypePickerNext();
+                                  }}
+                                  activeOpacity={0.75}
+                                >
+                                  <View style={styles.pickerIconCircle}>
+                                    <Truck
+                                      size={14}
+                                      color={Theme.iconPrimary}
+                                    />
+                                  </View>
+                                  <Text
                                     style={[
-                                      styles.pickerRow,
-                                      selected && styles.pickerRowSelected,
-                                      webCursor,
+                                      styles.pickerRowPrimary,
+                                      selected &&
+                                        styles.pickerRowPrimarySelected,
                                     ]}
-                                    onPress={() => {
-                                      setVehicleTypeIsOther(false);
-                                      update({ vehicle_type: opt });
-                                      setVehicleTypePickerOpen(false);
-                                      if (!selected) openLoadTypePickerNext();
-                                    }}
-                                    activeOpacity={0.75}
+                                    numberOfLines={3}
                                   >
-                                    <View style={styles.pickerIconCircle}>
-                                      <Truck
-                                        size={14}
-                                        color={Theme.iconPrimary}
-                                      />
-                                    </View>
-                                    <Text
-                                      style={[
-                                        styles.pickerRowPrimary,
-                                        selected &&
-                                          styles.pickerRowPrimarySelected,
-                                      ]}
-                                      numberOfLines={3}
-                                    >
-                                      {opt}
-                                    </Text>
-                                    {selected ? (
-                                      <CheckCircle2
-                                        size={16}
-                                        color={Theme.primary}
-                                        strokeWidth={2.5}
-                                      />
-                                    ) : (
-                                      <View style={styles.pickerRowEndSpacer} />
-                                    )}
-                                  </TouchableOpacity>
-                                );
-                              })}
-                            </>
-                          ) : null}
-
-                          {filteredBodyLengthOptions.length > 0 ? (
-                            <>
-                              <Text style={styles.pickerSectionLabel}>
-                                Presets & lengths
-                              </Text>
-                              {filteredBodyLengthOptions.map((opt) => {
-                                const selected =
-                                  form.vehicle_type === opt &&
-                                  !vehicleTypeIsOther;
-                                return (
-                                  <TouchableOpacity
-                                    key={normalizeBodyLengthKey(opt)}
-                                    style={[
-                                      styles.pickerRow,
-                                      selected && styles.pickerRowSelected,
-                                      webCursor,
-                                    ]}
-                                    onPress={() => {
-                                      setVehicleTypeIsOther(false);
-                                      update({ vehicle_type: opt });
-                                      setVehicleTypePickerOpen(false);
-                                      if (!selected) openLoadTypePickerNext();
-                                    }}
-                                    activeOpacity={0.75}
-                                  >
-                                    <View style={styles.pickerIconCircle}>
-                                      <Truck
-                                        size={14}
-                                        color={Theme.iconPrimary}
-                                      />
-                                    </View>
-                                    <Text
-                                      style={[
-                                        styles.pickerRowPrimary,
-                                        selected &&
-                                          styles.pickerRowPrimarySelected,
-                                      ]}
-                                      numberOfLines={3}
-                                    >
-                                      {opt}
-                                    </Text>
-                                    {selected ? (
-                                      <CheckCircle2
-                                        size={16}
-                                        color={Theme.primary}
-                                        strokeWidth={2.5}
-                                      />
-                                    ) : (
-                                      <View style={styles.pickerRowEndSpacer} />
-                                    )}
-                                  </TouchableOpacity>
-                                );
-                              })}
-                            </>
-                          ) : null}
-
+                                    {opt}
+                                  </Text>
+                                  {selected ? (
+                                    <CheckCircle2
+                                      size={16}
+                                      color={Theme.primary}
+                                      strokeWidth={2.5}
+                                    />
+                                  ) : (
+                                    <View style={styles.pickerRowEndSpacer} />
+                                  )}
+                                </TouchableOpacity>
+                              );
+                            })
+                          )}
                           <Text style={styles.pickerSectionLabel}>Custom</Text>
                           <TouchableOpacity
                             style={[
@@ -2899,10 +2827,10 @@ export default function CreateIndentScreen() {
                         <View style={styles.pickerSheetHead}>
                           <View style={styles.pickerSheetTitles}>
                             <Text style={styles.pickerSheetTitle}>
-                              Load type
+                              Product type
                             </Text>
                             <Text style={styles.pickerSheetSubtitle}>
-                              What you are shipping
+                              Same options as Add Trip
                             </Text>
                           </View>
                           <TouchableOpacity
@@ -2923,10 +2851,10 @@ export default function CreateIndentScreen() {
                         <CreateTripSheetSearchInput
                           value={loadTypePickerQuery}
                           onChangeText={setLoadTypePickerQuery}
-                          placeholder="Search load type…"
+                          placeholder="Search product type…"
                           shellStyle={styles.pickerSearchShell}
                           compactChat
-                          accessibilityLabel="Search load types"
+                          accessibilityLabel="Search product types"
                         />
 
                         <ScrollView
@@ -2937,7 +2865,7 @@ export default function CreateIndentScreen() {
                         >
                           {filteredLoadTypes.length === 0 ? (
                             <Text style={styles.pickerEmptyText}>
-                              No load types match your search.
+                              No product types match your search.
                             </Text>
                           ) : (
                             filteredLoadTypes.map((opt) => {

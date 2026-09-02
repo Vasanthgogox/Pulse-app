@@ -12,6 +12,7 @@ import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { VEHICLE_TYPES } from "@/features/indents/constants";
 import {
     createIndent,
     getIndentDisplayNumber,
@@ -56,16 +57,6 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 const STORY_TYPES: PostType[] = ["LOAD", "VEHICLE_AVAILABILITY"];
-const VEHICLE_TYPES = [
-  "20ft",
-  "32ft",
-  "SXL",
-  "MXL",
-  "Tanker",
-  "Container",
-  "Open Body",
-  "Trailer",
-];
 
 const LOAD_ILLUS_ASPECT = 600 / 520;
 const VEHICLE_ILLUS_ASPECT = 640 / 560;
