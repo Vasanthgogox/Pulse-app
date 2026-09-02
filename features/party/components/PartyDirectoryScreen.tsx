@@ -24,8 +24,8 @@ import { isActiveFleetRelationshipDriver } from "@/features/drivers/services/dri
 import {
   canAccessPartyKind,
 } from "@/lib/capabilities";
-import { useCapabilities } from "@/lib/useCapabilities";
 import { useMemberAccess } from "@/lib/useMemberAccess";
+import type { MemberSurfaceId } from "@/lib/memberSurfaces";
 import {
   useClientsQuery,
   useDriversQuery,
@@ -43,7 +43,7 @@ import {
   User,
   type LucideIcon,
 } from "lucide-react-native";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Pressable,
   ScrollView,
@@ -85,6 +85,22 @@ function chunkRows<T>(items: T[], columns: number): T[][] {
   return rows;
 }
 
+/** Party directory tab → the surface that governs member access to it. */
+function partyKindSurface(
+  kind: Parameters<typeof canAccessPartyKind>[1],
+): MemberSurfaceId {
+  switch (kind) {
+    case "customers":
+      return "sales.clients.view";
+    case "suppliers":
+      return "sales.suppliers.view";
+    case "drivers":
+      return "fleet.drivers.view";
+    case "vehicles":
+      return "fleet.vehicles.view";
+  }
+}
+
 export function PartyDirectoryScreen({ kind, onBack }: Props) {
   const insets = useSafeAreaInsets();
   const { width } = useWindowDimensions();
@@ -93,39 +109,43 @@ export function PartyDirectoryScreen({ kind, onBack }: Props) {
       ? PARTY_GRID_COLUMNS_DESKTOP
       : PARTY_GRID_COLUMNS;
   const router = useRouter();
-  const capabilities = useCapabilities();
-  const { can: canSurface } = useMemberAccess();
+  const { can: canSurface, orgCapabilities } = useMemberAccess();
+  // Org model ∩ surface. `canAccessPartyKind(capabilities, …)` alone hid every
+  // directory from finance members, whose party surfaces grant no `dispatch`.
+  const canPartyKind = useCallback(
+    (k: Parameters<typeof canAccessPartyKind>[1]) =>
+      canAccessPartyKind(orgCapabilities, k) && canSurface(partyKindSurface(k)),
+    [orgCapabilities, canSurface],
+  );
   const { currentOrganization } = useOrganization();
   const orgId = currentOrganization?.id ?? null;
   const [query, setQuery] = useState("");
 
   const visiblePartyKinds = useMemo(
     () =>
-      PARTY_DIRECTORY_TAB_ORDER.filter((k) =>
-        canAccessPartyKind(capabilities, k),
-      ),
-    [capabilities],
+      PARTY_DIRECTORY_TAB_ORDER.filter((k) => canPartyKind(k)),
+    [canPartyKind],
   );
 
   useEffect(() => {
-    if (!canAccessPartyKind(capabilities, kind) && visiblePartyKinds[0]) {
+    if (!canPartyKind(kind) && visiblePartyKinds[0]) {
       router.replace(
         ROUTES.partyDirectory(visiblePartyKinds[0]) as Parameters<
           typeof router.replace
         >[0],
       );
     }
-  }, [capabilities, kind, router, visiblePartyKinds]);
+  }, [canPartyKind, kind, router, visiblePartyKinds]);
 
   const clientsQ = useClientsQuery(orgId);
   const suppliersQ = useSuppliersQuery(
-    canAccessPartyKind(capabilities, "suppliers") ? orgId : null,
+    canPartyKind("suppliers") ? orgId : null,
   );
   const driversQ = useDriversQuery(
-    canAccessPartyKind(capabilities, "drivers") ? orgId : null,
+    canPartyKind("drivers") ? orgId : null,
   );
   const vehiclesQ = useVehiclesQuery(
-    canAccessPartyKind(capabilities, "vehicles") ? orgId : null,
+    canPartyKind("vehicles") ? orgId : null,
   );
 
   const tabCounts = useMemo(

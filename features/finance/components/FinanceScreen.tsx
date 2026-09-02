@@ -136,7 +136,11 @@ export function FinanceScreen() {
   const { t } = useLanguage();
   const { profile } = useAuth();
   const capabilities = useCapabilities();
-  const { can: canSurface } = useMemberAccess();
+  // Org-model capabilities for the operating-model gates below. Member reach is
+  // enforced separately by `canSurface`; using member-filtered capabilities here
+  // double-gated the sub-tabs and hid Customers/Suppliers from finance members,
+  // whose surface set deliberately confers no `dispatch`.
+  const { can: canSurface, orgCapabilities } = useMemberAccess();
   const canAccess =
     canAccessFinance(capabilities) && canSurface("finance.tab");
   const canAssetSupply = canUseAssetSupply(capabilities);
@@ -153,7 +157,7 @@ export function FinanceScreen() {
       drivers: "finance.subtab.drivers",
     };
     return TABS.filter((tab) => {
-      if (!canAccessFinanceSubTab(capabilities, tab.id)) return false;
+      if (!canAccessFinanceSubTab(orgCapabilities, tab.id)) return false;
       if (!canSurface(surfaceByTab[tab.id])) return false;
       // Garage/drivers sub-tabs are vehicle/driver rosters: also require the
       // matching fleet read surface so revoking it actually hides the list.
@@ -161,7 +165,7 @@ export function FinanceScreen() {
       if (tab.id === "drivers") return canSurface("fleet.drivers.view");
       return true;
     });
-  }, [capabilities, canSurface]);
+  }, [orgCapabilities, canSurface]);
   const {
     currentOrganization,
     refreshOrganization,
@@ -308,9 +312,9 @@ export function FinanceScreen() {
 
   const canLedgerCategory = useCallback(
     (category: "all" | "customers" | "suppliers" | "vehicle" | "driver") =>
-      canAccessLedgerCategory(capabilities, category) &&
+      canAccessLedgerCategory(orgCapabilities, category) &&
       canSurface(ledgerCategorySurface(category)),
-    [capabilities, canSurface],
+    [orgCapabilities, canSurface],
   );
 
   const canAddFinanceTx = canSurface("finance.add_transaction");
@@ -420,7 +424,7 @@ export function FinanceScreen() {
 
   const openAddPartyForSubTab = useCallback(
     (subTab: "customers" | "suppliers" | "garage" | "drivers") => {
-      if (!canAccessFinanceSubTab(capabilities, subTab)) return;
+      if (!canAccessFinanceSubTab(orgCapabilities, subTab)) return;
       const createSurface =
         subTab === "customers"
           ? ("sales.clients.create" as const)
@@ -450,7 +454,7 @@ export function FinanceScreen() {
       }
       routeAdd();
     },
-    [capabilities, canSurface, router, usePartyPortalOnWeb],
+    [orgCapabilities, canSurface, router, usePartyPortalOnWeb],
   );
 
   const handleAddPartyPress = useCallback(() => {
@@ -481,7 +485,7 @@ export function FinanceScreen() {
           : financeSubTab === "garage"
             ? ("fleet.vehicles.create" as const)
             : ("fleet.drivers.create" as const);
-    if (!canAccessFinanceSubTab(capabilities, financeSubTab)) return [];
+    if (!canAccessFinanceSubTab(orgCapabilities, financeSubTab)) return [];
     if (!canSurface(surface)) return [];
     const byTab: Record<
       "customers" | "suppliers" | "garage" | "drivers",
@@ -502,7 +506,7 @@ export function FinanceScreen() {
         onPress: () => openAddPartyForSubTab(financeSubTab),
       },
     ];
-  }, [canSurface, capabilities, financeSubTab, openAddPartyForSubTab, t]);
+  }, [canSurface, orgCapabilities, financeSubTab, openAddPartyForSubTab, t]);
 
   const showPartySpeedDial =
     financeSubTab === "customers" ||
@@ -1328,17 +1332,17 @@ export function FinanceScreen() {
   }, [selectedEntity, selectedEntityTrips, ledgerTransactions]);
 
   const handleTabPress = useCallback((tabId: FinanceSubTab) => {
-    if (!canAccessFinanceSubTab(capabilities, tabId)) return;
+    if (!canAccessFinanceSubTab(orgCapabilities, tabId)) return;
     setFinanceSubTab(tabId);
     // When switching to Ledger, close entity detail overlay so only one "detail" (expand row) is in view
     if (tabId === "cash") setSelectedEntity(null);
-  }, [capabilities]);
+  }, [orgCapabilities]);
 
   useEffect(() => {
-    if (!canAccessFinanceSubTab(capabilities, financeSubTab)) {
+    if (!canAccessFinanceSubTab(orgCapabilities, financeSubTab)) {
       setFinanceSubTab(visibleFinanceTabs[0]?.id ?? "cash");
     }
-  }, [capabilities, financeSubTab, visibleFinanceTabs]);
+  }, [orgCapabilities, financeSubTab, visibleFinanceTabs]);
 
   const handleLedgerRowSelect = useCallback(
     (data: FinancialRowData) => {
@@ -1618,7 +1622,7 @@ export function FinanceScreen() {
               financeSubTab={financeSubTab}
               visibleTabs={visibleFinanceTabs}
               kanbanVisibleColumns={financeKanbanColumnsForSupplyFilter(
-                capabilities,
+                orgCapabilities,
                 sourceSupplyFilter,
               )}
               organizationId={orgId}

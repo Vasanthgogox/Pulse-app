@@ -385,6 +385,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Open Network / sales home",
     domain: "sales",
     anyOfCaps: ["marketplace_post", "marketplace_bid", ...DISP],
+    grantsCaps: [],
   },
   {
     id: "sales.clients.view",
@@ -393,6 +394,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Clients list & party customers",
     domain: "sales",
     anyOfCaps: DISP,
+    grantsCaps: [],
     requires: "sales.tab",
   },
   {
@@ -420,6 +422,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Open client detail & trips",
     domain: "sales",
     anyOfCaps: DISP,
+    grantsCaps: [],
     requires: "sales.clients.view",
   },
   {
@@ -483,6 +486,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Supplier directory (aggregate / hybrid)",
     domain: "sales",
     anyOfCaps: ["dispatch"],
+    grantsCaps: [],
     requires: "sales.tab",
   },
   {
@@ -510,6 +514,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Open supplier detail & trips",
     domain: "sales",
     anyOfCaps: ["dispatch"],
+    grantsCaps: [],
     requires: "sales.suppliers.view",
   },
   {
@@ -556,6 +561,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Open Trips home",
     domain: "tripops",
     anyOfCaps: DISP,
+    grantsCaps: [],
   },
   {
     id: "tripops.trips.view",
@@ -564,6 +570,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Trips list",
     domain: "tripops",
     anyOfCaps: DISP,
+    grantsCaps: [],
     requires: "tripops.tab",
   },
   {
@@ -630,7 +637,10 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     label: "Trip documents",
     hint: "POD / LR / trip docs tab",
     domain: "tripops",
-    anyOfCaps: DISP,
+    anyOfCaps: [...DISP, ...FIN],
+    // POD / LR viewing is read-only and reachable by finance (POD
+    // reconciliation); it must not confer dispatch.
+    grantsCaps: [],
     requires: "tripops.trips.detail",
   },
   {
@@ -782,6 +792,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Resources / party vehicles",
     domain: "fleet",
     anyOfCaps: ["fleet_management"],
+    grantsCaps: [],
   },
   {
     id: "fleet.vehicles.create",
@@ -826,6 +837,7 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     hint: "Resources / party drivers",
     domain: "fleet",
     anyOfCaps: ["fleet_management"],
+    grantsCaps: [],
   },
   {
     id: "fleet.drivers.create",
@@ -1165,6 +1177,32 @@ export function normalizeSurfaces(
 }
 
 /**
+ * Read-only surfaces outside the "finance" domain that the finance preset must
+ * also grant. Each is either a chain parent (`*.tab`, `*.view`) required by a
+ * finance screen, or a trip-level fiscal tab. Every id here has
+ * `grantsCaps: []` in the catalog, so granting them confers no dispatch or
+ * fleet capability — the member can look, not act.
+ */
+const FINANCE_CROSS_DOMAIN_SURFACES: readonly MemberSurfaceId[] = [
+  // Party directories behind Finance → Customers / Suppliers.
+  "sales.tab",
+  "sales.clients.view",
+  "sales.clients.detail",
+  "sales.suppliers.view",
+  "sales.suppliers.detail",
+  // Trip path: finance opens a trip to reach its finance / expense tabs.
+  "tripops.tab",
+  "tripops.trips.view",
+  "tripops.trips.detail",
+  "tripops.trips.finance",
+  "tripops.trips.expenses",
+  "tripops.trips.docs",
+  // Rosters behind Finance → Garage / Drivers.
+  "fleet.vehicles.view",
+  "fleet.drivers.view",
+];
+
+/**
  * Default surface map for a platform role preset.
  * Only surfaces the org allows should be persisted as true by the UI.
  */
@@ -1184,8 +1222,20 @@ export function defaultSurfacesForRole(
     case "admin":
       return allOn(MEMBER_SURFACE_CATALOG.map((s) => s.id));
     case "finance":
+      // Finance needs more than the finance domain: the Customers/Suppliers
+      // sub-tabs read party directories (domain "sales"), Garage/Drivers read
+      // the fleet rosters (domain "fleet"), and the trip finance/expense tabs
+      // hang off the trip detail chain (domain "tripops"). A plain
+      // domain === "finance" filter left every one of those unsatisfiable —
+      // only the Cash sub-tab survived. All cross-domain additions below are
+      // read-only and carry `grantsCaps: []`, so they widen reach without
+      // handing finance `dispatch` / `fleet_management`.
       return allOn(
-        MEMBER_SURFACE_CATALOG.filter((s) => s.domain === "finance").map((s) => s.id),
+        MEMBER_SURFACE_CATALOG.filter(
+          (s) =>
+            s.domain === "finance" ||
+            FINANCE_CROSS_DOMAIN_SURFACES.includes(s.id),
+        ).map((s) => s.id),
       );
     case "sales":
       // tripops.indents.* and tripops.pulse_loads are catalogued under

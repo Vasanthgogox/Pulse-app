@@ -294,8 +294,12 @@ export default function TripsScreen() {
     : listLayout;
 
   const capabilities = useCapabilities();
-  const canAccess = canAccessTrips(capabilities);
-  const { can: canSurface } = useMemberAccess();
+  const { can: canSurface, orgCapabilities } = useMemberAccess();
+  // Org model decides whether trips exist at all; the surface decides whether
+  // this member may open them. Gating on member-filtered capabilities too would
+  // hide the list from finance members, who hold `tripops.trips.view` as a
+  // read-only surface that deliberately confers no `dispatch`.
+  const canAccess = canAccessTrips(orgCapabilities) && canSurface("tripops.trips.view");
   const canAddTrip =
     canAccess &&
     (canSurface("tripops.trips.create_asset") ||

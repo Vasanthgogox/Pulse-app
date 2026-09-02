@@ -18,6 +18,7 @@ import {
 } from "@/lib/capabilities";
 import {
   MEMBER_SURFACE_CATALOG,
+  capabilitiesFromMemberSurfaces,
   defaultSurfacesForRole,
   domainsFromSurfaces,
   memberHasSurface,
@@ -181,8 +182,37 @@ describe("TC-05..08 — role presets do not leak across domains", () => {
     );
   };
 
-  it("TC-06: finance preset touches only the finance domain", () => {
-    expect([...domainsTouched("finance")]).toEqual(["finance"]);
+  it("TC-06: finance preset reaches beyond finance only via read-only surfaces", () => {
+    // Finance owns the fiscal domain, but its sub-tabs and the trip finance tab
+    // read party directories, fleet rosters and trip detail — surfaces
+    // catalogued under sales/fleet/tripops. Crossing those domains is intended;
+    // what must never happen is a preset surface conferring a capability
+    // finance has no business holding (dispatch, fleet_management).
+    const s = defaultSurfacesForRole("finance", HYBRID);
+    const crossDomain = MEMBER_SURFACE_CATALOG.filter(
+      (d) => s[d.id] && d.domain !== "finance",
+    );
+
+    expect(crossDomain.length).toBeGreaterThan(0);
+    const leaking = crossDomain
+      .filter((d) => (d.grantsCaps ?? d.anyOfCaps).length > 0)
+      .flatMap((d) =>
+        (d.grantsCaps ?? d.anyOfCaps).map((c) => `${d.id} grants ${c}`),
+      )
+      .filter((entry) => !entry.endsWith("finance_view"));
+
+    expect(leaking).toEqual([]);
+  });
+
+  it("TC-06b: finance preset confers no dispatch or fleet capability", () => {
+    const caps = capabilitiesFromMemberSurfaces(
+      HYBRID,
+      defaultSurfacesForRole("finance", HYBRID),
+    );
+
+    expect(caps).not.toContain("dispatch");
+    expect(caps).not.toContain("dispatch_for_own_fleet");
+    expect(caps).not.toContain("fleet_management");
   });
 
   it("TC-07: sales preset touches only the sales domain", () => {
