@@ -38,7 +38,7 @@ export const WORKSPACE_PANEL_TITLES: Record<WorkspacePanelId, string> = {
 
 export const WORKSPACE_PANEL_SUBTITLES: Partial<Record<WorkspacePanelId, string>> = {
   account: "Manage your personal identity",
-  "account-edit": "Update your name, photo and status",
+  "account-edit": "Update your name, photo, contacts and status",
   profile: "Organization",
   settings: "How this organization operates Pulse",
   team: "Members, roles, and operational access",

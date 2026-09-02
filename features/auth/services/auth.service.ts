@@ -1966,6 +1966,25 @@ export async function updateProfile(
     if (updates.status_text !== undefined)
       data.status_text = updates.status_text?.trim() ?? "";
 
+    if (updates.phone !== undefined && String(updates.phone).trim()) {
+      const nextTen = extractIndianMobileTenDigits(updates.phone);
+      const currentTen =
+        extractIndianMobileTenDigits(String(user.user_metadata?.phone ?? "")) ??
+        extractIndianMobileTenDigits(user.phone ?? "");
+      if (nextTen && nextTen !== currentTen) {
+        const taken = await checkExistingUserByPhone(nextTen);
+        const existingEmail = (taken.email ?? "").trim().toLowerCase();
+        const myEmail = (user.email ?? "").trim().toLowerCase();
+        if (taken.exists && (!existingEmail || existingEmail !== myEmail)) {
+          return {
+            error: new Error(
+              "This mobile number is already used by another Pulse account.",
+            ),
+          };
+        }
+      }
+    }
+
     const { error: authError } = await supabase().auth.updateUser({ data });
     if (authError) return { error: new Error(authError.message || "Auth update failed") };
 

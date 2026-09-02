@@ -430,8 +430,8 @@ export function WorkspaceAccountPanel({
           icon={<FontAwesome name="phone" size={14} color={TEAL} />}
           iconBg={TEAL_TINT}
           label="Mobile"
-          value={phone}
-          locked
+          value={phone || "Add mobile number"}
+          onPress={onEdit}
         />
         <View style={styles.divider} />
         <IdentityRow
@@ -456,7 +456,8 @@ export function WorkspaceAccountPanel({
         <View style={styles.lockedNote}>
           <Lock size={10} color={Theme.textMuted} strokeWidth={2} />
           <Text style={styles.lockedNoteText}>
-            Phone, email and company are set at signup and cannot be changed here.
+            Email and company are set at signup. Add or update your mobile in Edit
+            profile.
           </Text>
         </View>
       </View>
