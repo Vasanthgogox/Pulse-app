@@ -11,6 +11,11 @@ import { pickContactForNameAndPhone } from "@/lib/contactPicker";
 import { validatePhone } from "@/lib/phoneValidation";
 import { formatMobileNumber } from "@/lib/format";
 import {
+  PARTY_LOOKUP_ERROR_MESSAGE,
+  classifyNullInviteeResult,
+  sameOrgPartyMessage,
+} from "@/features/connections/hooks/usePartyPhoneLookupState";
+import {
   inviteeProfileIsDriver,
   inviteeSuggestedCompanyName,
 } from "@/features/connections/services/connectionRequests.service";
@@ -60,6 +65,11 @@ interface AddSupplierModalProps {
   noOrganizationMessage?: string | null;
   /** Called when user taps Refresh to retry loading organization. */
   onRefreshOrganization?: () => void;
+  /**
+   * Active workspace org — required for the same-org membership probe that
+   * disambiguates a null invitee lookup.
+   */
+  organizationId?: string | null;
   /** When provided, enables "Search by phone" to find an existing org and send connection invite. */
   searchInviteeByPhone?: (
     phone: string,
@@ -77,6 +87,7 @@ export function AddSupplierModal({
   visible,
   noOrganizationMessage,
   onRefreshOrganization,
+  organizationId,
   searchInviteeByPhone,
   onSendInvitation,
 }: AddSupplierModalProps) {
@@ -94,6 +105,10 @@ export function AddSupplierModal({
   const [phoneSearchLoading, setPhoneSearchLoading] = useState(false);
   const [searchedNoResult, setSearchedNoResult] = useState(false);
   const [driverRegisteredAtPhone, setDriverRegisteredAtPhone] = useState(false);
+  /** Phone is an ACTIVE member of this org (hidden by the invitee RPC). */
+  const [sameOrgMemberAtPhone, setSameOrgMemberAtPhone] = useState(false);
+  /** Membership undetermined; block submit and let the user retry. */
+  const [lookupFailed, setLookupFailed] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const searchIdRef = useRef(0);
   const companyInputRef = useRef<TextInput>(null);
@@ -135,6 +150,8 @@ export function AddSupplierModal({
   const canSubmit =
     !blockedByNoOrg &&
     !driverRegisteredAtPhone &&
+    !sameOrgMemberAtPhone &&
+    !lookupFailed &&
     companyName.trim().length > 0 &&
     name.trim().length > 0 &&
     phone.trim().length > 0 &&
@@ -158,6 +175,8 @@ export function AddSupplierModal({
       setPhoneSearchLoading(false);
       setSearchedNoResult(false);
       setDriverRegisteredAtPhone(false);
+      setSameOrgMemberAtPhone(false);
+      setLookupFailed(false);
     }
   }, [visible]);
 
@@ -167,6 +186,8 @@ export function AddSupplierModal({
     setInviteeMatch(null);
     setSearchedNoResult(false);
     setDriverRegisteredAtPhone(false);
+    setSameOrgMemberAtPhone(false);
+    setLookupFailed(false);
     if (normalized.length < MIN_PHONE_LENGTH_FOR_SEARCH) {
       setPhoneSearchLoading(false);
       return;
@@ -174,13 +195,26 @@ export function AddSupplierModal({
     const id = ++searchIdRef.current;
     setPhoneSearchLoading(true);
     const t = setTimeout(() => {
-      searchInviteeByPhone(normalized).then((result) => {
+      searchInviteeByPhone(normalized).then(async (result) => {
         if (searchIdRef.current !== id) return;
+        if (!result) {
+          // Null is ambiguous: absent, or an active same-org member the RPC hid.
+          const status = organizationId
+            ? await classifyNullInviteeResult(normalized, organizationId)
+            : "not_found";
+          // Phone changed / workspace switched while the probe was in flight.
+          if (searchIdRef.current !== id) return;
+          setPhoneSearchLoading(false);
+          setSameOrgMemberAtPhone(status === "same_org");
+          setLookupFailed(status === "error");
+          setSearchedNoResult(status === "not_found");
+          return;
+        }
         setPhoneSearchLoading(false);
-        setInviteeMatch(result ?? null);
-        setSearchedNoResult(!result);
+        setInviteeMatch(result);
+        setSearchedNoResult(false);
         setDriverRegisteredAtPhone(
-          Boolean(result && inviteeProfileIsDriver(result.profile_role)),
+          inviteeProfileIsDriver(result.profile_role),
         );
         if (result) {
           setName((prev) => (prev.trim() ? prev : result.full_name));
@@ -192,7 +226,7 @@ export function AddSupplierModal({
       });
     }, PHONE_DEBOUNCE_MS);
     return () => clearTimeout(t);
-  }, [phone, searchInviteeByPhone, onSendInvitation]);
+  }, [phone, searchInviteeByPhone, onSendInvitation, organizationId]);
 
   /** Clearing/editing phone after a lookup match should drop auto-filled name + company (same as invalidating the search). */
   const handlePhoneChangeText = (text: string) => {
@@ -228,6 +262,7 @@ export function AddSupplierModal({
     setSearchedNoResult(false);
     setError(null);
     setDriverRegisteredAtPhone(false);
+    // sameOrgMemberAtPhone / lookupFailed intentionally NOT cleared.
   };
 
   const handleCreateSuccessOk = () => {
@@ -237,6 +272,14 @@ export function AddSupplierModal({
 
   const handleSubmit = () => {
     if (!canSubmit) return;
+    if (sameOrgMemberAtPhone) {
+      setError(sameOrgPartyMessage("supplier"));
+      return;
+    }
+    if (lookupFailed) {
+      setError(PARTY_LOOKUP_ERROR_MESSAGE);
+      return;
+    }
     if (driverRegisteredAtPhone) {
       setError(t("errorDriverCannotAddAsSupplier"));
       return;
@@ -411,6 +454,14 @@ export function AddSupplierModal({
             </TouchableOpacity>
           ) : null}
         </View>
+      ) : sameOrgMemberAtPhone ? (
+        <Text style={[styles.ledgerHintText, { color: Theme.negative }]}>
+          {sameOrgPartyMessage("supplier")}
+        </Text>
+      ) : lookupFailed ? (
+        <Text style={[styles.ledgerHintText, { color: Theme.negative }]}>
+          {PARTY_LOOKUP_ERROR_MESSAGE}
+        </Text>
       ) : searchedNoResult ? (
         <Text style={[styles.ledgerHintText, { color: Theme.textSecondary }]}>
           No account with this number. Add as offline below.
@@ -717,6 +768,18 @@ export function AddSupplierModal({
                     </Text>
                   </TouchableOpacity>
                 ) : null}
+              </View>
+            ) : sameOrgMemberAtPhone ? (
+              <View style={styles.screenStatusCard}>
+                <Text style={[styles.screenStatusText, { color: Theme.negative }]}>
+                  {sameOrgPartyMessage("supplier")}
+                </Text>
+              </View>
+            ) : lookupFailed ? (
+              <View style={styles.screenStatusCard}>
+                <Text style={[styles.screenStatusText, { color: Theme.negative }]}>
+                  {PARTY_LOOKUP_ERROR_MESSAGE}
+                </Text>
               </View>
             ) : searchedNoResult ? (
               <View style={styles.screenStatusCard}>

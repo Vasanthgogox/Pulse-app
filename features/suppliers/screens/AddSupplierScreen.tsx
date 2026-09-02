@@ -74,7 +74,10 @@ export default function AddSupplierScreen() {
   const searchInviteeByPhone = async (
     phone: string,
   ): Promise<SupplierInviteeMatch | null> => {
-    const { error, invitee } = await getConnectionInviteeByPhone(phone);
+    const { error, invitee } = await getConnectionInviteeByPhone(
+      phone,
+      currentOrganization?.id ?? "",
+    );
     if (error || !invitee) return null;
     return {
       organization_id: invitee.organization_id,

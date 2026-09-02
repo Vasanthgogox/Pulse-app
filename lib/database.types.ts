@@ -13035,8 +13035,12 @@ export type Database = {
         Returns: Json
       }
       get_integrated_partners: { Args: { p_org_id: string }; Returns: Json }
+      is_active_org_member_phone: {
+        Args: { p_org_id: string; p_phone: string }
+        Returns: boolean
+      }
       get_invitee_by_phone: {
-        Args: { p_phone: string }
+        Args: { p_org_id: string; p_phone: string }
         Returns: {
           full_name: string
           organization_id: string
@@ -13047,7 +13051,7 @@ export type Database = {
         }[]
       }
       get_invitees_by_phones: {
-        Args: { p_phones: string[] }
+        Args: { p_org_id: string; p_phones: string[] }
         Returns: {
           full_name: string
           organization_id: string

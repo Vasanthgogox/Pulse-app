@@ -63,7 +63,7 @@ export function useNetworkContactRecommendations({
       }
 
       const phones = entries.map((e) => e.normalized);
-      const { inviteesByPhone, error: lookupError } = await getConnectionInviteesByPhones(phones);
+      const { inviteesByPhone, error: lookupError } = await getConnectionInviteesByPhones(phones, orgId);
       if (lookupError && inviteesByPhone.size === 0) {
         setRecommendations([]);
         return;

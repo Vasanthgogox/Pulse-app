@@ -339,7 +339,7 @@ export default function ClientDetailScreen({
     }
     import("@/features/connections/services/connectionRequests.service")
       .then(({ getConnectionInviteeByPhone }) =>
-        getConnectionInviteeByPhone(phone),
+        getConnectionInviteeByPhone(phone, currentOrganization?.id ?? ""),
       )
       .then(({ invitee }) => {
         setIsInApp(Boolean(invitee));
@@ -348,7 +348,7 @@ export default function ClientDetailScreen({
         // Avoid unhandled promise rejections on transient lookup timeouts.
         setIsInApp(false);
       });
-  }, [client?.phone]);
+  }, [client?.phone, currentOrganization?.id]);
 
   useEffect(() => {
     if (!isWebDesktop) {
@@ -1001,6 +1001,7 @@ export default function ClientDetailScreen({
         await import("@/features/connections/services/connectionRequests.service");
       const { invitee, error: lookupError } = await getConnectionInviteeByPhone(
         client.phone,
+        currentOrganization.id,
       );
       if (lookupError) {
         Alert.alert("Unable to send invitation", lookupError.message);

@@ -59,7 +59,7 @@ export async function runConnectionInvite(
   }
 
   try {
-    const { invitee, error: lookupError } = await getConnectionInviteeByPhone(item.phone);
+    const { invitee, error: lookupError } = await getConnectionInviteeByPhone(item.phone, orgId);
     if (lookupError) throw lookupError;
 
     if (invitee?.organization_id && item.role !== "DRIVER") {

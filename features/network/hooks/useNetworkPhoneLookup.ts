@@ -9,7 +9,7 @@ import {
   normalizedDigitsForNetworkSearch,
 } from "@/lib/networkPhoneSearch";
 
-export function useNetworkPhoneLookup(search: string) {
+export function useNetworkPhoneLookup(search: string, orgId: string) {
   const [invitee, setInvitee] = useState<ConnectionInviteeByPhone | null>(null);
   const [loading, setLoading] = useState(false);
   const [searched, setSearched] = useState(false);
@@ -39,7 +39,7 @@ export function useNetworkPhoneLookup(search: string) {
     setSearched(false);
 
     const timer = setTimeout(() => {
-      void getConnectionInviteeByPhone(normalized).then(({ error: err, invitee: row }) => {
+      void getConnectionInviteeByPhone(normalized, orgId).then(({ error: err, invitee: row }) => {
         if (gen !== genRef.current) return;
         setLoading(false);
         setSearched(true);
@@ -54,7 +54,7 @@ export function useNetworkPhoneLookup(search: string) {
     }, NETWORK_PHONE_SEARCH_DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-  }, [search]);
+  }, [search, orgId]);
 
   return { invitee, loading, searched, error, isActive: isPhoneLikeNetworkSearch(search) };
 }
