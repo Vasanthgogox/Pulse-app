@@ -11,6 +11,25 @@ import {
   LEGACY_AVATAR_BUCKET,
   extractPathFromStorageUrl,
 } from "@/lib/avatarUpload";
+import { supabase } from "@/lib/supabase";
+
+/**
+ * Org logos live in the PUBLIC `org-assets` bucket under `org-logos/<orgId>/...`.
+ * getPublicUrl is a pure string builder — no network call, no Storage->Postgres
+ * connection — so these must never go through createSignedUrl.
+ */
+export const PUBLIC_ORG_ASSET_BUCKET = "org-assets";
+const PUBLIC_ORG_LOGO_PREFIX = "org-logos/";
+
+function isPublicOrgLogoPath(raw: string): boolean {
+  return raw.startsWith(PUBLIC_ORG_LOGO_PREFIX);
+}
+
+/** Public URL for an `org-logos/...` path. Never signs. */
+function publicOrgLogoUrl(path: string): string {
+  return supabase().storage.from(PUBLIC_ORG_ASSET_BUCKET).getPublicUrl(path).data
+    .publicUrl;
+}
 
 export type PartyEntityType = "client" | "supplier" | "driver" | "vehicle";
 
@@ -52,6 +71,8 @@ function resolvePartyPhotoPathSync(raw: string | null | undefined): string | nul
   if (!u) return null;
   const http = firstDisplayableHttpUrl(u);
   if (http) return http;
+  // Public org-logo path — resolvable synchronously, no signing round trip.
+  if (isPublicOrgLogoPath(u)) return publicOrgLogoUrl(u);
   // Private avatar buckets — never use getPublicUrl (returns 400 in browser).
   if (u.startsWith("http://") || u.startsWith("https://")) {
     const ref = extractPathFromStorageUrl(u);
@@ -66,6 +87,7 @@ function resolvePartyPhotoPathSync(raw: string | null | undefined): string | nul
 async function resolveOnePartyPhotoRaw(raw: string): Promise<string | null> {
   const t = raw.trim();
   if (!t) return null;
+  if (isPublicOrgLogoPath(t)) return publicOrgLogoUrl(t);
   if (t.startsWith("http://") || t.startsWith("https://")) {
     const ref = extractPathFromStorageUrl(t);
     if (ref && (ref.bucket === AVATAR_BUCKET || ref.bucket === LEGACY_AVATAR_BUCKET)) {
