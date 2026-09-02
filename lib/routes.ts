@@ -325,6 +325,9 @@ export const ROUTES = {
   LOAD_BOARD:     '/load-board'     as const,
   /** Load Center + share indent to Pulse (story); use when Network is story-only. */
   PULSE_LOADS:   '/pulse-loads'   as const,
+  /** A4 — Business Find Loads: open Marketplace discovery, separate from
+   * Load Center's relationship-based Get Load tab. */
+  FIND_LOADS:    '/find-loads'    as const,
   /** DBA audit tool — web only. */
   DBA_AUDIT:     '/audit'          as const,
   /** Workspace audit trail — who changed what (KYC, members, branding, trips). */

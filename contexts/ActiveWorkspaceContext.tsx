@@ -250,17 +250,21 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
   const [memberSurfaces, setMemberSurfaces] = useState<MemberSurfaceMap | null>(null);
   const [surfacesMap, setSurfacesMap] = useState<Map<string, MemberSurfaceMap>>(new Map());
   const [isLoading, setIsLoading] = useState(true);
+  const [membershipResolved, setMembershipResolved] = useState(false);
   const [error, setError] = useState<Error | null>(null);
 
   const sessionSignalRef = useRef<{ cancelled: boolean }>({ cancelled: false });
   const userRef = useRef(user);
   userRef.current = user;
+  /** Monotonic load id — ignore out-of-order completions from overlapping fetches. */
+  const loadGenerationRef = useRef(0);
 
   // ── Load workspaces from DB ─────────────────────────────────────────────────
 
   const loadWorkspaces = useCallback(
     async (signal: { cancelled: boolean }) => {
-      const stale = () => signal.cancelled;
+      const generation = ++loadGenerationRef.current;
+      const stale = () => signal.cancelled || generation !== loadGenerationRef.current;
       const currentUser = userRef.current;
 
       if (!currentUser) {
@@ -277,6 +281,7 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
           setSurfacesMap(new Map());
           setCurrentOrganizationRef.current(null);
           clearPlatformWorkspaceStore();
+          setMembershipResolved(true);
           setIsLoading(false);
         }
         return;
@@ -284,6 +289,7 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
 
       if (!stale()) {
         setIsLoading(true);
+        setMembershipResolved(false);
         setError(null);
       }
 
@@ -306,26 +312,39 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
         if (stale()) return;
 
         if (fetchError) {
+          // Keep membership unresolved so gates hold blank instead of flashing
+          // "No workspace access" on a transient PostgREST/RLS failure.
           setError(fetchError);
-          setIsLoading(false);
+          shouldFinishLoading = false;
+          if (!stale()) {
+            setTimeout(() => {
+              void loadWorkspaces(sessionSignalRef.current);
+            }, 800);
+          }
           return;
         }
 
-        // Cold web boot: authenticated UI can mount before the Supabase client
-        // attaches the JWT to PostgREST — RLS then returns zero rows, and
-        // MemberDomainGate briefly shows "No workspace access yet". Retry briefly.
+        // Cold web boot: JWT can exist while PostgREST still returns 0 RLS rows.
+        // Retry longer before accepting a durable empty membership.
         if (rows.length === 0) {
-          for (let attempt = 0; attempt < 2; attempt++) {
-            await new Promise((resolve) => setTimeout(resolve, 350 * (attempt + 1)));
+          for (let attempt = 0; attempt < 8; attempt++) {
+            await new Promise((resolve) =>
+              setTimeout(resolve, 250 * Math.min(attempt + 1, 4)),
+            );
             if (stale()) return;
             ({ rows, error: fetchError } = await fetchActiveMembershipRows(currentUser.uid));
             if (stale()) return;
-            if (fetchError || rows.length > 0) break;
-          }
-          if (fetchError) {
-            setError(fetchError);
-            setIsLoading(false);
-            return;
+            if (fetchError) {
+              setError(fetchError);
+              shouldFinishLoading = false;
+              if (!stale()) {
+                setTimeout(() => {
+                  void loadWorkspaces(sessionSignalRef.current);
+                }, 800);
+              }
+              return;
+            }
+            if (rows.length > 0) break;
           }
         }
 
@@ -393,9 +412,15 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
         } else {
           clearPlatformWorkspaceStore();
         }
+        setMembershipResolved(true);
       } catch (e) {
         if (!stale()) {
           setError(e instanceof Error ? e : new Error(String(e)));
+          // Retry instead of settling into a false "no access" state.
+          shouldFinishLoading = false;
+          setTimeout(() => {
+            void loadWorkspaces(sessionSignalRef.current);
+          }, 800);
         }
       } finally {
         if (!stale() && shouldFinishLoading) {
@@ -492,6 +517,7 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
     memberDomains,
     memberSurfaces,
     isLoading,
+    membershipResolved,
     error,
     switchWorkspace,
     refresh,
