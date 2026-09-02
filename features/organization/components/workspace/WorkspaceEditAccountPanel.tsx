@@ -9,6 +9,7 @@
  * account view.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
+import { IndiaFlagIcon } from "@/components/party/IndiaFlagIcon";
 import Theme from "@/constants/Theme";
 import { ALL_PRESET_AVATARS, getAvatarUriForSeed, getPresetImageSourceForSeed } from "@/constants/DriverLevels";
 import {
@@ -18,6 +19,7 @@ import {
   getUser2DPresetImageSourceForSeed,
 } from "@/constants/UserAvatars";
 import { useAuth } from "@/contexts/AuthContext";
+import { formatSignupPhoneDisplay } from "@/features/auth/signup/signUpKeypad.util";
 import * as authService from "@/features/auth/services/auth.service";
 import { WorkspaceDetailLayout } from "@/features/organization/components/workspace/WorkspaceDetailLayout";
 import { useWorkspaceFeedback } from "@/features/organization/components/workspace/WorkspaceFeedbackProvider";
@@ -26,6 +28,11 @@ import {
   WORKSPACE_PANEL_TITLES,
 } from "@/features/organization/components/workspace/workspacePanelTypes";
 import { getSignedAvatarUrl, pickAndUploadAvatar } from "@/lib/avatarUpload";
+import { formatMobileNumber } from "@/lib/format";
+import {
+  extractIndianMobileTenDigits,
+  validatePhone,
+} from "@/lib/phoneValidation";
 import { VALIDATION, maxLength, validateFullName } from "@/lib/validation";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Camera, Check, ImagePlus, Trash2 } from "lucide-react-native";
@@ -44,6 +51,10 @@ import {
 const PURPLE = "#4D3636";
 const PURPLE_TINT = "rgba(79,70,229,0.08)";
 
+function digitsFromStoredPhone(raw: string): string {
+  return extractIndianMobileTenDigits(raw) ?? formatMobileNumber(raw);
+}
+
 type Props = {
   onBack: () => void;
 };
@@ -61,6 +72,7 @@ export function WorkspaceEditAccountPanel({ onBack }: Props) {
   const avatarPresetStyle: "driver" | "user-2d" = "user-2d";
 
   const [fullName, setFullName] = useState(initialFullName);
+  const [phone, setPhone] = useState(() => digitsFromStoredPhone(initialPhone));
   const [statusText, setStatusText] = useState(initialStatusText);
   const [selectedPresetSeed, setSelectedPresetSeed] = useState<string>(initialAvatarSeed);
   const [avatarUri, setAvatarUri] = useState<string>(() =>
@@ -120,10 +132,31 @@ export function WorkspaceEditAccountPanel({ onBack }: Props) {
       notice({ kind: "error", title: "Status too long", message: statusErr });
       return;
     }
+    const currentTen = digitsFromStoredPhone(initialPhone);
+    const nextTen = digitsFromStoredPhone(phone);
+    if (currentTen && !nextTen) {
+      const msg = "Mobile number cannot be removed once set.";
+      setError(msg);
+      notice({ kind: "error", title: "Mobile required", message: msg });
+      return;
+    }
+    if (nextTen) {
+      const phoneErr = validatePhone(nextTen);
+      if (phoneErr) {
+        setError(phoneErr);
+        notice({
+          kind: "error",
+          title: "Check your mobile number",
+          message: phoneErr,
+        });
+        return;
+      }
+    }
     setSaving(true);
     const { error: err } = await authService.updateProfile({
       full_name: fullName.trim(),
       status_text: trimmedStatus || null,
+      ...(nextTen || currentTen ? { phone: nextTen } : {}),
     });
     setSaving(false);
     if (err) {
@@ -425,6 +458,14 @@ export function WorkspaceEditAccountPanel({ onBack }: Props) {
         />
 
         <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>
+          Contact details
+        </Text>
+        <Text style={styles.contactLead}>
+          Add a mobile number teammates and partners can reach you on. Email stays
+          tied to how you signed in.
+        </Text>
+
+        <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>
           Email address
         </Text>
         <TextInput
@@ -437,16 +478,33 @@ export function WorkspaceEditAccountPanel({ onBack }: Props) {
         <Text style={styles.hint}>Email cannot be changed here.</Text>
 
         <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>
-          Primary phone
+          Mobile number
         </Text>
-        <TextInput
-          style={[styles.input, styles.inputReadonly]}
-          value={initialPhone}
-          editable={false}
-          placeholder="—"
-          placeholderTextColor={Theme.textMuted}
-        />
-        <Text style={styles.hint}>Phone cannot be changed here.</Text>
+        <View style={styles.phoneRow}>
+          <View style={styles.ccBlock} accessibilityLabel="India +91">
+            <IndiaFlagIcon width={20} height={14} />
+            <Text style={styles.ccText}>+91</Text>
+          </View>
+          <TextInput
+            style={styles.phoneDigits}
+            value={formatSignupPhoneDisplay(phone)}
+            onChangeText={(v) => setPhone(formatMobileNumber(v))}
+            placeholder="000 000 0000"
+            placeholderTextColor={Theme.textMuted}
+            keyboardType="phone-pad"
+            inputMode="tel"
+            maxLength={12}
+            textContentType="telephoneNumber"
+            autoComplete="tel"
+            editable={!saving}
+            accessibilityLabel="Mobile number"
+          />
+        </View>
+        <Text style={styles.hint}>
+          {phone.length > 0 && phone.length < 10
+            ? `${phone.length}/10 digits`
+            : "Used for team invites and partner connections. Saved with your profile."}
+        </Text>
 
         <Text style={[styles.fieldLabel, styles.fieldLabelSpaced]}>
           Registered company
@@ -658,6 +716,12 @@ const styles = StyleSheet.create({
     marginBottom: 8,
   },
   fieldLabelSpaced: { marginTop: 14 },
+  contactLead: {
+    fontSize: 12,
+    color: Theme.textSecondary,
+    lineHeight: 17,
+    marginTop: -2,
+  },
   input: {
     backgroundColor: Theme.surfaceForm,
     paddingHorizontal: 14,
@@ -670,6 +734,40 @@ const styles = StyleSheet.create({
   inputReadonly: {
     backgroundColor: Theme.surfaceBorder,
     color: Theme.textSecondary,
+  },
+  phoneRow: {
+    backgroundColor: Theme.surfaceForm,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+  },
+  ccBlock: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingRight: 12,
+    marginRight: 12,
+    borderRightWidth: StyleSheet.hairlineWidth,
+    borderRightColor: Theme.borderLight,
+    flexShrink: 0,
+  },
+  ccText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.2,
+  },
+  phoneDigits: {
+    flex: 1,
+    minWidth: 0,
+    paddingVertical: 4,
+    paddingHorizontal: 0,
+    fontSize: 14,
+    fontWeight: "600",
+    color: Theme.textPrimary,
+    letterSpacing: 0.4,
   },
   inputMultiline: { minHeight: 68 },
   hint: {

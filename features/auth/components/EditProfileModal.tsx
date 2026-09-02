@@ -196,7 +196,7 @@ export function EditProfileModal({
       setError(statusErr);
       return;
     }
-    if (driverRefLayout && phone.trim()) {
+    if (phone.trim()) {
       const phoneErr = validatePhone(phone);
       if (phoneErr) {
         setError(phoneErr);
@@ -208,12 +208,8 @@ export function EditProfileModal({
     const { error: err } = await authService.updateProfile({
       full_name: name,
       status_text: statusText.trim() || null,
-      ...(driverRefLayout
-        ? {
-            phone: phone.trim(),
-            company_name: companyName.trim(),
-          }
-        : {}),
+      ...(phone.trim() ? { phone: phone.trim() } : {}),
+      ...(driverRefLayout ? { company_name: companyName.trim() } : {}),
     });
     setSaving(false);
     if (err) {
@@ -863,15 +859,25 @@ export function EditProfileModal({
               />
               <Text style={styles.hint}>Email cannot be changed here.</Text>
 
-              <Text style={labelStyle}>Primary phone</Text>
+              <Text style={labelStyle}>Mobile number</Text>
               <TextInput
-                style={[inputStyle, styles.inputReadOnly]}
+                style={inputStyle}
                 value={phone}
-                editable={false}
-                placeholder="—"
+                onChangeText={(v) => setPhone(formatMobileNumber(v))}
+                editable={!saving}
+                placeholder="98765 43210"
                 placeholderTextColor={Theme.textMuted}
+                keyboardType="phone-pad"
+                inputMode="tel"
+                autoCorrect={false}
+                spellCheck={false}
+                autoComplete="tel"
+                textContentType="telephoneNumber"
+                accessibilityLabel="Mobile number"
               />
-              <Text style={styles.hint}>Phone cannot be changed here.</Text>
+              <Text style={styles.hint}>
+                Add a 10-digit Indian mobile. Used for team invites and partner connections.
+              </Text>
 
               <Text style={labelStyle}>Registered company</Text>
               <TextInput
