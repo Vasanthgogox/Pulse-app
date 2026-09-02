@@ -48,11 +48,18 @@ export async function upsertDomainCacheMeta(params: {
   etag?: string | null;
 }): Promise<DomainCacheMeta> {
   const current = await getDomainCacheMeta(params.domain, params.orgId);
+  // `cursor: null` must CLEAR the cursor, not fall through to the stored one —
+  // callers pass null precisely to force the next sync down the full path (e.g.
+  // after a truncated fetch whose max(updated_at) would skip rows). Coalescing
+  // with `??` preserved the stale cursor and silently defeated that guard.
+  const cursorProvided = 'cursor' in params;
   const next: DomainCacheMeta = {
     domain: params.domain,
     orgId: params.orgId,
     schemaVersion: params.schemaVersion ?? current?.schemaVersion ?? DEFAULT_SCHEMA_VERSION,
-    lastSuccessfulCursor: params.cursor ?? current?.lastSuccessfulCursor ?? null,
+    lastSuccessfulCursor: cursorProvided
+      ? (params.cursor ?? null)
+      : (current?.lastSuccessfulCursor ?? null),
     lastDeltaSyncAt: nowIso(),
     lastFullSyncAt: params.markFullSync ? nowIso() : (current?.lastFullSyncAt ?? null),
     etag: params.etag ?? current?.etag ?? null,

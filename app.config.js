@@ -77,6 +77,18 @@ if (!supabaseUrl || !supabaseAnonKey) {
   }
 }
 
+// Build identity, resolved at config-eval time (i.e. per build, not per request).
+// Netlify sets COMMIT_REF/BUILD_ID; EAS sets EAS_BUILD_ID. Locally there is no
+// stable build, so fall back to the app version — a dev server restart must NOT
+// wipe the cache on every reload, which a Date.now() stamp would do.
+const buildStamp =
+  process.env.EXPO_PUBLIC_BUILD_ID ||
+  process.env.COMMIT_REF ||
+  process.env.BUILD_ID ||
+  process.env.EAS_BUILD_ID ||
+  process.env.VERCEL_GIT_COMMIT_SHA ||
+  'dev';
+
 // Static config inlined from the former app.json. Kept here (rather than a separate
 // app.json) because expo-doctor cannot tell that a dynamic app.config.js consumes
 // app.json, and flags the pair as conflicting. Single source of truth now.
@@ -224,6 +236,11 @@ module.exports = {
       supabaseUrl,
       supabaseAnonKey,
       geminiApiKey,
+      // Build identity for the client-cache buster. Any new deploy changes this,
+      // which discards every persisted TanStack cache + delta cursor on next load.
+      // Without it a poisoned cache survives redeploys for its full 6h maxAge and
+      // the only remedy is asking the user to clear site data (GX-PULSE-CACHE).
+      buildId: buildStamp,
       // Use app/+not-found.tsx — built-in Unmatched.js crashes when async-loaded (StyleSheet undefined).
       router: {
         notFound: false,

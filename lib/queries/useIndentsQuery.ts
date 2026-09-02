@@ -9,12 +9,14 @@
  */
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
+  INDENTS_CACHE_DOMAIN,
   getMarketIndentsForOrganization,
   syncIndentsWithCache,
 } from '@/features/indents/services/indents.service';
 import type { DirectQuoteRow } from '@/features/indents/services/direct-quotes.service';
 import type { IndentRow } from '@/features/indents/services/indents.service';
 import { findIndentInMarketList } from '@/features/indents/utils/findIndentInList.util';
+import { clearDomainCacheMeta } from '@/lib/cache/cacheMetadataStore';
 import { useAppQueryGate } from '@/lib/hooks/useAppQueryGate';
 import { refetchOnMountIfEntityListEmpty } from '@/lib/queries/entityListQueryOptions';
 import { queryKeys } from '@/lib/queryKeys';
@@ -36,11 +38,11 @@ export function useIndentsQuery(orgId: string | null) {
   return useQuery({
     queryKey: queryKeys.indents.finite(orgId ?? ''),
     queryFn: async () => {
+      // Seed the delta merge from whatever is already cached (incl. the rehydrated
+      // persisted list). Typing the read as IndentRow[] keeps this cast-free.
       const existing =
-        (qc.getQueryData(queryKeys.indents.finite(orgId ?? '')) as
-          | Array<{ id: string }>
-          | undefined) ?? [];
-      const res = await syncIndentsWithCache(orgId!, existing as Parameters<typeof syncIndentsWithCache>[1]);
+        qc.getQueryData<IndentRow[]>(queryKeys.indents.finite(orgId ?? '')) ?? [];
+      const res = await syncIndentsWithCache(orgId!, existing);
       if (res.error) throw res.error;
       return res.indents;
     },
@@ -266,6 +268,12 @@ export function useIndentsInfiniteQuery(orgId: string | null, opts?: { pageSize?
 export function useInvalidateIndents() {
   const qc = useQueryClient();
   return (orgId: string, options?: { bustPartnerSupplierMarket?: boolean }) => {
+    // Invalidation alone only re-runs the queryFn — which then takes the *delta*
+    // path off the stored cursor and can miss the row we just wrote. Dropping the
+    // cursor forces the next fetch to be a full sync, so a writer always sees
+    // their own change (GX-PULSE-CACHE).
+    void clearDomainCacheMeta(INDENTS_CACHE_DOMAIN, orgId);
+
     qc.invalidateQueries({ queryKey: queryKeys.indents.all(orgId) });
     qc.invalidateQueries({ queryKey: queryKeys.indents.finite(orgId) });
     qc.invalidateQueries({ queryKey: ['q', 'indents', orgId, 'infinite'] });
