@@ -3,6 +3,7 @@
  * Body length list is deduplicated by normalized key (case/spacing).
  */
 
+import { TRUCK_TYPE_AND_CAPACITY_PRESETS } from "@/features/indents/constants";
 import { INDIAN_TRUCK_LIST } from "./indianTruckData.util";
 
 export const VEHICLE_CATEGORY_LABELS = [
@@ -26,6 +27,7 @@ export function normalizeBodyLengthKey(label: string): string {
  * Reused across multiple fields to avoid duplicated lists.
  */
 const RAW_SCROLL_PRESET_OPTIONS: string[] = [
+  ...TRUCK_TYPE_AND_CAPACITY_PRESETS,
   "Canter / 709 14 ft - 3.5 MT",
   "Canter 17 ft - 5 MT",
   "19 ft - 6 Wheeler - 7 MT",

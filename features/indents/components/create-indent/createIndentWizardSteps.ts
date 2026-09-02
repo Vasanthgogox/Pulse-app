@@ -29,7 +29,7 @@ export function indentWizardStepLabel(step: IndentWizardStep): string {
     case "vehicle":
       return "Load";
     case "loadType":
-      return "Load type";
+      return "Product type";
     case "weight":
       return "Weight";
     default:

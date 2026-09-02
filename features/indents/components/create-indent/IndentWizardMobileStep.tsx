@@ -23,7 +23,7 @@ function stepFieldLabel(step: IndentWizardStep): string {
     case "vehicle":
       return "Vehicle type";
     case "loadType":
-      return "Load type";
+      return "Product type";
     case "weight":
       return "Weight (tons)";
     default:
