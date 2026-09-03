@@ -9,6 +9,7 @@
 import { supabase } from "@/lib/supabase";
 import { getPlatformEventBus } from "@/lib/platform/events/InProcessEventBus";
 import { recordTripWorkflowEvent } from "@/features/trips/services/tripWorkflow.service";
+import { createStorageSignedUrlCache } from "@/lib/storageSignedUrlCache";
 
 const BUCKET = "trip-documents";
 const MAX_TRIP_DOC_BYTES = 10 * 1024 * 1024;
@@ -99,26 +100,46 @@ function formatMb(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 }
 
-const SIGNED_URL_EXPIRY_SEC = 3600;
+const tripDocSignedUrls = createStorageSignedUrlCache({
+  async signOne(path, expiresInSec) {
+    const { data, error } = await supabase()
+      .storage
+      .from(BUCKET)
+      .createSignedUrl(path, expiresInSec, { download: false });
+    return {
+      signedUrl: data?.signedUrl ?? null,
+      error: error?.message ?? null,
+    };
+  },
+  async signMany(paths, expiresInSec) {
+    const { data, error } = await supabase()
+      .storage
+      .from(BUCKET)
+      .createSignedUrls(paths, expiresInSec, { download: false });
+    if (error) {
+      return paths.map((path) => ({
+        path,
+        signedUrl: null,
+        error: error.message,
+      }));
+    }
+    return (data ?? []).map((row) => ({
+      path: row.path ?? "",
+      signedUrl: row.error ? null : row.signedUrl,
+      error: row.error,
+    }));
+  },
+});
 
 /**
  * Get a URL to view a trip document (POD). Uses a signed URL so it works for private buckets.
  * Use for "View" in the app.
  */
-/**
- * Get a URL to view a trip document (POD). Uses a signed URL so it works for private buckets.
- * Use for "View" in the app.
- */
 export async function getDocumentViewUrl(storagePath: string): Promise<string> {
-  const { data, error } = await supabase()
-    .storage
-    .from(BUCKET)
-    .createSignedUrl(storagePath, SIGNED_URL_EXPIRY_SEC, { download: false });
-  if (error || !data?.signedUrl) {
-    const { data: publicData } = supabase().storage.from(BUCKET).getPublicUrl(storagePath);
-    return publicData.publicUrl;
-  }
-  return data.signedUrl;
+  const signed = await tripDocSignedUrls.getUrl(storagePath);
+  if (signed) return signed;
+  const { data: publicData } = supabase().storage.from(BUCKET).getPublicUrl(storagePath);
+  return publicData.publicUrl;
 }
 
 /**
@@ -128,12 +149,14 @@ export async function getDocumentViewUrl(storagePath: string): Promise<string> {
 export async function tryGetDocumentViewUrl(
   storagePath: string,
 ): Promise<string | null> {
-  const { data, error } = await supabase()
-    .storage
-    .from(BUCKET)
-    .createSignedUrl(storagePath, SIGNED_URL_EXPIRY_SEC, { download: false });
-  if (error || !data?.signedUrl) return null;
-  return data.signedUrl;
+  return tripDocSignedUrls.getUrl(storagePath);
+}
+
+/** One storage round-trip for all uncached paths. Cached / in-flight paths are reused. */
+export async function getDocumentViewUrls(
+  storagePaths: string[],
+): Promise<Record<string, string | null>> {
+  return tripDocSignedUrls.getUrls(storagePaths);
 }
 
 /** True for real storage objects; false for folder markers / placeholders after delete. */
@@ -450,6 +473,7 @@ export async function deleteTripDocument(doc: TripDocumentRow): Promise<{ error:
     if (dbErr) {
       // REST 404 / PGRST205: relation missing from API — storage remove still clears the file.
       if (!storageErr && isTripDocumentsRestEndpointMissing(dbErr)) {
+        tripDocSignedUrls.invalidate(doc.storage_path);
         return { error: null };
       }
       if (storageErr) return { error: new Error(storageErr.message) };
@@ -460,6 +484,7 @@ export async function deleteTripDocument(doc: TripDocumentRow): Promise<{ error:
   if (storageErr) {
     return { error: new Error(storageErr.message) };
   }
+  tripDocSignedUrls.invalidate(doc.storage_path);
   return { error: null };
 }
 
