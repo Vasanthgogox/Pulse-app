@@ -103,6 +103,7 @@ export default function DriverProfileScreen() {
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [profileView, setProfileView] = useState<ProfileView>('main');
   const [drivers, setDrivers] = useState<driversService.DriverRow[]>([]);
+  const [driverIds, setDriverIds] = useState<string[]>([]);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(true);
   const [driverRatings, setDriverRatings] = useState<RatingRow[]>([]);
@@ -154,6 +155,8 @@ export default function DriverProfileScreen() {
         // All driver rows (including left fleets) — experience is cumulative.
         const allRows = res.drivers ?? [];
         setDrivers(allRows.filter((d) => !d.left_at)); // UI fleet display: active only
+        // Same id set the trips query below uses — drives the realtime subscription filter.
+        setDriverIds(allRows.map((d) => d.id));
         if (allRows.length === 0) {
           setTrips([]);
           setLoadingTrips(false);
@@ -169,6 +172,7 @@ export default function DriverProfileScreen() {
       .catch(() => {
         setTrips([]);
         setDrivers([]);
+        setDriverIds([]);
       })
       .finally(() => {
         setLoadingTrips(false);
@@ -238,18 +242,21 @@ export default function DriverProfileScreen() {
     loadTrips();
   }, [loadTrips]));
 
-  // Shared with LevelProgressionScreen's identical subscription — same key means the
-  // realtime registry dedupes to one channel instead of two when both screens are mounted.
+  // Shared with LevelProgressionScreen's identical subscription (same signed-in user
+  // resolves the same driverIds) — same key means the realtime registry dedupes to one
+  // channel instead of two when both screens are mounted. Scoped to this user's own
+  // driver_id(s) — a driver's trips can span multiple orgs, so organization_id can't be
+  // used here; waits for driverIds to resolve before subscribing.
+  const driverIdsKey = driverIds.join(',');
   useEffect(() => {
-    // Shared ref-counted channel (registry) instead of a private static-named
-    // channel — same behavior (refetch on any trips change), but reuses one
-    // server channel and inherits cap/grace/prune lifecycle.
+    if (!profile?.uid || driverIds.length === 0) return;
     return subscribeSharedPostgresChanges(
-      'driver-app:trips:all',
-      [{ event: '*', schema: 'public', table: 'trips' }],
+      `driver-app:trips:driver:${profile.uid}`,
+      [{ event: '*', schema: 'public', table: 'trips', filter: `driver_id=in.(${driverIdsKey})` }],
       () => { loadTrips(); },
     );
-  }, [loadTrips]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- driverIdsKey is the stable dep for driverIds
+  }, [profile?.uid, driverIdsKey, loadTrips]);
 
   useEffect(() => {
     void loadKycSummary();
