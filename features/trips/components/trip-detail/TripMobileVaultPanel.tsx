@@ -7,6 +7,7 @@ import Theme from "@/constants/Theme";
 import { canAddMoreTripDocs, type TripDocItem, VAULT_DOC_LIMIT_HINT } from "@/features/trips/components/trip-detail/tripDocTypes";
 import { getDocumentViewUrl } from "@/features/trips/services/tripDocuments.service";
 import { getVehicleDocumentViewUrl } from "@/features/vehicles/services/vehicleDocuments.service";
+import { VEHICLE_COMPLIANCE_TYPE_HINT } from "@/features/vehicles/utils/vehicleDocuments.util";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Feather from "@expo/vector-icons/Feather";
 import { createElement, memo, useEffect, useMemo, useState } from "react";
@@ -292,9 +293,15 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
                         {doc.label}
                       </Text>
                       <Text style={styles.cardDetail} numberOfLines={2}>
-                        {(doc.files?.length ?? 0) > 1
-                          ? `${doc.files?.length} files on file — tap to view`
-                          : copy.detail}
+                        {doc.id === "vehicle-documents"
+                          ? isPending
+                            ? `Upload ${VEHICLE_COMPLIANCE_TYPE_HINT}`
+                            : doc.files?.length
+                              ? doc.files.map((file) => file.label).join(" · ")
+                              : doc.type
+                          : (doc.files?.length ?? 0) > 1
+                            ? `${doc.files?.length} files on file — tap to view`
+                            : copy.detail}
                       </Text>
                       <Text style={styles.cardAction} numberOfLines={1}>
                         {isUploading ? "Uploading…" : actionLabel}

@@ -31,6 +31,8 @@ import type { VehicleDocuments } from "@/features/vehicles/utils/vehicleDocument
 import {
     DOCUMENT_EXPIRY_ORDER,
     DOCUMENT_LABELS,
+    VEHICLE_COMPLIANCE_TYPE_HINT,
+    vehicleComplianceOnFileSummary,
 } from "@/features/vehicles/utils/vehicleDocuments.util";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { canAssignTrip } from "@/lib/capabilities";
@@ -975,7 +977,9 @@ export function useTripDetail({
       {
         id: "vehicle-documents",
         label: "Vehicle Document",
-        type: firstVehicleDoc?.type ?? (hasVehicleDoc ? "DOCS" : "JPG"),
+        type:
+          vehicleComplianceOnFileSummary(vehicleDocs) ||
+          (hasVehicleDoc ? "FILES" : VEHICLE_COMPLIANCE_TYPE_HINT),
         status: hasVehicleDoc ? ("Uploaded" as const) : ("Pending" as const),
         storagePath: firstVehicleDoc?.storagePath,
         docSource: "vehicle" as const,
@@ -992,7 +996,7 @@ export function useTripDetail({
         },
       ),
     ];
-  }, [tripDocuments, vehiclePreviewDocs]);
+  }, [tripDocuments, vehiclePreviewDocs, vehicleDocs]);
 
   const docPreviewStoragePath = useMemo(() => {
     if (!selectedDoc) return undefined;
@@ -1012,7 +1016,7 @@ export function useTripDetail({
   }, [selectedDoc, tripDocuments]);
 
   const isVehicleGalleryDoc = selectedDoc?.id === "vehicle-documents";
-  const isTripSlotGalleryDoc = (selectedDoc?.files?.length ?? 0) > 1;
+  const isTripSlotGalleryDoc = (selectedDoc?.files?.length ?? 0) >= 1;
   const isGalleryPreviewDoc = isVehicleGalleryDoc || isTripSlotGalleryDoc;
 
   const activeVehiclePreviewDoc = useMemo(
@@ -2455,10 +2459,7 @@ export function useTripDetail({
           storagePath: file.storagePath,
         }));
 
-    const firstUploadedIndex = isVehicleGalleryDoc
-      ? vehiclePreviewDocs.findIndex((doc) => !!doc.storagePath)
-      : 0;
-    setVehiclePreviewIndex(firstUploadedIndex >= 0 ? firstUploadedIndex : 0);
+    setVehiclePreviewIndex(0);
     setDocPreviewUrl(null);
     setDocPreviewError(false);
     setVehiclePreviewUrls({});

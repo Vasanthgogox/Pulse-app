@@ -6664,6 +6664,12 @@ export const styles = StyleSheet.create({
     fontWeight: "700",
     color: "#0f172a",
   },
+  addDocTypeBtnMeta: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748b",
+  },
   vaultLimitsHint: {
     marginTop: 4,
     fontSize: 12,

@@ -114,8 +114,12 @@ export function TripAssetVaultPanel({
                 <View style={[styles.statusChip, palette.chip]}>
                   <Text style={[styles.statusText, palette.chipText]} numberOfLines={1}>
                     {!isPending && (doc.files?.length ?? 0) > 1
-                      ? `${doc.files?.length} files`
-                      : doc.status}
+                      ? doc.id === 'vehicle-documents'
+                        ? doc.type
+                        : `${doc.files?.length} files`
+                      : doc.id === 'vehicle-documents'
+                        ? doc.type
+                        : doc.status}
                   </Text>
                 </View>
               </View>
