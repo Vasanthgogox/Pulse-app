@@ -74,6 +74,8 @@
     "functions:deploy": "supabase functions deploy",
     "functions:deploy:auth": "supabase functions deploy check-user-by-phone driver-phone-signin-unverified link-driver-phone",
     "functions:deploy-both": "bash scripts/push-both-dbs.sh",
+    "admin:dev": "npm run dev --prefix analytics",
+    "admin:build": "npm run build --prefix analytics",
     "oms:dev": "npm run dev --prefix oms",
     "oms:build": "npm run build --prefix oms"
   },
