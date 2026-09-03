@@ -3,6 +3,7 @@
  * Update LR + Add Document buttons, uploaded doc list, empty state.
  */
 import Theme from "@/constants/Theme";
+import { VAULT_DOC_LIMIT_HINT } from "@/features/trips/components/trip-detail/tripDocTypes";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
@@ -38,27 +39,30 @@ export function LRDocumentsSection({
   return (
     <View style={styles.section}>
       {isGallery ? (
-        <View style={styles.galleryHeader}>
-          <View style={styles.galleryHeaderLeft}>
-            <FontAwesome name="paperclip" size={14} color="#9ca3af" />
-            <Text style={styles.galleryHeaderTitle}>DOCUMENTS</Text>
+        <View>
+          <View style={styles.galleryHeader}>
+            <View style={styles.galleryHeaderLeft}>
+              <FontAwesome name="paperclip" size={14} color="#9ca3af" />
+              <Text style={styles.galleryHeaderTitle}>DOCUMENTS</Text>
+            </View>
+            <View style={styles.sectionActions}>
+              <TouchableOpacity
+                style={styles.galleryIconBtn}
+                onPress={onUpdateLR}
+                activeOpacity={0.85}
+              >
+                <FontAwesome name="pencil" size={12} color="#64748b" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.galleryIconBtn}
+                onPress={onAddDocument}
+                activeOpacity={0.85}
+              >
+                <FontAwesome name="plus" size={12} color="#64748b" />
+              </TouchableOpacity>
+            </View>
           </View>
-          <View style={styles.sectionActions}>
-            <TouchableOpacity
-              style={styles.galleryIconBtn}
-              onPress={onUpdateLR}
-              activeOpacity={0.85}
-            >
-              <FontAwesome name="pencil" size={12} color="#64748b" />
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={styles.galleryIconBtn}
-              onPress={onAddDocument}
-              activeOpacity={0.85}
-            >
-              <FontAwesome name="plus" size={12} color="#64748b" />
-            </TouchableOpacity>
-          </View>
+          <Text style={styles.limitsHint}>{VAULT_DOC_LIMIT_HINT}</Text>
         </View>
       ) : (
         <View style={styles.sectionHeader}>
@@ -304,6 +308,14 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     color: "#6b7280",
     letterSpacing: 0.8,
+  },
+  limitsHint: {
+    paddingHorizontal: 16,
+    paddingBottom: 10,
+    fontSize: 11,
+    fontWeight: "500",
+    color: "#9ca3af",
+    lineHeight: 16,
   },
   galleryIconBtn: {
     width: 34,

@@ -31,6 +31,8 @@ import type { VehicleDocuments } from "@/features/vehicles/utils/vehicleDocument
 import {
     DOCUMENT_EXPIRY_ORDER,
     DOCUMENT_LABELS,
+    VEHICLE_COMPLIANCE_TYPE_HINT,
+    vehicleComplianceOnFileSummary,
 } from "@/features/vehicles/utils/vehicleDocuments.util";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { canAssignTrip } from "@/lib/capabilities";
@@ -115,7 +117,7 @@ import type {
     ReconciliationPartyInfo,
     TripDetailTab,
 } from "../TripDetailFinanceView";
-import type { TripDocItem } from "../tripDocTypes";
+import { isPdfTripDoc, type TripDocItem } from "../tripDocTypes";
 
 import {
   resolveMapLocationLabel,
@@ -134,6 +136,64 @@ function docTypeFromFileName(fileName: string): string {
   if (ext === "png") return "PNG";
   if (ext === "pdf") return "PDF";
   return ext ? ext.toUpperCase() : "JPG";
+}
+
+function tripDocItemType(doc: {
+  mime_type?: string | null;
+  file_name?: string | null;
+  storage_path?: string | null;
+}): string {
+  if (
+    isPdfTripDoc({
+      mimeType: doc.mime_type,
+      fileName: doc.file_name,
+      storagePath: doc.storage_path,
+    })
+  ) {
+    return "PDF";
+  }
+  const mime = (doc.mime_type ?? "").toLowerCase();
+  if (mime.includes("png")) return "PNG";
+  if (mime.includes("webp")) return "WEBP";
+  if (mime.startsWith("image/")) return "JPG";
+  return docTypeFromFileName(doc.file_name || doc.storage_path || "");
+}
+
+function buildSlotCard(
+  rows: tripDocumentsService.TripDocumentRow[],
+  slot: {
+    id: string;
+    label: string;
+    pendingType: string;
+    category: TripDocItem["category"];
+  },
+): TripDocItem {
+  if (rows.length === 0) {
+    return {
+      id: slot.id,
+      label: slot.label,
+      type: slot.pendingType,
+      status: "Pending",
+      category: slot.category,
+    };
+  }
+  const files = rows.map((row, index) => ({
+    id: `${slot.id}-${row.id}`,
+    label: rows.length > 1 ? `${slot.label} ${index + 1}` : slot.label,
+    type: tripDocItemType(row),
+    storagePath: row.storage_path,
+    documentId: row.id,
+  }));
+  return {
+    id: slot.id,
+    label: slot.label,
+    type: files.length > 1 ? "FILES" : files[0].type,
+    status: "Uploaded",
+    storagePath: files[0].storagePath,
+    documentId: files[0].documentId,
+    category: slot.category,
+    files,
+  };
 }
 
 export interface VehiclePreviewDoc {
@@ -854,7 +914,7 @@ export function useTripDetail({
 
   // ── Vehicle preview docs ──────────────────────────────────────────────────
   const vehiclePreviewDocs = useMemo<VehiclePreviewDoc[]>(() => {
-    return DOCUMENT_EXPIRY_ORDER.map((docType) => {
+    const complianceDocs = DOCUMENT_EXPIRY_ORDER.map((docType) => {
       const vDoc = vehicleDocs?.[docType];
       const storagePath = vDoc?.url?.trim();
       return storagePath
@@ -874,91 +934,69 @@ export function useTripDetail({
             expiryDate: vDoc?.expiryDate ?? null,
           };
     });
+    const extraDocs = (vehicleDocs?.extras ?? [])
+      .filter((extra) => !!extra.url?.trim())
+      .map((extra, index) => ({
+        id: `vehicle-extra-${extra.id}`,
+        label: extra.fileName?.trim() || `Vehicle Document ${index + 1}`,
+        type: docTypeFromFileName(extra.url),
+        status: "Uploaded" as const,
+        storagePath: extra.url,
+        expiryDate: extra.expiryDate || null,
+      }));
+    return [...complianceDocs, ...extraDocs];
   }, [vehicleDocs]);
 
   const computedTripDocs = useMemo<TripDocItem[]>(() => {
     const hasVehicleDoc = vehiclePreviewDocs.some((doc) => !!doc.storagePath);
-
-    const lrDocs = tripDocuments.filter((d) => d.document_type === 'lr');
-    const manifestDocs = tripDocuments.filter((d) => d.document_type === 'manifest');
-    const rawPodDocs = tripDocuments.filter((d) => d.document_type === 'pod');
-
-    const manifestCard: TripDocItem =
-      manifestDocs.length > 0
-        ? {
-            id: `manifest-${manifestDocs[0].id}`,
-            label: "Trip Manifest",
-            type: (manifestDocs[0].mime_type ?? "").includes("pdf") ? "PDF" : "JPG",
-            status: "Uploaded" as const,
-            storagePath: manifestDocs[0].storage_path,
-            documentId: manifestDocs[0].id,
-            category: "trip" as const,
-          }
-        : {
-            id: "manifest",
-            label: "Trip Manifest",
-            type: "PDF",
-            status: "Pending" as const,
-            category: "trip" as const,
-          };
-
-    const podDocs: TripDocItem[] =
-      rawPodDocs.length > 0
-        ? rawPodDocs.map((podDoc, index) => ({
-            id: `pod-${podDoc.id}`,
-            label: rawPodDocs.length > 1 ? `Driver POD ${index + 1}` : "Driver POD",
-            type: (podDoc.mime_type ?? "image/jpeg").includes("pdf") ? "PDF" : "JPG",
-            status: "Uploaded" as const,
-            storagePath: podDoc.storage_path,
-            documentId: podDoc.id,
-            category: "driver" as const,
-          }))
-        : [
-            {
-              id: "pod",
-              label: "Driver POD",
-              type: "JPG",
-              status: "Pending" as const,
-              category: "driver" as const,
-            },
-          ];
-
-    const lrCard: TripDocItem =
-      lrDocs.length > 0
-        ? {
-            id: `lr-${lrDocs[0].id}`,
-            label: 'LR Document',
-            type: (lrDocs[0].mime_type ?? '').includes('pdf') ? 'PDF' : 'JPG',
-            status: 'Uploaded' as const,
-            storagePath: lrDocs[0].storage_path,
-            documentId: lrDocs[0].id,
-            category: 'lr' as const,
-          }
-        : {
-            id: 'lr',
-            label: 'LR Document',
-            type: 'PDF',
-            status: 'Pending' as const,
-            category: 'lr' as const,
-          };
-
     const firstVehicleDoc = vehiclePreviewDocs.find((doc) => !!doc.storagePath);
 
+    const uploadedVehicleFiles = vehiclePreviewDocs
+      .filter((doc) => !!doc.storagePath)
+      .map((doc) => ({
+        id: doc.id,
+        label: doc.label,
+        type: doc.type,
+        storagePath: doc.storagePath!,
+      }));
+
     return [
-      lrCard,
-      manifestCard,
+      buildSlotCard(
+        tripDocuments.filter((d) => d.document_type === "lr"),
+        { id: "lr", label: "LR Document", pendingType: "PDF", category: "lr" },
+      ),
+      buildSlotCard(
+        tripDocuments.filter((d) => d.document_type === "manifest"),
+        {
+          id: "manifest",
+          label: "Trip Manifest",
+          pendingType: "PDF",
+          category: "trip",
+        },
+      ),
       {
         id: "vehicle-documents",
         label: "Vehicle Document",
-        type: firstVehicleDoc?.type ?? (hasVehicleDoc ? "DOCS" : "JPG"),
+        type:
+          vehicleComplianceOnFileSummary(vehicleDocs) ||
+          (hasVehicleDoc ? "FILES" : VEHICLE_COMPLIANCE_TYPE_HINT),
         status: hasVehicleDoc ? ("Uploaded" as const) : ("Pending" as const),
         storagePath: firstVehicleDoc?.storagePath,
         docSource: "vehicle" as const,
         category: "vehicle" as const,
+        files: uploadedVehicleFiles.length > 0 ? uploadedVehicleFiles : undefined,
       },
-      ...podDocs,
+      buildSlotCard(
+        tripDocuments.filter((d) => d.document_type === "pod"),
+        {
+          id: "pod",
+          label: "Driver POD",
+          pendingType: "JPG",
+          category: "driver",
+        },
+      ),
     ];
-  }, [tripDocuments, vehiclePreviewDocs]);
+  }, [tripDocuments, vehiclePreviewDocs, vehicleDocs]);
 
   const docPreviewStoragePath = useMemo(() => {
     if (!selectedDoc) return undefined;
@@ -978,6 +1016,8 @@ export function useTripDetail({
   }, [selectedDoc, tripDocuments]);
 
   const isVehicleGalleryDoc = selectedDoc?.id === "vehicle-documents";
+  const isTripSlotGalleryDoc = (selectedDoc?.files?.length ?? 0) >= 1;
+  const isGalleryPreviewDoc = isVehicleGalleryDoc || isTripSlotGalleryDoc;
 
   const activeVehiclePreviewDoc = useMemo(
     () => vehiclePreviewDocs[vehiclePreviewIndex] ?? null,
@@ -2371,7 +2411,7 @@ export function useTripDetail({
       setVehiclePreviewIndex(0);
       return;
     }
-    if (isVehicleGalleryDoc) return;
+    if (isGalleryPreviewDoc) return;
     if (!docPreviewStoragePath) {
       // Clear any previously-resolved preview before bailing -- otherwise
       // the modal header (bound to selectedDoc.label) updates to the new
@@ -2406,19 +2446,25 @@ export function useTripDetail({
     return () => {
       isActive = false;
     };
-  }, [selectedDoc, docPreviewStoragePath, isVehicleGalleryDoc]);
+  }, [selectedDoc, docPreviewStoragePath, isGalleryPreviewDoc]);
 
   useEffect(() => {
-    if (!selectedDoc || !isVehicleGalleryDoc) return;
+    if (!selectedDoc || !isGalleryPreviewDoc) return;
 
-    const firstUploadedIndex = vehiclePreviewDocs.findIndex((doc) => !!doc.storagePath);
-    setVehiclePreviewIndex(firstUploadedIndex >= 0 ? firstUploadedIndex : 0);
+    const slotFiles = (selectedDoc.files ?? []).filter((file) => !!file.storagePath);
+    const galleryDocs = isVehicleGalleryDoc
+      ? vehiclePreviewDocs.filter((doc) => !!doc.storagePath)
+      : slotFiles.map((file) => ({
+          id: file.id,
+          storagePath: file.storagePath,
+        }));
+
+    setVehiclePreviewIndex(0);
     setDocPreviewUrl(null);
     setDocPreviewError(false);
     setVehiclePreviewUrls({});
 
-    const docsToResolve = vehiclePreviewDocs.filter((doc) => !!doc.storagePath);
-    if (docsToResolve.length === 0) {
+    if (galleryDocs.length === 0) {
       setDocPreviewLoading(false);
       return;
     }
@@ -2427,7 +2473,12 @@ export function useTripDetail({
     setDocPreviewLoading(true);
 
     Promise.all(
-      docsToResolve.map(async (doc) => [doc.id, await getVehicleDocumentViewUrl(doc.storagePath!)] as const),
+      galleryDocs.map(async (doc) => {
+        const url = isVehicleGalleryDoc
+          ? await getVehicleDocumentViewUrl(doc.storagePath!)
+          : await tripDocumentsService.getDocumentViewUrl(doc.storagePath!);
+        return [doc.id, url] as const;
+      }),
     )
       .then((resolved) => {
         if (!isActive) return;
@@ -2443,7 +2494,7 @@ export function useTripDetail({
     return () => {
       isActive = false;
     };
-  }, [selectedDoc, isVehicleGalleryDoc, vehiclePreviewDocs]);
+  }, [selectedDoc, isGalleryPreviewDoc, isVehicleGalleryDoc, vehiclePreviewDocs]);
 
   useEffect(() => {
     if (!selectedDoc) {
@@ -2881,6 +2932,8 @@ export function useTripDetail({
     setVehiclePreviewIndex,
     activeVehiclePreviewDoc,
     isVehicleGalleryDoc,
+    isTripSlotGalleryDoc,
+    isGalleryPreviewDoc,
     selectedDoc,
     setSelectedDoc,
     docPreviewUrl,

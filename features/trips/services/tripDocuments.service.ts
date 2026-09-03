@@ -113,7 +113,7 @@ export async function getDocumentViewUrl(storagePath: string): Promise<string> {
   const { data, error } = await supabase()
     .storage
     .from(BUCKET)
-    .createSignedUrl(storagePath, SIGNED_URL_EXPIRY_SEC);
+    .createSignedUrl(storagePath, SIGNED_URL_EXPIRY_SEC, { download: false });
   if (error || !data?.signedUrl) {
     const { data: publicData } = supabase().storage.from(BUCKET).getPublicUrl(storagePath);
     return publicData.publicUrl;
@@ -131,7 +131,7 @@ export async function tryGetDocumentViewUrl(
   const { data, error } = await supabase()
     .storage
     .from(BUCKET)
-    .createSignedUrl(storagePath, SIGNED_URL_EXPIRY_SEC);
+    .createSignedUrl(storagePath, SIGNED_URL_EXPIRY_SEC, { download: false });
   if (error || !data?.signedUrl) return null;
   return data.signedUrl;
 }

@@ -4,9 +4,10 @@
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
-import type { TripDocItem } from "@/features/trips/components/trip-detail/tripDocTypes";
+import { canAddMoreTripDocs, type TripDocItem, VAULT_DOC_LIMIT_HINT } from "@/features/trips/components/trip-detail/tripDocTypes";
 import { getDocumentViewUrl } from "@/features/trips/services/tripDocuments.service";
 import { getVehicleDocumentViewUrl } from "@/features/vehicles/services/vehicleDocuments.service";
+import { VEHICLE_COMPLIANCE_TYPE_HINT } from "@/features/vehicles/utils/vehicleDocuments.util";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Feather from "@expo/vector-icons/Feather";
 import { createElement, memo, useEffect, useMemo, useState } from "react";
@@ -33,6 +34,7 @@ type Props = {
   uploadingDocId: string | null;
   vehicleId: string | null;
   onCardPress: (doc: TripDocItem) => void;
+  onAddMore?: (doc: TripDocItem) => void;
   tripIdLabel: string;
   createdAtLabel: string;
 };
@@ -214,6 +216,7 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
   uploadingDocId,
   vehicleId,
   onCardPress,
+  onAddMore,
   tripIdLabel,
   createdAtLabel,
 }: Props) {
@@ -232,6 +235,9 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
         <Text style={styles.heroSub}>
           Vault · {verifiedCount}/{docs.length || 0} on file
         </Text>
+        {canUploadTripDocs ? (
+          <Text style={styles.limitsHint}>{VAULT_DOC_LIMIT_HINT}</Text>
+        ) : null}
       </View>
 
       <View style={styles.listPad}>
@@ -255,49 +261,76 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
                   : "Pending"
               : "View";
 
+            const showAddMore =
+              canUploadTripDocs &&
+              !!onAddMore &&
+              canAddMoreTripDocs(doc) &&
+              (doc.id !== "vehicle-documents" || !!vehicleId);
+
             return (
-              <TouchableOpacity
-                key={doc.id}
-                style={styles.card}
-                onPress={() => onCardPress(doc)}
-                activeOpacity={0.88}
-                disabled={isUploading}
-                accessibilityRole="button"
-                accessibilityLabel={`${actionLabel} ${doc.label}`}
-              >
-                <View style={styles.cardMain}>
-                  <VaultDocThumb doc={doc} tone={copy.tone} />
-                  <View style={styles.cardBody}>
-                    <Text
-                      style={[
-                        styles.cardStatus,
-                        copy.tone === "miss" && styles.cardStatusMiss,
-                        copy.tone === "ok" && styles.cardStatusOk,
-                      ]}
-                      numberOfLines={1}
-                    >
-                      {copy.title}
-                    </Text>
-                    <Text style={styles.cardTitle} numberOfLines={1}>
-                      {doc.label}
-                    </Text>
-                    <Text style={styles.cardDetail} numberOfLines={2}>
-                      {copy.detail}
-                    </Text>
-                    <Text style={styles.cardAction} numberOfLines={1}>
-                      {isUploading ? "Uploading…" : actionLabel}
-                      {canUploadTripDocs && isPending ? " · required" : ""}
-                    </Text>
+              <View key={doc.id} style={styles.card}>
+                <TouchableOpacity
+                  onPress={() => onCardPress(doc)}
+                  activeOpacity={0.88}
+                  disabled={isUploading}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${actionLabel} ${doc.label}`}
+                >
+                  <View style={styles.cardMain}>
+                    <VaultDocThumb doc={doc} tone={copy.tone} />
+                    <View style={styles.cardBody}>
+                      <Text
+                        style={[
+                          styles.cardStatus,
+                          copy.tone === "miss" && styles.cardStatusMiss,
+                          copy.tone === "ok" && styles.cardStatusOk,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {copy.title}
+                      </Text>
+                      <Text style={styles.cardTitle} numberOfLines={1}>
+                        {doc.label}
+                      </Text>
+                      <Text style={styles.cardDetail} numberOfLines={2}>
+                        {doc.id === "vehicle-documents"
+                          ? isPending
+                            ? `Upload ${VEHICLE_COMPLIANCE_TYPE_HINT}`
+                            : doc.files?.length
+                              ? doc.files.map((file) => file.label).join(" · ")
+                              : doc.type
+                          : (doc.files?.length ?? 0) > 1
+                            ? `${doc.files?.length} files on file — tap to view`
+                            : copy.detail}
+                      </Text>
+                      <Text style={styles.cardAction} numberOfLines={1}>
+                        {isUploading ? "Uploading…" : actionLabel}
+                        {canUploadTripDocs && isPending ? " · required" : ""}
+                      </Text>
+                    </View>
+                    <View style={styles.chevronWrap}>
+                      {isUploading ? (
+                        <LoadingIndicator size="small" color={MUTED} />
+                      ) : (
+                        <FontAwesome name="chevron-right" size={12} color={MUTED} />
+                      )}
+                    </View>
                   </View>
-                  <View style={styles.chevronWrap}>
-                    {isUploading ? (
-                      <LoadingIndicator size="small" color={MUTED} />
-                    ) : (
-                      <FontAwesome name="chevron-right" size={12} color={MUTED} />
-                    )}
-                  </View>
-                </View>
-              </TouchableOpacity>
+                </TouchableOpacity>
+                {showAddMore ? (
+                  <TouchableOpacity
+                    onPress={() => onAddMore(doc)}
+                    style={styles.addMoreBtn}
+                    activeOpacity={0.85}
+                    disabled={isUploading}
+                    accessibilityRole="button"
+                    accessibilityLabel={`Add another ${doc.label}`}
+                  >
+                    <FontAwesome name="plus" size={12} color={LINK} />
+                    <Text style={styles.addMoreText}>Add another</Text>
+                  </TouchableOpacity>
+                ) : null}
+              </View>
             );
           })
         )}
@@ -342,6 +375,13 @@ const styles = StyleSheet.create({
     fontWeight: "400",
     color: MUTED,
   },
+  limitsHint: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: "500",
+    color: MUTED,
+    lineHeight: 16,
+  },
   listPad: {
     paddingHorizontal: PAD,
     paddingTop: 8,
@@ -370,6 +410,21 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "#EEEEEE",
+  },
+  addMoreBtn: {
+    marginTop: 10,
+    minHeight: 44,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 8,
+    borderRadius: 8,
+    backgroundColor: "#F5F5F5",
+  },
+  addMoreText: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: LINK,
   },
   cardMain: {
     flexDirection: "row",
