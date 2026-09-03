@@ -504,6 +504,25 @@ export async function getTripById(
   return { error: null, trip };
 }
 
+/** Batched form of getTripById — one round trip for N trips instead of N. */
+export async function getTripsByIds(
+  tripIds: string[],
+): Promise<{ error: Error | null; trips: TripRow[] }> {
+  if (tripIds.length === 0) return { error: null, trips: [] };
+  const { data, error } = await supabase()
+    .from("trips")
+    .select(
+      "*, active_indent:indents!trips_indent_id_fkey(indent_operational_code, indent_number, indent_code), source_indent:indents!trips_source_indent_id_fkey(indent_operational_code, indent_number, indent_code)",
+    )
+    .in("id", tripIds);
+  if (error) return { error: new Error(error.message), trips: [] };
+  const raw = (data ?? []) as (TripRow & {
+    active_indent?: TripIndentJoin | null;
+    source_indent?: TripIndentJoin | null;
+  })[];
+  return { error: null, trips: raw.map((row) => normalizeTripRowWithIndent(row)) };
+}
+
 /** Driver-safe trip fetch (trips_driver_view). */
 export async function getDriverTripById(
   tripId: string,

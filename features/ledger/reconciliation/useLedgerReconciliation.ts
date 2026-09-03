@@ -4,7 +4,7 @@ import { getTripOperationalDisplay } from "@/features/operations/display";
 import { appendTripOperationalTimelineEventSafe } from "@/features/trips/operations/timeline/timelineEvents.service";
 import {
   reconcileOperationalPosting,
-  reconcileVehicleLedgerState,
+  reconcileVehicleLedgerStatesBatch,
 } from "@/features/ledger/vehicle/reconciliation/reconciliation.service";
 import { getTripsByOrganization } from "@/features/trips/services/trips.service";
 import { queryKeys } from "@/lib/queryKeys";
@@ -130,9 +130,13 @@ export function useLedgerReconciliation(input: {
         }
       }
       const rows: ReconciliationMismatchView[] = [];
-      for (const trip of tripCandidates.slice(0, 30)) {
-        const recon = await reconcileVehicleLedgerState({ tripId: trip.tripId });
-        if (recon.error) continue;
+      const cappedTrips = tripCandidates.slice(0, 30);
+      const reconByTripId = await reconcileVehicleLedgerStatesBatch(
+        cappedTrips.map((trip) => trip.tripId),
+      );
+      for (const trip of cappedTrips) {
+        const recon = reconByTripId.get(trip.tripId);
+        if (!recon || recon.error) continue;
         for (const mismatch of recon.mismatches) {
           const key = markKey(mismatch.sourceType, mismatch.sourceId);
           rows.push({

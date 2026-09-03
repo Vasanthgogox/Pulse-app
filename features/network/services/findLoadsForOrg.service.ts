@@ -54,7 +54,7 @@ export async function listOpenMarketplaceLoadsForOrg(
  * Phase 3), not at bid time. Membership, self-bid, and indent-eligibility
  * checks are all enforced server-side by submit_market_bid() itself.
  */
-export type MyOrgMarketBidStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn';
+export type MyOrgMarketBidStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'superseded';
 
 export type MyOrgMarketBidRow = {
   id: string;

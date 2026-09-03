@@ -108,8 +108,29 @@ export default function AvailableLoadsScreen() {
  * new composition only.
  */
 function MarketFindWorkScreen({ uid }: { uid: string }) {
-  const { refetch: refetchLoads } = useFleetOwnerOpenLoadsQuery(uid);
+  const { loads, refetch: refetchLoads } = useFleetOwnerOpenLoadsQuery(uid);
   const { refetch: refetchBids } = useMyMarketBidsQuery(uid);
+
+  // Shared pickup/drop filter chips should represent both sources (see
+  // DriverStoriesScreen.tsx's extraPickupCities/extraDropCities) — derived
+  // here, at the composition layer, from the same open-Market loads
+  // FindLoadsContent already renders. No new query, no DB change.
+  const extraPickupCities = useMemo(() => {
+    const set = new Set<string>();
+    for (const l of loads) {
+      const c = cityOf(l.pickup_area);
+      if (c) set.add(c);
+    }
+    return [...set];
+  }, [loads]);
+  const extraDropCities = useMemo(() => {
+    const set = new Set<string>();
+    for (const l of loads) {
+      const c = cityOf(l.drop_location);
+      if (c) set.add(c);
+    }
+    return [...set];
+  }, [loads]);
 
   return (
     <StoriesContent
@@ -118,6 +139,8 @@ function MarketFindWorkScreen({ uid }: { uid: string }) {
         void refetchLoads();
         void refetchBids();
       }}
+      extraPickupCities={extraPickupCities}
+      extraDropCities={extraDropCities}
     />
   );
 }
@@ -250,6 +273,10 @@ function bidStatusBadgeColor(
       return colors.emerald;
     case 'rejected':
       return Theme.negative;
+    // A6.4: superseded is not "still pending" — must not share pending's
+    // warning/amber color, which reads as "awaiting decision".
+    case 'superseded':
+      return colors.textMuted;
     default:
       return Theme.warning;
   }

@@ -57,6 +57,16 @@ function statusTone(status: string): { bg: string; text: string; label: string }
       label: status === "withdrawn" ? "Withdrawn" : "Rejected",
     };
   }
+  // A6.4: not a business decision, not a driver withdrawal -- the driver was
+  // awarded a different load and this bid became moot. Must not fall
+  // through to the "Pending" default below.
+  if (status === "superseded") {
+    return {
+      bg: Theme.surfaceGray,
+      text: Theme.textMuted,
+      label: "Superseded",
+    };
+  }
   return {
     bg: SKY,
     text: INK,

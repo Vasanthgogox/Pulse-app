@@ -38,6 +38,30 @@ const LEDGER_TX_SELECT_WITH_TRIPS =
 const LEDGER_TX_SELECT_WITH_TRIPS_LEGACY =
   `*, ${LEDGER_TX_TRIP_EMBED}(trip_number)` as const;
 
+export interface TripLedgerEmbed {
+  trip_number: string;
+  display_trip_id?: string | null;
+  trip_code?: string | null;
+  trip_operational_code?: string | null;
+}
+
+/**
+ * Single-row trip embed lookup. Lets a realtime-pushed transaction row (which only
+ * carries transactions' own columns) be completed locally via toLedgerRow instead of
+ * refetching the whole org transactions list.
+ */
+export async function getTripLedgerEmbed(
+  tripId: string,
+): Promise<{ error: Error | null; embed: TripLedgerEmbed | null }> {
+  const { data, error } = await supabase()
+    .from("trips")
+    .select("trip_number, display_trip_id, trip_code, trip_operational_code")
+    .eq("id", tripId)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), embed: null };
+  return { error: null, embed: (data as TripLedgerEmbed) ?? null };
+}
+
 function isMissingTripsDisplayTripIdError(
   error: {
     message?: string;
@@ -756,7 +780,7 @@ function deriveReconciliationMeta(row: {
   };
 }
 
-function toLedgerRow(row: {
+export function toLedgerRow(row: {
   id: string;
   organization_id: string;
   trip_id: string | null;

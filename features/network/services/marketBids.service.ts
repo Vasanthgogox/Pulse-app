@@ -9,7 +9,7 @@
  */
 import { supabase } from '@/lib/supabase';
 
-export type MarketBidStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn';
+export type MarketBidStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'superseded';
 
 export type MarketBidForIndentRow = {
   id: string;

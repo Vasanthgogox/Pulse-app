@@ -58,9 +58,21 @@ function statusColor(status: MarketBidStatus, colors: ReturnType<typeof useDrive
       return colors.emerald;
     case 'rejected':
       return Theme.negative;
+    case 'superseded':
+      return colors.textMuted;
     default:
       return colors.textMuted;
   }
+}
+
+/** A6.4: explain *why* a bid stopped mattering — 'superseded' is not a business
+ * decision (rejected) or a driver choice (withdrawn), it just became moot
+ * because the driver was awarded a different load. */
+function statusExplanation(status: MarketBidStatus): string | null {
+  if (status === 'superseded') {
+    return 'Another load was awarded to you, so this bid is no longer active.';
+  }
+  return null;
 }
 
 /**
@@ -306,6 +318,12 @@ function BidCard({
       {bid.note ? (
         <Text style={[styles.note, { color: colors.textMuted }]} numberOfLines={2}>
           {bid.note}
+        </Text>
+      ) : null}
+
+      {statusExplanation(bid.status) ? (
+        <Text style={[styles.note, { color: colors.textMuted }]}>
+          {statusExplanation(bid.status)}
         </Text>
       ) : null}
 

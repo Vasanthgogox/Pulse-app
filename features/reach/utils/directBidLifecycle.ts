@@ -14,9 +14,10 @@ export type DirectBidUiBucket =
   | 'counter'
   | 'awarded'
   | 'rejected'
+  | 'superseded'
   | 'other';
 
-/** Filters on the LOADS opportunity feed (excludes awarded/rejected). */
+/** Filters on the LOADS opportunity feed (excludes awarded/rejected/superseded). */
 export type BidStatusFilter = 'all' | 'open' | 'quoted' | 'counter';
 
 const BUCKET_RANK: Record<DirectBidUiBucket, number> = {
@@ -26,12 +27,18 @@ const BUCKET_RANK: Record<DirectBidUiBucket, number> = {
   other: 3,
   awarded: 4,
   rejected: 5,
+  superseded: 6,
 };
 
 export function directBidUiBucket(story: DriverReachStoryRow): DirectBidUiBucket {
   const status = story.direct_bid_status;
   if (status === 'accepted') return 'awarded';
   if (status === 'rejected') return 'rejected';
+  // A6.4: became moot because the driver was awarded a DIFFERENT load —
+  // not a business decision, not a driver withdrawal. Must not fall into
+  // 'other' (which isLoadOpportunity treats as still-biddable) or this load
+  // resurfaces with a "Bid Now" CTA as if the driver never bid on it.
+  if (status === 'superseded') return 'superseded';
   if (status === 'pending') {
     const counter = positiveMoneyOrNull(story.direct_bid_counter_amount);
     if (counter != null) return 'counter';
@@ -44,7 +51,7 @@ export function directBidUiBucket(story: DriverReachStoryRow): DirectBidUiBucket
 /** True when the row is still an actionable load opportunity. */
 export function isLoadOpportunity(story: DriverReachStoryRow): boolean {
   const bucket = directBidUiBucket(story);
-  if (bucket === 'awarded' || bucket === 'rejected') return false;
+  if (bucket === 'awarded' || bucket === 'rejected' || bucket === 'superseded') return false;
   // Converted referral earnings stay in RPC for the earnings card — not LOADS.
   if (story.referral_status === 'rewarded') return false;
   if ((story.campaign_status ?? '').toLowerCase() !== 'active') return false;

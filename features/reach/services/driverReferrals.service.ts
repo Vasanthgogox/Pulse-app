@@ -24,7 +24,7 @@ export type ReachDriverReferralStatus =
 /** Status of an independent driver's direct bid on a boosted story
  * (driver_direct_bids). UI maps pending → Quoted, pending+counter_amount →
  * Counter received, accepted → Awarded (job card). */
-export type DriverDirectBidStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn';
+export type DriverDirectBidStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'superseded';
 
 /** Structured driver intent — WHY the driver recommends this load. */
 export type ReachReferralReason =
@@ -178,6 +178,9 @@ export function formatDirectBidError(message: string): string {
   }
   if (m.includes('invalid_amount')) {
     return 'Enter a valid bid amount greater than zero.';
+  }
+  if (m.includes('driver_unavailable')) {
+    return "You're currently on an active trip. Complete it before bidding on another load.";
   }
   return message.trim() || 'Could not submit bid.';
 }

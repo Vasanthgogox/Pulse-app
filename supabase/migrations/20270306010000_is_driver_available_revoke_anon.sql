@@ -1,0 +1,13 @@
+-- A6.3 follow-up: is_driver_available() was created with only
+-- `REVOKE ALL ... FROM PUBLIC`, which does not remove a role's own direct
+-- grant -- this project's default privileges grant EXECUTE on every new
+-- function to anon/authenticated/service_role automatically, so the
+-- function was left callable, unauthenticated, by anon. Unlike the other
+-- four A6.3 functions (which all raise on a null auth.uid()), this is a
+-- pure boolean helper with no internal auth check by design (it is meant to
+-- be called from inside other SECURITY DEFINER functions, not directly by a
+-- client), so an anon caller could pass an arbitrary uuid and learn whether
+-- that person currently has an active trip. Revoke explicitly, matching the
+-- `REVOKE ... FROM PUBLIC, anon` convention already used elsewhere in this
+-- migration set (e.g. verification_rpc_anon_lockdown).
+REVOKE EXECUTE ON FUNCTION public.is_driver_available(uuid) FROM anon;

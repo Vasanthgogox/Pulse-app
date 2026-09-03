@@ -2,6 +2,7 @@ export {
   detectPostingMismatch,
   reconcileOperationalPosting,
   reconcileVehicleLedgerState,
+  reconcileVehicleLedgerStatesBatch,
   rebuildOperationalLedgerState,
   type PostingMismatch,
   type ReconciliationChip,

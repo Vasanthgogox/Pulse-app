@@ -56,13 +56,22 @@ export const MarketBidCard = memo(function MarketBidCard({
   const isPending = status === "pending";
   const isAccepted = status === "accepted";
   const isRejected = status === "rejected";
+  // A6.4: 'superseded' is neither a business decision (rejected) nor a
+  // driver withdrawal -- the driver was awarded a DIFFERENT load and this
+  // bid became moot. Must not fall through to the unconditional "Pending"
+  // default below.
+  const isSuperseded = status === "superseded";
   const statusLabel = isAccepted
     ? "Accepted"
     : isRejected
       ? "Rejected"
       : status === "withdrawn"
         ? "Withdrawn"
-        : "Pending";
+        : isSuperseded
+          ? "Superseded"
+          : isPending
+            ? "Pending"
+            : status;
 
   const amountDisplay = stripCurrencyPrefix(formatINR(Number(bid.amount ?? 0)));
   const submitted = timeAgo(bid.created_at);
@@ -150,6 +159,15 @@ export const MarketBidCard = memo(function MarketBidCard({
         <View style={styles.noteWrap}>
           <Text style={styles.noteText} numberOfLines={2}>
             &ldquo;{bid.note.trim()}&rdquo;
+          </Text>
+        </View>
+      ) : null}
+
+      {isSuperseded ? (
+        <View style={styles.noteWrap}>
+          <Text style={styles.noteText} numberOfLines={2}>
+            Driver&rsquo;s bid was superseded because another opportunity was awarded to the
+            driver.
           </Text>
         </View>
       ) : null}

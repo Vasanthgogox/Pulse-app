@@ -7,7 +7,7 @@
  */
 import { supabase } from '@/lib/supabase';
 
-export type MarketBidStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn';
+export type MarketBidStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'superseded';
 
 export type MarketBidRow = {
   id: string;
@@ -92,7 +92,21 @@ export function marketBidStatusLabel(status: MarketBidStatus): string {
       return 'Not selected';
     case 'withdrawn':
       return 'Withdrawn';
+    case 'superseded':
+      return 'Superseded';
     default:
       return status;
   }
+}
+
+/** A6.4: translate a raw RPC error into a driver-facing line. Only handles
+ * codes this Market bid-submission path can actually raise -- unmatched
+ * messages pass through unchanged (same posture as Reach's
+ * formatDirectBidError). */
+export function formatMarketBidSubmitError(message: string): string {
+  const m = (message ?? '').toLowerCase();
+  if (m.includes('driver_unavailable')) {
+    return "You're currently on an active trip. Complete it before bidding on another load.";
+  }
+  return message.trim() || 'Could not submit bid.';
 }
