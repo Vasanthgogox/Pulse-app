@@ -34,6 +34,23 @@ export function resolveDriverParticipation(
   return { mode: 'independent' };
 }
 
+/**
+ * A7.3 — which participation personas see the DCO Available surface (Home
+ * when free of an active trip) instead of the legacy dispatcher-oriented
+ * Home. Deliberately a named, single-seam mapping rather than an inline
+ * `participation.mode === 'independent'` check scattered across call
+ * sites -- if employed/invited semantics ever need DCO availability too,
+ * this is the one place that changes.
+ *
+ * Never conflate this with availability itself: a DCO-eligible driver can
+ * still be unavailable (active trip in progress) -- see
+ * useDriverAvailabilityQuery / is_driver_available(). This function only
+ * answers "which operating experience applies," not "can they bid right now."
+ */
+export function isDcoEligibleParticipation(participation: DriverParticipation): boolean {
+  return participation.mode === 'independent';
+}
+
 /** Story CTA copy for a boosted LOAD, per persona. Same story UI — only the
  * call-to-action changes. */
 export function driverStoryCta(
