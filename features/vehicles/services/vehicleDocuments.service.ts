@@ -10,6 +10,7 @@
  *  - Delete: removes storage object + clears JSONB key in one call
  */
 import { supabase } from '@/lib/supabase';
+import { createStorageSignedUrlCache } from '@/lib/storageSignedUrlCache';
 import type {
   DocumentWithExpiry,
   VehicleComplianceDocType,
@@ -18,10 +19,8 @@ import type {
 } from '../utils/vehicleDocuments.util';
 
 const BUCKET = 'vehicle-documents';
-const SIGNED_URL_EXPIRY_SEC = 3600;
 const MAX_FILE_SIZE_BYTES = 10 * 1024 * 1024; // 10 MB
 const STORAGE_RETRY_DELAYS_MS = [250, 800, 1800] as const;
-const SIGNED_URL_CACHE_TTL_MS = (SIGNED_URL_EXPIRY_SEC - 120) * 1000;
 
 const ALLOWED_MIME_TYPES: ReadonlySet<string> = new Set([
   'image/jpeg',
@@ -40,13 +39,6 @@ export interface UploadVehicleDocumentResult {
 export interface DeleteVehicleDocumentResult {
   error: Error | null;
 }
-
-type SignedUrlCacheEntry = {
-  url: string;
-  expiresAtMs: number;
-};
-
-const signedUrlCache = new Map<string, SignedUrlCacheEntry>();
 
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
@@ -78,6 +70,50 @@ async function runWithStorageRetry<T>(op: () => Promise<T>, classifyError: (valu
   return lastResult as T;
 }
 
+const vehicleDocSignedUrls = createStorageSignedUrlCache({
+  async signOne(path, expiresInSec) {
+    const { data, error } = await runWithStorageRetry(
+      () =>
+        supabase()
+          .storage
+          .from(BUCKET)
+          .createSignedUrl(path, expiresInSec, { download: false }),
+      (result) => result.error?.message ?? null,
+    );
+    return {
+      signedUrl: data?.signedUrl ?? null,
+      error: error?.message ?? null,
+    };
+  },
+  async signMany(paths, expiresInSec) {
+    const { data, error } = await runWithStorageRetry(
+      () =>
+        supabase()
+          .storage
+          .from(BUCKET)
+          .createSignedUrls(paths, expiresInSec, { download: false }),
+      (value) => value.error?.message ?? null,
+    );
+    if (error) {
+      return paths.map((path) => ({
+        path,
+        signedUrl: null,
+        error: error.message,
+      }));
+    }
+    return (data ?? []).map((row) => ({
+      path: row.path ?? '',
+      signedUrl: row.error ? null : row.signedUrl,
+      error: row.error,
+    }));
+  },
+});
+
+function invalidateVehicleDocUrl(storagePath: string, extraPrefix?: string): void {
+  vehicleDocSignedUrls.invalidate(storagePath);
+  if (extraPrefix) vehicleDocSignedUrls.invalidatePrefix(extraPrefix);
+}
+
 /**
  * Validate file before attempting an upload. Returns null if valid, or an error message.
  * O(1) — two constant-time checks.
@@ -94,27 +130,17 @@ export function validateDocumentFile(file: { arrayBuffer: ArrayBuffer; mimeType:
 
 /**
  * Get a time-limited signed URL for viewing a vehicle document.
- * O(1) — single Supabase RPC.
+ * Cached for ~58 minutes; concurrent callers share one in-flight request.
  */
 export async function getVehicleDocumentViewUrl(storagePath: string): Promise<string | null> {
-  if (!storagePath?.trim()) return null;
-  const cached = signedUrlCache.get(storagePath);
-  if (cached && cached.expiresAtMs > Date.now()) return cached.url;
+  return vehicleDocSignedUrls.getUrl(storagePath);
+}
 
-  const { data, error } = await runWithStorageRetry(
-    () =>
-      supabase()
-        .storage
-        .from(BUCKET)
-        .createSignedUrl(storagePath, SIGNED_URL_EXPIRY_SEC, { download: false }),
-    (result) => result.error?.message ?? null,
-  );
-  if (error || !data?.signedUrl) return null;
-  signedUrlCache.set(storagePath, {
-    url: data.signedUrl,
-    expiresAtMs: Date.now() + SIGNED_URL_CACHE_TTL_MS,
-  });
-  return data.signedUrl;
+/** One storage round-trip for all uncached vehicle document paths. */
+export async function getVehicleDocumentViewUrls(
+  storagePaths: string[],
+): Promise<Record<string, string | null>> {
+  return vehicleDocSignedUrls.getUrls(storagePaths);
 }
 
 function extraDocumentId(): string {
@@ -154,7 +180,7 @@ export async function uploadVehicleDocument(
   );
 
   if (error) return { storagePath: null, error: new Error(error.message) };
-  signedUrlCache.delete(path);
+  invalidateVehicleDocUrl(path, `${orgId}/${vehicleId}/${docType}.`);
   return { storagePath: path, error: null };
 }
 
@@ -173,7 +199,7 @@ export async function deleteVehicleDocumentFile(storagePath: string): Promise<De
     (result) => result.error?.message ?? null,
   );
   if (error) return { error: new Error(error.message) };
-  signedUrlCache.delete(storagePath);
+  invalidateVehicleDocUrl(storagePath);
   return { error: null };
 }
 
@@ -267,7 +293,7 @@ export async function uploadAndSaveVehicleExtraDocuments(
       await Promise.all(uploaded.map((item) => deleteVehicleDocumentFile(item.url).catch(() => {})));
       return { documents: null, error: new Error(error.message) };
     }
-    signedUrlCache.delete(path);
+    invalidateVehicleDocUrl(path);
     uploaded.push({
       id: extraId,
       url: path,

@@ -25,7 +25,7 @@ import {
     getSupplierById,
     getSupplierDetails,
 } from "@/features/suppliers/services/suppliers.service";
-import { getVehicleDocumentViewUrl } from "@/features/vehicles/services/vehicleDocuments.service";
+import { getVehicleDocumentViewUrl, getVehicleDocumentViewUrls } from "@/features/vehicles/services/vehicleDocuments.service";
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
 import type { VehicleDocuments } from "@/features/vehicles/utils/vehicleDocuments.util";
 import {
@@ -1410,6 +1410,42 @@ export function useTripDetail({
     if (!trip || !ownerOrg) return;
 
     void (async () => {
+      if (bundleActive) {
+        if (!bundle) return;
+        if (trip.client_id) {
+          const client = bundle.client_detail?.client;
+          const linked = bundle.client_detail?.linked_org;
+          const fields = emptyTripPartyAvatarFields();
+          fields.avatarUrl = nStr(client?.avatar_url);
+          fields.avatarSeed = nStr(client?.avatar_seed);
+          fields.organizationImageUrl = nStr(linked?.logo_url);
+          const rawAvatar =
+            nStr(client?.avatar_url) ?? nStr(linked?.logo_url);
+          const uri = await resolvePartyAvatarUri(rawAvatar);
+          if (!cancelled) {
+            setClientPartyAvatarFields(fields);
+            setClientAvatarUri(uri);
+          }
+        }
+        if (trip.supplier_id) {
+          const supplier = bundle.supplier_detail?.supplier;
+          const linked = bundle.supplier_detail?.linked_org;
+          const fields = emptyTripPartyAvatarFields();
+          fields.avatarUrl = nStr(supplier?.avatar_url);
+          fields.avatarSeed = nStr(supplier?.avatar_seed);
+          fields.organizationImageUrl = nStr(linked?.logo_url);
+          fields.organizationName = nStr(linked?.name);
+          const rawAvatar =
+            nStr(supplier?.avatar_url) ?? nStr(linked?.logo_url);
+          const uri = await resolvePartyAvatarUri(rawAvatar);
+          if (!cancelled) {
+            setSupplierPartyAvatarFields(fields);
+            setSupplierAvatarUri(uri);
+          }
+        }
+        return;
+      }
+
       if (trip.client_id) {
         const fields = emptyTripPartyAvatarFields();
         let rawAvatar = "";
@@ -1599,6 +1635,7 @@ export function useTripDetail({
     trip?.organization_id,
     currentOrganization?.id,
     bundleActive,
+    bundle,
   ]);
 
   useEffect(() => {
@@ -2448,16 +2485,31 @@ export function useTripDetail({
     };
   }, [selectedDoc, docPreviewStoragePath, isGalleryPreviewDoc]);
 
+  const galleryPreviewDocs = useMemo(() => {
+    if (!selectedDoc || !isGalleryPreviewDoc) return [];
+    if (isVehicleGalleryDoc) {
+      return vehiclePreviewDocs.filter((doc) => !!doc.storagePath);
+    }
+    return (selectedDoc.files ?? [])
+      .filter((file) => !!file.storagePath)
+      .map((file) => ({
+        id: file.id,
+        storagePath: file.storagePath,
+      }));
+  }, [selectedDoc, isGalleryPreviewDoc, isVehicleGalleryDoc, vehiclePreviewDocs]);
+
+  const galleryStorageKey = useMemo(
+    () =>
+      galleryPreviewDocs
+        .map((doc) => `${doc.id}:${doc.storagePath}`)
+        .join("|"),
+    [galleryPreviewDocs],
+  );
+
   useEffect(() => {
     if (!selectedDoc || !isGalleryPreviewDoc) return;
 
-    const slotFiles = (selectedDoc.files ?? []).filter((file) => !!file.storagePath);
-    const galleryDocs = isVehicleGalleryDoc
-      ? vehiclePreviewDocs.filter((doc) => !!doc.storagePath)
-      : slotFiles.map((file) => ({
-          id: file.id,
-          storagePath: file.storagePath,
-        }));
+    const galleryDocs = galleryPreviewDocs;
 
     setVehiclePreviewIndex(0);
     setDocPreviewUrl(null);
@@ -2472,17 +2524,22 @@ export function useTripDetail({
     let isActive = true;
     setDocPreviewLoading(true);
 
-    Promise.all(
-      galleryDocs.map(async (doc) => {
-        const url = isVehicleGalleryDoc
-          ? await getVehicleDocumentViewUrl(doc.storagePath!)
-          : await tripDocumentsService.getDocumentViewUrl(doc.storagePath!);
-        return [doc.id, url] as const;
-      }),
-    )
-      .then((resolved) => {
+    const signGallery = isVehicleGalleryDoc
+      ? getVehicleDocumentViewUrls(
+          galleryDocs.map((doc) => doc.storagePath!),
+        )
+      : tripDocumentsService.getDocumentViewUrls(
+          galleryDocs.map((doc) => doc.storagePath!),
+        );
+
+    void signGallery
+      .then((byPath) => {
         if (!isActive) return;
-        setVehiclePreviewUrls(Object.fromEntries(resolved));
+        const next: Record<string, string | null> = {};
+        for (const doc of galleryDocs) {
+          next[doc.id] = byPath[doc.storagePath!] ?? null;
+        }
+        setVehiclePreviewUrls(next);
         setDocPreviewLoading(false);
       })
       .catch(() => {
@@ -2494,7 +2551,7 @@ export function useTripDetail({
     return () => {
       isActive = false;
     };
-  }, [selectedDoc, isGalleryPreviewDoc, isVehicleGalleryDoc, vehiclePreviewDocs]);
+  }, [galleryStorageKey, isGalleryPreviewDoc, isVehicleGalleryDoc, galleryPreviewDocs]);
 
   useEffect(() => {
     if (!selectedDoc) {

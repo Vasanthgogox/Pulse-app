@@ -5,12 +5,12 @@
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
 import { canAddMoreTripDocs, type TripDocItem, VAULT_DOC_LIMIT_HINT } from "@/features/trips/components/trip-detail/tripDocTypes";
-import { getDocumentViewUrl } from "@/features/trips/services/tripDocuments.service";
-import { getVehicleDocumentViewUrl } from "@/features/vehicles/services/vehicleDocuments.service";
+import { getDocumentViewUrls } from "@/features/trips/services/tripDocuments.service";
+import { getVehicleDocumentViewUrls } from "@/features/vehicles/services/vehicleDocuments.service";
 import { VEHICLE_COMPLIANCE_TYPE_HINT } from "@/features/vehicles/utils/vehicleDocuments.util";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Feather from "@expo/vector-icons/Feather";
-import { createElement, memo, useEffect, useMemo, useState } from "react";
+import { createElement, memo, useEffect, useLayoutEffect, useMemo, useState } from "react";
 import {
   Image,
   Platform,
@@ -98,55 +98,24 @@ function StatusGlyph({ tone }: { tone: Tone }) {
 const VaultDocThumb = memo(function VaultDocThumb({
   doc,
   tone,
+  signedUrl,
+  signing,
 }: {
   doc: TripDocItem;
   tone: Tone;
+  signedUrl: string | null;
+  signing: boolean;
 }) {
   const storagePath = doc.storagePath?.trim() || "";
   const canPreview = tone === "ok" && !!storagePath;
   const pdf = useMemo(() => isPdfDoc(doc), [doc]);
-
-  const [url, setUrl] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const url = (signedUrl ?? "").trim() || null;
+  const loading = canPreview && signing;
   const [imageFailed, setImageFailed] = useState(false);
 
   useEffect(() => {
-    if (!canPreview || !storagePath) {
-      setUrl(null);
-      setLoading(false);
-      setImageFailed(false);
-      return;
-    }
-
-    let alive = true;
-    setLoading(true);
-    setUrl(null);
     setImageFailed(false);
-
-    const resolve =
-      doc.docSource === "vehicle"
-        ? getVehicleDocumentViewUrl(storagePath)
-        : getDocumentViewUrl(storagePath);
-
-    void Promise.resolve(resolve)
-      .then((signed) => {
-        if (!alive) return;
-        const next = (signed ?? "").trim() || null;
-        setUrl(next);
-        setLoading(false);
-        if (!next) setImageFailed(true);
-      })
-      .catch(() => {
-        if (!alive) return;
-        setUrl(null);
-        setLoading(false);
-        setImageFailed(true);
-      });
-
-    return () => {
-      alive = false;
-    };
-  }, [canPreview, storagePath, doc.docSource]);
+  }, [url]);
 
   if (!canPreview) {
     return (
@@ -228,6 +197,56 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
         ? "All documents ready"
         : `${verifiedCount} of ${docs.length} documents ready`;
 
+  const thumbPaths = useMemo(() => {
+    const vehicle: string[] = [];
+    const trip: string[] = [];
+    for (const doc of docs) {
+      if (doc.status === "Pending") continue;
+      const path = doc.storagePath?.trim();
+      if (!path) continue;
+      if (doc.docSource === "vehicle") vehicle.push(path);
+      else trip.push(path);
+    }
+    return { vehicle, trip };
+  }, [docs]);
+
+  const [thumbUrls, setThumbUrls] = useState<Record<string, string | null>>({});
+  const [thumbSigning, setThumbSigning] = useState(false);
+
+  useLayoutEffect(() => {
+    const vehicle = thumbPaths.vehicle;
+    const trip = thumbPaths.trip;
+    if (vehicle.length === 0 && trip.length === 0) {
+      setThumbUrls({});
+      setThumbSigning(false);
+      return;
+    }
+
+    let alive = true;
+    setThumbSigning(true);
+    void Promise.all([
+      vehicle.length > 0
+        ? getVehicleDocumentViewUrls(vehicle)
+        : Promise.resolve({} as Record<string, string | null>),
+      trip.length > 0
+        ? getDocumentViewUrls(trip)
+        : Promise.resolve({} as Record<string, string | null>),
+    ])
+      .then(([vehicleUrls, tripUrls]) => {
+        if (!alive) return;
+        setThumbUrls({ ...vehicleUrls, ...tripUrls });
+        setThumbSigning(false);
+      })
+      .catch(() => {
+        if (!alive) return;
+        setThumbSigning(false);
+      });
+
+    return () => {
+      alive = false;
+    };
+  }, [thumbPaths]);
+
   return (
     <View style={styles.root}>
       <View style={[styles.block, styles.blockFirst]}>
@@ -277,7 +296,20 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
                   accessibilityLabel={`${actionLabel} ${doc.label}`}
                 >
                   <View style={styles.cardMain}>
-                    <VaultDocThumb doc={doc} tone={copy.tone} />
+                    <VaultDocThumb
+                      doc={doc}
+                      tone={copy.tone}
+                      signedUrl={
+                        thumbUrls[doc.storagePath?.trim() || ""] ?? null
+                      }
+                      signing={
+                        thumbSigning &&
+                        !Object.prototype.hasOwnProperty.call(
+                          thumbUrls,
+                          doc.storagePath?.trim() || "",
+                        )
+                      }
+                    />
                     <View style={styles.cardBody}>
                       <Text
                         style={[
