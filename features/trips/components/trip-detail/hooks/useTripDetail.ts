@@ -912,7 +912,7 @@ export function useTripDetail({
 
   // ── Vehicle preview docs ──────────────────────────────────────────────────
   const vehiclePreviewDocs = useMemo<VehiclePreviewDoc[]>(() => {
-    return DOCUMENT_EXPIRY_ORDER.map((docType) => {
+    const complianceDocs = DOCUMENT_EXPIRY_ORDER.map((docType) => {
       const vDoc = vehicleDocs?.[docType];
       const storagePath = vDoc?.url?.trim();
       return storagePath
@@ -932,11 +932,31 @@ export function useTripDetail({
             expiryDate: vDoc?.expiryDate ?? null,
           };
     });
+    const extraDocs = (vehicleDocs?.extras ?? [])
+      .filter((extra) => !!extra.url?.trim())
+      .map((extra, index) => ({
+        id: `vehicle-extra-${extra.id}`,
+        label: extra.fileName?.trim() || `Vehicle Document ${index + 1}`,
+        type: docTypeFromFileName(extra.url),
+        status: "Uploaded" as const,
+        storagePath: extra.url,
+        expiryDate: extra.expiryDate || null,
+      }));
+    return [...complianceDocs, ...extraDocs];
   }, [vehicleDocs]);
 
   const computedTripDocs = useMemo<TripDocItem[]>(() => {
     const hasVehicleDoc = vehiclePreviewDocs.some((doc) => !!doc.storagePath);
     const firstVehicleDoc = vehiclePreviewDocs.find((doc) => !!doc.storagePath);
+
+    const uploadedVehicleFiles = vehiclePreviewDocs
+      .filter((doc) => !!doc.storagePath)
+      .map((doc) => ({
+        id: doc.id,
+        label: doc.label,
+        type: doc.type,
+        storagePath: doc.storagePath!,
+      }));
 
     return [
       buildSlotCard(
@@ -960,6 +980,7 @@ export function useTripDetail({
         storagePath: firstVehicleDoc?.storagePath,
         docSource: "vehicle" as const,
         category: "vehicle" as const,
+        files: uploadedVehicleFiles.length > 0 ? uploadedVehicleFiles : undefined,
       },
       buildSlotCard(
         tripDocuments.filter((d) => d.document_type === "pod"),

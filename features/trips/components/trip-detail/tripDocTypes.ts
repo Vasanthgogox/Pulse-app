@@ -31,11 +31,92 @@ export interface TripDocItem {
   files?: TripDocFile[];
 }
 
+/** Matches trip-documents + vehicle-documents bucket limits (10 MB). */
+export const VAULT_DOC_MAX_BYTES = 10 * 1024 * 1024;
+export const VAULT_DOC_MAX_MB = VAULT_DOC_MAX_BYTES / (1024 * 1024);
+export const VAULT_DOC_TYPES_LABEL = "PDF, JPEG, PNG, WebP";
+export const VAULT_DOC_LIMIT_HINT = `${VAULT_DOC_TYPES_LABEL} · ${VAULT_DOC_MAX_MB} MB max per file`;
+export const VAULT_DOC_PICKER_TYPES = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+] as const;
+
+const VAULT_OK_MIME = new Set([
+  "application/pdf",
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]);
+const VAULT_OK_EXT = new Set([
+  "pdf",
+  "jpg",
+  "jpeg",
+  "png",
+  "webp",
+  "heic",
+  "heif",
+]);
+
+export function isSupportedVaultDocument(file: {
+  name?: string | null;
+  fileName?: string | null;
+  mimeType?: string | null;
+}): boolean {
+  const mime = (file.mimeType ?? "").toLowerCase().trim();
+  if (mime) return VAULT_OK_MIME.has(mime);
+  const fileName = file.fileName ?? file.name ?? "";
+  const ext = fileName.split(".").pop()?.toLowerCase() ?? "";
+  if (!ext) return true;
+  return VAULT_OK_EXT.has(ext);
+}
+
+/** Returns an error string when any picked file is too large or unsupported. */
+export function vaultPickerRejectionMessage(
+  assets: {
+    name?: string | null;
+    fileName?: string | null;
+    mimeType?: string | null;
+    size?: number | null;
+  }[],
+): string | null {
+  if (assets.length === 0) return null;
+  const oversized = assets.filter(
+    (asset) => typeof asset.size === "number" && asset.size > VAULT_DOC_MAX_BYTES,
+  );
+  if (oversized.length > 0) {
+    const names = oversized
+      .map((asset) => asset.fileName?.trim() || asset.name?.trim() || "A file")
+      .join(", ");
+    return `${names} ${oversized.length === 1 ? "exceeds" : "exceed"} ${VAULT_DOC_MAX_MB} MB. Each file must be ${VAULT_DOC_MAX_MB} MB or smaller.`;
+  }
+  const unsupported = assets.filter((asset) => !isSupportedVaultDocument(asset));
+  if (unsupported.length > 0) {
+    const names = unsupported
+      .map((asset) => asset.fileName?.trim() || asset.name?.trim() || "A file")
+      .join(", ");
+    return `${names} ${unsupported.length === 1 ? "is" : "are"} not supported. Use ${VAULT_DOC_TYPES_LABEL}.`;
+  }
+  return null;
+}
+
 export function canAddMoreTripDocs(
-  doc: Pick<TripDocItem, "category" | "docSource"> | null | undefined,
+  doc: Pick<TripDocItem, "category" | "docSource" | "id"> | null | undefined,
 ): boolean {
   if (!doc) return false;
-  if (doc.docSource === "vehicle" || doc.category === "vehicle") return false;
+  if (
+    doc.category === "vehicle" ||
+    doc.docSource === "vehicle" ||
+    doc.id === "vehicle-documents"
+  ) {
+    return true;
+  }
   return doc.category === "lr" || doc.category === "trip" || doc.category === "driver";
 }
 

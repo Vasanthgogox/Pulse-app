@@ -2885,6 +2885,14 @@ export const neoStyles = StyleSheet.create({
     flexWrap: "wrap",
     gap: 8,
   },
+  vaultLimitsHint: {
+    width: "100%",
+    marginBottom: 8,
+    color: "#64748b",
+    fontSize: 11,
+    fontWeight: "600",
+    lineHeight: 16,
+  },
   vaultCard: {
     flexGrow: 0,
     flexShrink: 1,
@@ -6655,6 +6663,13 @@ export const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: "700",
     color: "#0f172a",
+  },
+  vaultLimitsHint: {
+    marginTop: 4,
+    fontSize: 12,
+    fontWeight: "600",
+    color: "#64748b",
+    lineHeight: 18,
   },
   docGalleryWrap: {
     position: "relative",

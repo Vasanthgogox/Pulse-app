@@ -34,6 +34,7 @@ import {
   DOCUMENT_EXPIRY_ORDER,
   DOCUMENT_LABELS,
   type DocumentWithExpiry,
+  type VehicleComplianceDocType,
   type VehicleDocuments,
 } from '../utils/vehicleDocuments.util';
 import {
@@ -148,8 +149,8 @@ export function VehicleDocumentsSection({
   onDocumentsUpdated,
 }: VehicleDocumentsSectionProps) {
   const insets = useSafeAreaInsets();
-  const [busyType, setBusyType] = useState<keyof VehicleDocuments | null>(null);
-  const [expiryModalType, setExpiryModalType] = useState<keyof VehicleDocuments | null>(null);
+  const [busyType, setBusyType] = useState<VehicleComplianceDocType | null>(null);
+  const [expiryModalType, setExpiryModalType] = useState<VehicleComplianceDocType | null>(null);
   const [pendingExpiry, setPendingExpiry] = useState<string | null>(null);
   const [pendingExpiryInput, setPendingExpiryInput] = useState('');
   const [expiryInlineError, setExpiryInlineError] = useState<string | null>(null);
@@ -162,7 +163,7 @@ export function VehicleDocumentsSection({
 
   const [previewUrl, setPreviewUrl] = useState<string | null>(null);
   const [previewLoading, setPreviewLoading] = useState(false);
-  const [previewDocType, setPreviewDocType] = useState<keyof VehicleDocuments | null>(null);
+  const [previewDocType, setPreviewDocType] = useState<VehicleComplianceDocType | null>(null);
 
   // Guard against concurrent operations
   const busyRef = useRef(false);
@@ -210,7 +211,7 @@ export function VehicleDocumentsSection({
     return picked;
   };
 
-  const handleUploadPress = async (docType: keyof VehicleDocuments) => {
+  const handleUploadPress = async (docType: VehicleComplianceDocType) => {
     if (busyRef.current) return;
     const file = await pickAndValidateFile();
     if (!file) return;
@@ -304,7 +305,7 @@ export function VehicleDocumentsSection({
     setExpiryInlineError(null);
   };
 
-  const handleViewPress = async (doc: DocumentWithExpiry, docType: keyof VehicleDocuments) => {
+  const handleViewPress = async (doc: DocumentWithExpiry, docType: VehicleComplianceDocType) => {
     if (!doc?.url?.trim()) return;
     setPreviewDocType(docType);
     setPreviewLoading(true);
@@ -320,7 +321,7 @@ export function VehicleDocumentsSection({
     }
   };
 
-  const handleDeletePress = (docType: keyof VehicleDocuments) => {
+  const handleDeletePress = (docType: VehicleComplianceDocType) => {
     Alert.alert(
       'Delete document',
       `Remove ${DOCUMENT_LABELS[docType]}? This cannot be undone.`,

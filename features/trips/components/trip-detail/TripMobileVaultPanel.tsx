@@ -4,7 +4,7 @@
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
-import { canAddMoreTripDocs, type TripDocItem } from "@/features/trips/components/trip-detail/tripDocTypes";
+import { canAddMoreTripDocs, type TripDocItem, VAULT_DOC_LIMIT_HINT } from "@/features/trips/components/trip-detail/tripDocTypes";
 import { getDocumentViewUrl } from "@/features/trips/services/tripDocuments.service";
 import { getVehicleDocumentViewUrl } from "@/features/vehicles/services/vehicleDocuments.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
@@ -234,6 +234,9 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
         <Text style={styles.heroSub}>
           Vault · {verifiedCount}/{docs.length || 0} on file
         </Text>
+        {canUploadTripDocs ? (
+          <Text style={styles.limitsHint}>{VAULT_DOC_LIMIT_HINT}</Text>
+        ) : null}
       </View>
 
       <View style={styles.listPad}>
@@ -259,9 +262,9 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
 
             const showAddMore =
               canUploadTripDocs &&
-              !isPending &&
               !!onAddMore &&
-              canAddMoreTripDocs(doc);
+              canAddMoreTripDocs(doc) &&
+              (doc.id !== "vehicle-documents" || !!vehicleId);
 
             return (
               <View key={doc.id} style={styles.card}>
@@ -364,6 +367,13 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "400",
     color: MUTED,
+  },
+  limitsHint: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: "500",
+    color: MUTED,
+    lineHeight: 16,
   },
   listPad: {
     paddingHorizontal: PAD,

@@ -10,7 +10,12 @@
  *  - Delete: removes storage object + clears JSONB key in one call
  */
 import { supabase } from '@/lib/supabase';
-import type { VehicleDocuments, DocumentWithExpiry } from '../utils/vehicleDocuments.util';
+import type {
+  DocumentWithExpiry,
+  VehicleComplianceDocType,
+  VehicleDocuments,
+  VehicleExtraDocument,
+} from '../utils/vehicleDocuments.util';
 
 const BUCKET = 'vehicle-documents';
 const SIGNED_URL_EXPIRY_SEC = 3600;
@@ -112,6 +117,10 @@ export async function getVehicleDocumentViewUrl(storagePath: string): Promise<st
   return data.signedUrl;
 }
 
+function extraDocumentId(): string {
+  return `extra-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
+}
+
 /**
  * Upload a document file for a vehicle. Returns storage path on success.
  *
@@ -123,7 +132,7 @@ export async function getVehicleDocumentViewUrl(storagePath: string): Promise<st
 export async function uploadVehicleDocument(
   orgId: string,
   vehicleId: string,
-  docType: keyof VehicleDocuments,
+  docType: VehicleComplianceDocType,
   file: { arrayBuffer: ArrayBuffer; fileName: string; mimeType: string; blob?: Blob },
 ): Promise<UploadVehicleDocumentResult> {
   const validationError = validateDocumentFile(file);
@@ -177,7 +186,7 @@ export async function deleteVehicleDocumentFile(storagePath: string): Promise<De
 export async function uploadAndSaveVehicleDocument(
   orgId: string,
   vehicleId: string,
-  docType: keyof VehicleDocuments,
+  docType: VehicleComplianceDocType,
   file: { arrayBuffer: ArrayBuffer; fileName: string; mimeType: string; blob?: Blob },
   expiryDate: string,
   existingDocuments: VehicleDocuments | null,
@@ -220,6 +229,114 @@ export async function uploadAndSaveVehicleDocument(
 }
 
 /**
+ * Upload extra vehicle files from the trip vault (does not replace RC / insurance / fitness / PUC).
+ * Path: {orgId}/{vehicleId}/extras/{id}.{ext}
+ */
+export async function uploadAndSaveVehicleExtraDocuments(
+  orgId: string,
+  vehicleId: string,
+  files: { arrayBuffer: ArrayBuffer; fileName: string; mimeType: string }[],
+  existingDocuments: VehicleDocuments | null,
+): Promise<{ documents: VehicleDocuments | null; error: Error | null }> {
+  if (files.length === 0) {
+    return { documents: existingDocuments, error: new Error('No files selected') };
+  }
+
+  const uploaded: VehicleExtraDocument[] = [];
+  for (const file of files) {
+    const validationError = validateDocumentFile(file);
+    if (validationError) {
+      await Promise.all(uploaded.map((item) => deleteVehicleDocumentFile(item.url).catch(() => {})));
+      return { documents: null, error: new Error(validationError) };
+    }
+    const extraId = extraDocumentId();
+    const ext = file.fileName.split('.').pop()?.toLowerCase() || 'jpg';
+    const path = `${orgId}/${vehicleId}/extras/${extraId}.${ext}`;
+    const { error } = await runWithStorageRetry(
+      () =>
+        supabase()
+          .storage
+          .from(BUCKET)
+          .upload(path, file.arrayBuffer, {
+            contentType: file.mimeType || 'image/jpeg',
+            upsert: false,
+          }),
+      (result) => result.error?.message ?? null,
+    );
+    if (error) {
+      await Promise.all(uploaded.map((item) => deleteVehicleDocumentFile(item.url).catch(() => {})));
+      return { documents: null, error: new Error(error.message) };
+    }
+    signedUrlCache.delete(path);
+    uploaded.push({
+      id: extraId,
+      url: path,
+      expiryDate: '',
+      uploadedAt: new Date().toISOString(),
+      fileName: file.fileName,
+    });
+  }
+
+  const updated: VehicleDocuments = {
+    ...(existingDocuments ?? {}),
+    extras: [...(existingDocuments?.extras ?? []), ...uploaded],
+  };
+
+  const { data: savedRow, error: dbError } = await supabase()
+    .from('vehicles')
+    .update({ documents: updated })
+    .eq('organization_id', orgId)
+    .eq('id', vehicleId)
+    .select('id, documents')
+    .maybeSingle();
+
+  if (dbError || !savedRow) {
+    await Promise.all(uploaded.map((item) => deleteVehicleDocumentFile(item.url).catch(() => {})));
+    return {
+      documents: null,
+      error: new Error(
+        dbError?.message ??
+          'Vehicle document metadata was not saved (row not found or insufficient permission).',
+      ),
+    };
+  }
+
+  return { documents: (savedRow.documents ?? updated) as VehicleDocuments, error: null };
+}
+
+export async function deleteVehicleExtraDocument(
+  orgId: string,
+  vehicleId: string,
+  extraId: string,
+  existingDocuments: VehicleDocuments | null,
+): Promise<{ documents: VehicleDocuments | null; error: Error | null }> {
+  const extras = existingDocuments?.extras ?? [];
+  const extra = extras.find((item) => item.id === extraId);
+  if (!extra) {
+    return {
+      documents: existingDocuments,
+      error: new Error("That vehicle file is no longer on record."),
+    };
+  }
+  if (extra.url?.trim()) {
+    await deleteVehicleDocumentFile(extra.url).catch(() => {});
+  }
+  const nextExtras = extras.filter((item) => item.id !== extraId);
+  const updated: VehicleDocuments = { ...(existingDocuments ?? {}) };
+  if (nextExtras.length > 0) updated.extras = nextExtras;
+  else delete updated.extras;
+
+  const { error: dbError } = await supabase()
+    .from("vehicles")
+    .update({ documents: updated })
+    .eq("organization_id", orgId)
+    .eq("id", vehicleId);
+
+  if (dbError) return { documents: null, error: new Error(dbError.message) };
+  return { documents: updated, error: null };
+}
+
+/**
  * Delete a document type for a vehicle (storage file + clear JSONB key).
  *
  * O(1) — one storage delete + one DB update.
@@ -227,7 +344,7 @@ export async function uploadAndSaveVehicleDocument(
 export async function deleteVehicleDocument(
   orgId: string,
   vehicleId: string,
-  docType: keyof VehicleDocuments,
+  docType: VehicleComplianceDocType,
   existingDocuments: VehicleDocuments | null,
 ): Promise<{ documents: VehicleDocuments | null; error: Error | null }> {
   const doc: DocumentWithExpiry | undefined = existingDocuments?.[docType];
