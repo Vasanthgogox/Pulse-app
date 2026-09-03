@@ -293,9 +293,14 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
   },
+  // A9.4: pending must read as "awaiting your decision", not "already won"
+  // -- was identical to statusPillAccepted (same positiveMuted/positive
+  // pair), which looked like success on a bid nobody has decided on yet.
+  // Theme.warning/warningMuted is the same pairing InvitationsView.tsx
+  // already uses for its own "pending" pill -- reused, not invented.
   statusPillPending: {
-    backgroundColor: Theme.positiveMuted,
-    borderColor: Theme.positiveMutedDarkBorder,
+    backgroundColor: Theme.warningMuted,
+    borderColor: Theme.borderMedium,
   },
   statusPillAccepted: {
     backgroundColor: Theme.positiveMuted,
@@ -311,7 +316,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.35,
     color: Theme.textMuted,
   },
-  statusTextPending: { color: Theme.positive },
+  statusTextPending: { color: Theme.warning },
   statusTextAccepted: { color: Theme.positive },
   statusTextRejected: { color: Theme.teslaRed },
   noteWrap: {

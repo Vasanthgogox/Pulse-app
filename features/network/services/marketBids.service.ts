@@ -49,6 +49,40 @@ export async function listMarketBidsForIndent(
   return { error: null, bids: (data ?? []) as MarketBidForIndentRow[] };
 }
 
+export type MarketplacePlatformFeeCalc = {
+  is_active_config_found: boolean;
+  config_id?: string;
+  config_name?: string;
+  comparison_mode?: 'highest' | 'lowest';
+  max_fee?: number | null;
+  bid_amount: number;
+  components?: Array<{
+    component_type: 'flat' | 'percentage';
+    flat_amount: number | null;
+    percentage_rate: number | null;
+    computed_amount: number;
+  }>;
+  resolved_fee: number;
+  capped?: boolean;
+  client_price: number;
+};
+
+/**
+ * A8.3 — preview-only call to the single authoritative fee calculation
+ * (public.calculate_marketplace_platform_fee). Never recompute this
+ * formula client-side; this is purely for showing the business what
+ * accept_market_bid() will resolve to before they confirm the award.
+ */
+export async function calculateMarketplacePlatformFee(
+  bidAmount: number,
+): Promise<{ error: Error | null; calc: MarketplacePlatformFeeCalc | null }> {
+  const { data, error } = await supabase().rpc('calculate_marketplace_platform_fee', {
+    p_bid_amount: bidAmount,
+  });
+  if (error) return { error: new Error(error.message), calc: null };
+  return { error: null, calc: (data as MarketplacePlatformFeeCalc) ?? null };
+}
+
 export async function acceptMarketBid(
   bidId: string,
 ): Promise<{ error: Error | null; tripId: string | null }> {

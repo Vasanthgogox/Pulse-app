@@ -91,7 +91,12 @@ const DISTRIBUTION_OPTIONS: Array<{
   {
     value: "marketplace",
     label: "Marketplace",
-    hint: "Make this load available to verified DCO / fleet owners",
+    // A9.4: the old copy said only "verified DCO / fleet owners", but
+    // organization-type bidders (other businesses) can also respond via
+    // Marketplace (see market_bids.bidder_type) -- confirmed real
+    // organization-type bids exist in production. Businesses choosing this
+    // option should know both audiences can respond.
+    hint: "Share with verified fleet owners and businesses on Marketplace",
   },
   {
     value: "both",

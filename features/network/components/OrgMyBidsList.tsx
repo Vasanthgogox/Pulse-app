@@ -111,18 +111,18 @@ export function OrgMyBidsList({
     );
   }
 
-  return (
+    return (
     <View style={styles.listContent}>
-      {groups.pending.length > 0 ? (
-        <Section title="Pending" count={groups.pending.length}>
-          {groups.pending.map((b) => (
+      {groups.awarded.length > 0 ? (
+        <Section title="Awarded" count={groups.awarded.length}>
+          {groups.awarded.map((b) => (
             <BidCard key={b.id} bid={b} />
           ))}
         </Section>
       ) : null}
-      {groups.awarded.length > 0 ? (
-        <Section title="Awarded" count={groups.awarded.length}>
-          {groups.awarded.map((b) => (
+      {groups.pending.length > 0 ? (
+        <Section title="Pending" count={groups.pending.length}>
+          {groups.pending.map((b) => (
             <BidCard key={b.id} bid={b} />
           ))}
         </Section>

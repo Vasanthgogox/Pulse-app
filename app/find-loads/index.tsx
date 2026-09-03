@@ -31,6 +31,7 @@ import {
 } from "@/features/network/services/findLoadsForOrg.service";
 import { OrgMyBidsList } from "@/features/network/components/OrgMyBidsList";
 import { isVehicleTypeCompatibleWithFleet } from "@/features/marketplace/utils/fleetFit.util";
+import { formatMarketplaceTransactionError } from "@/features/marketplace/utils/marketplaceErrorFormat.util";
 import { getVehiclesByOrganization } from "@/features/vehicles/services/vehicles.service";
 import { showAppAlert } from "@/lib/appAlert";
 import { useLayoutInsets } from "@/lib/layoutInsets";
@@ -39,7 +40,7 @@ import { ROUTES } from "@/lib/routes";
 import { useMemberAccess } from "@/lib/useMemberAccess";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
-import { X } from "lucide-react-native";
+import { Award, X } from "lucide-react-native";
 import React, { useMemo, useState } from "react";
 import {
   FlatList,
@@ -114,9 +115,13 @@ export default function FindLoadsScreen() {
   const myBidsQ = useQuery({
     queryKey: queryKeys.findLoadsForOrg.myBids(orgId ?? ""),
     queryFn: () => listMyOrgMarketBids(orgId as string),
-    enabled: !!orgId && segment === "myBids",
+    enabled: !!orgId,
   });
   const myBids = myBidsQ.data?.bids ?? [];
+  const awardedCount = useMemo(
+    () => myBids.filter((b) => b.status === "accepted").length,
+    [myBids],
+  );
 
   const viewerCanBidCapability =
     (organization?.capabilities?.canBid ?? true) &&
@@ -166,6 +171,19 @@ export default function FindLoadsScreen() {
 
   return (
     <View style={[styles.root, { paddingTop: contentTopInset }]}>
+      {awardedCount > 0 ? (
+        <Pressable
+          onPress={() => setSegment("myBids")}
+          style={styles.awardedBanner}
+        >
+          <Award size={16} color={Theme.positive} />
+          <Text style={styles.awardedBannerText}>
+            {awardedCount === 1
+              ? "You have 1 awarded bid — assign a vehicle to get started"
+              : `You have ${awardedCount} awarded bids — assign vehicles to get started`}
+          </Text>
+        </Pressable>
+      ) : null}
       <View style={styles.header}>
         <View style={styles.headerTextCol}>
           <Text style={styles.title}>Find Loads</Text>
@@ -370,7 +388,7 @@ function OrgMarketBidModal({
     );
     setSubmitting(false);
     if (submitErr) {
-      setError(submitErr.message);
+      setError(formatMarketplaceTransactionError(submitErr.message));
       return;
     }
     onSuccess();
@@ -478,6 +496,25 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 12,
     right: 16,
+  },
+  awardedBanner: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginHorizontal: 16,
+    marginTop: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 12,
+    backgroundColor: Theme.positiveMuted,
+    borderWidth: 1,
+    borderColor: Theme.positiveMutedDarkBorder,
+  },
+  awardedBannerText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.primaryText,
   },
   title: { fontSize: 22, fontWeight: "700", color: Theme.primaryText },
   subtitle: { fontSize: 14, color: Theme.textSecondary, marginTop: 2 },
