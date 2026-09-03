@@ -4,9 +4,11 @@
  *                        INSERT/DELETE → the list key too.
  */
 import { useEffect } from 'react';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import type { RealtimePostgresChangesPayload } from '@supabase/supabase-js';
 import { queryKeys } from '@/lib/queryKeys';
 import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
+import { getTripLedgerEmbed, toLedgerRow, type LedgerRow } from '@/features/finance/services/finance.service';
 
 export function useRealtimeTripsInvalidation(organizationId: string | null) {
   const qc = useQueryClient();
@@ -112,32 +114,75 @@ export function useRealtimeTransactionsInvalidation(organizationId: string | nul
         },
       ],
       (payload) => {
-        const txId =
-          (payload.new as { id?: string } | undefined)?.id ??
-          (payload.old as { id?: string } | undefined)?.id ??
-          null;
-        if (txId) {
-          qc.setQueriesData(
-            { queryKey: queryKeys.transactions.finite(organizationId) },
-            (old: unknown) => {
-              if (!Array.isArray(old)) return old;
-              const row = (payload.new as Record<string, unknown> | undefined) ?? {};
-              let found = false;
-              const next = old.map((item: { id: string }) => {
-                if (item.id !== txId) return item;
-                found = true;
-                return { ...item, ...row };
-              });
-              if (!found && Object.keys(row).length > 0) next.unshift({ id: txId, ...row });
-              return next;
-            },
-          );
-        }
-        void qc.invalidateQueries({ queryKey: queryKeys.transactions.finite(organizationId) });
-        qc.invalidateQueries({ queryKey: queryKeys.transactions.all(organizationId) });
+        void applyTransactionRealtimeEvent(qc, organizationId, payload);
       },
     );
   }, [organizationId, qc]);
+}
+
+/**
+ * Keeps transactions.finite's cache correct without a full-list refetch: DELETE
+ * removes the row locally; INSERT/UPDATE reconstruct the same transformed LedgerRow
+ * toLedgerRow would produce, fetching only the trip-label embed (the one thing a
+ * realtime payload can't carry — it has no joins) when the trip is new or changed.
+ * transactions.infinite and transactions.byContact aren't surgically patched here,
+ * so they keep their existing (broader) invalidation behaviour unchanged.
+ */
+export async function applyTransactionRealtimeEvent(
+  qc: QueryClient,
+  organizationId: string,
+  payload: RealtimePostgresChangesPayload<Record<string, unknown>>,
+): Promise<void> {
+  const newRow = payload.new as Record<string, unknown> | undefined;
+  const oldRow = payload.old as Record<string, unknown> | undefined;
+  const txId = (newRow?.id as string | undefined) ?? (oldRow?.id as string | undefined) ?? null;
+
+  if (txId) {
+    if (payload.eventType === 'DELETE') {
+      qc.setQueriesData(
+        { queryKey: queryKeys.transactions.finite(organizationId) },
+        (old: unknown) => {
+          if (!Array.isArray(old)) return old;
+          return old.filter((item: { id: string }) => item.id !== txId);
+        },
+      );
+    } else if (newRow) {
+      const cached = qc.getQueryData<LedgerRow[]>(queryKeys.transactions.finite(organizationId));
+      // No observer is watching this org's finite list right now — skip the trip-embed
+      // fetch too, since there'd be no cache entry for setQueriesData to patch.
+      if (cached !== undefined) {
+        const existing = cached.find((item) => item.id === txId);
+        const tripId = (newRow.trip_id as string | null | undefined) ?? null;
+        let trips: LedgerRow['trips'] = null;
+        if (tripId) {
+          trips =
+            existing && existing.trip_id === tripId && existing.trips
+              ? existing.trips
+              : (await getTripLedgerEmbed(tripId)).embed;
+        }
+        const transformed = toLedgerRow({
+          ...(newRow as Parameters<typeof toLedgerRow>[0]),
+          trips,
+        });
+        qc.setQueriesData<LedgerRow[]>(
+          { queryKey: queryKeys.transactions.finite(organizationId) },
+          (old) => {
+            if (!Array.isArray(old)) return old;
+            const idx = old.findIndex((item) => item.id === txId);
+            if (idx === -1) return [transformed, ...old];
+            const next = old.slice();
+            next[idx] = transformed;
+            return next;
+          },
+        );
+      }
+    }
+  }
+
+  // .finite is self-sufficient above; .infinite and .byContact are not surgically
+  // patched, so preserve their existing invalidation behaviour, unchanged in scope.
+  qc.invalidateQueries({ queryKey: ['q', 'transactions', organizationId, 'infinite'] });
+  qc.invalidateQueries({ queryKey: ['q', 'transactions', organizationId, 'contact'] });
 }
 
 /**
