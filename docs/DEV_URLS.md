@@ -7,10 +7,11 @@ Local URLs for Pulse apps and tooling. Use this as the quick map when spinning u
 | Service | URL | Port | Start command |
 |---------|-----|------|---------------|
 | Pulse web (Expo / Metro) | http://localhost:8081 | **8081** | `npm run web` or `npm run dev` |
-| Pulse + Commerce (combined) | http://localhost:8081 (+ `/oms` proxied) | **8081** + **3004** | `npm run dev` |
+| Pulse + Commerce + Ops (combined) | http://localhost:8081 (+ `/oms`, `/admin` proxied) | **8081** + **3004** + **3002** | `npm run dev` |
 | Commerce / OMS (Vite, direct) | http://127.0.0.1:3004/oms/ | **3004** | `npm run oms:dev` |
 | Commerce via Pulse proxy | http://localhost:8081/oms/ | *(proxied → 3004)* | `npm run dev` |
-| Admin console / Analytics | http://localhost:3002/ops-9f3a2c/ | **3002** | `cd analytics && npm run dev` |
+| Ops console via Pulse proxy | http://localhost:8081/admin | *(proxied → 3002)* | `npm run dev` |
+| Ops console / Analytics (direct) | http://127.0.0.1:3002/admin/ | **3002** | `npm run admin:dev` |
 | DB Audit UI | http://localhost:4040 | **4040** | `npm run audit` |
 | Playwright HTML report | *(opens after tests)* | — | `npm run test:web:report` |
 
@@ -64,17 +65,37 @@ npm run dev   # starts OMS then proxies /oms/* from :8081 → :3004
 
 Optional: `VITE_EXECUTION_API_URL=http://localhost:4000` (execution API when that service is running). See `oms/.env.example`.
 
-### Admin console (analytics) — `:3002`
+### Ops / Admin console (analytics) — `:3002`
 
-Vite app under `analytics/`, base path `/ops-9f3a2c/`.
+Vite app under `analytics/`. Dev base path is `/admin/` so Metro can proxy it
+onto the Pulse origin; production keeps the obscured `/ops-9f3a2c/` base.
 
 ```bash
-cd analytics && npm install && npm run dev
+npm run dev         # starts OMS + Ops, then Pulse web (recommended)
+npm run admin:dev   # Ops console only
 ```
 
-Open: **http://localhost:3002/ops-9f3a2c/**
+Open: **http://localhost:8081/admin** (or direct: http://127.0.0.1:3002/admin/)
+
+| Env override | Default |
+|--------------|---------|
+| `ADMIN_DEV_PORT` | `3002` |
+| `ADMIN_DEV_HOST` | `127.0.0.1` |
+| `ADMIN_DEV_BASE` | `/admin/` |
 
 Production build is copied to `dist/ops-9f3a2c` via `npm run build:admin`.
+Netlify serves it from **both** paths (200 rewrites, see `netlify.toml`):
+
+| Path | Purpose |
+|------|---------|
+| `/admin/*` | Canonical — same URL shape as dev |
+| `/ops-9f3a2c/*` | Original path, kept so existing bookmarks work |
+
+Deep links and refreshes work on both (`/admin/support`, `/ops-9f3a2c/support`).
+Assets stay at `/ops-9f3a2c/assets/*` — real files, served before any rewrite.
+
+`/admin` is a convenience path, **not** a security boundary: access control is
+`AdminAuthProvider` + `get_my_platform_permissions()` / RLS.
 
 ### DB Audit — `:4040`
 
@@ -98,7 +119,7 @@ Details: [tools/db-audit/README.md](../tools/db-audit/README.md).
 
 | Port | Owner |
 |------|--------|
-| 3002 | Admin / analytics (`analytics`) |
+| 3002 | Ops / admin console (`analytics`) |
 | 3004 | Commerce / OMS (`oms`) |
 | 4000 | Execution API (optional; OMS env) |
 | 4040 | DB Audit (`tools/db-audit`) |

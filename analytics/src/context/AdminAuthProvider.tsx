@@ -38,9 +38,18 @@ export function AdminAuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     let active = true;
+    // `getSession()` and `onAuthStateChange` both report the same initial session,
+    // so without this guard every RPC below runs twice on load. Keyed by access
+    // token: a genuine sign-in / refresh / sign-out still re-resolves.
+    let resolvedToken: string | null | undefined;
 
     async function resolve(nextSession: Session | null) {
       if (!active) return;
+
+      const nextToken = nextSession?.access_token ?? null;
+      if (resolvedToken !== undefined && resolvedToken === nextToken) return;
+      resolvedToken = nextToken;
+
       setSession(nextSession);
 
       if (!nextSession) {

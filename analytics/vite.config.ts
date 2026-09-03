@@ -6,7 +6,7 @@ import path from "path";
 /** Repo-root `.env` (Expo / shared Pulse). Maps to VITE_* for the admin console. */
 const repoRoot = path.resolve(__dirname, "..");
 
-export default defineConfig(({ mode }) => {
+export default defineConfig(({ mode, command }) => {
   const rootEnv = loadEnv(mode, repoRoot, "");
   const localEnv = loadEnv(mode, __dirname, "");
   const env = { ...rootEnv, ...localEnv };
@@ -25,13 +25,30 @@ export default defineConfig(({ mode }) => {
   const anonKey =
     env.VITE_SUPABASE_ANON_KEY || env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "";
 
+  const isDev = command === "serve";
+  const adminBase = isDev
+    ? env.ADMIN_DEV_BASE || "/admin/"
+    : "/ops-9f3a2c/";
+  const adminPort = Number(env.ADMIN_DEV_PORT || 3002);
+  const adminHost = env.ADMIN_DEV_HOST || "127.0.0.1";
+
   return {
     plugins: [react(), tailwind()],
-    base: "/ops-9f3a2c/",
+    // Dev is served through the Pulse Metro proxy at /admin (same origin as the
+    // main app); production keeps the obscured /ops-9f3a2c/ path.
+    base: adminBase,
     resolve: {
       alias: { "@": path.resolve(__dirname, "./src") },
     },
-    server: { port: 3002, strictPort: true },
+    server: {
+      host: adminHost,
+      port: adminPort,
+      strictPort: true,
+      // The page is served through Metro's /admin proxy on :8081, but that proxy
+      // only forwards HTTP — it cannot forward the HMR websocket upgrade. Point
+      // the HMR client straight at this Vite server so hot reload still works.
+      hmr: { protocol: 'ws', host: adminHost, port: adminPort, clientPort: adminPort },
+    },
     build: { sourcemap: false },
     // Prefer analytics/.env when present; otherwise inject from repo root.
     envDir: __dirname,

@@ -106,6 +106,30 @@
   to     = "/oms/index.html"
   status = 200
 
+# Ops / Admin console SPA routes — must come before the /* catch-all.
+# Two entry points, one app (dist/ops-9f3a2c, built by npm run build:admin):
+#   /admin/*       — canonical path, matches the dev URL (localhost:8081/admin/)
+#   /ops-9f3a2c/*  — original path, kept so existing bookmarks keep working
+# Both are 200 rewrites (URL stays put), not 302s, so the SPA owns its routing
+# and deep links / refreshes on /admin/support etc. resolve instead of 404ing.
+# NOTE: /admin is a convenience path, NOT a security boundary — access control is
+# AdminAuthProvider + platform_users/get_my_platform_permissions RLS. Assets under
+# /ops-9f3a2c/assets/* are real files, so Netlify serves them before these rules.
+[[redirects]]
+  from   = "/admin"
+  to     = "/ops-9f3a2c/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/admin/*"
+  to     = "/ops-9f3a2c/index.html"
+  status = 200
+
+[[redirects]]
+  from   = "/ops-9f3a2c/*"
+  to     = "/ops-9f3a2c/index.html"
+  status = 200
+
 # Missing Expo hashed assets must 404 — not SPA HTML. Otherwise browsers parse
 # index.html as JS ("Unexpected token '<'") / Metro "unknown module". Existing
 # files under dist/ are still served first; this only applies when the hash is gone.
@@ -147,6 +171,11 @@
 
 [[headers]]
   for = "/ops-9f3a2c/index.html"
+  [headers.values]
+    Cache-Control = "no-cache, no-store, must-revalidate"
+
+[[headers]]
+  for = "/admin/*"
   [headers.values]
     Cache-Control = "no-cache, no-store, must-revalidate"
 
