@@ -17,6 +17,7 @@ import {
   type ViewStyle,
 } from 'react-native';
 import Theme from '@/constants/Theme';
+import { useFailedImageUriGuard } from '@/hooks/useFailedImageUriGuard';
 import {
   useAvatarUri,
   type AvatarContext,
@@ -99,6 +100,13 @@ export function Avatar({
   showBorder = true,
 }: AvatarProps) {
   const { imageSource, initials, bg } = useAvatarUri(party, context);
+  // Only remote URIs are tracked; local require() assets pass through.
+  const guardUri =
+    imageSource && typeof imageSource === 'object' && 'uri' in imageSource
+      ? ((imageSource as { uri?: string }).uri ?? null)
+      : null;
+  const { failed: guardFailed, onError: onGuardError } =
+    useFailedImageUriGuard(guardUri);
   const [imgError, setImgError] = useState(false);
 
   // Reset error when source changes (e.g. after async signed URL upgrade)
@@ -134,7 +142,7 @@ export function Avatar({
     style,
   ];
 
-  if (!imgError && imageSource) {
+  if (!imgError && !guardFailed && imageSource) {
     return (
       <View style={containerStyle}>
         <Animated.Image
@@ -146,7 +154,10 @@ export function Avatar({
           ]}
           resizeMode={resizeMode}
           onLoad={onLoad}
-          onError={() => setImgError(true)}
+          onError={() => {
+            onGuardError();
+            setImgError(true);
+          }}
           accessibilityIgnoresInvertColors
         />
       </View>

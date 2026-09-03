@@ -52,6 +52,7 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useFailedImageUriGuard } from "@/hooks/useFailedImageUriGuard";
 
 const WEB_DESKTOP_BREAKPOINT = 600;
 
@@ -128,15 +129,11 @@ export function BusinessConnectionRequestModal({
   const [shellVisible, setShellVisible] = useState(visible);
   const [isDragging, setIsDragging] = useState(false);
 
-  const [logoLoadFailed, setLogoLoadFailed] = useState(false);
-  const [senderAvatarLoadFailed, setSenderAvatarLoadFailed] = useState(false);
   const [fetchedVerificationStatus, setFetchedVerificationStatus] = useState<
     string | null
   >(null);
 
   useEffect(() => {
-    setLogoLoadFailed(false);
-    setSenderAvatarLoadFailed(false);
     setFetchedVerificationStatus(null);
   }, [invite.id]);
 
@@ -309,6 +306,10 @@ export function BusinessConnectionRequestModal({
       senderLabel,
     ],
   );
+  const { failed: logoLoadFailed, onError: onLogoError } =
+    useFailedImageUriGuard(orgLogoUri);
+  const { failed: senderAvatarLoadFailed, onError: onSenderAvatarError } =
+    useFailedImageUriGuard(senderAvatarUri);
   const showSenderRow = senderName.length > 0 || senderPhone.length > 0;
   const yourRoleTiles = useMemo(() => buildYourRoleTiles(invite.type), [invite.type]);
   const inviteDateLabel = useMemo(
@@ -371,7 +372,7 @@ export function BusinessConnectionRequestModal({
                 source={{ uri: orgLogoUri }}
                 style={styles.heroLogo}
                 resizeMode="cover"
-                onError={() => setLogoLoadFailed(true)}
+                onError={onLogoError}
               />
             ) : (
               <View style={[styles.heroLogoFallback, { backgroundColor: orgInitialsBg }]}>
@@ -470,7 +471,7 @@ export function BusinessConnectionRequestModal({
                       source={{ uri: senderAvatarUri }}
                       style={styles.senderAvatar}
                       resizeMode="cover"
-                      onError={() => setSenderAvatarLoadFailed(true)}
+                      onError={onSenderAvatarError}
                     />
                   ) : (
                     <View

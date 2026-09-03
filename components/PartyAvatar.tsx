@@ -11,6 +11,7 @@ import {
 } from "react-native";
 import { Building2, Truck, User } from "lucide-react-native";
 import Theme from "@/constants/Theme";
+import { useFailedImageUriGuard } from "@/hooks/useFailedImageUriGuard";
 import {
   partyAvatarBackgroundColor,
   partyAvatarInitialsTextColor,
@@ -91,14 +92,10 @@ export function PartyAvatar({
   // for a freshly picked client — and React threw minified error #310
   // (GX-PULSE-T, seen on /create-indent).
   const [resolvedPhotoUri, setResolvedPhotoUri] = useState<string | null>(null);
-  const [imageFailed, setImageFailed] = useState(false);
+
   const hasRawPhotoField = Boolean(
     (organizationImageUrl ?? "").trim() || (avatarUrl ?? "").trim(),
   );
-
-  useEffect(() => {
-    setImageFailed(false);
-  }, [organizationImageUrl, avatarUrl, avatarSeed, organizationAvatarSeed, entityType, name]);
 
   useEffect(() => {
     let cancelled = false;
@@ -190,7 +187,12 @@ export function PartyAvatar({
     avatarSeed,
     entityType,
   });
-  const uri = !imageFailed ? resolvedPhotoUri ?? syncUri : seedUri;
+  // Guard the candidate before render: a URI that has already failed twice
+  // (in this or any prior mount) never reaches <Image>.
+  const candidateUri = resolvedPhotoUri ?? syncUri;
+  const { failed: imageFailed, onError: onImageError } =
+    useFailedImageUriGuard(candidateUri);
+  const uri = !imageFailed ? candidateUri : seedUri;
   const displayName = (name ?? "").trim() || "Party";
   const colorSeed = (initialsColorSeed ?? avatarSeed ?? "").trim() || displayName;
   const initials = partyInitialsFromName(displayName);
@@ -215,7 +217,7 @@ export function PartyAvatar({
           source={{ uri }}
           resizeMode={resizeMode}
           accessibilityIgnoresInvertColors
-          onError={() => setImageFailed(true)}
+          onError={onImageError}
           style={[
             styles.photoImage,
             {

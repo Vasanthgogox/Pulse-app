@@ -10,6 +10,7 @@ import {
   partyInitialsFromName,
 } from "@/lib/partyAvatarDisplay";
 import { formatIndianVehicleNumber } from "@/lib/format";
+import { useFailedImageUriGuard } from "@/hooks/useFailedImageUriGuard";
 
 export type VehicleAvatarProps = {
   vehicleId: string;
@@ -39,10 +40,10 @@ export const VehicleAvatar = memo(function VehicleAvatar({
   const seed = (avatarSeed ?? "").trim();
   const radius = Math.round(size * 0.28);
   const [resolvedUri, setResolvedUri] = useState<string | null>(null);
-  const [imageFailed, setImageFailed] = useState(false);
+  const { failed: imageFailed, onError: onImageError } =
+    useFailedImageUriGuard(resolvedUri);
 
   useEffect(() => {
-    setImageFailed(false);
     let cancelled = false;
 
     const run = async () => {
@@ -83,7 +84,7 @@ export const VehicleAvatar = memo(function VehicleAvatar({
             borderColor: Theme.borderLight,
           }}
           resizeMode="cover"
-          onError={() => setImageFailed(true)}
+          onError={onImageError}
           accessibilityIgnoresInvertColors
         />
       </View>

@@ -26,7 +26,32 @@ const QUALITY = 0.85;
 const SIGNED_URL_EXPIRY_SEC = 3600;
 const SIGNED_URL_CACHE_MS = 55 * 60 * 1000;
 // null = confirmed not found; cached for 5min to suppress repeated 400s
-const SIGNED_URL_NOT_FOUND_CACHE_MS = 5 * 60 * 1000;
+const SIGNED_URL_NOT_FOUND_CACHE_MS = 60 * 60 * 1000;
+
+// Bound the signing path independently of the image-load guard in
+// hooks/useFailedImageUriGuard. One cache miss costs up to 2 storage.list()
+// plus 10 createSignedUrl calls, each holding a Storage->Postgres connection,
+// so a systemic failure (bad data migration, revoked bucket policy) must not
+// be allowed to turn that into thousands of calls.
+const SIGN_FAILURE_THRESHOLD = 20;
+const SIGN_BREAKER_COOLOFF_MS = 5 * 60 * 1000;
+let consecutiveSignFailures = 0;
+let signBreakerOpenUntil = 0;
+
+function noteSignFailure(): void {
+  consecutiveSignFailures += 1;
+  if (consecutiveSignFailures >= SIGN_FAILURE_THRESHOLD) {
+    signBreakerOpenUntil = Date.now() + SIGN_BREAKER_COOLOFF_MS;
+    consecutiveSignFailures = 0;
+    console.warn(
+      '[avatar] sign breaker OPEN - skipping signed-URL calls for 5m',
+    );
+  }
+}
+
+function noteSignSuccess(): void {
+  consecutiveSignFailures = 0;
+}
 const signedAvatarUrlCache = new Map<string, { url: string | null; expiresAt: number }>();
 // Deduplicates concurrent calls for the same path (thundering-herd guard)
 const inFlightAvatarRequests = new Map<string, Promise<string | null>>();
@@ -520,6 +545,9 @@ export async function getSignedAvatarUrl(path: string): Promise<string | null> {
       .from(PUBLIC_ORG_ASSET_BUCKET)
       .getPublicUrl(cacheKey).data.publicUrl;
   }
+  // Breaker open: fall back to initials rather than re-probing Storage.
+  if (Date.now() < signBreakerOpenUntil) return null;
+
   if (cacheKey) {
     const cached = signedAvatarUrlCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {
@@ -546,9 +574,12 @@ export async function getSignedAvatarUrl(path: string): Promise<string | null> {
         .createSignedUrl(candidate, SIGNED_URL_EXPIRY_SEC);
       if (!primary.error && primary.data?.signedUrl) {
         const url = primary.data.signedUrl;
+        noteSignSuccess();
         if (cacheKey) signedAvatarUrlCache.set(cacheKey, { url, expiresAt: Date.now() + SIGNED_URL_CACHE_MS });
         return url;
       }
+      noteSignFailure();
+      if (Date.now() < signBreakerOpenUntil) break;
 
     }
 
@@ -560,9 +591,12 @@ export async function getSignedAvatarUrl(path: string): Promise<string | null> {
         .createSignedUrl(candidate, SIGNED_URL_EXPIRY_SEC);
       if (!legacy.error && legacy.data?.signedUrl) {
         const url = legacy.data.signedUrl;
+        noteSignSuccess();
         if (cacheKey) signedAvatarUrlCache.set(cacheKey, { url, expiresAt: Date.now() + SIGNED_URL_CACHE_MS });
         return url;
       }
+      noteSignFailure();
+      if (Date.now() < signBreakerOpenUntil) break;
     }
 
     // Cache the not-found result so repeated calls don't hammer storage again.
