@@ -3,9 +3,11 @@ import { tGlobal } from '@/contexts/LanguageContext';
 import { registerConfirmDialogImplementation } from '@/lib/confirmDialog';
 import { platformShadow } from '@/lib/platformShadow';
 import { pe } from '@/lib/platformViewStyle.util';
+import { WebOverlayPortal, webFixedFill } from '@/lib/webOverlayPortal';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   Modal,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -55,7 +57,7 @@ export function ConfirmDialogHost() {
     return () => registerConfirmDialogImplementation(null);
   }, [show]);
 
-  if (!request) return null;
+  if (!request || !visible) return null;
 
   const {
     title,
@@ -67,64 +69,72 @@ export function ConfirmDialogHost() {
 
   const accent = destructive ? Theme.destructive : Theme.modalNeutralAccent;
 
+  const overlay = (
+    <View style={[styles.backdrop, webFixedFill, pe('box-none')]}>
+      <Pressable
+        style={StyleSheet.absoluteFill}
+        onPress={() => settle(false)}
+        accessibilityRole="button"
+        accessibilityLabel={cancelLabel}
+      />
+      <View
+        style={[styles.card, isCompact && styles.cardCompact]}
+        accessibilityRole="alert"
+        accessibilityViewIsModal
+      >
+        <View
+          style={[
+            styles.iconWrap,
+            destructive && { backgroundColor: 'rgba(232,33,39,0.10)' },
+          ]}
+        >
+          <Text style={[styles.iconChar, { color: accent }]}>
+            {destructive ? '!' : '?'}
+          </Text>
+        </View>
+        <Text style={styles.title}>{title}</Text>
+        {message ? <Text style={styles.body}>{message}</Text> : null}
+
+        <View style={styles.actionRow}>
+          <Pressable
+            onPress={() => settle(false)}
+            style={({ pressed }) => [
+              styles.button,
+              styles.buttonNeutral,
+              pressed && styles.buttonPressed,
+            ]}
+            accessibilityRole="button"
+          >
+            <Text style={styles.buttonNeutralLabel}>{cancelLabel}</Text>
+          </Pressable>
+          <Pressable
+            onPress={() => settle(true)}
+            style={({ pressed }) => [
+              styles.button,
+              { backgroundColor: accent },
+              pressed && styles.buttonPressed,
+            ]}
+            accessibilityRole="button"
+          >
+            <Text style={styles.buttonLabel}>{confirmLabel}</Text>
+          </Pressable>
+        </View>
+      </View>
+    </View>
+  );
+
+  if (Platform.OS === 'web') {
+    return <WebOverlayPortal>{overlay}</WebOverlayPortal>;
+  }
+
   return (
     <Modal
-      visible={visible}
+      visible
       transparent
       animationType="fade"
       onRequestClose={() => settle(false)}
     >
-      <View style={[styles.backdrop, pe('box-none')]}>
-        <Pressable
-          style={StyleSheet.absoluteFill}
-          onPress={() => settle(false)}
-          accessibilityRole="button"
-          accessibilityLabel={cancelLabel}
-        />
-        <View
-          style={[styles.card, isCompact && styles.cardCompact]}
-          accessibilityRole="alert"
-          accessibilityViewIsModal
-        >
-          <View
-            style={[
-              styles.iconWrap,
-              destructive && { backgroundColor: 'rgba(232,33,39,0.10)' },
-            ]}
-          >
-            <Text style={[styles.iconChar, { color: accent }]}>
-              {destructive ? '!' : '?'}
-            </Text>
-          </View>
-          <Text style={styles.title}>{title}</Text>
-          {message ? <Text style={styles.body}>{message}</Text> : null}
-
-          <View style={styles.actionRow}>
-            <Pressable
-              onPress={() => settle(false)}
-              style={({ pressed }) => [
-                styles.button,
-                styles.buttonNeutral,
-                pressed && styles.buttonPressed,
-              ]}
-              accessibilityRole="button"
-            >
-              <Text style={styles.buttonNeutralLabel}>{cancelLabel}</Text>
-            </Pressable>
-            <Pressable
-              onPress={() => settle(true)}
-              style={({ pressed }) => [
-                styles.button,
-                { backgroundColor: accent },
-                pressed && styles.buttonPressed,
-              ]}
-              accessibilityRole="button"
-            >
-              <Text style={styles.buttonLabel}>{confirmLabel}</Text>
-            </Pressable>
-          </View>
-        </View>
-      </View>
+      {overlay}
     </Modal>
   );
 }
@@ -139,8 +149,9 @@ const styles = StyleSheet.create({
     paddingVertical: 24,
   },
   card: {
-    width: '100%',
-    maxWidth: 380,
+    alignSelf: 'center',
+    width: 380,
+    maxWidth: '100%',
     borderRadius: 28,
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -149,6 +160,7 @@ const styles = StyleSheet.create({
     paddingTop: 26,
     paddingBottom: 20,
     alignItems: 'stretch',
+    zIndex: 1,
     ...platformShadow('0 16px 28px rgba(15, 23, 42, 0.18)', {
       color: Theme.shadow,
       opacity: 0.18,
@@ -158,6 +170,7 @@ const styles = StyleSheet.create({
     }),
   },
   cardCompact: {
+    width: '100%',
     borderRadius: 24,
     paddingHorizontal: 18,
   },
