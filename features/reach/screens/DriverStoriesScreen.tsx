@@ -27,6 +27,7 @@ import {
   type DriverReachStoryRow,
   type ReachReferralReason,
 } from '@/features/reach/services/driverReferrals.service';
+import { isVehicleTypeCompatibleWithFleet } from '@/features/marketplace/utils/fleetFit.util';
 import { DriverPulseStoryViewer } from '@/features/reach/screens/DriverPulseStoryViewer';
 import { DriverCapacityStoryViewer } from '@/features/reach/screens/DriverCapacityStoryViewer';
 import { DriverDirectBidSheet } from '@/features/reach/components/DriverDirectBidSheet';
@@ -106,17 +107,6 @@ export function cityOf(value: string | null | undefined): string {
   return !city || city === '—' ? '' : city;
 }
 
-function normalizeVehicleType(value: string | null | undefined): string {
-  return (value ?? '').toLowerCase().replace(/[^a-z0-9]/g, '');
-}
-
-function vehicleTypesMatch(a: string | null | undefined, b: string | null | undefined): boolean {
-  const na = normalizeVehicleType(a);
-  const nb = normalizeVehicleType(b);
-  if (!na || !nb) return false;
-  return na.includes(nb) || nb.includes(na);
-}
-
 function referralStatusChip(story: DriverReachStoryRow): {
   label: string;
   tone: 'pending' | 'positive' | 'negative' | 'reward';
@@ -187,9 +177,20 @@ export interface SharedFeedFilters {
 export function StoriesContent({
   footer,
   onRefreshExtra,
+  extraPickupCities,
+  extraDropCities,
 }: {
   footer?: (filters: SharedFeedFilters) => React.ReactNode;
   onRefreshExtra?: () => void;
+  /**
+   * Marketplace-only pickup/drop cities, supplied by the composing screen
+   * (see AvailableLoadsScreen.tsx's MarketFindWorkScreen) so the shared
+   * filter chips represent both sources — StoriesContent otherwise only
+   * knows about Reach stories/capacity. Presentation-layer composition
+   * only; no query or DB change.
+   */
+  extraPickupCities?: string[];
+  extraDropCities?: string[];
 } = {}) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -291,8 +292,11 @@ export function StoriesContent({
       const c = cityOf(s.origin);
       if (c) set.add(c);
     }
+    for (const c of extraPickupCities ?? []) {
+      if (c) set.add(c);
+    }
     return [...set].sort((a, b) => a.localeCompare(b));
-  }, [stories, capacityQ.activeStories]);
+  }, [stories, capacityQ.activeStories, extraPickupCities]);
 
   const dropOptions = useMemo(() => {
     const set = new Set<string>();
@@ -304,8 +308,11 @@ export function StoriesContent({
       const c = cityOf(s.destination);
       if (c) set.add(c);
     }
+    for (const c of extraDropCities ?? []) {
+      if (c) set.add(c);
+    }
     return [...set].sort((a, b) => a.localeCompare(b));
-  }, [stories, capacityQ.activeStories]);
+  }, [stories, capacityQ.activeStories, extraDropCities]);
 
   const recommendedStories = useMemo(() => {
     const filtered = stories.filter((s) => {
@@ -321,7 +328,7 @@ export function StoriesContent({
       if (
         fitsFleetFilter &&
         fleetVehicleTypes.length > 0 &&
-        !fleetVehicleTypes.some((vt) => vehicleTypesMatch(vt, s.snapshot_vehicle_type))
+        !isVehicleTypeCompatibleWithFleet(s.snapshot_vehicle_type, fleetVehicleTypes)
       ) {
         return false;
       }
@@ -331,7 +338,7 @@ export function StoriesContent({
     const scored = filtered.map((s) => {
       const matchesFleet =
         fleetVehicleTypes.length > 0 &&
-        fleetVehicleTypes.some((vt) => vehicleTypesMatch(vt, s.snapshot_vehicle_type));
+        isVehicleTypeCompatibleWithFleet(s.snapshot_vehicle_type, fleetVehicleTypes);
       const bucket = directBidUiBucket(s);
       return { story: s, matchesFleet, bucket };
     });
@@ -352,7 +359,7 @@ export function StoriesContent({
     const scored = stories.map((s) => {
       const matchesFleet =
         fleetVehicleTypes.length > 0 &&
-        fleetVehicleTypes.some((vt) => vehicleTypesMatch(vt, s.snapshot_vehicle_type));
+        isVehicleTypeCompatibleWithFleet(s.snapshot_vehicle_type, fleetVehicleTypes);
       const bucket = directBidUiBucket(s);
       return { story: s, matchesFleet, bucket };
     });
@@ -796,7 +803,8 @@ export function StoriesContent({
               const canBid =
                 participation.mode === 'independent' &&
                 !isAwardedJob &&
-                story.direct_bid_status !== 'rejected';
+                story.direct_bid_status !== 'rejected' &&
+                story.direct_bid_status !== 'superseded';
               const showRevise = canBid && (bucket === 'quoted' || bucket === 'counter');
               const showBidNow = canBid && !showRevise;
 

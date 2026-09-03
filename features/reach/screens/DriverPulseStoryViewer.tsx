@@ -161,6 +161,13 @@ function BidToShipperBanner({
     const status = story.direct_bid_status;
     const isAccepted = status === "accepted";
     const isRejected = status === "rejected";
+    // A6.4: not a business decision, not a driver withdrawal -- another
+    // load was awarded to the driver and this bid became moot. In practice
+    // isLoadOpportunity() already excludes a superseded story from the feed
+    // that feeds this viewer, but handling it explicitly here too avoids a
+    // misleading "waiting for shipper" / green-checkmark fallback if this
+    // component is ever reached another way.
+    const isSuperseded = status === "superseded";
     return (
       <View
         style={[
@@ -170,7 +177,7 @@ function BidToShipperBanner({
       >
         {isAccepted ? (
           <CheckCircle2 size={16} color="#10b981" strokeWidth={2.5} />
-        ) : isRejected ? (
+        ) : isRejected || isSuperseded ? (
           <XCircle size={16} color={Theme.negative} strokeWidth={2.5} />
         ) : (
           <CheckCircle2 size={16} color="#10b981" strokeWidth={2.5} />
@@ -181,11 +188,14 @@ function BidToShipperBanner({
               ? "Bid accepted by shipper"
               : isRejected
                 ? "Bid not accepted"
-                : `Your bid to ${shipperName}`}
+                : isSuperseded
+                  ? "Bid superseded"
+                  : `Your bid to ${shipperName}`}
           </Text>
           <Text style={styles.bidStatusAmount}>
             ₹{Math.round(amount).toLocaleString("en-IN")}
-            {!isAccepted && !isRejected ? " · waiting for shipper" : ""}
+            {!isAccepted && !isRejected && !isSuperseded ? " · waiting for shipper" : ""}
+            {isSuperseded ? " · another load was awarded to you" : ""}
           </Text>
         </View>
         <View
@@ -193,7 +203,7 @@ function BidToShipperBanner({
             styles.bidStatusBadge,
             isAccepted
               ? styles.bidBadgeAccepted
-              : isRejected
+              : isRejected || isSuperseded
                 ? styles.bidBadgeRejected
                 : styles.bidBadgePending,
           ]}

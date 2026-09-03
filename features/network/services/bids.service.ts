@@ -26,6 +26,14 @@ export interface BidRow {
   updated_at: string;
 }
 
+/**
+ * driver_direct_bids status vocabulary — kept distinct from BidStatus
+ * (above), which types the unrelated org-to-org `bids` table and never
+ * gets 'superseded' (A6.3 added that state only to market_bids and
+ * driver_direct_bids).
+ */
+export type DriverDirectBidStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'superseded';
+
 /** Independent / Fleet Owner bid on a Reach story (driver_direct_bids). */
 export interface DriverDirectBidRow {
   id: string;
@@ -37,7 +45,7 @@ export interface DriverDirectBidRow {
   is_fleet_owner: boolean;
   amount: number;
   note: string | null;
-  status: BidStatus;
+  status: DriverDirectBidStatus;
   counter_amount: number | null;
   created_at: string;
   updated_at: string;
@@ -77,7 +85,7 @@ export async function getDriverDirectBidsForPost(
       is_fleet_owner: Boolean(r.is_fleet_owner),
       amount: Number(r.amount ?? 0),
       note: r.note,
-      status: (r.status as BidStatus) || 'pending',
+      status: (r.status as DriverDirectBidStatus) || 'pending',
       counter_amount:
         r.counter_amount != null && Number.isFinite(Number(r.counter_amount))
           ? Number(r.counter_amount)

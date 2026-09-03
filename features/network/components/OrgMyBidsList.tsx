@@ -46,9 +46,21 @@ function statusLabel(status: MyOrgMarketBidStatus): string {
       return "Not selected";
     case "withdrawn":
       return "Withdrawn";
+    case "superseded":
+      return "Superseded";
     default:
       return status;
   }
+}
+
+/** A6.4: the bid became moot before the business decided on it -- not a
+ * rejection. (Superseding keys off the submitting account's own
+ * availability, same mechanism as the DCO path -- see is_driver_available().) */
+function statusExplanation(status: MyOrgMarketBidStatus): string | null {
+  if (status === "superseded") {
+    return "Another opportunity was awarded before this bid could be decided.";
+  }
+  return null;
 }
 
 function routeLabel(bid: MyOrgMarketBidRow): string {
@@ -188,6 +200,12 @@ function BidCard({ bid }: { bid: MyOrgMarketBidRow }) {
       {bid.note?.trim() ? (
         <Text style={styles.note} numberOfLines={2}>
           &ldquo;{bid.note.trim()}&rdquo;
+        </Text>
+      ) : null}
+
+      {statusExplanation(bid.status) ? (
+        <Text style={styles.note} numberOfLines={2}>
+          {statusExplanation(bid.status)}
         </Text>
       ) : null}
 

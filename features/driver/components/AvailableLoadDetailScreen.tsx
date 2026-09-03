@@ -17,6 +17,7 @@ import {
 } from '@/features/driver/services/fleetOwnerLoads.service';
 import {
   formatMarketBidAmount,
+  formatMarketBidSubmitError,
   marketBidStatusLabel,
   submitMarketBid,
 } from '@/features/driver/services/marketBids.service';
@@ -123,7 +124,7 @@ export default function AvailableLoadDetailScreen() {
         ownerVehicleId: vehicleId,
       });
       if (bidError) {
-        setSubmitError(bidError.message);
+        setSubmitError(formatMarketBidSubmitError(bidError.message));
         return;
       }
       setJustSubmitted(true);
@@ -155,7 +156,9 @@ export default function AvailableLoadDetailScreen() {
               ? 'Awarded to you'
               : myBid?.status === 'rejected'
                 ? 'Not selected'
-                : 'Load unavailable'}
+                : myBid?.status === 'superseded'
+                  ? 'Bid superseded'
+                  : 'Load unavailable'}
           </Text>
           <Text style={[styles.gateBody, { color: colors.textMuted }]}>
             {error instanceof Error
@@ -164,7 +167,9 @@ export default function AvailableLoadDetailScreen() {
                 ? 'This load was awarded to your bid. Find the trip under Awards.'
                 : myBid?.status === 'rejected'
                   ? 'The business selected another bid for this load.'
-                  : 'It may have closed or been awarded.'}
+                  : myBid?.status === 'superseded'
+                    ? 'Another load was awarded to you, so this bid is no longer active.'
+                    : 'It may have closed or been awarded.'}
           </Text>
           {myBid?.status === 'accepted' ? (
             <Pressable
