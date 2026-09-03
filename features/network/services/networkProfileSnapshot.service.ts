@@ -391,6 +391,12 @@ export async function getOrgProfileSnapshot(
       status = "REQUEST SENT";
     }
   }
+  // A live client/supplier link is the actual integration, even when the
+  // connection_request row is missing or still pending (e.g. admin-linked).
+  if (clientLinkRes.data?.id || supplierLinkRes.data?.id) {
+    isIntegrated = true;
+    if (status !== "REQUEST SENT") status = "CONNECTED";
+  }
 
   let role: NetworkProfileSnapshotRole = "SUPPLIER";
   if (clientLinkRes.data?.id) {
