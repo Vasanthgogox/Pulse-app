@@ -26,6 +26,7 @@ import {
     REVENUE_REASON_OPTIONS,
 } from "@/features/trips/services/tripAdjustments";
 import type { TripRow } from "@/features/trips/services/trips.service";
+import { formatTrackingDateTime } from "@/features/trips/utils/formatTrackingTimestamp.util";
 import { splitTripLocationDisplay } from "@/features/trips/utils/tripLocationDisplay.util";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import type { ComponentProps, ReactNode } from "react";
@@ -376,19 +377,7 @@ function TripDocsGrid({
 }
 
 function formatAssignmentDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  try {
-    const d = new Date(iso);
-    return d.toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso.slice(0, 16).replace("T", " ") || "—";
-  }
+  return formatTrackingDateTime(iso);
 }
 
 /** Uppercase format for Activity Log: "12 MAR 2026 AT 2:07 PM" */

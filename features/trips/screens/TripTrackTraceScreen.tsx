@@ -35,7 +35,7 @@ import { useRouter } from "expo-router";
 import { useQuery } from "@tanstack/react-query";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import Theme from "@/constants/Theme";
-import { formatTime } from "@/lib/format";
+import { formatTrackingDateTime } from "@/features/trips/utils/formatTrackingTimestamp.util";
 import { getTripById } from "@/features/trips/services/trips.service";
 import { useTripTimelineQuery } from "@/lib/queries/useTripTimelineQuery";
 import { useTripDriverPresenceQuery } from "@/lib/queries/useTripDriverPresenceQuery";
@@ -428,8 +428,8 @@ export function TripTrackTraceScreen({ tripId }: TripTrackTraceScreenProps) {
                               ) : null}
                             </View>
                             <View style={styles.timelineTimeBadge}>
-                              <Text style={styles.timelineTimeText} numberOfLines={1}>
-                                {formatTime(e.occurredAt)}
+                              <Text style={styles.timelineTimeText}>
+                                {formatTrackingDateTime(e.occurredAt)}
                               </Text>
                             </View>
                           </View>
@@ -749,7 +749,7 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
     borderRadius: 6,
     flexShrink: 0,
-    maxWidth: 92,
+    maxWidth: 148,
   },
   timelineTimeText: {
     fontSize: 9,

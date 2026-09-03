@@ -21,7 +21,7 @@ import { useMemo } from "react";
 import { StyleSheet, Text, View } from "react-native";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import Theme from "@/constants/Theme";
-import { formatTime } from "@/lib/format";
+import { formatTrackingDateTime } from "@/features/trips/utils/formatTrackingTimestamp.util";
 import { useTripTimelineQuery } from "@/lib/queries/useTripTimelineQuery";
 import { useTripDriverPresenceQuery } from "@/lib/queries/useTripDriverPresenceQuery";
 import {
@@ -160,7 +160,7 @@ export function TripStageControlPanel({
           <View style={styles.headerCell}>
             <Text style={styles.headerLabel}>Last Event</Text>
             <Text style={styles.headerValue} numberOfLines={1}>
-              {lastEvent ? `${lastEvent.title} • ${formatTime(lastEvent.occurredAt)}` : "—"}
+              {lastEvent ? `${lastEvent.title} • ${formatTrackingDateTime(lastEvent.occurredAt)}` : "—"}
             </Text>
           </View>
           <View style={styles.headerCell}>
@@ -198,15 +198,15 @@ export function TripStageControlPanel({
               label="Time at drop"
               value={stageStartedAt ? elapsedLabel(stageStartedAt, nowMs) : "—"}
             />
-            <MetricRow label="POD" value={podEvent ? `Uploaded • ${formatTime(podEvent.occurredAt)}` : "Pending"} />
+            <MetricRow label="POD" value={podEvent ? `Uploaded • ${formatTrackingDateTime(podEvent.occurredAt)}` : "Pending"} />
           </>
         )}
         {meta.stage === "completed" && (
           <>
-            <MetricRow label="POD" value={podEvent ? `Uploaded • ${formatTime(podEvent.occurredAt)}` : "—"} />
+            <MetricRow label="POD" value={podEvent ? `Uploaded • ${formatTrackingDateTime(podEvent.occurredAt)}` : "—"} />
             <MetricRow
               label="Completion time"
-              value={completedEvent ? formatTime(completedEvent.occurredAt) : "—"}
+              value={completedEvent ? formatTrackingDateTime(completedEvent.occurredAt) : "—"}
             />
           </>
         )}

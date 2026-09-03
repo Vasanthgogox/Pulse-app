@@ -32,6 +32,7 @@ import {
   formatHubPingOfflineLabel,
   formatHubPingTimeLabel,
 } from "@/features/trips/utils/driverLastPingDisplay.util";
+import { formatTrackingDateTime } from "@/features/trips/utils/formatTrackingTimestamp.util";
 import type { LiveTrackingPresentation } from "@/features/trips/utils/liveTrackingPresentation.util";
 import type { DriverActivityTimelineRow } from "../hooks/useTripDetail";
 import type { TrackingState } from "@/features/tracking/hooks/useTrackingState";
@@ -79,19 +80,7 @@ interface LiveTrackingModalProps {
 }
 
 function formatAssignmentDate(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  try {
-    const d = new Date(iso);
-    return d.toLocaleDateString("en-IN", {
-      day: "2-digit",
-      month: "short",
-      year: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return (iso as string).slice(0, 16).replace("T", " ") || "—";
-  }
+  return formatTrackingDateTime(iso);
 }
 
 function timelineItemId(item: DriverActivityTimelineRow): string {

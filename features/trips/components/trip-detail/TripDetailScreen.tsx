@@ -156,6 +156,7 @@ import {
   type ManifestJourneyLogEntry,
 } from "@/features/trips/utils/manifestJourneyLog.util";
 import { MANIFEST_PULSE_PING_DISPLAY_MAX } from "@/lib/trackingLocation.constants";
+import { formatTrackingDateTime } from "@/features/trips/utils/formatTrackingTimestamp.util";
 import { useTripVerificationSync } from "@/features/trips/verification";
 import { useTripOperationsSummary, useTripOperationsSync } from "@/features/trips/operations";
 const TripExpensesScreen = lazy(() =>
@@ -3713,12 +3714,7 @@ export default function TripDetailScreen({
                                                 neoStyles.simLogBadgeTimeMobile,
                                             ]}
                                           >
-                                            {new Date(
-                                              sim.timestamp,
-                                            ).toLocaleTimeString("en-IN", {
-                                              hour: "2-digit",
-                                              minute: "2-digit",
-                                            })}
+                                            {formatTrackingDateTime(sim.timestamp)}
                                           </Text>
                                         ) : null}
                                       </View>
@@ -4841,10 +4837,7 @@ export default function TripDetailScreen({
                       <View style={dStyles.statBoxSm}>
                         <Text style={dStyles.statLabelSm}>STARTED</Text>
                         <Text style={dStyles.statValueSm}>
-                          {new Date(String(trip.started_at)).toLocaleTimeString(
-                            "en-IN",
-                            { hour: "2-digit", minute: "2-digit" },
-                          )}
+                          {formatTrackingDateTime(String(trip.started_at))}
                         </Text>
                       </View>
                     ) : null}
