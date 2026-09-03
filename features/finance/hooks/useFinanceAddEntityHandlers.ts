@@ -79,7 +79,11 @@ export function useFinanceAddEntityHandlers(
   );
 
   const searchInviteeByPhone = useCallback(async (phone: string) => {
-    const { error, invitee } = await getConnectionInviteeByPhone(phone);
+    if (!organizationId) return null;
+    const { error, invitee } = await getConnectionInviteeByPhone(
+      phone,
+      organizationId,
+    );
     if (error || !invitee) return null;
     return {
       organization_id: invitee.organization_id,

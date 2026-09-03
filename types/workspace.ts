@@ -71,6 +71,12 @@ export interface ActiveWorkspaceState {
   memberSurfaces: MemberSurfaceMap | null;
   // True while loading the workspace list
   isLoading: boolean;
+  /**
+   * False until a membership fetch has finished with either rows or a durable
+   * empty result. Gates must not show "no access" while this is false — cold
+   * web boots can briefly see zero RLS rows before the JWT sticks.
+   */
+  membershipResolved: boolean;
   error: Error | null;
   // Switch the active workspace (persists to storage)
   switchWorkspace: (workspaceId: string) => Promise<void>;

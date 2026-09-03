@@ -301,6 +301,7 @@ export function FinanceModals(props: FinanceModalsProps) {
         visible={showAddSupplierModal}
         onClose={onCloseAddSupplierModal}
         onComplete={onAddSupplierComplete}
+        organizationId={organizationId}
         noOrganizationMessage={noOrganizationMessage}
         onRefreshOrganization={onRefreshOrganization}
         searchInviteeByPhone={searchInviteeByPhone}

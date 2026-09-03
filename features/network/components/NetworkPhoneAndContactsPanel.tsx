@@ -176,7 +176,7 @@ export function NetworkPhoneAndContactsPanel({
   const invalidateNetwork = useInvalidateNetwork(orgId);
   const sentQ = useConnectionRequestsSentQuery(orgId);
   const { orgs: discoverOrgs } = useNetworkDiscovery({ orgId, search: "" });
-  const phoneLookup = useNetworkPhoneLookup(search);
+  const phoneLookup = useNetworkPhoneLookup(search, orgId);
   const phoneSearchActive = isPhoneLikeNetworkSearch(search);
   const contactRecs = useNetworkContactRecommendations({
     orgId,

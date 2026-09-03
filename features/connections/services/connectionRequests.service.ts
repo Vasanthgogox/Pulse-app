@@ -106,14 +106,22 @@ export interface ConnectionInviteeByPhoneRow {
   profile_role?: string | null;
 }
 
-export async function getConnectionInviteeByPhone(phone: string): Promise<{
+export async function getConnectionInviteeByPhone(
+  phone: string,
+  orgId: string,
+): Promise<{
   error: Error | null;
   invitee: ConnectionInviteeByPhone | null;
 }> {
   const normalized = normalizePhoneForInviteeLookup(phone);
   if (!normalized) return { error: null, invitee: null };
+  // orgId = the caller's ACTIVE workspace org. The RPC validates membership and
+  // hides active members of that org, so a colleague can never be surfaced as an
+  // external organization. Without it the RPC rejects the call outright.
+  if (!orgId) return { error: null, invitee: null };
   const { data, error } = await supabase().rpc('get_invitee_by_phone', {
     p_phone: normalized,
+    p_org_id: orgId,
   });
   if (error) return { error: new Error(error.message), invitee: null };
   const row = Array.isArray(data) && data.length > 0 ? data[0] : null;
@@ -133,6 +141,35 @@ export async function getConnectionInviteeByPhone(phone: string): Promise<{
 }
 
 /**
+ * Is this phone an ACTIVE member of `orgId`?
+ *
+ * Disambiguates a null `getConnectionInviteeByPhone` result: the invitee RPC
+ * deliberately hides same-org active members, so "no row" means either "no
+ * platform account" or "one of your own people". Call this ONLY when that lookup
+ * returned null, to decide which.
+ *
+ * Returns a bare boolean about the caller's OWN org — no name, user id or org id.
+ * Former/inactive members return false (still addable as an offline party).
+ *
+ * Throws on failure. Callers must surface a retryable error rather than falling
+ * through to "no account": treating an error as NOT_FOUND would re-open the
+ * misleading offline path this check exists to close.
+ */
+export async function isActiveOrgMemberPhone(
+  phone: string,
+  orgId: string,
+): Promise<boolean> {
+  const normalized = normalizePhoneForInviteeLookup(phone);
+  if (!normalized || !orgId) return false;
+  const { data, error } = await supabase().rpc('is_active_org_member_phone', {
+    p_org_id: orgId,
+    p_phone: normalized,
+  });
+  if (error) throw new Error(error.message);
+  return data === true;
+}
+
+/**
  * Batch lookup: resolve invitee orgs for multiple phone numbers in one RPC call.
  * Returns a map keyed by normalized phone (digits-only, last-10 for India).
  *
@@ -140,16 +177,21 @@ export async function getConnectionInviteeByPhone(phone: string): Promise<{
  * If the RPC is not deployed yet, this function returns an empty map (no hard failure),
  * so the UI can gracefully show "Offline" until backend rollout completes.
  */
-export async function getConnectionInviteesByPhones(phones: string[]): Promise<{
+export async function getConnectionInviteesByPhones(
+  phones: string[],
+  orgId: string,
+): Promise<{
   error: Error | null;
   inviteesByPhone: Map<string, ConnectionInviteeByPhone>;
 }> {
   const normalizedPhones = uniqueNormalizedPhonesForLookup(phones);
   const inviteesByPhone = new Map<string, ConnectionInviteeByPhone>();
   if (normalizedPhones.length === 0) return { error: null, inviteesByPhone };
+  if (!orgId) return { error: null, inviteesByPhone };
 
   const { data, error } = await supabase().rpc('get_invitees_by_phones', {
     p_phones: normalizedPhones,
+    p_org_id: orgId,
   });
 
   if (error) {
@@ -159,7 +201,7 @@ export async function getConnectionInviteesByPhones(phones: string[]): Promise<{
     // detect "ON APP" accounts and show the right CTA.
     const settled = await Promise.allSettled(
       normalizedPhones.map(async (p) => {
-        const { invitee } = await getConnectionInviteeByPhone(p);
+        const { invitee } = await getConnectionInviteeByPhone(p, orgId);
         return invitee;
       }),
     );

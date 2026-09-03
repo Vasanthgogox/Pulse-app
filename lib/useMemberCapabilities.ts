@@ -84,11 +84,21 @@ export function useMemberCapabilities(): MemberDomainAccess {
   const capabilities = useCapabilities();
   const { status: authStatus } = useAuth();
   const org = useOptionalOrganization();
-  const { memberRole, memberPlatformRole, memberDomains, isLoading } =
-    useActiveWorkspace();
+  const {
+    memberRole,
+    memberPlatformRole,
+    memberDomains,
+    isLoading,
+    membershipResolved,
+    activeWorkspace,
+  } = useActiveWorkspace();
 
   const accessLoading =
-    isLoading || authStatus === "restoring" || Boolean(org?.isLoading);
+    isLoading ||
+    authStatus === "restoring" ||
+    Boolean(org?.isLoading) ||
+    (authStatus === "authenticated" && !membershipResolved) ||
+    (Boolean(memberRole) && !org?.currentOrganization && org?.isLoading !== false);
 
   return useMemo(() => {
     const isOwnerOrAdmin = memberRole === "owner" || memberRole === "admin";
@@ -104,12 +114,21 @@ export function useMemberCapabilities(): MemberDomainAccess {
     const orgAllowsTripOps =
       canAccessIndents(capabilities) || canAccessTrips(capabilities);
 
+    // Owner/admin with membership but empty org caps (org not hydrated yet) —
+    // keep loading rather than flashing "no workspace access".
+    const ownerWaitingForCaps =
+      isOwnerOrAdmin &&
+      !orgAllowsFinance &&
+      !orgAllowsSales &&
+      !orgAllowsTripOps &&
+      (!activeWorkspace || !org?.currentOrganization);
+
     if (isOwnerOrAdmin) {
       return {
         finance: orgAllowsFinance,
         sales: orgAllowsSales,
         tripops: orgAllowsTripOps,
-        isLoading: accessLoading,
+        isLoading: accessLoading || ownerWaitingForCaps,
       };
     }
 
@@ -119,7 +138,7 @@ export function useMemberCapabilities(): MemberDomainAccess {
         finance: orgAllowsFinance,
         sales: orgAllowsSales,
         tripops: orgAllowsTripOps,
-        isLoading: accessLoading,
+        isLoading: accessLoading || ownerWaitingForCaps,
       };
     }
 
@@ -136,5 +155,7 @@ export function useMemberCapabilities(): MemberDomainAccess {
     memberPlatformRole,
     memberDomains,
     accessLoading,
+    activeWorkspace,
+    org?.currentOrganization,
   ]);
 }

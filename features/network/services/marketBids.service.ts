@@ -5,6 +5,7 @@
  * @see supabase/migrations/20270301040000_market_bids.sql
  * @see supabase/migrations/20270304040000_list_market_bids_for_indent.sql
  * @see supabase/migrations/20270304030000_market_bid_trips_fk_fix.sql
+ * @see supabase/migrations/20270304110000_market_bids_contact_visibility.sql
  */
 import { supabase } from '@/lib/supabase';
 
@@ -16,6 +17,12 @@ export type MarketBidForIndentRow = {
   bidder_type: 'dco' | 'organization';
   bidder_user_id: string;
   bidder_display_name: string;
+  bidder_organization_id: string | null;
+  bidder_organization_name: string | null;
+  /** Always populated (last-4 masked). */
+  bidder_masked_phone: string | null;
+  /** Unmasked — only non-null once the bid is 'accepted'; enforced server-side. */
+  bidder_phone: string | null;
   is_fleet_owner: boolean;
   amount: number;
   note: string | null;

@@ -16,6 +16,9 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { Platform } from 'react-native';
 
 export const AVATAR_BUCKET = 'userprofiles';
+/** Public bucket + path prefix for org logos (never signed). */
+export const PUBLIC_ORG_ASSET_BUCKET = 'org-assets';
+export const PUBLIC_ORG_LOGO_PREFIX = 'org-logos/';
 export const LEGACY_AVATAR_BUCKET = 'avatars';
 const MAX_SIZE = 512;
 const QUALITY = 0.85;
@@ -299,15 +302,22 @@ export async function pickAndUploadOrgLogo(orgId: string): Promise<PickAndUpload
       return { path: null, previewUri: null, error: new Error('Not signed in') };
     }
 
-    const path = `${userId}/org-logo-${orgId}-${Date.now()}.jpg`;
+    // Org logos go to the PUBLIC `org-assets` bucket under `org-logos/<orgId>/`,
+    // so reads are plain static files (no createSignedUrl, no Storage->Postgres
+    // connection). Write access is gated by the "Org admins can ... org-assets"
+    // storage policies, which key off the <orgId> folder segment.
+    const path = `${PUBLIC_ORG_LOGO_PREFIX}${orgId}/org-logo-${orgId}-${Date.now()}.jpg`;
 
-    const { error } = await supabase().storage.from(AVATAR_BUCKET).upload(path, uploadBytes, {
-      contentType: 'image/jpeg',
-      upsert: true,
-    });
+    const { error } = await supabase()
+      .storage
+      .from(PUBLIC_ORG_ASSET_BUCKET)
+      .upload(path, uploadBytes, {
+        contentType: 'image/jpeg',
+        upsert: true,
+      });
     if (error) {
       const msg = error.message || 'Upload failed';
-      console.log('[Org Logo Upload Error]', msg, 'bucket:', AVATAR_BUCKET, 'path:', path);
+      console.log('[Org Logo Upload Error]', msg, 'bucket:', PUBLIC_ORG_ASSET_BUCKET, 'path:', path);
       return { path: null, previewUri: null, error: new Error(msg) };
     }
     return { path, previewUri: uri, error: null };
@@ -501,6 +511,15 @@ export function resolveAvatarPublicUrl(path: string | null | undefined): string 
  */
 export async function getSignedAvatarUrl(path: string): Promise<string | null> {
   const cacheKey = path.trim();
+  // Org logos live in the PUBLIC `org-assets` bucket (`org-logos/<orgId>/...`).
+  // getPublicUrl is a pure string builder, so short-circuit before any signing:
+  // signing these was ~90% of storage traffic and held Storage->Postgres connections.
+  if (cacheKey.startsWith(PUBLIC_ORG_LOGO_PREFIX)) {
+    return supabase()
+      .storage
+      .from(PUBLIC_ORG_ASSET_BUCKET)
+      .getPublicUrl(cacheKey).data.publicUrl;
+  }
   if (cacheKey) {
     const cached = signedAvatarUrlCache.get(cacheKey);
     if (cached && cached.expiresAt > Date.now()) {

@@ -143,6 +143,37 @@ export function isActiveFleetRelationshipDriver(
 }
 
 /**
+ * Salary/billing eligibility — may this driver row bill its org as an employer?
+ *
+ * Canonical gate for every "request salary / commission from this fleet" surface.
+ * Do not hand-roll this check in a screen: a local copy is how the marketplace
+ * (DCO) hole appeared, and Rule 7 of docs/DRIVER_TRIP_COMPENSATION_MODEL.md
+ * exists to prevent exactly that.
+ *
+ * Keyed on `relationship_origin` (write-once provenance), not on current state:
+ * - `market_award` rows are award stubs the marketplace engine creates so a DCO
+ *   can execute a trip. Rules 1/3/6 of that doc: driver-row existence is not
+ *   employment, assignment is not compensation, and marketplace compensation
+ *   must not route through fleet employment. A DCO is paid via the marketplace
+ *   payout path (Part 5), never as that org's staff.
+ *
+ * Deliberately NOT checked here:
+ * - `tracking_only` — excluding it blocked the phone-assignment cohort from
+ *   billing legitimate work (the tracking_only incident); it is not an
+ *   employer signal (Rule 2).
+ * - `relationship_status === 'independent'` — shared by 25 legitimate
+ *   phone-assignment drivers, so it cannot discriminate a DCO.
+ */
+export function isSalaryEligibleDriver(
+  d: Pick<DriverRow, "organization_id" | "relationship_status" | "relationship_origin">,
+): boolean {
+  if (!String(d.organization_id ?? "").trim()) return false;
+  if (String(d.relationship_origin ?? "").trim().toLowerCase() === "market_award") return false;
+  const status = String(d.relationship_status ?? "").trim().toLowerCase();
+  return status !== "disconnected" && status !== "superseded";
+}
+
+/**
  * Finance Drivers ledger — settle current fleet members and former members
  * who left (`left_at` / disconnected). Tracking-only trip stubs stay out:
  * a phone-assign on a trip is not a roster identity.

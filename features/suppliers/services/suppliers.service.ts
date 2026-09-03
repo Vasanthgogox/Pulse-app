@@ -8,6 +8,10 @@ import type { DeltaResponse } from '@/lib/cache/deltaTypes';
 import { enrichConnectionPartnerAvatars } from '@/lib/enrichConnectionPartnerAvatars';
 import { isIntegratedSupplierRow } from '@/features/trips/visibility/tripVisibility';
 import { supabase } from '@/lib/supabase';
+import {
+  SAME_ORG_SUPPLIER_MESSAGE,
+  phoneBelongsToActiveOrgMember,
+} from '@/lib/sameOrgPartyGuard';
 
 export interface SupplierRow {
   id: string;
@@ -364,6 +368,12 @@ export async function createSupplier(
   orgId: string,
   supplierData: CreateSupplierData
 ): Promise<{ error: Error | null; supplier: SupplierRow | null }> {
+  // Service-layer backstop: never create an offline supplier representing an
+  // ACTIVE member of this same org. Not DB-enforced — see lib/sameOrgPartyGuard.
+  if (await phoneBelongsToActiveOrgMember(orgId, supplierData.phone)) {
+    return { error: new Error(SAME_ORG_SUPPLIER_MESSAGE), supplier: null };
+  }
+
   const displayName = (supplierData.name ?? supplierData.company_name ?? supplierData.contact_person ?? '').trim();
   const payload = {
     organization_id: orgId,

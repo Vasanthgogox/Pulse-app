@@ -453,6 +453,33 @@ Only after transaction history exists: Assist, Escrow, Credit, Insurance, dynami
 
 ---
 
+## Distribution vs monetization (design intent, locked 2026-09-02)
+
+Not new commercial state — a naming of how the three existing distribution channels monetize once M4/M5 gate open. No platform code implied by this section; it exists so the model isn't re-derived from scratch next time.
+
+The indent is the single commercial object (`CommercialOpportunity`). `circulation_target` (`integrated_supplier` | `marketplace` | `both` | `offline`) decides **who can discover it** — Network vs open Marketplace. Reach is **orthogonal** to `circulation_target`, not a fourth value: it is paid *promotion* of an indent that already has a circulation target, never a separate lifecycle or a second "Reach load."
+
+| Channel | What it is | Monetization |
+|---|---|---|
+| Network (`integrated_supplier`) | Existing linked-partner distribution | Core platform, no incremental commission |
+| Reach | Sponsored/boosted attention on an indent the business already circulated | Credits, spent on promotion |
+| Marketplace (`marketplace`/`both`) | Open-market discovery | Subscription entitlement to publish/discover + transaction commission |
+
+**Double-monetization guard:** if an indent is `both` + Reach-boosted and the winning bid comes through the Marketplace side, commission is decided by the transaction's marketplace eligibility/source — never simply because Reach also touched that indent. Reach charges for attention; Marketplace charges for access/transaction. Don't charge both for the same outcome.
+
+**Find Loads scoping (feeds M2 / A4):** a business's "Find Loads" surface must resolve `CommercialOpportunity` for indents where `circulation_target ∈ {marketplace, both}` — not every indent in the org. Reach-boosted marketplace-visible indents get a "Sponsored" affordance in that same feed; it's still the same `CommercialOpportunity`, not a separate list.
+
+### Contact visibility (locked 2026-09-02, A4.4)
+
+A Marketplace bidder's contact info (currently: phone) is protected until the two sides have a real transaction relationship, and is enforced **backend-side**, never as client-side masking of an already-unmasked API response. This applies specifically to Marketplace bids between orgs with no prior relationship — not to Network (`integrated_supplier`) indents, which already have one.
+
+- **Permission boundary = award**, via the existing `market_bids`/indent relationship (`accept_market_bid` setting `assigned_supplier_id`) — not a new contact-sharing mechanism, and not the separate Network `connection_requests`/`organization_relations` system. Awarding a Marketplace bid does not create a Network connection.
+- **RPC contract:** any read of a `market_bids` row (`list_market_bids_for_indent`, `list_my_org_market_bids`) always returns a masked phone (`mask_phone_last4`, last-4-digits, same display format as the client-side `maskPhone()` in `features/public-profile/mappers.ts`); the unmasked phone column is `NULL` unless that bid's `status = 'accepted'`. The client renders whichever of the two columns is non-null — it never masks or reveals anything itself.
+- **V1 (now):** award alone unlocks contact, free — no payment or terms-agreement step.
+- **Designed seam for later:** monetization can insert a gate between award and reveal (e.g. commercial terms agreed → payment entitlement → contact revealed) without changing the underlying bid/indent/trip relationship. Not built — the RPC contract above only distinguishes masked vs. revealed, not a payment-gated third state.
+
+---
+
 ## Consumers (today → M1 target)
 
 | Surface | Today | Target |

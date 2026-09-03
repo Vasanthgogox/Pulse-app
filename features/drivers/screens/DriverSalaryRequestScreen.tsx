@@ -100,21 +100,6 @@ function parseRupeeAmountInput(raw: string): number {
   return Number.isFinite(n) ? n : NaN;
 }
 
-/**
- * Statuses that positively disqualify a driver from billing a fleet.
- * NULL is deliberately NOT here: it is the un-backfilled legacy cohort (16 of
- * 25 active drivers), not evidence of a missing relationship. Gating on a
- * non-NULL status would keep the highest-mileage drivers blocked (Mani: 20
- * trips, Ravi: 7 trips and already billing via the Wallet path).
- */
-const SALARY_BLOCKED_RELATIONSHIP_STATUSES = new Set(['disconnected', 'superseded']);
-
-const canRequestSalaryFromFleet = (d: driversService.DriverRow) => {
-  if (!String(d.organization_id ?? '').trim()) return false;
-  const status = String(d.relationship_status ?? '').trim().toLowerCase();
-  return !SALARY_BLOCKED_RELATIONSHIP_STATUSES.has(status);
-};
-
 const REQUEST_TYPES: { type: salaryRequestsService.SalaryRequestType; label: string; hint: string }[] = [
   // Map to existing DB enum (kept stable for backend):
   // - Salary -> monthly
@@ -305,7 +290,7 @@ export default function SalaryRequestScreen() {
     // and the Wallet / trip-detail claim paths already let them request payment.
     // Requiring an invite here blocked 17 of 25 active drivers.
     const options = linkedDrivers
-      .filter(canRequestSalaryFromFleet)
+      .filter(driversService.isSalaryEligibleDriver)
       .map((d) => {
         const inv = accepted.find(
           (i) => String(i.from_organization_id || '') === String(d.organization_id || '')

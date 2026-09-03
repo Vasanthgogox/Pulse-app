@@ -62,6 +62,7 @@ import type { ViewStyle } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
+import { QUERY_CACHE_BUSTER } from '@/lib/cache/cacheBuster';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { useFonts } from 'expo-font';
 import { Stack, usePathname, useRouter, type ErrorBoundaryProps } from 'expo-router';
@@ -385,6 +386,11 @@ export default function RootLayout() {
             }}
             persistOptions={{
               persister,
+              // Tied to the build id: any deploy discards caches written by older
+              // code, so a drifted cache can never outlive a release. Previously a
+              // stale list survived redeploys and hard refreshes, and only that one
+              // device was affected (GX-PULSE-CACHE).
+              buster: QUERY_CACHE_BUSTER,
               maxAge: 6 * 60 * 60 * 1000,  // 6h: balances cold-start speed vs memory on long-shift devices
               dehydrateOptions: {
                 shouldDehydrateQuery: (query) => {

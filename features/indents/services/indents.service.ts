@@ -14,7 +14,7 @@ import {
   getIndentOperationalDisplay,
   getTripOperationalDisplay,
 } from "@/features/operations/display";
-import type { DeltaResponse } from "@/lib/cache/deltaTypes";
+import type { CacheDomain, DeltaResponse } from "@/lib/cache/deltaTypes";
 import { syncDomainRows } from "@/lib/cache/domainSync";
 import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import { DEFAULT_PAGE_SIZE, FINITE_LIST_CAP, type PageOpts } from "@/lib/pagination";
@@ -177,7 +177,13 @@ async function ensurePublicUserRecord(userId?: string | null): Promise<void> {
 export async function getIndentsByOrganization(
   orgId: string,
   opts?: PageOpts,
-): Promise<{ error: Error | null; indents: IndentRow[]; hasMore?: boolean }> {
+): Promise<{
+  error: Error | null;
+  indents: IndentRow[];
+  hasMore?: boolean;
+  /** True when the unpaginated read hit FINITE_LIST_CAP and older rows were cut off. */
+  truncated?: boolean;
+}> {
   const base = () =>
     supabase()
       .from("indents")
@@ -206,7 +212,12 @@ export async function getIndentsByOrganization(
   const indents = (data ?? []).map((row) =>
     normalizeIndentRow(row as IndentRow & { trips?: IndentTripJoin[] | null }),
   ) as IndentRow[];
-  return { error: null, indents };
+  // Hitting the cap means older indents were cut off. The delta cursor is derived
+  // from max(updated_at) of whatever came back, so a truncated page would advance
+  // the cursor past rows that were never merged — making them permanently
+  // invisible until the next scheduled full sync. Report truncation so the sync
+  // layer can decline to trust this page as a cursor baseline.
+  return { error: null, indents, truncated: indents.length >= FINITE_LIST_CAP };
 }
 
 export async function getIndentsDelta(
@@ -234,20 +245,52 @@ export async function getIndentsDelta(
   };
 }
 
+/**
+ * Cheap count of this org's LIVE indents — `head: true` sends no rows.
+ *
+ * Deliberately a *floor*, not an exact match for `getIndentsByOrganization`
+ * (which also returns soft-deleted rows). The delta path prunes soft-deleted
+ * rows via deletedIds, so a long-lived cache legitimately holds somewhere
+ * between this count and the full-fetch count. Counting live rows makes it a
+ * bound the cache can never fall below without genuinely missing data, so the
+ * drift check needs no tuned tolerance.
+ */
+export async function getIndentsCountForOrganization(
+  orgId: string,
+): Promise<number | null> {
+  const { count, error } = await supabase()
+    .from("indents")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", orgId)
+    .is("deleted_at", null);
+  if (error) return null;
+  return count ?? null;
+}
+
+/** Domain key for the indents delta cache — exported so callers don't hardcode it. */
+export const INDENTS_CACHE_DOMAIN = "indents" as const satisfies CacheDomain;
+
 export async function syncIndentsWithCache(orgId: string, currentRows: IndentRow[]) {
   try {
     const indents = await syncDomainRows<IndentRow>({
-      domain: "indents",
+      domain: INDENTS_CACHE_DOMAIN,
       orgId,
-      // Bump cache schema so legacy cached rows without operational identity
-      // fields are invalidated and rebuilt with normalized indent refs.
-      schemaVersion: "2",
-      policy: { maxDeltaLagMs: 3 * 60_000, fullSyncEveryMs: 4 * 60 * 60_000 },
+      // v2 invalidated legacy rows lacking operational identity fields.
+      // v3 discards cursors written before the truncation guard below — those
+      // may already point past rows the client never merged, so they cannot be
+      // trusted even though the row shape is unchanged.
+      schemaVersion: "3",
+      // Was fullSyncEveryMs: 4h — a cursor that had drifted stayed authoritative
+      // for a whole shift, so a user could create an indent and simply not see it.
+      // 15m bounds the worst case; the count reconciliation below catches it sooner.
+      policy: { maxDeltaLagMs: 3 * 60_000, fullSyncEveryMs: 15 * 60_000 },
       currentRows,
+      fullFetchCap: FINITE_LIST_CAP,
+      getServerCount: () => getIndentsCountForOrganization(orgId),
       getFull: async () => {
         const res = await getIndentsByOrganization(orgId);
         if (res.error) throw res.error;
-        return res.indents;
+        return { rows: res.indents, truncated: res.truncated };
       },
       getDelta: async (cursor) => {
         const res = await getIndentsDelta(orgId, cursor);

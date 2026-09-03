@@ -4,6 +4,10 @@
  * Connection RPCs (detail bundle, linked org profiles) remain here until Phase 3.
  */
 import { enrichConnectionPartnerAvatars } from '@/lib/enrichConnectionPartnerAvatars';
+import {
+  SAME_ORG_CLIENT_MESSAGE,
+  phoneBelongsToActiveOrgMember,
+} from '@/lib/sameOrgPartyGuard';
 import { isIntegratedClientRow } from '@/features/trips/visibility/tripVisibility';
 import { CustomerService } from '@/lib/platform';
 import { supabase } from '@/lib/supabase';
@@ -419,6 +423,12 @@ export async function createClient(
       client: null,
     };
   }
+  // Service-layer backstop: never create an offline client representing an
+  // ACTIVE member of this same org. Not DB-enforced — see lib/sameOrgPartyGuard.
+  if (await phoneBelongsToActiveOrgMember(orgId, clientData.phone)) {
+    return { error: new Error(SAME_ORG_CLIENT_MESSAGE), client: null };
+  }
+
   const name =
     (clientData.organization_name ?? '').trim() ||
     (clientData.contact_person ?? '').trim() ||

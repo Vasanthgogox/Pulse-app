@@ -446,7 +446,7 @@ export function EntityCompareVerifyView({
         return;
       }
       const { error: lookupError, invitee: inv } =
-        await getConnectionInviteeByPhone(normalized);
+        await getConnectionInviteeByPhone(normalized, organizationId ?? "");
       if (cancelled) return;
       if (lookupError) {
         setInviteeStatus("error");

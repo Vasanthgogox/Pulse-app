@@ -11,6 +11,11 @@ import { pickContactForNameAndPhone } from "@/lib/contactPicker";
 import { validatePhone } from "@/lib/phoneValidation";
 import { formatMobileNumber } from "@/lib/format";
 import {
+  PARTY_LOOKUP_ERROR_MESSAGE,
+  classifyNullInviteeResult,
+  sameOrgPartyMessage,
+} from "@/features/connections/hooks/usePartyPhoneLookupState";
+import {
   inviteeProfileIsDriver,
   inviteeSuggestedCompanyName,
 } from "@/features/connections/services/connectionRequests.service";
@@ -58,7 +63,10 @@ interface AddClientModalProps {
   onComplete: (data: AddClientFormData) => void;
   /** When true, show as bottom-sheet popup (like Add Transaction). When undefined, full-screen (e.g. add-client route). */
   visible?: boolean;
-  /** Shown in dev to verify which org is used for the insert (for RLS debugging). */
+  /**
+   * Active workspace org. Used for the same-org membership probe that
+   * disambiguates a null invitee lookup (and shown in dev for RLS debugging).
+   */
   organizationId?: string | null;
   /** When set, shown at top of form and submit is disabled (e.g. no organization loaded). */
   noOrganizationMessage?: string | null;
@@ -81,6 +89,7 @@ export function AddClientModal({
   onClose,
   onComplete,
   visible,
+  organizationId,
   noOrganizationMessage,
   onRefreshOrganization,
   searchInviteeByPhone,
@@ -101,6 +110,14 @@ export function AddClientModal({
   const [searchedNoResult, setSearchedNoResult] = useState(false);
   /** Stays true for this phone after lookup found a driver (blocks offline add if user cleared the match via "add as offline" for org users only). */
   const [driverRegisteredAtPhone, setDriverRegisteredAtPhone] = useState(false);
+  /**
+   * Phone belongs to an ACTIVE member of this org. The invitee RPC hides them,
+   * so a null result alone cannot be read as "no account" — see
+   * classifyNullInviteeResult. Blocks the offline path entirely.
+   */
+  const [sameOrgMemberAtPhone, setSameOrgMemberAtPhone] = useState(false);
+  /** Membership could not be determined; block submit and let the user retry. */
+  const [lookupFailed, setLookupFailed] = useState(false);
   const [importLoading, setImportLoading] = useState(false);
   const searchIdRef = useRef(0);
   const orgInputRef = useRef<TextInput>(null);
@@ -143,6 +160,8 @@ export function AddClientModal({
   const canSubmit =
     !blockedByNoOrg &&
     !driverRegisteredAtPhone &&
+    !sameOrgMemberAtPhone &&
+    !lookupFailed &&
     organizationName.trim().length > 0 &&
     contactPerson.trim().length > 0 &&
     phone.trim().length > 0 &&
@@ -166,6 +185,8 @@ export function AddClientModal({
       setPhoneSearchLoading(false);
       setSearchedNoResult(false);
       setDriverRegisteredAtPhone(false);
+      setSameOrgMemberAtPhone(false);
+      setLookupFailed(false);
     }
   }, [visible]);
 
@@ -176,6 +197,8 @@ export function AddClientModal({
     setInviteeMatch(null);
     setSearchedNoResult(false);
     setDriverRegisteredAtPhone(false);
+    setSameOrgMemberAtPhone(false);
+    setLookupFailed(false);
     if (normalized.length < MIN_PHONE_LENGTH_FOR_SEARCH) {
       setPhoneSearchLoading(false);
       return;
@@ -183,13 +206,27 @@ export function AddClientModal({
     const id = ++searchIdRef.current;
     setPhoneSearchLoading(true);
     const t = setTimeout(() => {
-      searchInviteeByPhone(normalized).then((result) => {
+      searchInviteeByPhone(normalized).then(async (result) => {
         if (searchIdRef.current !== id) return;
+        if (!result) {
+          // Null is ambiguous: genuinely absent, or an active same-org member
+          // the RPC hid. Resolve before offering the offline path.
+          const status = organizationId
+            ? await classifyNullInviteeResult(normalized, organizationId)
+            : "not_found";
+          // Phone changed (or workspace switched) while the probe was in flight.
+          if (searchIdRef.current !== id) return;
+          setPhoneSearchLoading(false);
+          setSameOrgMemberAtPhone(status === "same_org");
+          setLookupFailed(status === "error");
+          setSearchedNoResult(status === "not_found");
+          return;
+        }
         setPhoneSearchLoading(false);
-        setInviteeMatch(result ?? null);
-        setSearchedNoResult(!result);
+        setInviteeMatch(result);
+        setSearchedNoResult(false);
         setDriverRegisteredAtPhone(
-          Boolean(result && inviteeProfileIsDriver(result.profile_role)),
+          inviteeProfileIsDriver(result.profile_role),
         );
         if (result) {
           setContactPerson((prev) => (prev.trim() ? prev : result.full_name));
@@ -202,7 +239,7 @@ export function AddClientModal({
       });
     }, PHONE_DEBOUNCE_MS);
     return () => clearTimeout(t);
-  }, [phone, searchInviteeByPhone, onSendInvitation]);
+  }, [phone, searchInviteeByPhone, onSendInvitation, organizationId]);
 
   /** Clearing/editing phone after a lookup match should drop auto-filled contact + org (same as invalidating the search). */
   const handlePhoneChangeText = (text: string) => {
@@ -211,6 +248,8 @@ export function AddClientModal({
     setInviteeMatch(null);
     setSearchedNoResult(false);
     setDriverRegisteredAtPhone(false);
+    setSameOrgMemberAtPhone(false);
+    setLookupFailed(false);
     if (hadInviteeMatch) {
       setContactPerson("");
       setOrganizationName("");
@@ -238,6 +277,9 @@ export function AddClientModal({
     setSearchedNoResult(false);
     setError(null);
     setDriverRegisteredAtPhone(false);
+    // sameOrgMemberAtPhone / lookupFailed intentionally NOT cleared: this link
+    // is never rendered in those states, and clearing them here would reopen
+    // the offline path the guard exists to close.
   };
 
   const createSuccessTitle =
@@ -254,6 +296,14 @@ export function AddClientModal({
     if (!canSubmit) return;
     if (driverRegisteredAtPhone) {
       setError(t("errorDriverCannotAddAsClient"));
+      return;
+    }
+    if (sameOrgMemberAtPhone) {
+      setError(sameOrgPartyMessage("client"));
+      return;
+    }
+    if (lookupFailed) {
+      setError(PARTY_LOOKUP_ERROR_MESSAGE);
       return;
     }
     setError(null);
@@ -429,6 +479,14 @@ export function AddClientModal({
             </TouchableOpacity>
           ) : null}
         </View>
+      ) : sameOrgMemberAtPhone ? (
+        <Text style={[styles.ledgerHintText, { color: Theme.negative }]}>
+          {sameOrgPartyMessage("client")}
+        </Text>
+      ) : lookupFailed ? (
+        <Text style={[styles.ledgerHintText, { color: Theme.negative }]}>
+          {PARTY_LOOKUP_ERROR_MESSAGE}
+        </Text>
       ) : searchedNoResult ? (
         <Text style={[styles.ledgerHintText, { color: Theme.textSecondary }]}>
           No account with this number. Add as offline below.
@@ -738,6 +796,18 @@ export function AddClientModal({
                     </Text>
                   </TouchableOpacity>
                 ) : null}
+              </View>
+            ) : sameOrgMemberAtPhone ? (
+              <View style={styles.screenStatusCard}>
+                <Text style={[styles.screenStatusText, { color: Theme.negative }]}>
+                  {sameOrgPartyMessage("client")}
+                </Text>
+              </View>
+            ) : lookupFailed ? (
+              <View style={styles.screenStatusCard}>
+                <Text style={[styles.screenStatusText, { color: Theme.negative }]}>
+                  {PARTY_LOOKUP_ERROR_MESSAGE}
+                </Text>
               </View>
             ) : searchedNoResult ? (
               <View style={styles.screenStatusCard}>

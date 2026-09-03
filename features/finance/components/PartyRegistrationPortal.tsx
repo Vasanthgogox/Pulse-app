@@ -3,6 +3,11 @@
  * Steps: fill form → review and confirm → Finance entity handlers.
  */
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
+import {
+  PARTY_LOOKUP_ERROR_MESSAGE,
+  classifyNullInviteeResult,
+  sameOrgPartyMessage,
+} from "@/features/connections/hooks/usePartyPhoneLookupState";
 import { CapacityDialPicker } from "@/components/CapacityDialPicker";
 import Theme from "@/constants/Theme";
 import type {
@@ -343,6 +348,10 @@ function PartyRegistrationPortalInner(
   const [phoneSearchLoading, setPhoneSearchLoading] = useState(false);
   const [searchedNoResult, setSearchedNoResult] = useState(false);
   const [driverRegisteredAtPhone, setDriverRegisteredAtPhone] = useState(false);
+  /** Phone is an ACTIVE member of this org (hidden by the invitee RPC). */
+  const [sameOrgMemberAtPhone, setSameOrgMemberAtPhone] = useState(false);
+  /** Membership undetermined; block submit and let the user retry. */
+  const [lookupFailed, setLookupFailed] = useState(false);
   const phoneLookupSearchIdRef = useRef(0);
   const { width: viewportW, height: viewportH } = useWindowDimensions();
   const [visualViewportHeight, setVisualViewportHeight] = useState<number | null>(
@@ -609,6 +618,8 @@ function PartyRegistrationPortalInner(
     setInviteeMatch(null);
     setSearchedNoResult(false);
     setDriverRegisteredAtPhone(false);
+    setSameOrgMemberAtPhone(false);
+    setLookupFailed(false);
     if (normalized.length < MIN_PHONE_LENGTH_FOR_SEARCH) {
       setPhoneSearchLoading(false);
       return;
@@ -616,13 +627,26 @@ function PartyRegistrationPortalInner(
     const id = ++phoneLookupSearchIdRef.current;
     setPhoneSearchLoading(true);
     const timer = setTimeout(() => {
-      searchInviteeByPhone(normalized).then((result) => {
+      searchInviteeByPhone(normalized).then(async (result) => {
         if (phoneLookupSearchIdRef.current !== id) return;
+        if (!result) {
+          // Null is ambiguous: absent, or an active same-org member the RPC hid.
+          const status = organizationId
+            ? await classifyNullInviteeResult(normalized, organizationId)
+            : "not_found";
+          // Phone changed / workspace switched while the probe was in flight.
+          if (phoneLookupSearchIdRef.current !== id) return;
+          setPhoneSearchLoading(false);
+          setSameOrgMemberAtPhone(status === "same_org");
+          setLookupFailed(status === "error");
+          setSearchedNoResult(status === "not_found");
+          return;
+        }
         setPhoneSearchLoading(false);
-        setInviteeMatch(result ?? null);
-        setSearchedNoResult(!result);
+        setInviteeMatch(result);
+        setSearchedNoResult(false);
         setDriverRegisteredAtPhone(
-          Boolean(result && inviteeProfileIsDriver(result.profile_role)),
+          inviteeProfileIsDriver(result.profile_role),
         );
         if (result) {
           setContactName((prev) => (prev.trim() ? prev : result.full_name));
@@ -641,6 +665,7 @@ function PartyRegistrationPortalInner(
     searchInviteeByPhone,
     onSendInvitation,
     onSendSupplierInvitation,
+    organizationId,
   ]);
 
   // Add Driver (web) — debounced lookup for in-app invite when `onInviteDriver` is provided.
@@ -753,7 +778,15 @@ function PartyRegistrationPortalInner(
       return false;
     }
     if (kind === "client" || kind === "supplier") {
-      if (kind === "client" && driverRegisteredAtPhone) {
+      if ((kind === "client" || kind === "supplier") && sameOrgMemberAtPhone) {
+      setFormError(sameOrgPartyMessage(kind === "client" ? "client" : "supplier"));
+      return;
+    }
+    if ((kind === "client" || kind === "supplier") && lookupFailed) {
+      setFormError(PARTY_LOOKUP_ERROR_MESSAGE);
+      return;
+    }
+    if (kind === "client" && driverRegisteredAtPhone) {
         setFormError(t("errorDriverCannotAddAsClient"));
         return false;
       }
@@ -1396,7 +1429,9 @@ function PartyRegistrationPortalInner(
     (contactWizardStep === "phone" &&
       contactName.trim().length >= 2 &&
       !validatePhone(phoneDigits) &&
-      !driverRegisteredAtPhone);
+      !driverRegisteredAtPhone &&
+      !sameOrgMemberAtPhone &&
+      !lookupFailed);
 
   const handleContactWizardAdvance = () => {
     setFormError(null);
@@ -1471,6 +1506,14 @@ function PartyRegistrationPortalInner(
               </Pressable>
             ) : null}
           </View>
+        ) : sameOrgMemberAtPhone ? (
+          <Text style={[styles.clientNoMatchHint, { color: Theme.negative }]}>
+            {sameOrgPartyMessage(kind === "supplier" ? "supplier" : "client")}
+          </Text>
+        ) : lookupFailed ? (
+          <Text style={[styles.clientNoMatchHint, { color: Theme.negative }]}>
+            {PARTY_LOOKUP_ERROR_MESSAGE}
+          </Text>
         ) : searchedNoResult ? (
           <Text style={styles.clientNoMatchHint}>
             No account with this number. Add as offline below.
@@ -1863,7 +1906,9 @@ function PartyRegistrationPortalInner(
       orgOrCompanyName.trim().length >= 2 &&
       contactName.trim().length >= 2 &&
       !validatePhone(phoneDigits) &&
-      !driverRegisteredAtPhone;
+      !driverRegisteredAtPhone &&
+      !sameOrgMemberAtPhone &&
+      !lookupFailed;
 
     return renderWizardModal(
       step === "form" ? (
@@ -1940,6 +1985,14 @@ function PartyRegistrationPortalInner(
                       </Pressable>
                     ) : null}
                   </View>
+                ) : sameOrgMemberAtPhone ? (
+                  <Text style={[styles.clientNoMatchHint, { color: Theme.negative }]}>
+                    {sameOrgPartyMessage(kind === "supplier" ? "supplier" : "client")}
+                  </Text>
+                ) : lookupFailed ? (
+                  <Text style={[styles.clientNoMatchHint, { color: Theme.negative }]}>
+                    {PARTY_LOOKUP_ERROR_MESSAGE}
+                  </Text>
                 ) : searchedNoResult ? (
                   <Text style={styles.clientNoMatchHint}>
                     No account with this number. Add as offline below.
@@ -2397,6 +2450,14 @@ function PartyRegistrationPortalInner(
                               </Pressable>
                             ) : null}
                           </View>
+                        ) : sameOrgMemberAtPhone ? (
+                          <Text style={[styles.clientNoMatchHint, { color: Theme.negative }]}>
+                            {sameOrgPartyMessage(kind === "supplier" ? "supplier" : "client")}
+                          </Text>
+                        ) : lookupFailed ? (
+                          <Text style={[styles.clientNoMatchHint, { color: Theme.negative }]}>
+                            {PARTY_LOOKUP_ERROR_MESSAGE}
+                          </Text>
                         ) : searchedNoResult ? (
                           <Text style={styles.clientNoMatchHint}>
                             No account with this number. Add as offline below.
@@ -2836,7 +2897,9 @@ function PartyRegistrationPortalInner(
                   styles.primaryBtn,
                   (!organizationId ||
                     ((kind === "client" || kind === "supplier") &&
-                      driverRegisteredAtPhone) ||
+                      (driverRegisteredAtPhone ||
+                        sameOrgMemberAtPhone ||
+                        lookupFailed)) ||
                     (kind === "driver" &&
                       onInviteDriver &&
                       driverExistingMatches.some((m) => m.is_in_fleet === true))) &&
@@ -2846,7 +2909,9 @@ function PartyRegistrationPortalInner(
                 disabled={
                   !organizationId ||
                   ((kind === "client" || kind === "supplier") &&
-                    driverRegisteredAtPhone) ||
+                    (driverRegisteredAtPhone ||
+                      sameOrgMemberAtPhone ||
+                      lookupFailed)) ||
                   (kind === "driver" &&
                     onInviteDriver &&
                     driverExistingMatches.some((m) => m.is_in_fleet === true))
