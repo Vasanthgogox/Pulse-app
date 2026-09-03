@@ -121,6 +121,16 @@ export async function getIntegratedSupplierOrgIdsForShipper(
   return [...ids];
 }
 
+/** Live connected supplier org ids for award / Get Load — not the delta-cached CRM list. */
+export function useConnectedSupplierOrgIdsQuery(orgId: string | null) {
+  return useQuery<string[]>({
+    queryKey: queryKeys.suppliers.connectedOrgIds(orgId ?? ""),
+    queryFn: () => getIntegratedSupplierOrgIdsForShipper(orgId!),
+    enabled: Boolean(orgId),
+    staleTime: STALE.frequent,
+  });
+}
+
 export function invalidateMarketIndentsForIntegratedSuppliers(
   qc: ReturnType<typeof useQueryClient>,
   shipperOrgId: string,

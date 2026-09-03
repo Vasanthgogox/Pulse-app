@@ -12,7 +12,13 @@ import {
   type IndentRow,
 } from "@/features/indents";
 import type { DriverDirectBidRow } from "@/features/network/services/bids.service";
-import { useIndentDirectQuotesQuery, useInvalidateIndents } from "@/lib/queries";
+import {
+  getIntegratedSupplierOrgIdsForShipper,
+  useIndentDirectQuotesQuery,
+  useInvalidateIndents,
+} from "@/lib/queries";
+import { queryKeys } from "@/lib/queryKeys";
+import { STALE } from "@/lib/queryClient";
 import { useDriverDirectBidsForPostQuery } from "@/lib/queries/useBidsQuery";
 import { useInvalidatePosts } from "@/lib/queries/usePostsQuery";
 import { showAppAlert } from "@/lib/appAlert";
@@ -127,6 +133,19 @@ export function useAwardQuote({
     refetch: refetchAwardModalQuotes,
   } = useIndentDirectQuotesQuery(currentLoad?.id ?? null);
 
+  const liveConnectedQ = useQuery({
+    queryKey: queryKeys.suppliers.connectedOrgIds(orgId ?? ""),
+    queryFn: () => getIntegratedSupplierOrgIdsForShipper(orgId!),
+    enabled: Boolean(orgId) && currentLoad != null,
+    staleTime: STALE.frequent,
+  });
+
+  const effectiveConnectedSupplierOrgIds = useMemo(() => {
+    const ids = new Set(connectedSupplierOrgIds);
+    for (const id of liveConnectedQ.data ?? []) ids.add(id);
+    return ids;
+  }, [connectedSupplierOrgIds, liveConnectedQ.data]);
+
   const linkedPostQ = useQuery({
     queryKey: ["q", "posts", "latest-load-for-indent", currentLoad?.id ?? ""],
     queryFn: async () => {
@@ -223,8 +242,14 @@ export function useAwardQuote({
 
   const selectedBidderNeedsInvite = useMemo(
     () =>
-      !!selectedBidderOrgId && !connectedSupplierOrgIds.has(selectedBidderOrgId),
-    [selectedBidderOrgId, connectedSupplierOrgIds],
+      !!selectedBidderOrgId &&
+      !liveConnectedQ.isPending &&
+      !effectiveConnectedSupplierOrgIds.has(selectedBidderOrgId),
+    [
+      selectedBidderOrgId,
+      liveConnectedQ.isPending,
+      effectiveConnectedSupplierOrgIds,
+    ],
   );
 
   const [inviteStatusByOrgId, setInviteStatusByOrgId] = useState<
@@ -353,16 +378,29 @@ export function useAwardQuote({
       const isDriverDirect = winner.offer_source === "driver_direct_bid";
 
       // Org quotes need a supplier link; Pilot / FO awards create the driver row.
-      if (
-        !isDriverDirect &&
-        winner.bidder_organization_id &&
-        !connectedSupplierOrgIds.has(winner.bidder_organization_id)
-      ) {
-        showAppAlert(
-          "Supplier not connected",
-          `${winner.bidder_organization_name ?? "This bidder"} is not in your supplier network yet. Send a supplier invite and award once they accept.`,
+      // Use live organization_relations, not the delta-cached CRM list — a
+      // linked supplier whose suppliers.updated_at was backdated never arrives
+      // in cache, which previously swapped Award → "Invite as supplier".
+      if (!isDriverDirect && winner.bidder_organization_id && orgId) {
+        const alreadyConnected = effectiveConnectedSupplierOrgIds.has(
+          winner.bidder_organization_id,
         );
-        return;
+        if (!alreadyConnected) {
+          const { canAward } = await import(
+            "@/features/connections/services/relationshipService"
+          );
+          const { allowed } = await canAward(
+            winner.bidder_organization_id,
+            orgId,
+          );
+          if (!allowed) {
+            showAppAlert(
+              "Supplier not connected",
+              `${winner.bidder_organization_name ?? "This bidder"} is not in your supplier network yet. Send a supplier invite and award once they accept.`,
+            );
+            return;
+          }
+        }
       }
       const confirmed = await confirmDialog({
         title: "Confirm Award",
@@ -492,6 +530,7 @@ export function useAwardQuote({
       selectedQuoteId,
       hubQuotes,
       connectedSupplierOrgIds,
+      effectiveConnectedSupplierOrgIds,
       queryClient,
       invalidateIndents,
       invalidatePosts,
@@ -508,7 +547,7 @@ export function useAwardQuote({
     pendingCount,
     lowestPendingAmount,
     quotesLoading: quotesLoading || linkedPostQ.isLoading || driverDirectBidsQ.isLoading,
-    connectedSupplierOrgIds,
+    connectedSupplierOrgIds: effectiveConnectedSupplierOrgIds,
     selectedBidderNeedsInvite,
     selectedBidderInviteStatus,
     inviteSelectedBidder,

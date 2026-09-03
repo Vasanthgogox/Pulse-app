@@ -115,6 +115,7 @@ import {
     useMarketIndentsQuery,
     useMyDirectQuotesQuery,
     useSuppliersQuery,
+    useConnectedSupplierOrgIdsQuery,
     useClientsQuery,
     useTripsQuery,
     useVehiclesQuery,
@@ -223,6 +224,8 @@ export function LoadCenterView({
   const { data: drivers = [] } = useDriversQuery(orgId);
   useVehiclesQuery(orgId);
   const { data: suppliers = [] } = useSuppliersQuery(orgId);
+  const { data: liveConnectedSupplierOrgIds = [] } =
+    useConnectedSupplierOrgIdsQuery(orgId);
   const { data: clients = [] } = useClientsQuery(orgId);
   const linkedOrgByOrganizationId = useLinkedOrgProfileMap(clients, suppliers);
   const integratedSuppliers = useMemo(
@@ -608,10 +611,13 @@ export function LoadCenterView({
   );
 
   // ── Award Quote hook ────────────────────────────────────────────────────────
-  const connectedSupplierOrgIds = useMemo(
-    () => new Set(suppliers.map((s) => s.linked_organization_id).filter(Boolean) as string[]),
-    [suppliers],
-  );
+  const connectedSupplierOrgIds = useMemo(() => {
+    const ids = new Set(
+      suppliers.map((s) => s.linked_organization_id).filter(Boolean) as string[],
+    );
+    for (const id of liveConnectedSupplierOrgIds) ids.add(id);
+    return ids;
+  }, [suppliers, liveConnectedSupplierOrgIds]);
   const connectedClientOrgIds = useMemo(
     () => new Set(clients.map((c) => c.linked_organization_id).filter(Boolean) as string[]),
     [clients],

@@ -34,6 +34,8 @@ export {
   useDirectQuoteCountsQuery,
   useIndentOfferCountsQuery,
   useInvalidateIndents,
+  useConnectedSupplierOrgIdsQuery,
+  getIntegratedSupplierOrgIdsForShipper,
 } from './useIndentsQuery';
 export {
   useConnectionRequestsReceivedQuery,

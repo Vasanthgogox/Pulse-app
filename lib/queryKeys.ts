@@ -113,6 +113,9 @@ export const queryKeys = {
       ["q", "suppliers", orgId, supplierId] as const,
     managementBundle: (orgId: string, supplierId: string) =>
       ["q", "suppliers", orgId, supplierId, "management-bundle"] as const,
+    /** Live organization_relations + suppliers.linked_organization_id — not the CRM cache. */
+    connectedOrgIds: (orgId: string) =>
+      ["q", "suppliers", orgId, "connected-org-ids"] as const,
   },
 
   drivers: {
