@@ -43,6 +43,25 @@ export async function getTripFuelEntries(
   return { error: null, entries: (data ?? []) as TripFuelEntry[] };
 }
 
+/** Batched form of getTripFuelEntries — one round trip for N trips instead of N. */
+export async function getTripFuelEntriesForTrips(
+  tripIds: string[],
+): Promise<{ error: Error | null; entriesByTripId: Record<string, TripFuelEntry[]> }> {
+  if (tripIds.length === 0) return { error: null, entriesByTripId: {} };
+  const { data, error } = await supabase()
+    .from("trip_fuel_entries")
+    .select("*")
+    .in("trip_id", tripIds)
+    .eq("status", "active")
+    .order("entered_at", { ascending: false });
+  if (error) return { error: new Error(error.message), entriesByTripId: {} };
+  const entriesByTripId: Record<string, TripFuelEntry[]> = {};
+  for (const entry of (data ?? []) as TripFuelEntry[]) {
+    (entriesByTripId[entry.trip_id] ??= []).push(entry);
+  }
+  return { error: null, entriesByTripId };
+}
+
 export async function getTripFuelEntryById(
   entryId: string,
 ): Promise<{ error: Error | null; entry: TripFuelEntry | null }> {
