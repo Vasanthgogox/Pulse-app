@@ -10,7 +10,10 @@ import {
   RefreshCw,
   SlidersHorizontal,
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+// Session client, not service_role: reward_rules already gates both read and
+// write on the 'credits.issue' platform permission
+// (reward_rules_platform_read / reward_rules_platform_write).
+import { supabaseAuth as supabase } from '@/lib/supabaseAuth';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 

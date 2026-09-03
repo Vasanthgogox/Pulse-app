@@ -1,4 +1,11 @@
-import { supabase } from '@/lib/supabase';
+// Driver KYC data access. Runs on the signed-in admin's session
+// (supabaseAuth), not the service_role key: driver_kyc_documents /
+// driver_kyc_submissions already grant read to holders of the
+// 'driver_kyc.review' platform permission, the driver_kyc_review_queue view is
+// security_invoker so it inherits those policies, and every RPC below is
+// SECURITY DEFINER with its own can_review_driver_kyc() guard and auth.uid()
+// attribution. See 20270306040000_kyc_admin_session_access.sql.
+import { supabaseAuth as supabase } from '@/lib/supabaseAuth';
 import { resolveDocumentMime } from '@/lib/kycDocuments';
 
 const DRIVER_DOCUMENTS_BUCKET = 'driver-documents';

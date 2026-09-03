@@ -15,11 +15,12 @@ import { BoostControlCenterPanel } from '@/components/growth/BoostControlCenterP
 import { SupportPanel } from '@/components/support/SupportPanel';
 import { AdminUsersPanel } from '@/components/admin/AdminUsersPanel';
 import { Badge } from '@/components/ui/badge';
-import { supabase, supabaseConfigError } from '@/lib/supabase';
-import { supabaseAuthConfigError } from '@/lib/supabaseAuth';
+// The Support nav badge subscribes on the admin's session client: its query path
+// is session-based (Phase 1), and a channel on the service_role client would both
+// authenticate differently from the data it refreshes and hold a second socket.
+import { supabaseAuth, supabaseAuthConfigError } from '@/lib/supabaseAuth';
 import {
-  countSupportTicketsNeedingAgentAttention,
-  fetchAllSupportTickets,
+  fetchSupportAttentionCount,
   formatSupportUnreadBadge,
 } from '@/lib/supportTickets';
 
@@ -55,12 +56,15 @@ function Topbar({
 
   useEffect(() => {
     let cancelled = false;
+    // Counts server-side (admin_support_attention_count) instead of pulling every
+    // ticket row to compute one integer. This effect is mounted for the whole
+    // console, on every screen -- the old whole-table fetch ran there too.
     const refresh = async () => {
-      const rows = await fetchAllSupportTickets();
-      if (!cancelled) setSupportUpdateCount(countSupportTicketsNeedingAgentAttention(rows));
+      const n = await fetchSupportAttentionCount();
+      if (!cancelled) setSupportUpdateCount(n);
     };
     void refresh();
-    const channel = supabase
+    const channel = supabaseAuth
       .channel('support-nav-badge')
       .on(
         'postgres_changes',
@@ -70,7 +74,7 @@ function Topbar({
       .subscribe();
     return () => {
       cancelled = true;
-      void supabase.removeChannel(channel);
+      void supabaseAuth.removeChannel(channel);
     };
   }, []);
 
@@ -348,35 +352,6 @@ function AdminGate() {
 }
 
 export default function App() {
-  if (supabaseConfigError) {
-    return (
-      <div className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">
-        <div className="max-w-lg space-y-3 rounded-xl border border-border bg-card p-6 shadow-sm">
-          <div className="flex items-center gap-2">
-            <Shield className="size-4 text-primary" />
-            <h1 className="text-sm font-bold">Admin Console — config required</h1>
-          </div>
-          <p className="text-xs leading-5 text-muted-foreground">{supabaseConfigError}</p>
-          <ol className="list-decimal space-y-1 pl-4 text-xs leading-5 text-muted-foreground">
-            <li>
-              Open Supabase Dashboard → Project Settings → API
-            </li>
-            <li>
-              Copy the <span className="font-semibold text-foreground">service_role</span> secret
-              into repo-root <code className="rounded bg-muted px-1">.env</code> as{" "}
-              <code className="rounded bg-muted px-1">SUPABASE_SERVICE_ROLE_KEY=...</code>
-            </li>
-            <li>
-              Restart analytics:{" "}
-              <code className="rounded bg-muted px-1">npm run dev</code> in{" "}
-              <code className="rounded bg-muted px-1">analytics/</code>
-            </li>
-          </ol>
-        </div>
-      </div>
-    );
-  }
-
   if (supabaseAuthConfigError) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background px-6 text-foreground">

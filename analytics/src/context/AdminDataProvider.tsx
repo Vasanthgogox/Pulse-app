@@ -6,7 +6,13 @@ import type {
   AuditEntry, AutomatedCheck, BusinessDocument,
   DocumentType,
 } from '@/types/admin';
-import { supabase } from '@/lib/supabase';
+// Session client, not service_role: the six tables this provider reads
+// (organizations, organization_members, profiles, trips,
+// verification_audit_logs, org_feature_flags) now carry admin-read policies
+// gated on the existing verification.review/approve permissions, and writes are
+// gated on verification.approve. Audit rows record auth.uid().
+// See 20270306060000_admindata_admin_access.sql.
+import { supabaseAuth as supabase } from '@/lib/supabaseAuth';
 import { fetchKycDocumentsByOrg } from '@/lib/kycDocuments';
 import {
   registrationTypeRequiresCin,
@@ -474,11 +480,15 @@ export function AdminDataProvider({ children }: { children: React.ReactNode }) {
         .eq('id', id);
       if (updateErr) throw updateErr;
 
+      // Records the real signed-in admin. This was `null` while the provider ran
+      // on the service_role key, which had no user identity -- the trail showed
+      // that an escalation happened but never who did it.
+      const { data: authData } = await supabase.auth.getUser();
       const { error: auditErr } = await supabase
         .from('verification_audit_logs')
         .insert({
           org_id: id,
-          changed_by: null,
+          changed_by: authData?.user?.id ?? null,
           previous_status: previousStatus,
           new_status: 'pending',
           notes: reason.trim(),

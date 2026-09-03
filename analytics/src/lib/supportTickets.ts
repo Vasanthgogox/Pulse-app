@@ -1,16 +1,23 @@
 /**
- * Support S2 — Admin Console data access. Runs under the console's existing
- * service_role client (analytics/src/lib/supabase.ts), same as every other
- * panel — explicitly interim per docs/SUPPORT_SYSTEM_PLAN.md §15 Decision A,
- * not a new access model invented for Support.
+ * Support — Admin Console data access. Runs under the signed-in admin's own
+ * session (analytics/src/lib/supabaseAuth.ts), NOT the service_role client.
  *
- * Writes go through the four admin_* RPCs (admin_reply_to_support_ticket,
- * admin_add_internal_note, admin_change_support_ticket_status,
- * admin_change_support_ticket_priority) — never raw table writes — so the
- * activity trail stays centralized in one place instead of scattered across
- * client-side inserts. No agent identity/assignment here: that's S3.
+ * Phase 1 (20270304000000_support_admin_session_auth.sql) moved Support off
+ * service_role: the admin_* RPCs are now granted to `authenticated` and guarded
+ * on can_manage_support()/can_view_support(), and the four support_ticket*
+ * tables carry admin-read RLS policies. Two things follow that the old
+ * service_role path could not give:
+ *
+ *   - Reads are RLS-enforced rather than RLS-bypassing, so this file no longer
+ *     needs to be trusted to filter internal-only rows correctly; the database
+ *     does it.
+ *   - Every write records auth.uid() as the actor, so the activity trail names
+ *     which admin acted instead of storing null.
+ *
+ * Writes still go exclusively through the admin_* RPCs -- never raw table
+ * writes -- so the activity trail stays centralized.
  */
-import { supabase } from '@/lib/supabase';
+import { supabaseAuth as supabase } from '@/lib/supabaseAuth';
 
 export type SupportTicketStatus =
   | 'open'
@@ -93,9 +100,9 @@ export function isImageAttachment(mimeType: string | null): boolean {
   return !!mimeType && mimeType.startsWith('image/');
 }
 
-/** service_role bypasses RLS by design (see module comment) -- returns every attachment,
- *  including ones tied to internal-only comments; the UI is responsible for not surfacing
- *  those to a non-admin context, same as it already does for internal comments. */
+/** Admin-read RLS (support_ticket_attachments_admin_select) scopes this to callers holding
+ *  support.view/support.manage -- a non-admin session gets zero rows from the database
+ *  itself rather than relying on the UI to withhold them. */
 export async function fetchSupportTicketAttachments(
   ticketId: string,
 ): Promise<SupportTicketAttachmentRow[]> {
@@ -114,6 +121,33 @@ export async function getSupportAttachmentSignedUrl(storagePath: string): Promis
     .createSignedUrl(storagePath, 3600);
   if (error || !data?.signedUrl) return null;
   return data.signedUrl;
+}
+
+/**
+ * Signed URLs for many attachments in ONE request (Storage's createSignedUrls),
+ * replacing a sequential per-file round trip.
+ *
+ * These are HTTP calls to the Storage API, not Postgres connections -- batching
+ * them reduces request count and re-renders, and has no bearing on database
+ * connection usage.
+ *
+ * Returns a path -> URL map; a path Storage could not sign is simply absent, so
+ * the caller renders that attachment without a link rather than failing the set.
+ */
+export async function getSupportAttachmentSignedUrls(
+  storagePaths: string[],
+): Promise<Record<string, string>> {
+  if (storagePaths.length === 0) return {};
+  const unique = Array.from(new Set(storagePaths));
+  const { data, error } = await supabase.storage
+    .from(SUPPORT_ATTACHMENTS_BUCKET)
+    .createSignedUrls(unique, 3600);
+  if (error || !data) return {};
+  const out: Record<string, string> = {};
+  for (const row of data) {
+    if (row.signedUrl && row.path) out[row.path] = row.signedUrl;
+  }
+  return out;
 }
 
 export const SUPPORT_STATUS_LABEL: Record<SupportTicketStatus, string> = {
@@ -141,7 +175,14 @@ export const SUPPORT_PRIORITY_ORDER: SupportTicketPriority[] = [
   'critical',
 ];
 
-/** All tickets, service_role bypasses RLS by design (see module comment). */
+/**
+ * All tickets the caller may see -- support_tickets_admin_select gates this.
+ *
+ * @deprecated Unbounded: selects every ticket row. Superseded by
+ * fetchSupportTicketQueue() (paginated, filtered and counted server-side) and
+ * fetchSupportAttentionCount() (badge only). No caller remains in the console;
+ * kept as an export so nothing outside this file breaks silently.
+ */
 export async function fetchAllSupportTickets(): Promise<SupportTicketRow[]> {
   const { data, error } = await supabase
     .from('support_tickets')
@@ -149,6 +190,83 @@ export async function fetchAllSupportTickets(): Promise<SupportTicketRow[]> {
     .order('updated_at', { ascending: false });
   if (error || !data) return [];
   return data as SupportTicketRow[];
+}
+
+export interface SupportTicketQueuePage {
+  rows: SupportTicketRow[];
+  total: number;
+  statusCounts: Partial<Record<SupportTicketStatus, number>>;
+  needsAttention: number;
+  limit: number;
+  offset: number;
+}
+
+export interface SupportTicketQueueParams {
+  search?: string | null;
+  status?: SupportTicketStatus | null;
+  unassignedOnly?: boolean;
+  limit?: number;
+  offset?: number;
+}
+
+/**
+ * One page of the queue plus whole-queue aggregates, in a single round trip.
+ *
+ * Replaces fetchAllSupportTickets() + client-side filter/search/count. The
+ * status counts and attention total deliberately describe the WHOLE queue, not
+ * the returned page -- they drive the status tabs and the unread badge, which
+ * would be wrong if they only counted the rows currently on screen.
+ */
+export async function fetchSupportTicketQueue(
+  params: SupportTicketQueueParams = {},
+): Promise<SupportTicketQueuePage> {
+  const limit = params.limit ?? 50;
+  const offset = params.offset ?? 0;
+  const empty: SupportTicketQueuePage = {
+    rows: [],
+    total: 0,
+    statusCounts: {},
+    needsAttention: 0,
+    limit,
+    offset,
+  };
+
+  const { data, error } = await supabase.rpc('admin_list_support_tickets', {
+    p_search: params.search?.trim() || null,
+    p_status: params.status ?? null,
+    p_unassigned_only: params.unassignedOnly ?? false,
+    p_limit: limit,
+    p_offset: offset,
+  });
+  if (error || !data) return empty;
+
+  const payload = data as {
+    rows?: SupportTicketRow[];
+    total?: number;
+    status_counts?: Partial<Record<SupportTicketStatus, number>>;
+    needs_attention?: number;
+    limit?: number;
+    offset?: number;
+  };
+  return {
+    rows: payload.rows ?? [],
+    total: payload.total ?? 0,
+    statusCounts: payload.status_counts ?? {},
+    needsAttention: payload.needs_attention ?? 0,
+    limit: payload.limit ?? limit,
+    offset: payload.offset ?? offset,
+  };
+}
+
+/**
+ * Just the nav-badge number. Returns 0 when the caller holds no Support
+ * permission (the RPC yields null there) so a permissionless admin sees no badge
+ * rather than a console-wide error on a decorative element.
+ */
+export async function fetchSupportAttentionCount(): Promise<number> {
+  const { data, error } = await supabase.rpc('admin_support_attention_count');
+  if (error || typeof data !== 'number') return 0;
+  return data;
 }
 
 export async function fetchSupportTicketConversation(ticketId: string): Promise<{
@@ -214,46 +332,33 @@ export interface SupportTicketContextLabels {
 }
 
 /**
- * Human-readable labels for a ticket's related-record chips, resolved by ID.
- * Never invents a label -- a record that can't be resolved (deleted, RLS-
- * irrelevant since service_role bypasses it anyway, or just not found) comes
- * back null, and the caller falls back to showing the raw ID as before.
+ * Human-readable labels for a ticket's related-record chips.
+ *
+ * Resolved server-side by admin_support_ticket_context_labels(), not by reading
+ * trips/indents/owner_vehicles/market_bids from here. Those four are ordinary
+ * business tables whose RLS is scoped to org membership or ownership, which a
+ * platform admin does not match -- reading them on a session client would return
+ * null for every chip and silently degrade to raw UUIDs. The RPC is guarded on
+ * support.view and returns only these four display strings, so the admin gets
+ * the label without being granted the tables.
+ *
+ * Never invents a label: an unresolvable record comes back null and the caller
+ * falls back to showing the raw ID, exactly as before.
  */
 export async function resolveSupportTicketContextLabels(
-  ticket: Pick<SupportTicketRow, 'trip_id' | 'indent_id' | 'owner_vehicle_id' | 'market_bid_id'>,
+  ticket: Pick<SupportTicketRow, 'id'>,
 ): Promise<SupportTicketContextLabels> {
-  const [tripRes, indentRes, vehicleRes, bidRes] = await Promise.all([
-    ticket.trip_id
-      ? supabase.from('trips').select('pickup_area,drop_location').eq('id', ticket.trip_id).maybeSingle()
-      : Promise.resolve({ data: null }),
-    ticket.indent_id
-      ? supabase
-          .from('indents')
-          .select('indent_number,display_indent_id')
-          .eq('id', ticket.indent_id)
-          .maybeSingle()
-      : Promise.resolve({ data: null }),
-    ticket.owner_vehicle_id
-      ? supabase.from('owner_vehicles').select('vehicle_number').eq('id', ticket.owner_vehicle_id).maybeSingle()
-      : Promise.resolve({ data: null }),
-    ticket.market_bid_id
-      ? supabase.from('market_bids').select('amount').eq('id', ticket.market_bid_id).maybeSingle()
-      : Promise.resolve({ data: null }),
-  ]);
-
-  const trip = tripRes.data as { pickup_area: string | null; drop_location: string | null } | null;
-  const indent = indentRes.data as { indent_number: string | null; display_indent_id: string | null } | null;
-  const vehicle = vehicleRes.data as { vehicle_number: string | null } | null;
-  const bid = bidRes.data as { amount: number | null } | null;
-
-  return {
-    trip: trip && (trip.pickup_area || trip.drop_location)
-      ? `${trip.pickup_area?.trim() || 'Pickup'} → ${trip.drop_location?.trim() || 'Drop'}`
-      : null,
-    indent: indent ? (indent.display_indent_id || indent.indent_number) : null,
-    vehicle: vehicle?.vehicle_number ?? null,
-    marketBid: bid?.amount != null ? `₹${Number(bid.amount).toLocaleString('en-IN')}` : null,
+  const empty: SupportTicketContextLabels = {
+    trip: null,
+    indent: null,
+    vehicle: null,
+    marketBid: null,
   };
+  const { data, error } = await supabase.rpc('admin_support_ticket_context_labels', {
+    p_ticket_id: ticket.id,
+  });
+  if (error || !data) return empty;
+  return { ...empty, ...(data as Partial<SupportTicketContextLabels>) };
 }
 
 export async function changeSupportTicketPriority(

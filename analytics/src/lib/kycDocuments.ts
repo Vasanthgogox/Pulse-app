@@ -1,4 +1,8 @@
-import { supabase } from '@/lib/supabase';
+// Organization KYC documents. Session client, not service_role: reads are gated
+// by org_kyc_documents_platform_select (verification.review/approve) and the
+// matching storage policy on the private verification-documents bucket.
+// See 20270306040000_kyc_admin_session_access.sql.
+import { supabaseAuth as supabase } from '@/lib/supabaseAuth';
 import { mapDbDocTypeToAdmin } from '@/lib/kycDocumentMatrix';
 import type { BusinessDocument, DocumentStatus } from '@/types/admin';
 
@@ -92,15 +96,24 @@ export async function fetchKycDocumentsByOrg(): Promise<Record<string, BusinessD
   if (error || !data?.length) return {};
 
   const rows = data as KycDocRow[];
-  const paths = [...new Set(rows.map((r) => r.storage_path?.trim()).filter(Boolean))] as string[];
-  const signedByPath: Record<string, string> = {};
 
-  await Promise.all(
-    paths.map(async (path) => {
-      const { url } = await createDocumentSignedUrl(path);
-      if (url) signedByPath[path] = url;
-    }),
-  );
+  // Deliberately does NOT sign URLs here.
+  //
+  // This runs on every loadData(), and previously signed one URL per document
+  // across ALL organizations -- one Storage round trip each. Measured in the
+  // console: ~30+ requests at 2.3-2.5s apiece, ~41s to first paint, including
+  // for orgs whose documents are all missing and will never be previewed.
+  //
+  // Signed URLs also expire (SIGNED_URL_TTL_SEC = 1 hour), so a URL minted at
+  // list time is frequently stale by the time anyone clicks the document --
+  // the work had to be redone on demand regardless.
+  //
+  // `url` is left empty and DocumentViewportPanel signs the one document being
+  // viewed: it already auto-signs when it sees a storage_path with no url, and
+  // its Refresh button re-signs on expiry. Every other field below (status,
+  // mime, size, file name) comes from the table, so the queue, the
+  // Missing/Required badges and the document tabs render unchanged.
+  const signedByPath: Record<string, string> = {};
 
   const byOrg: Record<string, BusinessDocument[]> = {};
   for (const row of rows) {

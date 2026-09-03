@@ -8,7 +8,7 @@
  * today; the filter below is real, it just always matches everything until
  * S3 introduces agents to assign to.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Clock3,
   FileText,
@@ -20,22 +20,34 @@ import {
   StickyNote,
   Ticket,
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+// Realtime subscribes on the admin's own session client, not the service_role
+// client: Phase 1 moved every Support read/write onto the session, and a channel
+// opened on a second client would both authenticate differently from the queries
+// it invalidates and keep an extra socket open for the panel's lifetime.
+import { supabaseAuth as supabase } from '@/lib/supabaseAuth';
+import { useSupportQueue, type StatusFilter } from './useSupportQueue';
+import { SupportTicketList } from './SupportTicketList';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 import {
   addSupportTicketInternalNote,
   changeSupportTicketPriority,
   changeSupportTicketStatus,
-  fetchAllSupportTickets,
   fetchSupportTicketAttachments,
   fetchSupportTicketConversation,
   formatAttachmentSize,
-  getSupportAttachmentSignedUrl,
+  getSupportAttachmentSignedUrls,
   isImageAttachment,
   markSupportTicketReadAsAgent,
   replyToSupportTicketAsAgent,
   resolveSupportTicketContextLabels,
-  countSupportTicketsNeedingAgentAttention,
-  supportTicketNeedsAgentAttention,
   SUPPORT_PRIORITY_ORDER,
   SUPPORT_STATUS_LABEL,
   SUPPORT_STATUS_ORDER,
@@ -48,22 +60,49 @@ import {
   type SupportTicketStatus,
 } from '@/lib/supportTickets';
 
+/** Shared empty array: a fresh [] per render would defeat the memoization above. */
+const EMPTY_ATTACHMENTS: SupportTicketAttachmentRow[] = [];
+
 function AttachmentStrip({ attachments }: { attachments: SupportTicketAttachmentRow[] }) {
   const [urls, setUrls] = useState<Record<string, string>>({});
+  // Latest rows, readable inside the effect without making the (freshly
+  // allocated) array a dependency.
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
   const [lightbox, setLightbox] = useState<{ url: string; name: string } | null>(null);
+
+  // One batched Storage request for every attachment, then a single state update
+  // -- previously this awaited one signed URL per file in sequence and re-rendered
+  // after each. (Storage HTTP requests; unrelated to Postgres connections.)
+  // Depend on a stable STRING of the paths, never on the array itself. Callers
+  // build this list with attachments.filter(...), which yields a new array on
+  // every render -- keying the effect on that identity re-ran it after each
+  // setUrls, which re-rendered, which re-ran it: an endless signed-URL loop.
+  const pathKey = attachments.map((a) => a.storage_path).join('|');
 
   useEffect(() => {
     let active = true;
+    if (!pathKey) {
+      setUrls({});
+      return;
+    }
     void (async () => {
-      for (const a of attachments) {
-        const url = await getSupportAttachmentSignedUrl(a.storage_path);
-        if (active && url) setUrls((prev) => ({ ...prev, [a.id]: url }));
+      const paths = pathKey.split('|');
+      const byPath = await getSupportAttachmentSignedUrls(paths);
+      if (!active) return;
+      const byId: Record<string, string> = {};
+      for (const a of attachmentsRef.current) {
+        const url = byPath[a.storage_path];
+        if (url) byId[a.id] = url;
       }
+      setUrls(byId);
     })();
     return () => {
       active = false;
     };
-  }, [attachments]);
+    // attachmentsRef is read inside, deliberately not a dependency.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pathKey]);
 
   if (!attachments.length) return null;
 
@@ -134,27 +173,6 @@ function AttachmentStrip({ attachments }: { attachments: SupportTicketAttachment
     </>
   );
 }
-import { Badge } from '@/components/ui/badge';
-import { Button } from '@/components/ui/button';
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from '@/components/ui/select';
-
-const STATUS_BADGE: Record<
-  SupportTicketStatus,
-  'info' | 'warning' | 'success' | 'secondary' | 'destructive'
-> = {
-  open: 'info',
-  assigned: 'info',
-  in_progress: 'warning',
-  waiting_for_user: 'warning',
-  resolved: 'success',
-  closed: 'secondary',
-};
 
 const PRIORITY_BADGE: Record<SupportTicketPriority, 'secondary' | 'info' | 'warning' | 'destructive'> = {
   low: 'secondary',
@@ -163,7 +181,7 @@ const PRIORITY_BADGE: Record<SupportTicketPriority, 'secondary' | 'info' | 'warn
   critical: 'destructive',
 };
 
-type StatusFilter = 'all' | SupportTicketStatus;
+
 
 function formatDate(iso: string): string {
   return new Date(iso).toLocaleString('en-IN', {
@@ -194,12 +212,29 @@ function activityLabel(a: SupportTicketActivityRow): string {
 }
 
 export function SupportPanel() {
-  const [tickets, setTickets] = useState<SupportTicketRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState('');
-  const [statusFilter, setStatusFilter] = useState<StatusFilter>('all');
-  const [unassignedOnly, setUnassignedOnly] = useState(false);
+  const {
+    tickets,
+    loading,
+    search,
+    setSearch,
+    statusFilter,
+    setStatusFilter,
+    unassignedOnly,
+    setUnassignedOnly,
+    page,
+    setPage,
+    total,
+    totalPages,
+    statusCounts,
+    needsAttentionCount,
+    reload: load,
+    patchTicket,
+  } = useSupportQueue();
+
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // Ticket id we have already sent a mark-read for, so realtime-driven re-renders
+  // do not re-send it.
+  const markedReadRef = useRef<string | null>(null);
 
   const [comments, setComments] = useState<SupportTicketCommentRow[]>([]);
   const [activity, setActivity] = useState<SupportTicketActivityRow[]>([]);
@@ -212,42 +247,30 @@ export function SupportPanel() {
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    setLoading(true);
-    const rows = await fetchAllSupportTickets();
-    setTickets(rows);
-    setLoading(false);
-  }, []);
-
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  useEffect(() => {
-    const channel = supabase
-      .channel('support-console')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'support_tickets' },
-        () => void load(),
-      )
-      .subscribe();
-    return () => {
-      void supabase.removeChannel(channel);
-    };
-  }, [load]);
-
+  // Conversation only. Attachments are loaded by their own effect below: this
+  // runs on every comment/activity realtime event, and re-setting `attachments`
+  // each time replaced the array identity and re-triggered signed-URL fetches
+  // even when the attachment set had not changed.
   const loadConversation = useCallback(async (ticketId: string) => {
     setConversationLoading(true);
-    const [{ comments: c, activity: a }, atts] = await Promise.all([
-      fetchSupportTicketConversation(ticketId),
-      fetchSupportTicketAttachments(ticketId),
-    ]);
+    const { comments: c, activity: a } = await fetchSupportTicketConversation(ticketId);
     setComments(c);
     setActivity(a);
-    setAttachments(atts);
     setConversationLoading(false);
   }, []);
+
+  // Attachments change only when a comment carrying one is added, which is rare
+  // compared to activity rows -- so this keys off the ticket, not the conversation.
+  useEffect(() => {
+    if (!selectedId) return;
+    let cancelled = false;
+    void fetchSupportTicketAttachments(selectedId).then((atts) => {
+      if (!cancelled) setAttachments(atts);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedId, comments.length]);
 
   useEffect(() => {
     if (!selectedId) {
@@ -257,16 +280,23 @@ export function SupportPanel() {
       return;
     }
     void loadConversation(selectedId);
-    void (async () => {
-      const { error: markErr } = await markSupportTicketReadAsAgent(selectedId);
-      if (markErr) return;
-      setTickets((prev) =>
-        prev.map((t) =>
-          t.id === selectedId ? { ...t, agent_last_read_at: new Date().toISOString() } : t,
-        ),
-      );
-    })();
-  }, [selectedId, loadConversation]);
+
+    // Mark-read writes to support_tickets, which emits a realtime UPDATE, which
+    // re-renders this component. Without this guard the effect re-ran and marked
+    // read again, looping through the database indefinitely. Once per ticket.
+    if (markedReadRef.current !== selectedId) {
+      markedReadRef.current = selectedId;
+      void (async () => {
+        const { error: markErr } = await markSupportTicketReadAsAgent(selectedId);
+        if (markErr) {
+          markedReadRef.current = null;
+          return;
+        }
+        // Optimistic: clears the unread marker on the row without a refetch.
+        patchTicket(selectedId, { agent_last_read_at: new Date().toISOString() });
+      })();
+    }
+  }, [selectedId, loadConversation, patchTicket]);
 
   useEffect(() => {
     const t = tickets.find((row) => row.id === selectedId) ?? null;
@@ -306,33 +336,46 @@ export function SupportPanel() {
     };
   }, [selectedId, loadConversation]);
 
-  const filtered = useMemo(() => {
-    const q = search.trim().toLowerCase();
-    return tickets.filter((t) => {
-      if (statusFilter !== 'all' && t.status !== statusFilter) return false;
-      if (unassignedOnly && t.assigned_to != null) return false;
-      if (!q) return true;
-      return (
-        t.display_id.toLowerCase().includes(q) ||
-        t.subject.toLowerCase().includes(q) ||
-        (t.reporter_display_name ?? '').toLowerCase().includes(q) ||
-        (t.organization_name ?? '').toLowerCase().includes(q)
-      );
-    });
-  }, [tickets, statusFilter, unassignedOnly, search]);
+  // Filtering, searching and counting all happen in admin_list_support_tickets --
+  // `tickets` is already the matching page, so there is nothing left to filter here.
+  const filtered = tickets;
 
   const selected = tickets.find((t) => t.id === selectedId) ?? null;
 
-  const statusCounts = useMemo(() => {
-    const counts: Partial<Record<StatusFilter, number>> = { all: tickets.length };
-    for (const s of SUPPORT_STATUS_ORDER) counts[s] = tickets.filter((t) => t.status === s).length;
-    return counts;
-  }, [tickets]);
-
-  const needsAttentionCount = useMemo(
-    () => countSupportTicketsNeedingAgentAttention(tickets),
-    [tickets],
+  // Group once per attachments change. Filtering inline in JSX allocated a new
+  // array on every render for every comment, which is what drove the signed-URL
+  // effect to re-fire continuously.
+  const ticketAttachments = useMemo(
+    () => attachments.filter((a) => a.comment_id === null),
+    [attachments],
   );
+  const attachmentsByComment = useMemo(() => {
+    const map = new Map<string, SupportTicketAttachmentRow[]>();
+    for (const a of attachments) {
+      if (!a.comment_id) continue;
+      const list = map.get(a.comment_id);
+      if (list) list.push(a);
+      else map.set(a.comment_id, [a]);
+    }
+    return map;
+  }, [attachments]);
+
+
+  // `total` is the count for the CURRENT filter, so it cannot serve as the "All"
+  // tab -- with a status tab active it would report that status's count. The
+  // per-status counts come back describing the whole queue (narrowed only by
+  // search/unassigned, which the tabs do not override), so "All" is their sum.
+  const tabCounts = useMemo(() => {
+    const counts: Partial<Record<StatusFilter, number>> = {};
+    let all = 0;
+    for (const st of SUPPORT_STATUS_ORDER) {
+      const n = statusCounts[st] ?? 0;
+      counts[st] = n;
+      all += n;
+    }
+    counts.all = all;
+    return counts;
+  }, [statusCounts]);
 
   const handleSend = async () => {
     if (!selected || !composerBody.trim()) return;
@@ -378,7 +421,7 @@ export function SupportPanel() {
           <Ticket className="size-3.5 text-muted-foreground" />
           <span className="text-[12px] font-semibold">Support</span>
           <Badge variant="secondary" appearance="light" size="xs">
-            {filtered.length}
+            {total}
           </Badge>
           {needsAttentionCount > 0 ? (
             <Badge variant="warning" appearance="light" size="xs">
@@ -415,7 +458,7 @@ export function SupportPanel() {
                   : 'bg-muted text-muted-foreground hover:bg-muted/70'
               }`}
             >
-              All · {statusCounts.all ?? 0}
+              All · {tabCounts.all ?? 0}
             </button>
             {SUPPORT_STATUS_ORDER.map((s) => (
               <button
@@ -427,7 +470,7 @@ export function SupportPanel() {
                     : 'bg-muted text-muted-foreground hover:bg-muted/70'
                 }`}
               >
-                {SUPPORT_STATUS_LABEL[s]} · {statusCounts[s] ?? 0}
+                {SUPPORT_STATUS_LABEL[s]} · {tabCounts[s] ?? 0}
               </button>
             ))}
           </div>
@@ -442,56 +485,16 @@ export function SupportPanel() {
           </label>
         </div>
 
-        <div className="flex-1 overflow-y-auto">
-          {loading ? (
-            <div className="flex items-center justify-center py-8">
-              <Loader2 className="size-4 animate-spin text-muted-foreground" />
-            </div>
-          ) : filtered.length === 0 ? (
-            <p className="px-3 py-8 text-center text-[11px] text-muted-foreground">
-              No tickets{statusFilter !== 'all' ? ' in this state' : ''}.
-            </p>
-          ) : (
-            filtered.map((t) => {
-              const active = t.id === selectedId;
-              const needsAttention = supportTicketNeedsAgentAttention(t);
-              return (
-                <button
-                  key={t.id}
-                  onClick={() => setSelectedId(t.id)}
-                  className={`flex w-full flex-col gap-1 border-b border-border px-3 py-2 text-left hover:bg-muted/40 ${
-                    active ? 'bg-muted/60' : ''
-                  } ${needsAttention && !active ? 'bg-amber-500/5' : ''}`}
-                >
-                  <div className="flex items-center gap-2">
-                    {needsAttention ? (
-                      <span
-                        className="size-1.5 shrink-0 rounded-full bg-amber-500"
-                        title="Update available"
-                        aria-label="Update available"
-                      />
-                    ) : null}
-                    <span className="font-mono text-[10px] text-muted-foreground">{t.display_id}</span>
-                    <Badge variant={STATUS_BADGE[t.status]} appearance="light" size="xs" className="ml-auto shrink-0">
-                      {SUPPORT_STATUS_LABEL[t.status]}
-                    </Badge>
-                  </div>
-                  <span className={`truncate text-[12px] ${needsAttention ? 'font-bold' : 'font-semibold'}`}>
-                    {t.subject}
-                  </span>
-                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                    <span>{t.reporter_display_name ?? 'Unknown reporter'}</span>
-                    {t.organization_name ? <span>· {t.organization_name}</span> : null}
-                  </div>
-                  <div className="flex items-center gap-2 text-[10px] text-muted-foreground">
-                    <span>{t.category}</span>
-                    <span className="ml-auto">{formatDate(t.updated_at)}</span>
-                  </div>
-                </button>
-              );
-            })
-          )}
-        </div>
+        <SupportTicketList
+          tickets={filtered}
+          loading={loading}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          isFiltered={statusFilter !== 'all'}
+          page={page}
+          totalPages={totalPages}
+          onPageChange={setPage}
+        />
       </aside>
 
       {/* ── Right: ticket workspace ─────────────────────────────────────────── */}
@@ -561,7 +564,7 @@ export function SupportPanel() {
                   <span>Reported {formatDate(selected.created_at)}</span>
                 </div>
                 <p className="text-[12px] leading-relaxed text-foreground">{selected.description}</p>
-                <AttachmentStrip attachments={attachments.filter((a) => a.comment_id === null)} />
+                <AttachmentStrip attachments={ticketAttachments} />
                 {selected.trip_id || selected.indent_id || selected.owner_vehicle_id || selected.market_bid_id ? (
                   <div className="mt-2 flex flex-wrap gap-1.5">
                     {selected.trip_id ? (
@@ -620,7 +623,7 @@ export function SupportPanel() {
                         <span className="ml-auto font-normal">{formatDate(c.created_at)}</span>
                       </div>
                       <p className="whitespace-pre-wrap text-[12px] leading-relaxed text-foreground">{c.body}</p>
-                      <AttachmentStrip attachments={attachments.filter((a) => a.comment_id === c.id)} />
+                      <AttachmentStrip attachments={attachmentsByComment.get(c.id) ?? EMPTY_ATTACHMENTS} />
                     </div>
                   ))}
 

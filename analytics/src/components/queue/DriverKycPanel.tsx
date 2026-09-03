@@ -20,7 +20,9 @@ import {
   ShieldX,
   UserRound,
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+// Realtime on the session client so the channel authenticates the same way as
+// the queries it refreshes (Realtime enforces RLS for `authenticated`).
+import { supabaseAuth as supabase } from '@/lib/supabaseAuth';
 import {
   approveDriverKycDocument,
   fetchDriverKycDocumentsForDriver,

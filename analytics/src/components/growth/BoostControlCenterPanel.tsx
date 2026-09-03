@@ -15,7 +15,10 @@ import {
   TrendingUp,
   Users,
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+// Session client, not service_role: get_boost_control_center() is SECURITY
+// DEFINER and now requires 'analytics.view' positively (a NULL auth.uid() no
+// longer skips the check). See 20270306070000_boost_analytics_guard_hardening.sql.
+import { supabaseAuth as supabase } from '@/lib/supabaseAuth';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 

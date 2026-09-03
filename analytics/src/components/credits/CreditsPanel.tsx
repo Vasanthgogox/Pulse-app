@@ -42,7 +42,11 @@ import {
   Wallet,
 } from 'lucide-react';
 import { useAdmin } from '@/context/AdminDataProvider';
-import { supabase } from '@/lib/supabase';
+// Session client, not service_role: pulse_credit_wallets/transactions already
+// grant read to holders of the 'credits.issue' platform permission, and
+// increment_credit_wallet is SECURITY DEFINER with its own credits.issue guard
+// and created_by = auth.uid(). See 20270306050000_credits_rpc_type_guard.sql.
+import { supabaseAuth as supabase } from '@/lib/supabaseAuth';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 

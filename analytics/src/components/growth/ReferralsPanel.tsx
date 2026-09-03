@@ -12,7 +12,11 @@ import {
   Users,
   UserPlus,
 } from 'lucide-react';
-import { supabase } from '@/lib/supabase';
+// Session client, not service_role: pulse_credit_referrals already grants read
+// to holders of the 'credits.issue' platform permission
+// (pcr_visible_to_participants), and the joined organizations rows are covered
+// by organizations_platform_admin_select. Read-only panel.
+import { supabaseAuth as supabase } from '@/lib/supabaseAuth';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 
