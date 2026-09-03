@@ -101,7 +101,7 @@ export async function getVehicleDocumentViewUrl(storagePath: string): Promise<st
       supabase()
         .storage
         .from(BUCKET)
-        .createSignedUrl(storagePath, SIGNED_URL_EXPIRY_SEC),
+        .createSignedUrl(storagePath, SIGNED_URL_EXPIRY_SEC, { download: false }),
     (result) => result.error?.message ?? null,
   );
   if (error || !data?.signedUrl) return null;

@@ -8,6 +8,8 @@ import { PersistentTabPanel } from "@/components/PersistentTabPanel";
 import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { Theme } from "@/constants/Theme";
+import { canAddMoreTripDocs, isPdfTripDoc } from "@/features/trips/components/trip-detail/tripDocTypes";
+import { TripVaultFilePreview } from "@/features/trips/components/trip-detail/TripVaultFilePreview";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { TripChatRoomSheet } from "@/features/chat/components/TripChatRoomSheet";
@@ -37,7 +39,6 @@ import Feather from "@expo/vector-icons/Feather";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import * as DocumentPicker from "expo-document-picker";
 import * as FileSystem from "expo-file-system/legacy";
-import * as ImagePicker from "expo-image-picker";
 import { useRouter } from "expo-router";
 import { Activity, MessageSquare, Zap } from "lucide-react-native";
 import { useQuery } from "@tanstack/react-query";
@@ -703,9 +704,29 @@ export default function TripDetailScreen({
   const { migrationBlocked: reassignMigrationBlocked } =
     useReassignMigrationGate(reassignMigrationCheckEnabled);
 
+  const previewGalleryDocs = useMemo(() => {
+    if (detail.isVehicleGalleryDoc) return detail.vehiclePreviewDocs;
+    if (detail.isTripSlotGalleryDoc) {
+      return (detail.selectedDoc?.files ?? []).map((file) => ({
+        id: file.id,
+        label: file.label,
+        type: file.type,
+        storagePath: file.storagePath,
+        status: "Uploaded" as const,
+      }));
+    }
+    return [];
+  }, [
+    detail.isVehicleGalleryDoc,
+    detail.isTripSlotGalleryDoc,
+    detail.vehiclePreviewDocs,
+    detail.selectedDoc?.files,
+  ]);
+  const isGalleryPreview = detail.isVehicleGalleryDoc || !!detail.isTripSlotGalleryDoc;
+
   const goToVehicleGalleryIndex = useCallback(
     (nextIndex: number, animated = true) => {
-      const total = detail.vehiclePreviewDocs.length;
+      const total = previewGalleryDocs.length;
       if (total <= 0) return;
       const clamped = Math.max(0, Math.min(nextIndex, total - 1));
       if (clamped !== detail.vehiclePreviewIndex) {
@@ -718,13 +739,12 @@ export default function TripDetailScreen({
         });
       }
     },
-    [detail, vehicleGalleryPageWidth],
+    [detail, vehicleGalleryPageWidth, previewGalleryDocs.length],
   );
 
-  // Asset Vault (non-vehicle) gallery nav.
-  // Used for "previous/next" image preview inside the asset vault modal.
+  // Asset Vault gallery nav (images + PDFs) inside the preview modal.
   const assetVaultPreviewDocs = detail.computedTripDocs.filter(
-    (doc) => !!doc.storagePath && doc.type !== "PDF",
+    (doc) => !!doc.storagePath,
   );
   const assetVaultPreviewIndex = assetVaultPreviewDocs.findIndex(
     (d) => d.id === detail.selectedDoc?.id,
@@ -743,12 +763,38 @@ export default function TripDetailScreen({
     if (nextDoc) detail.setSelectedDoc(nextDoc);
   };
 
+  const selectedPreviewIsPdf = isPdfTripDoc(
+    isGalleryPreview
+      ? previewGalleryDocs[detail.vehiclePreviewIndex] ?? detail.selectedDoc
+      : detail.selectedDoc,
+  );
+  const galleryActiveDoc = previewGalleryDocs[detail.vehiclePreviewIndex] ?? null;
+  const galleryPreviewOpenUrl = galleryActiveDoc
+    ? (detail.vehiclePreviewUrls[galleryActiveDoc.id] ?? null)
+    : null;
+  const previewOpenUrl = isGalleryPreview
+    ? galleryPreviewOpenUrl
+    : detail.docPreviewUrl;
+
+  const openPreviewExternally = (url: string | null) => {
+    if (!url) return;
+    if (Platform.OS === "web") {
+      (globalThis as { window?: Window }).window?.open?.(
+        url,
+        "_blank",
+        "noopener,noreferrer",
+      );
+      return;
+    }
+    void Linking.openURL(url);
+  };
+
   // One-shot scroll sync when the gallery first becomes visible, so the
   // hook's auto-jump to the first uploaded doc lines up with the carousel.
   // After that, scroll position and `vehiclePreviewIndex` stay in sync via
   // `onScroll` for swipes and `goToVehicleGalleryIndex` for taps.
   useEffect(() => {
-    if (!detail.isVehicleGalleryDoc) {
+    if (!isGalleryPreview) {
       vehicleGalleryInitialSyncedRef.current = false;
       return;
     }
@@ -760,7 +806,7 @@ export default function TripDetailScreen({
       animated: false,
     });
   }, [
-    detail.isVehicleGalleryDoc,
+    isGalleryPreview,
     detail.vehiclePreviewIndex,
     vehicleGalleryPageWidth,
   ]);
@@ -1050,8 +1096,10 @@ export default function TripDetailScreen({
     uri: string;
     fileName: string;
     mimeType: string;
+    extraFiles?: { uri: string; fileName: string; mimeType: string }[];
   } | null>(null);
   const [pendingLrNumber, setPendingLrNumber] = useState('');
+  const [addDocChooserVisible, setAddDocChooserVisible] = useState(false);
   const [vaultDeleteTarget, setVaultDeleteTarget] = useState<{
     cardId: string;
     label: string;
@@ -1059,6 +1107,17 @@ export default function TripDetailScreen({
     documentId?: string;
     category?: string;
   } | null>(null);
+  const pendingPreviewIsPdf = isPdfTripDoc({
+    mimeType: pendingVaultUpload?.mimeType,
+    fileName: pendingVaultUpload?.fileName,
+    storagePath: pendingVaultUpload?.uri,
+  });
+  const pendingPreviewIsImage = (pendingVaultUpload?.mimeType || "").startsWith(
+    "image/",
+  );
+
+  const pendingFileCount =
+    (pendingVaultUpload ? 1 : 0) + (pendingVaultUpload?.extraFiles?.length ?? 0);
 
   const readFileAsArrayBuffer = useCallback(
     async (uri: string): Promise<ArrayBuffer> => {
@@ -1082,30 +1141,60 @@ export default function TripDetailScreen({
 
     setUploadingDocId(pending.slotId);
     try {
-      const arrayBuffer = await readFileAsArrayBuffer(pending.uri);
-      if (!arrayBuffer || arrayBuffer.byteLength === 0) {
-        Alert.alert("Upload failed", "Could not read the selected file.");
-        return;
-      }
-      const { error } = await tripDocumentsService.uploadTripDocument(
-        tripIdForUpload,
-        uploaderId,
+      const files = [
         {
-          arrayBuffer,
+          uri: pending.uri,
           fileName: pending.fileName,
           mimeType: pending.mimeType,
         },
-        pending.docType,
-        pending.docType === "lr" ? pendingLrNumber : undefined,
-      );
-      if (error) {
-        Alert.alert("Upload failed", error.message);
-        return;
+        ...(pending.extraFiles ?? []),
+      ];
+      let uploadedCount = 0;
+      for (const [index, file] of files.entries()) {
+        const arrayBuffer = await readFileAsArrayBuffer(file.uri);
+        if (!arrayBuffer || arrayBuffer.byteLength === 0) {
+          Alert.alert(
+            "Upload failed",
+            `Could not read ${file.fileName || "the selected file"}.`,
+          );
+          return;
+        }
+        const { error } = await tripDocumentsService.uploadTripDocument(
+          tripIdForUpload,
+          uploaderId,
+          {
+            arrayBuffer,
+            fileName: file.fileName,
+            mimeType: file.mimeType,
+          },
+          pending.docType,
+          pending.docType === "lr" && index === 0 ? pendingLrNumber : undefined,
+        );
+        if (error) {
+          Alert.alert(
+            uploadedCount > 0 ? "Partial upload" : "Upload failed",
+            uploadedCount > 0
+              ? `${uploadedCount} file${uploadedCount === 1 ? "" : "s"} saved, then ${error.message}`
+              : error.message,
+          );
+          if (uploadedCount > 0) {
+            setPendingVaultUpload(null);
+            setPendingLrNumber("");
+            detail.handleRefresh();
+          }
+          return;
+        }
+        uploadedCount += 1;
       }
       setPendingVaultUpload(null);
       setPendingLrNumber("");
       detail.handleRefresh();
-      Alert.alert("Uploaded", `${pending.label} is saved in the vault.`);
+      Alert.alert(
+        "Uploaded",
+        uploadedCount > 1
+          ? `${uploadedCount} documents are saved in the vault.`
+          : `${pending.label} is saved in the vault.`,
+      );
     } catch (e) {
       Alert.alert(
         "Upload failed",
@@ -1194,43 +1283,27 @@ export default function TripDetailScreen({
       if (!tripIdForUpload || !uploaderId || uploadingDocId || pendingVaultUpload)
         return;
 
-      const allowPdf = doc.category !== "driver";
       let uri: string | null = null;
-      let fileName = `${doc.id}-${Date.now()}.jpg`;
-      let mimeType = "image/jpeg";
+      let fileName = `${doc.id}-${Date.now()}.pdf`;
+      let mimeType = "application/pdf";
+      let extraFiles: { uri: string; fileName: string; mimeType: string }[] = [];
 
       try {
-        if (allowPdf) {
-          const res = await DocumentPicker.getDocumentAsync({
-            multiple: false,
-            copyToCacheDirectory: true,
-            type: ["application/pdf", "image/*"],
-          });
-          if (res.canceled || !res.assets?.[0]) return;
-          const asset = res.assets[0];
-          uri = asset.uri;
-          fileName = asset.name || fileName;
-          mimeType = asset.mimeType || "application/pdf";
-        } else {
-          const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-          if (!perm.granted) {
-            Alert.alert(
-              "Permission required",
-              "Photo library access is needed to attach this document.",
-            );
-            return;
-          }
-          const res = await ImagePicker.launchImageLibraryAsync({
-            mediaTypes: ["images"],
-            allowsEditing: false,
-            quality: 0.9,
-          });
-          if (res.canceled || !res.assets?.[0]) return;
-          const asset = res.assets[0];
-          uri = asset.uri;
-          fileName = asset.fileName ?? fileName;
-          mimeType = asset.mimeType ?? "image/jpeg";
-        }
+        const res = await DocumentPicker.getDocumentAsync({
+          multiple: true,
+          copyToCacheDirectory: true,
+          type: ["application/pdf", "image/*"],
+        });
+        if (res.canceled || !res.assets?.[0]) return;
+        const [asset, ...rest] = res.assets;
+        uri = asset.uri;
+        fileName = asset.name || fileName;
+        mimeType = asset.mimeType || "application/pdf";
+        extraFiles = rest.map((item, index) => ({
+          uri: item.uri,
+          fileName: item.name || `${doc.id}-${Date.now()}-${index + 2}.pdf`,
+          mimeType: item.mimeType || "application/pdf",
+        }));
 
         if (!uri) return;
 
@@ -1251,6 +1324,7 @@ export default function TripDetailScreen({
           uri,
           fileName,
           mimeType,
+          extraFiles: extraFiles.length > 0 ? extraFiles : undefined,
         });
       } catch (e) {
         Alert.alert(
@@ -1275,22 +1349,30 @@ export default function TripDetailScreen({
 
     try {
       const res = await DocumentPicker.getDocumentAsync({
-        multiple: false,
+        multiple: true,
         copyToCacheDirectory: true,
         type: ["application/pdf", "image/*"],
       });
       if (res.canceled || !res.assets?.[0]) return;
-      const asset = res.assets[0];
+      const [asset, ...rest] = res.assets;
       const fileName = asset.name || `lr-${Date.now()}.pdf`;
       const mimeType = asset.mimeType || "application/pdf";
 
       setPendingVaultUpload({
         slotId: "lr",
-        label: "LR Document",
+        label: rest.length > 0 ? "LR Documents" : "LR Document",
         docType: "lr",
         uri: asset.uri,
         fileName,
         mimeType,
+        extraFiles:
+          rest.length > 0
+            ? rest.map((item, index) => ({
+                uri: item.uri,
+                fileName: item.name || `lr-${Date.now()}-${index + 2}.pdf`,
+                mimeType: item.mimeType || "application/pdf",
+              }))
+            : undefined,
       });
     } catch (e) {
       Alert.alert(
@@ -1304,6 +1386,40 @@ export default function TripDetailScreen({
     uploadingDocId,
     pendingVaultUpload,
   ]);
+
+  const startAddMoreForDoc = useCallback(
+    (doc: (typeof detail.computedTripDocs)[number]) => {
+      if (doc.category === "lr" || doc.id === "lr" || doc.id.startsWith("lr-")) {
+        void handleLRUpload();
+        return;
+      }
+      void handleVaultUpload(doc);
+    },
+    [handleLRUpload, handleVaultUpload],
+  );
+
+  const openAddDocumentChooser = useCallback(() => {
+    if (uploadingDocId || pendingVaultUpload) return;
+    setAddDocChooserVisible(true);
+  }, [uploadingDocId, pendingVaultUpload]);
+
+  const chooseAddDocumentType = useCallback(
+    (kind: "lr" | "manifest" | "pod") => {
+      setAddDocChooserVisible(false);
+      if (kind === "lr") {
+        void handleLRUpload();
+        return;
+      }
+      void handleVaultUpload({
+        id: kind,
+        label: kind === "pod" ? "Driver POD" : "Trip Manifest",
+        type: kind === "pod" ? "JPG" : "PDF",
+        status: "Pending",
+        category: kind === "pod" ? "driver" : "trip",
+      });
+    },
+    [handleLRUpload, handleVaultUpload],
+  );
 
   const manifestJourneyPings = useMemo(() => {
     const trail = detail.locationTrailWithNames ?? [];
@@ -3264,6 +3380,7 @@ export default function TripDetailScreen({
                 uploadingDocId={uploadingDocId}
                 vehicleId={trip.vehicle_id ?? null}
                 onCardPress={handleVaultCardPress}
+                onAddMore={(doc) => startAddMoreForDoc(doc)}
                 tripIdLabel={mobileTripIdLabel}
                 createdAtLabel={mobilePlacedOnLabel}
               />
@@ -4449,6 +4566,15 @@ export default function TripDetailScreen({
                       const isUploadingThis = uploadingDocId === doc.id;
                       const isPending = doc.status === "Pending";
                       const isVehicleDoc = doc.id === "vehicle-documents";
+                      const canAddMore =
+                        canUploadTripDocs &&
+                        !isPending &&
+                        canAddMoreTripDocs(doc);
+                      const fileCount = doc.files?.length ?? 0;
+                      const statusLabel =
+                        !isPending && fileCount > 1
+                          ? `${fileCount} files`
+                          : doc.status;
                       const btnLabel = isPending
                         ? canUploadTripDocs
                           ? "Upload"
@@ -4473,44 +4599,74 @@ export default function TripDetailScreen({
                           <Text style={neoStyles.vaultTitle} numberOfLines={2}>
                             {doc.label}
                           </Text>
-                          <Text style={neoStyles.vaultSub}>{doc.status}</Text>
-                          <TouchableOpacity
-                            onPress={() => handleVaultCardPress(doc)}
-                            style={[
-                              neoStyles.vaultBtn,
-                              isPending &&
-                                canUploadTripDocs &&
-                                neoStyles.vaultBtnUpload,
-                            ]}
-                            activeOpacity={0.85}
-                            disabled={isUploadingThis}
-                          >
-                            {isUploadingThis ? (
-                              <LoadingIndicator size="small" color="#fff" />
-                            ) : (
-                              <>
+                          <Text style={neoStyles.vaultSub}>{statusLabel}</Text>
+                          <View style={neoStyles.vaultBtnRow}>
+                            <TouchableOpacity
+                              onPress={() => handleVaultCardPress(doc)}
+                              style={[
+                                neoStyles.vaultBtn,
+                                isPending &&
+                                  canUploadTripDocs &&
+                                  neoStyles.vaultBtnUpload,
+                                canAddMore && neoStyles.vaultBtnFlex,
+                              ]}
+                              activeOpacity={0.85}
+                              disabled={isUploadingThis}
+                            >
+                              {isUploadingThis ? (
+                                <LoadingIndicator size="small" color="#fff" />
+                              ) : (
+                                <>
+                                  <Feather
+                                    name={btnIcon}
+                                    size={12}
+                                    color={
+                                      isPending && canUploadTripDocs
+                                        ? Theme.buttonPrimaryText
+                                        : "#fff"
+                                    }
+                                  />
+                                  <Text
+                                    style={[
+                                      neoStyles.vaultBtnText,
+                                      isPending &&
+                                        canUploadTripDocs &&
+                                        neoStyles.vaultBtnTextUpload,
+                                    ]}
+                                  >
+                                    {btnLabel}
+                                  </Text>
+                                </>
+                              )}
+                            </TouchableOpacity>
+                            {canAddMore ? (
+                              <TouchableOpacity
+                                onPress={() => startAddMoreForDoc(doc)}
+                                style={[
+                                  neoStyles.vaultBtn,
+                                  neoStyles.vaultBtnUpload,
+                                  neoStyles.vaultBtnFlex,
+                                ]}
+                                activeOpacity={0.85}
+                                disabled={isUploadingThis}
+                                accessibilityLabel={`Add another ${doc.label}`}
+                              >
                                 <Feather
-                                  name={btnIcon}
+                                  name="plus"
                                   size={12}
-                                  color={
-                                    isPending && canUploadTripDocs
-                                      ? Theme.buttonPrimaryText
-                                      : "#fff"
-                                  }
+                                  color={Theme.buttonPrimaryText}
                                 />
                                 <Text
                                   style={[
                                     neoStyles.vaultBtnText,
-                                    isPending &&
-                                      canUploadTripDocs &&
-                                      neoStyles.vaultBtnTextUpload,
+                                    neoStyles.vaultBtnTextUpload,
                                   ]}
                                 >
-                                  {btnLabel}
+                                  Add
                                 </Text>
-                              </>
-                            )}
-                          </TouchableOpacity>
+                              </TouchableOpacity>
+                            ) : null}
+                          </View>
                         </View>
                       );
                     })}
@@ -5054,23 +5210,36 @@ export default function TripDetailScreen({
                     <LRDocumentsSection
                       presentation="gallery"
                       docs={detail.computedTripDocs.map((d) => {
-                        const openable =
-                          d.status !== "Pending" ||
-                          !!d.storagePath ||
-                          d.id === "vehicle-documents";
+                        const isUploaded =
+                          d.status !== "Pending" || !!d.storagePath;
+                        const canUploadThis =
+                          canUploadTripDocs &&
+                          d.id !== "vehicle-documents" &&
+                          (d.category === "lr" ||
+                            d.category === "trip" ||
+                            d.category === "driver");
                         return {
                           id: d.id,
                           label: d.label,
-                          type: d.type,
+                          type:
+                            (d.files?.length ?? 0) > 1
+                              ? `${d.files?.length} files`
+                              : d.type,
                           status:
                             d.status === "Verified" ? "Uploaded" : d.status,
-                          onView: openable
+                          onView: isUploaded
                             ? () => detail.setSelectedDoc(d)
-                            : undefined,
+                            : canUploadThis
+                              ? () => startAddMoreForDoc(d)
+                              : d.id === "vehicle-documents"
+                                ? () => detail.setSelectedDoc(d)
+                                : undefined,
                         };
                       })}
                       onUpdateLR={() => void handleLRUpload()}
-                      onAddDocument={openTripDocumentsFlow}
+                      onAddDocument={
+                        canUploadTripDocs ? openAddDocumentChooser : undefined
+                      }
                     />
                     </Suspense>
                   </View>
@@ -5545,9 +5714,9 @@ export default function TripDetailScreen({
                     : (detail.selectedDoc?.label ?? "Document")}
                 </Text>
                 <Text style={styles.docModalSubtitle} numberOfLines={1}>
-                  {detail.isVehicleGalleryDoc && detail.activeVehiclePreviewDoc
-                    ? `${detail.vehiclePreviewIndex + 1}/${detail.vehiclePreviewDocs.length} · ${detail.activeVehiclePreviewDoc.label}`
-                    : !detail.isVehicleGalleryDoc &&
+                  {isGalleryPreview && galleryActiveDoc
+                    ? `${detail.vehiclePreviewIndex + 1}/${previewGalleryDocs.length} · ${galleryActiveDoc.label}`
+                    : !isGalleryPreview &&
                         assetVaultPreviewDocs.length > 1 &&
                         assetVaultPreviewIndex >= 0
                       ? `${assetVaultPreviewIndex + 1}/${assetVaultPreviewDocs.length}`
@@ -5564,8 +5733,8 @@ export default function TripDetailScreen({
                   <LoadingIndicator size="large" color={Theme.primary} />
                   <Text style={styles.docModalHint}>Loading preview…</Text>
                 </View>
-              ) : detail.isVehicleGalleryDoc ? (
-                detail.vehiclePreviewDocs.length > 0 ? (
+              ) : isGalleryPreview ? (
+                previewGalleryDocs.length > 0 ? (
                   <View
                     style={styles.docGalleryWrap}
                     onLayout={(event) =>
@@ -5589,7 +5758,7 @@ export default function TripDetailScreen({
                           0,
                           Math.min(
                             nextIndex,
-                            detail.vehiclePreviewDocs.length - 1,
+                            previewGalleryDocs.length - 1,
                           ),
                         );
                         if (clamped !== detail.vehiclePreviewIndex) {
@@ -5607,7 +5776,7 @@ export default function TripDetailScreen({
                           0,
                           Math.min(
                             nextIndex,
-                            detail.vehiclePreviewDocs.length - 1,
+                            previewGalleryDocs.length - 1,
                           ),
                         );
                         if (clamped !== detail.vehiclePreviewIndex) {
@@ -5615,9 +5784,9 @@ export default function TripDetailScreen({
                         }
                       }}
                     >
-                      {detail.vehiclePreviewDocs.map((doc) => {
+                      {previewGalleryDocs.map((doc) => {
                         const url = detail.vehiclePreviewUrls[doc.id] ?? null;
-                        const isPdf = doc.type === "PDF";
+                        const isPdf = isPdfTripDoc(doc);
                         const slideStyle = [
                           styles.docGallerySlide,
                           vehicleGalleryPageWidth > 0
@@ -5626,28 +5795,27 @@ export default function TripDetailScreen({
                         ];
                         return (
                           <View key={doc.id} style={slideStyle}>
-                            {url && !isPdf ? (
-                              <Image
-                                source={{ uri: url }}
+                            {url ? (
+                              <TripVaultFilePreview
+                                uri={url}
+                                isPdf={isPdf}
                                 style={styles.docModalImage}
-                                resizeMode="contain"
+                                accessibilityLabel={`${doc.label} preview`}
                               />
                             ) : (
                               <View style={styles.docModalCenter}>
                                 <FontAwesome
-                                  name={url ? "file-pdf-o" : "file-o"}
+                                  name="file-o"
                                   size={48}
-                                  color={url ? Theme.primary : "#94a3b8"}
+                                  color="#94a3b8"
                                 />
                                 <Text style={styles.docModalHint}>
                                   {doc.label}
                                 </Text>
                                 <Text style={styles.docModalHint}>
-                                  {url
-                                    ? "PDF preview may be limited in the browser."
-                                    : doc.storagePath
-                                      ? "Generating secure link…"
-                                      : "No document uploaded yet."}
+                                  {doc.storagePath
+                                    ? "Generating secure link…"
+                                    : "No document uploaded yet."}
                                 </Text>
                               </View>
                             )}
@@ -5656,7 +5824,7 @@ export default function TripDetailScreen({
                       })}
                     </ScrollView>
 
-                    {detail.vehiclePreviewDocs.length > 1 ? (
+                    {previewGalleryDocs.length > 1 ? (
                       <>
                         <TouchableOpacity
                           accessibilityLabel="Previous document"
@@ -5687,7 +5855,7 @@ export default function TripDetailScreen({
                           activeOpacity={0.85}
                           disabled={
                             detail.vehiclePreviewIndex >=
-                            detail.vehiclePreviewDocs.length - 1
+                            previewGalleryDocs.length - 1
                           }
                           onPress={() =>
                             goToVehicleGalleryIndex(
@@ -5698,7 +5866,7 @@ export default function TripDetailScreen({
                             styles.docGalleryNavBtn,
                             styles.docGalleryNavBtnRight,
                             detail.vehiclePreviewIndex >=
-                              detail.vehiclePreviewDocs.length - 1 &&
+                              previewGalleryDocs.length - 1 &&
                               styles.docGalleryNavBtnDisabled,
                           ]}
                           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -5716,16 +5884,19 @@ export default function TripDetailScreen({
                   <View style={styles.docModalCenter}>
                     <FontAwesome name="file-o" size={48} color="#94a3b8" />
                     <Text style={styles.docModalHint}>
-                      No vehicle document on file yet.
+                      {detail.isVehicleGalleryDoc
+                        ? "No vehicle document on file yet."
+                        : "No document on file yet."}
                     </Text>
                   </View>
                 )
               ) : detail.docPreviewUrl ? (
                 <View style={styles.docGalleryWrap}>
-                  <Image
-                    source={{ uri: detail.docPreviewUrl }}
+                  <TripVaultFilePreview
+                    uri={detail.docPreviewUrl}
+                    isPdf={selectedPreviewIsPdf}
                     style={styles.docModalImage}
-                    resizeMode="contain"
+                    accessibilityLabel={`${detail.selectedDoc?.label ?? "Document"} preview`}
                   />
 
                   {assetVaultPreviewDocs.length > 1 && assetVaultPreviewIndex >= 0 ? (
@@ -5801,10 +5972,9 @@ export default function TripDetailScreen({
               )}
             </View>
 
-            {detail.isVehicleGalleryDoc &&
-            detail.vehiclePreviewDocs.length > 1 ? (
+            {isGalleryPreview && previewGalleryDocs.length > 1 ? (
               <View style={styles.docGalleryDots}>
-                {detail.vehiclePreviewDocs.map((doc, index) => {
+                {previewGalleryDocs.map((doc, index) => {
                   const isActive = index === detail.vehiclePreviewIndex;
                   return (
                     <TouchableOpacity
@@ -5829,14 +5999,55 @@ export default function TripDetailScreen({
             ) : null}
 
             <View style={styles.docModalFooter}>
-              <View />
-              <TouchableOpacity
-                style={styles.docModalFooterBtn}
-                onPress={() => detail.setSelectedDoc(null)}
-                activeOpacity={0.85}
-              >
-                <Text style={styles.docModalFooterBtnText}>Close</Text>
-              </TouchableOpacity>
+              {canUploadTripDocs &&
+              canAddMoreTripDocs(detail.selectedDoc) &&
+              !detail.isVehicleGalleryDoc ? (
+                <TouchableOpacity
+                  style={styles.docModalFooterCancelBtn}
+                  onPress={() => {
+                    const doc = detail.selectedDoc;
+                    detail.setSelectedDoc(null);
+                    if (doc) startAddMoreForDoc(doc);
+                  }}
+                  activeOpacity={0.85}
+                  accessibilityLabel="Add another document"
+                >
+                  <Text style={styles.docModalFooterCancelText}>Add another</Text>
+                </TouchableOpacity>
+              ) : previewOpenUrl ? (
+                <TouchableOpacity
+                  style={styles.docModalFooterCancelBtn}
+                  onPress={() => openPreviewExternally(previewOpenUrl)}
+                  activeOpacity={0.85}
+                  accessibilityLabel="Open document"
+                >
+                  <Text style={styles.docModalFooterCancelText}>Open</Text>
+                </TouchableOpacity>
+              ) : (
+                <View />
+              )}
+              <View style={{ flexDirection: "row", gap: 8 }}>
+                {previewOpenUrl &&
+                canUploadTripDocs &&
+                canAddMoreTripDocs(detail.selectedDoc) &&
+                !detail.isVehicleGalleryDoc ? (
+                  <TouchableOpacity
+                    style={styles.docModalFooterCancelBtn}
+                    onPress={() => openPreviewExternally(previewOpenUrl)}
+                    activeOpacity={0.85}
+                    accessibilityLabel="Open document"
+                  >
+                    <Text style={styles.docModalFooterCancelText}>Open</Text>
+                  </TouchableOpacity>
+                ) : null}
+                <TouchableOpacity
+                  style={styles.docModalFooterBtn}
+                  onPress={() => detail.setSelectedDoc(null)}
+                  activeOpacity={0.85}
+                >
+                  <Text style={styles.docModalFooterBtnText}>Close</Text>
+                </TouchableOpacity>
+              </View>
             </View>
           </View>
         </View>
@@ -5883,19 +6094,26 @@ export default function TripDetailScreen({
                   {pendingVaultUpload?.label ?? "Document"}
                 </Text>
                 <Text style={styles.docModalSubtitle} numberOfLines={1}>
-                  Confirm upload
+                  {pendingFileCount > 1
+                    ? `Confirm upload · ${pendingFileCount} files`
+                    : "Confirm upload"}
                 </Text>
               </View>
               <View style={{ width: 36 }} />
             </View>
 
-            <View style={styles.docModalBody}>
+            <ScrollView
+              style={styles.docModalBody}
+              contentContainerStyle={{ paddingBottom: 8 }}
+              nestedScrollEnabled
+            >
               {pendingVaultUpload ? (
-                (pendingVaultUpload.mimeType || "").startsWith("image/") ? (
-                  <Image
-                    source={{ uri: pendingVaultUpload.uri }}
-                    style={styles.docModalImage}
-                    resizeMode="contain"
+                pendingPreviewIsImage || pendingPreviewIsPdf ? (
+                  <TripVaultFilePreview
+                    uri={pendingVaultUpload.uri}
+                    isPdf={pendingPreviewIsPdf}
+                    style={styles.docModalImageConfirm}
+                    accessibilityLabel={`${pendingVaultUpload.label} preview`}
                   />
                 ) : (
                   <View style={styles.docModalCenter}>
@@ -5908,10 +6126,34 @@ export default function TripDetailScreen({
                       {pendingVaultUpload.fileName}
                     </Text>
                     <Text style={styles.docModalHint}>
-                      PDF ready — confirm to save to the vault.
+                      File ready — confirm to save to the vault.
                     </Text>
                   </View>
                 )
+              ) : null}
+
+              {pendingVaultUpload ? (
+                <Text style={styles.pendingExtraFileName} numberOfLines={2}>
+                  {pendingVaultUpload.fileName}
+                </Text>
+              ) : null}
+
+              {pendingVaultUpload?.extraFiles &&
+              pendingVaultUpload.extraFiles.length > 0 ? (
+                <View style={styles.pendingExtraFiles}>
+                  <Text style={styles.pendingExtraFilesTitle}>
+                    Also uploading
+                  </Text>
+                  {pendingVaultUpload.extraFiles.map((file) => (
+                    <Text
+                      key={`${file.uri}-${file.fileName}`}
+                      style={styles.pendingExtraFileName}
+                      numberOfLines={1}
+                    >
+                      {file.fileName}
+                    </Text>
+                  ))}
+                </View>
               ) : null}
 
               {pendingVaultUpload?.docType === "lr" ? (
@@ -5929,7 +6171,7 @@ export default function TripDetailScreen({
                   />
                 </View>
               ) : null}
-            </View>
+            </ScrollView>
 
             <View style={styles.docModalFooter}>
               <TouchableOpacity
@@ -5955,9 +6197,67 @@ export default function TripDetailScreen({
                     color={Theme.buttonDarkText}
                   />
                 ) : (
-                  <Text style={styles.docModalFooterBtnText}>Upload</Text>
+                  <Text style={styles.docModalFooterBtnText}>Save to vault</Text>
                 )}
               </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal
+        visible={addDocChooserVisible}
+        animationType="fade"
+        transparent
+        onRequestClose={() => setAddDocChooserVisible(false)}
+      >
+        <View style={styles.docModalBackdrop}>
+          <View
+            style={[
+              styles.docModalCard,
+              {
+                maxWidth: 420,
+                marginTop: insets.top + 12,
+                marginBottom: insets.bottom + 12,
+              },
+            ]}
+          >
+            <View style={styles.docModalHeader}>
+              <View style={styles.docModalTitleBlock}>
+                <Text style={styles.docModalTitle}>Add document</Text>
+                <Text style={styles.docModalSubtitle}>
+                  Choose what you want to upload
+                </Text>
+              </View>
+              <TouchableOpacity
+                onPress={() => setAddDocChooserVisible(false)}
+                style={styles.docModalCloseIcon}
+                activeOpacity={0.8}
+                accessibilityLabel="Close"
+              >
+                <FontAwesome name="times" size={18} color="#0f172a" />
+              </TouchableOpacity>
+            </View>
+            <View style={{ padding: 12, gap: 8 }}>
+              {(
+                [
+                  { kind: "lr" as const, label: "LR Document" },
+                  { kind: "manifest" as const, label: "Trip Manifest" },
+                  { kind: "pod" as const, label: "Driver POD" },
+                ] as const
+              ).map((item) => (
+                <TouchableOpacity
+                  key={item.kind}
+                  style={styles.addDocTypeBtn}
+                  onPress={() => chooseAddDocumentType(item.kind)}
+                  activeOpacity={0.85}
+                  accessibilityLabel={`Upload ${item.label}`}
+                >
+                  <FontAwesome name="file-text-o" size={16} color="#0f172a" />
+                  <Text style={styles.addDocTypeBtnText}>{item.label}</Text>
+                  <FontAwesome name="chevron-right" size={12} color="#94a3b8" />
+                </TouchableOpacity>
+              ))}
             </View>
           </View>
         </View>
