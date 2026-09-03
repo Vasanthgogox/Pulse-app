@@ -2,6 +2,9 @@ import { getIdentityDb } from '@/lib/supabase';
 
 const AVATAR_BUCKET = 'userprofiles';
 const LEGACY_AVATAR_BUCKET = 'avatars';
+/** Public bucket + path prefix for org logos (never signed) — mirrors Core `lib/avatarUpload.ts`. */
+const PUBLIC_ORG_ASSET_BUCKET = 'org-assets';
+const PUBLIC_ORG_LOGO_PREFIX = 'org-logos/';
 const SIGNED_URL_EXPIRY_SEC = 3600;
 const SIGNED_URL_CACHE_MS = 55 * 60 * 1000;
 
@@ -55,6 +58,13 @@ export function avatarInitialsStyle(seed: string): { backgroundColor: string; co
   return { backgroundColor, color: avatarInkColor(backgroundColor) };
 }
 
+/** Public URL for an `org-logos/...` path. Never signs. */
+function publicOrgLogoUrl(path: string): string | null {
+  const db = getIdentityDb();
+  if (!db) return null;
+  return db.storage.from(PUBLIC_ORG_ASSET_BUCKET).getPublicUrl(path).data.publicUrl;
+}
+
 async function createSignedUrl(bucket: string, path: string): Promise<string | null> {
   const db = getIdentityDb();
   if (!db) return null;
@@ -67,6 +77,13 @@ async function createSignedUrl(bucket: string, path: string): Promise<string | n
 export async function getSignedAvatarUrl(path: string): Promise<string | null> {
   const cacheKey = path.trim();
   if (!cacheKey) return null;
+
+  // Org logos live in the PUBLIC `org-assets` bucket (`org-logos/<orgId>/...`).
+  // Signing them probed `userprofiles` then `avatars` — neither holds the object, so
+  // every call was two guaranteed 400s. getPublicUrl is a pure string builder: no network.
+  if (cacheKey.startsWith(PUBLIC_ORG_LOGO_PREFIX)) {
+    return publicOrgLogoUrl(cacheKey);
+  }
 
   const cached = signedUrlCache.get(cacheKey);
   if (cached && cached.expiresAt > Date.now()) {
