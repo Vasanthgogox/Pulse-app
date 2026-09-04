@@ -47,15 +47,15 @@ export function indentStepCanAdvance(
       return Boolean(
         t(form.pickup_area) && t(form.drop_location) && t(form.pickup_date),
       );
-    case "client":
-      return Boolean(
-        form.client_id?.trim() &&
-          t(form.client_name) &&
-          Number.isFinite(
-            parseFloat(String(form.client_price ?? "").replace(/,/g, "")),
-          ) &&
-          parseFloat(String(form.client_price ?? "").replace(/,/g, "")) > 0,
-      );
+    case "client": {
+      const price = parseFloat(String(form.client_price ?? "").replace(/,/g, ""));
+      const unit = parseFloat(String(form.sale_unit_rate ?? "").replace(/,/g, ""));
+      const hasSale =
+        form.sale_rate_basis === "per_mt"
+          ? Number.isFinite(unit) && unit > 0
+          : Number.isFinite(price) && price > 0;
+      return Boolean(form.client_id?.trim() && t(form.client_name) && hasSale);
+    }
     case "prices": {
       const st = parseFloat(
         String(form.supplier_target ?? "").replace(/,/g, ""),
@@ -66,17 +66,20 @@ export function indentStepCanAdvance(
         st > 0
       );
     }
-    case "vehicle":
+    case "vehicle": {
+      const w = parseFloat(String(form.weight ?? "").replace(/,/g, ""));
+      const unit = parseFloat(String(form.sale_unit_rate ?? "").replace(/,/g, ""));
+      const weightOk =
+        form.sale_rate_basis === "per_mt" && Number.isFinite(unit) && unit > 0
+          ? !t(form.weight) || (Number.isFinite(w) && w > 0)
+          : Boolean(t(form.weight) && Number.isFinite(w) && w > 0);
       return Boolean(
         t(form.vehicle_type) &&
           t(form.load_type) &&
-          t(form.weight) &&
-          Number.isFinite(
-            parseFloat(String(form.weight ?? "").replace(/,/g, "")),
-          ) &&
-          parseFloat(String(form.weight ?? "").replace(/,/g, "")) > 0 &&
+          weightOk &&
           isValidIndentVehicleCount(form.vehicle_count),
       );
+    }
     case "loadType":
       return Boolean(t(form.load_type));
     case "weight": {

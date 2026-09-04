@@ -4,6 +4,10 @@
 import type { ClientLaneRate } from "@/features/clients/types/clientManagement.types";
 import { formatINR } from "@/lib/format";
 import { formatCityStateLabel } from "@/lib/placeCityState.util";
+import {
+  formatSaleAmount,
+  type SaleRateBasis,
+} from "@/features/clients/utils/saleRateSnapshot.util";
 
 export type ClientLanePrefill = {
   pickup: string;
@@ -17,6 +21,9 @@ export type ClientLanePrefill = {
   clientPrice: string | null;
   originWarehouseId: string | null;
   agreementId: string | null;
+  laneId: string;
+  saleRateBasis: SaleRateBasis;
+  saleUnitRate: number | null;
 };
 
 function todayISO(d = new Date()): string {
@@ -51,15 +58,33 @@ function positive(n: number | null | undefined): number | null {
  */
 type LaneRateBasis = "weight" | "distance" | "total";
 
-function laneRateBasis(lane: ClientLaneRate): LaneRateBasis {
+export function laneRateBasis(lane: ClientLaneRate): LaneRateBasis {
   const type = lane.rate_type;
   if (type === "per_ton" || type === "per_kg") return "weight";
   if (type === "per_km") return "distance";
-  // `pricing_model` is a legacy free-text mirror of the same intent; honour it
-  // only when rate_type itself is not weight/distance-bearing.
-  if (lane.pricing_model === "per_ton") return "weight";
-  if (lane.pricing_model === "per_km") return "distance";
+  const model = lane.pricing_model;
+  if (model === "per_ton" || model === "per_mt_km") return "weight";
+  if (model === "per_km") return "distance";
+  // per_mt_rate with no flat trip rate is a weight quote even if rate_type
+  // was left at the form default (`per_trip`).
+  if (positive(lane.per_mt_rate) != null && positive(lane.rate) == null && positive(lane.base_rate) == null) {
+    return "weight";
+  }
   return "total";
+}
+
+export function isWeightBasedLane(lane: ClientLaneRate): boolean {
+  return laneRateBasis(lane) === "weight";
+}
+
+/** ₹ per metric ton for a weight lane. `per_kg` rates are scaled ×1000. */
+export function laneUnitRatePerMt(lane: ClientLaneRate): number | null {
+  if (laneRateBasis(lane) !== "weight") return null;
+  const perMt = positive(lane.per_mt_rate);
+  if (perMt != null) return perMt;
+  const raw = positive(lane.rate) ?? positive(lane.base_rate);
+  if (raw == null) return null;
+  return lane.rate_type === "per_kg" ? raw * 1000 : raw;
 }
 
 /**
@@ -81,22 +106,25 @@ function laneMultiplier(lane: ClientLaneRate, basis: LaneRateBasis): number | nu
  * Total sale amount for a lane, scaled by weight or distance where the rate
  * type demands it. Returns null when no usable rate exists.
  *
- * A weight/distance lane with no load or distance recorded falls back to the
- * raw rate — a visibly-too-low number the user can correct beats blocking the
- * prefill entirely, and it matches the pre-scaling behaviour.
+ * A weight lane with no load returns null — never stamp ₹/MT as the trip total.
  */
 export function resolveLaneSaleAmount(lane: ClientLaneRate): number | null {
   const basis = laneRateBasis(lane);
-  const multiplier = laneMultiplier(lane, basis) ?? 1;
+  const multiplier = laneMultiplier(lane, basis);
+
+  if (basis === "weight") {
+    const unit = laneUnitRatePerMt(lane);
+    if (unit == null || multiplier == null) return null;
+    return applyMinBilling(lane, unit * multiplier);
+  }
 
   const unitRate =
     positive(lane.rate) ??
     positive(lane.base_rate) ??
-    (basis === "weight" ? positive(lane.per_mt_rate) : null) ??
     (basis === "distance" ? positive(lane.per_km_rate) : null);
 
   if (unitRate != null) {
-    return applyMinBilling(lane, unitRate * multiplier);
+    return applyMinBilling(lane, unitRate * (multiplier ?? 1));
   }
 
   // No flat rate: fall back to the composite per-MT / per-KM columns.
@@ -139,9 +167,12 @@ export function buildClientLanePrefill(lane: ClientLaneRate): ClientLanePrefill 
     vehicleType: lane.vehicle_type?.trim() || null,
     loadType: lane.default_load_type?.trim() || null,
     tons,
-    clientPrice: amount != null ? String(Math.round(amount)) : null,
+    clientPrice: formatSaleAmount(amount),
     originWarehouseId: lane.origin_warehouse_id,
     agreementId: lane.agreement_id,
+    laneId: lane.id,
+    saleRateBasis: isWeightBasedLane(lane) ? "per_mt" : "per_trip",
+    saleUnitRate: laneUnitRatePerMt(lane),
   };
 }
 
@@ -169,7 +200,7 @@ export function lanePrimaryRateLabel(lane: ClientLaneRate): string {
   const type = lane.rate_type?.replace(/_/g, " ") ?? "rate";
   // Show the stored UNIT rate here — pairing the weight-scaled total with a
   // "per ton" suffix would read as a far higher per-ton price than contracted.
-  const unit = positive(lane.rate) ?? positive(lane.base_rate);
+  const unit = laneUnitRatePerMt(lane) ?? positive(lane.rate) ?? positive(lane.base_rate);
   if (unit != null) return `${formatINR(unit)} · ${type}`;
   const amount = resolveLaneSaleAmount(lane);
   if (amount == null) return "Rate TBD";
@@ -184,7 +215,7 @@ export function laneSaleBreakdownLabel(lane: ClientLaneRate): string | null {
   const basis = laneRateBasis(lane);
   if (basis === "total") return null;
   const multiplier = laneMultiplier(lane, basis);
-  const unit = positive(lane.rate) ?? positive(lane.base_rate);
+  const unit = laneUnitRatePerMt(lane) ?? positive(lane.rate) ?? positive(lane.base_rate);
   const total = resolveLaneSaleAmount(lane);
   if (multiplier == null || unit == null || total == null) return null;
   const suffix = basis === "distance" ? "km" : lane.rate_type === "per_kg" ? "kg" : "t";

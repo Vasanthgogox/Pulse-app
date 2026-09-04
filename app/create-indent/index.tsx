@@ -36,6 +36,14 @@ import {
   buildClientLanePrefill,
   repriceLaneForTons,
 } from "@/features/clients/utils/clientLanePrefill.util";
+import {
+  computeClientPrice,
+  formatSaleAmount,
+  hasConvertibleSale,
+  parsePositiveAmount,
+  parsePositiveTons,
+  type SaleRateBasis,
+} from "@/features/clients/utils/saleRateSnapshot.util";
 import { useClientLaneRatesQuery } from "@/lib/queries/useClientLaneRatesQuery";
 import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { useClientWarehousesQuery } from "@/lib/queries/useClientWarehousesQuery";
@@ -160,15 +168,23 @@ function validateForm(state: FormState): Record<string, string> {
   }
   r("pickup_area", required(), maxLength(255));
   r("drop_location", required(), maxLength(255));
-  const clientPriceErr = positiveAmount()(state.client_price);
-  if (clientPriceErr) errors.client_price = clientPriceErr;
+  const perMt = state.sale_rate_basis === "per_mt";
+  if (perMt) {
+    const unitErr = positiveAmount()(state.sale_unit_rate);
+    if (unitErr) errors.client_price = unitErr;
+  } else {
+    const clientPriceErr = positiveAmount()(state.client_price);
+    if (clientPriceErr) errors.client_price = clientPriceErr;
+  }
   const supplierTargetErr = positiveAmount()(state.supplier_target);
   if (supplierTargetErr) errors.supplier_target = supplierTargetErr;
   r("vehicle_type", required("Vehicle is required"), maxLength(100));
   r("load_type", required("Product type is required"), maxLength(100));
   const weightStr = (state.weight ?? "").trim();
   if (!weightStr) {
-    errors.weight = "Weight is required.";
+    if (!perMt || !parsePositiveAmount(state.sale_unit_rate)) {
+      errors.weight = "Weight is required.";
+    }
   } else {
     const w = parseFloat(weightStr.replace(/,/g, ""));
     if (Number.isNaN(w) || w <= 0)
@@ -284,6 +300,8 @@ const initialFormState: FormState = {
   weight: "",
   vehicle_count: "1",
   client_price: "",
+  sale_rate_basis: "per_trip",
+  sale_unit_rate: "",
   supplier_target: "",
   pickup_date: getToday(),
   circulation_target: "integrated_supplier",
@@ -315,6 +333,7 @@ function hasIndentDraftProgress(state: FormState): boolean {
   if (t(state.load_type)) return true;
   if (t(state.weight)) return true;
   if (t(state.client_price)) return true;
+  if (t(state.sale_unit_rate)) return true;
   if (t(state.supplier_target)) return true;
   return false;
 }
@@ -634,6 +653,12 @@ export default function CreateIndentScreen() {
               indent.client_price != null
                 ? String(Number(indent.client_price))
                 : "",
+            sale_rate_basis:
+              indent.sale_rate_basis === "per_mt" ? "per_mt" : "per_trip",
+            sale_unit_rate:
+              indent.sale_unit_rate != null && Number(indent.sale_unit_rate) > 0
+                ? String(Number(indent.sale_unit_rate))
+                : "",
             supplier_target:
               indent.supplier_target != null
                 ? String(Number(indent.supplier_target))
@@ -653,6 +678,9 @@ export default function CreateIndentScreen() {
           setForm(nextForm);
           setLastSavedForm(nextForm);
           setDraftIndentId(indent.id);
+          const draftLaneId =
+            typeof indent.lane_id === "string" ? indent.lane_id : null;
+          setSelectedLaneId(draftLaneId);
           if (nextForm.client_id?.trim()) {
             setClientListExpanded(false);
           } else {
@@ -826,7 +854,10 @@ export default function CreateIndentScreen() {
         ...(prefill.vehicleType ? { vehicle_type: prefill.vehicleType } : {}),
         ...(prefill.loadType ? { load_type: prefill.loadType } : {}),
         ...(prefill.tons ? { weight: prefill.tons } : {}),
-        ...(prefill.clientPrice ? { client_price: prefill.clientPrice } : {}),
+        sale_rate_basis: prefill.saleRateBasis,
+        sale_unit_rate:
+          prefill.saleUnitRate != null ? String(prefill.saleUnitRate) : "",
+        client_price: prefill.clientPrice ?? "",
       });
       if (wh?.latitude != null && wh?.longitude != null) {
         setPickupLat(wh.latitude);
@@ -838,23 +869,74 @@ export default function CreateIndentScreen() {
 
   const handleClearLane = useCallback(() => {
     setSelectedLaneId(null);
-  }, []);
+    update({ sale_rate_basis: "per_trip", sale_unit_rate: "" });
+  }, [update]);
+
+  const handleSaleRateBasisChange = useCallback(
+    (basis: SaleRateBasis) => {
+      const next: Partial<FormState> = { sale_rate_basis: basis };
+      if (basis === "per_mt") {
+        const tons = parsePositiveTons(form.weight);
+        const total = parsePositiveAmount(form.client_price);
+        if (tons && total && !parsePositiveAmount(form.sale_unit_rate)) {
+          next.sale_unit_rate = String(Math.round((total / tons) * 100) / 100);
+        }
+        next.client_price = formatSaleAmount(
+          computeClientPrice({
+            basis: "per_mt",
+            unitRate: parsePositiveAmount(next.sale_unit_rate ?? form.sale_unit_rate),
+            tons,
+          }),
+        );
+      }
+      update(next);
+    },
+    [form.client_price, form.sale_unit_rate, form.weight, update],
+  );
+
+  const handleSaleUnitRateChange = useCallback(
+    (value: string) => {
+      update({
+        sale_unit_rate: value,
+        client_price: formatSaleAmount(
+          computeClientPrice({
+            basis: "per_mt",
+            unitRate: parsePositiveAmount(value),
+            tons: parsePositiveTons(form.weight),
+          }),
+        ),
+      });
+    },
+    [form.weight, update],
+  );
 
   /**
-   * Weight drives the price on per-ton / per-kg contract lanes, so editing tons
-   * after picking a lane must re-derive client_price. Non-weight lanes and
-   * ad-hoc indents (no lane selected) just take the new weight.
+   * Weight drives the price on per-MT lanes, so editing tons must re-derive
+   * client_price from the stored unit rate.
    */
   const handleTonsChange = useCallback(
     (value: string) => {
       const tons = value.replace(/[^\d.]/g, "").slice(0, 12);
+      if (form.sale_rate_basis === "per_mt") {
+        update({
+          weight: tons,
+          client_price: formatSaleAmount(
+            computeClientPrice({
+              basis: "per_mt",
+              unitRate: parsePositiveAmount(form.sale_unit_rate),
+              tons: parsePositiveTons(tons),
+            }),
+          ),
+        });
+        return;
+      }
       const lane = selectedLaneId
         ? contractLanes.find((l) => l.id === selectedLaneId)
         : undefined;
       const repriced = lane ? repriceLaneForTons(lane, tons) : null;
       update({ weight: tons, ...(repriced ? { client_price: repriced } : {}) });
     },
-    [contractLanes, selectedLaneId, update],
+    [contractLanes, form.sale_rate_basis, form.sale_unit_rate, selectedLaneId, update],
   );
 
   const indentWizardContextRow = useMemo(() => {
@@ -903,6 +985,8 @@ export default function CreateIndentScreen() {
       update({
         client_id: client.id,
         client_name: clientName,
+        sale_rate_basis: "per_trip",
+        sale_unit_rate: "",
       });
       setSelectedLaneId(null);
       setLaneSearch("");
@@ -913,7 +997,13 @@ export default function CreateIndentScreen() {
   );
 
   const handleClearClient = useCallback(() => {
-    update({ client_id: null, client_name: "", client_price: "" });
+    update({
+      client_id: null,
+      client_name: "",
+      client_price: "",
+      sale_rate_basis: "per_trip",
+      sale_unit_rate: "",
+    });
     setSelectedLaneId(null);
     setLaneSearch("");
     setClientListExpanded(true);
@@ -955,6 +1045,9 @@ export default function CreateIndentScreen() {
       client_name: form.client_name.trim(),
       client_price:
         parseFloat(String(form.client_price).replace(/,/g, "")) || 0,
+      sale_rate_basis: form.sale_rate_basis,
+      sale_unit_rate: parsePositiveAmount(form.sale_unit_rate),
+      lane_id: selectedLaneId,
       supplier_target:
         parseFloat(String(form.supplier_target).replace(/,/g, "")) || 0,
       vehicle_type: form.vehicle_type.trim(),
@@ -967,7 +1060,7 @@ export default function CreateIndentScreen() {
     };
     if (form.client_id) payload.client_id = form.client_id;
     return payload;
-  }, [form, profile, user]);
+  }, [form, profile, selectedLaneId, user]);
 
   const persistDraft = useCallback(async () => {
     if (shouldSkipLockedSubmit(submitting, submitLockRef)) return;
@@ -1145,11 +1238,15 @@ export default function CreateIndentScreen() {
     (form.drop_location ?? "").trim().length > 0 &&
     (form.vehicle_type ?? "").trim().length > 0 &&
     (form.load_type ?? "").trim().length > 0 &&
-    (form.weight ?? "").trim().length > 0 &&
-    parseFloat((form.weight ?? "").replace(/,/g, "")) > 0 &&
+    (hasConvertibleSale({
+      basis: form.sale_rate_basis,
+      unitRate: parsePositiveAmount(form.sale_unit_rate),
+      clientPrice: parsePositiveAmount(form.client_price),
+    })) &&
+    (form.sale_rate_basis === "per_mt" ||
+      ((form.weight ?? "").trim().length > 0 &&
+        parseFloat((form.weight ?? "").replace(/,/g, "")) > 0)) &&
     isValidIndentVehicleCount(form.vehicle_count) &&
-    (form.client_price ?? "").trim().length > 0 &&
-    parseFloat(String(form.client_price ?? "").replace(/,/g, "")) > 0 &&
     (form.supplier_target ?? "").trim().length > 0 &&
     parseFloat(String(form.supplier_target ?? "").replace(/,/g, "")) > 0;
 
@@ -1424,6 +1521,10 @@ export default function CreateIndentScreen() {
                 onClientPriceChange={(value) => update({ client_price: value })}
                 clientPriceError={Boolean(errors.client_price)}
                 onClearClient={handleClearClient}
+                saleRateBasis={form.sale_rate_basis}
+                saleUnitRate={form.sale_unit_rate}
+                onSaleRateBasisChange={handleSaleRateBasisChange}
+                onSaleUnitRateChange={handleSaleUnitRateChange}
                 contractLanes={contractLanes}
                 contractLanesLoading={lanesLoading}
                 selectedLaneId={selectedLaneId}

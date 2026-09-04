@@ -1,0 +1,2 @@
+-- Placeholder: version owned by pulse-unified-base on the shared project.
+-- Do not put SQL here. Remote already recorded this version as applied.

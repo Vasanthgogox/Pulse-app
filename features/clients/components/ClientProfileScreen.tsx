@@ -53,7 +53,8 @@ function mapContracts(bundle: ClientManagementBundle): ProfileContract[] {
     const perTon =
       lane.rate_type === "per_ton" ||
       lane.rate_type === "per_kg" ||
-      lane.pricing_model === "per_ton";
+      lane.pricing_model === "per_ton" ||
+      lane.pricing_model === "per_mt_km";
     const warehouseId = lane.origin_warehouse_id ?? null;
     const warehouseName = warehouseId
       ? warehouseById.get(warehouseId) ?? null

@@ -285,7 +285,7 @@ export const signUpMobileStyles = StyleSheet.create({
     borderColor: SIGNUP_MOBILE.border,
     backgroundColor: SIGNUP_MOBILE.bg,
     flex: 1,
-    minHeight: 40,
+    minHeight: 44,
   },
   docActionText: {
     ...PULSE_SIGNUP_TYPO.captionMedium,

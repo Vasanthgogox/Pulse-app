@@ -23,6 +23,7 @@ import Theme from "@/constants/Theme";
 import { platformShadow } from "@/lib/platformShadow";
 
 import { ClientSaleKeypadFlow } from "./ClientSaleKeypadFlow";
+import type { SaleRateBasis } from "@/features/clients/utils/saleRateSnapshot.util";
 
 const SHEET_EASE = Easing.bezier(0.16, 1, 0.3, 1);
 
@@ -35,6 +36,9 @@ export type ClientSaleDesktopModalProps = {
   partyPreview?: NumericEntryPartyPreview;
   onChangeClient?: () => void;
   priceError?: boolean;
+  saleRateBasis?: SaleRateBasis;
+  onSaleRateBasisChange?: (basis: SaleRateBasis) => void;
+  saleBasisLocked?: boolean;
 };
 
 export const ClientSaleDesktopModal = memo(function ClientSaleDesktopModal({
@@ -46,6 +50,9 @@ export const ClientSaleDesktopModal = memo(function ClientSaleDesktopModal({
   partyPreview,
   onChangeClient,
   priceError = false,
+  saleRateBasis,
+  onSaleRateBasisChange,
+  saleBasisLocked,
 }: ClientSaleDesktopModalProps) {
   const insets = useSafeAreaInsets();
   const { height } = useWindowDimensions();
@@ -156,8 +163,15 @@ export const ClientSaleDesktopModal = memo(function ClientSaleDesktopModal({
                 partyPreview={partyPreview}
                 onPartyPress={onChangeClient}
                 errorMessage={
-                  priceError ? "Enter a sale price greater than 0" : undefined
+                  priceError
+                    ? saleRateBasis === "per_mt"
+                      ? "Enter a per-MT rate greater than 0"
+                      : "Enter a sale price greater than 0"
+                    : undefined
                 }
+                saleRateBasis={saleRateBasis}
+                onSaleRateBasisChange={onSaleRateBasisChange}
+                saleBasisLocked={saleBasisLocked}
               />
             </View>
           </WizardActionBarProvider>

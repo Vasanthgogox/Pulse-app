@@ -920,6 +920,10 @@ export interface CreateTripData {
   client_name: string;
   client_id?: string | null;
   client_price?: number;
+  sale_rate_basis?: "per_mt" | "per_trip" | null;
+  sale_unit_rate?: number | null;
+  lane_id?: string | null;
+  indent_id?: string | null;
   supplier_rate?: number;
   notes?: string | null;
   pickup_date?: string | null;
@@ -1739,7 +1743,6 @@ export async function createTrip(
     owner_user_id: ownerUserId,
     created_by_user_id: creatorUserId,
     trip_number: null as string | null,
-    source: "manual",
     pickup_area: (data.pickup_area ?? "").trim(),
     drop_location: (data.drop_location ?? "").trim(),
     pickup_lat:
@@ -1767,6 +1770,14 @@ export async function createTrip(
     client_name: (data.client_name ?? "").trim() || "—",
     client_id: normalizeNullableUuid(data.client_id),
     client_price: clientPrice,
+    sale_rate_basis: data.sale_rate_basis === "per_mt" ? "per_mt" : data.sale_rate_basis === "per_trip" ? "per_trip" : null,
+    sale_unit_rate:
+      data.sale_unit_rate != null && Number(data.sale_unit_rate) > 0
+        ? Number(data.sale_unit_rate)
+        : null,
+    lane_id: normalizeNullableUuid(data.lane_id),
+    indent_id: normalizeNullableUuid(data.indent_id),
+    source: normalizeNullableUuid(data.indent_id) ? "indent" : "manual",
     supplier_rate: supplierRate,
     platform_fee: 0,
     driver_commission: computedDriverCommission,

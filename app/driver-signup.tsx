@@ -62,6 +62,7 @@ import { createPulseSignUpTextStyles } from '@/features/auth/signup/signUpTypogr
 import { suiteSignUpCopy } from '@/lib/suite/suiteAuthContent';
 import { updateProfile } from '@/features/auth/services/auth.service';
 import { pickLocalAvatar, uploadAvatarFromLocal } from '@/lib/avatarUpload';
+import { submitDriverKycDocument } from '@/features/drivers/services/driverKycDocuments.service';
 import {
   clearDriverSignupSuccess,
   hydrateDriverSignupSuccessFlag,
@@ -133,6 +134,7 @@ type DriverSignupDocAsset = {
   fileName: string;
   mimeType: string;
   base64?: string;
+  fileSize?: number;
 };
 
 function normalizeDocMimeType(rawMime: string | null | undefined): string {
@@ -735,23 +737,30 @@ export default function DriverSignUpScreen() {
 
   const pickDocument = async (doc: DriverSignupDocKey, method: 'gallery' | 'camera') => {
     try {
-      if (method === 'gallery') {
-        const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
-        if (!perm.granted) {
-          showAppAlert('Permission required', 'Photo library access is needed to upload this document.');
-          return;
-        }
-      } else {
-        const perm = await ImagePicker.requestCameraPermissionsAsync();
-        if (!perm.granted) {
-          showAppAlert('Permission required', 'Camera access is needed to capture this document.');
-          return;
+      // Web has no media-library permission model — the browser file dialog is
+      // the consent step. Requesting permission first can resolve un-granted
+      // and also drops the user-gesture, so the picker never opens.
+      if (Platform.OS !== 'web') {
+        if (method === 'gallery') {
+          const perm = await ImagePicker.requestMediaLibraryPermissionsAsync();
+          if (!perm.granted) {
+            showAppAlert('Permission required', 'Photo library access is needed to upload this document.');
+            return;
+          }
+        } else {
+          const perm = await ImagePicker.requestCameraPermissionsAsync();
+          if (!perm.granted) {
+            showAppAlert('Permission required', 'Camera access is needed to capture this document.');
+            return;
+          }
         }
       }
 
-      const result =
-        method === 'gallery'
-          ? await ImagePicker.launchImageLibraryAsync({
+      // On web, both buttons open the file picker. getUserMedia camera capture
+      // is unreliable in browsers; mobile OS pickers already include camera.
+      const useLibrary = method === 'gallery' || Platform.OS === 'web';
+      const result = useLibrary
+        ? await ImagePicker.launchImageLibraryAsync({
               mediaTypes: ['images'],
               allowsEditing: false,
               quality: 0.9,
@@ -774,6 +783,7 @@ export default function DriverSignUpScreen() {
           fileName: asset.fileName ?? fallbackName,
           mimeType,
           base64: typeof asset.base64 === 'string' ? asset.base64.trim() : undefined,
+          fileSize: typeof asset.fileSize === 'number' ? asset.fileSize : undefined,
         },
       }));
       markDocumentUploaded(doc, method);
@@ -795,6 +805,7 @@ export default function DriverSignUpScreen() {
         fileName: asset.fileName ?? fallbackName,
         mimeType,
         base64: typeof asset.base64 === 'string' ? asset.base64.trim() : undefined,
+        fileSize: typeof asset.fileSize === 'number' ? asset.fileSize : undefined,
       };
       const immediateUpload = await uploadSingleDriverDocument(currentUser.id, doc, immediateDoc);
       if (immediateUpload.error || !immediateUpload.path) {
@@ -836,6 +847,21 @@ export default function DriverSignUpScreen() {
         upsert: true,
       });
     if (error) return { path: null, error: new Error(error.message || `Failed to upload ${docType}`) };
+
+    const kycResult = await submitDriverKycDocument({
+      doc_type: docType,
+      storage_path: path,
+      file_name: doc.fileName,
+      mime_type: doc.mimeType || 'image/jpeg',
+      file_size_bytes: doc.fileSize,
+    });
+    if (kycResult.error) {
+      return {
+        path,
+        error: new Error(kycResult.error.message || `Failed to save ${docType} for review`),
+      };
+    }
+
     return { path, error: null };
   };
 

@@ -4287,6 +4287,7 @@ export type Database = {
           assigned_supplier_id: string | null
           assigned_supplier_rate: number | null
           circulation_target: string | null
+          client_id: string | null
           client_name: string
           client_price: number
           created_at: string | null
@@ -4298,12 +4299,15 @@ export type Database = {
           indent_code: string | null
           indent_number: string
           indent_operational_code: string | null
+          lane_id: string | null
           last_saved_at: string | null
           load_type: string | null
           organization_id: string
           owner_user_id: string | null
           pickup_area: string
           pickup_date: string | null
+          sale_rate_basis: string | null
+          sale_unit_rate: number | null
           sales_order_id: string | null
           sequence_number: number | null
           shared_at: string | null
@@ -4317,6 +4321,7 @@ export type Database = {
           assigned_supplier_id?: string | null
           assigned_supplier_rate?: number | null
           circulation_target?: string | null
+          client_id?: string | null
           client_name: string
           client_price?: number
           created_at?: string | null
@@ -4328,12 +4333,15 @@ export type Database = {
           indent_code?: string | null
           indent_number: string
           indent_operational_code?: string | null
+          lane_id?: string | null
           last_saved_at?: string | null
           load_type?: string | null
           organization_id: string
           owner_user_id?: string | null
           pickup_area: string
           pickup_date?: string | null
+          sale_rate_basis?: string | null
+          sale_unit_rate?: number | null
           sales_order_id?: string | null
           sequence_number?: number | null
           shared_at?: string | null
@@ -4347,6 +4355,7 @@ export type Database = {
           assigned_supplier_id?: string | null
           assigned_supplier_rate?: number | null
           circulation_target?: string | null
+          client_id?: string | null
           client_name?: string
           client_price?: number
           created_at?: string | null
@@ -4358,12 +4367,15 @@ export type Database = {
           indent_code?: string | null
           indent_number?: string
           indent_operational_code?: string | null
+          lane_id?: string | null
           last_saved_at?: string | null
           load_type?: string | null
           organization_id?: string
           owner_user_id?: string | null
           pickup_area?: string
           pickup_date?: string | null
+          sale_rate_basis?: string | null
+          sale_unit_rate?: number | null
           sales_order_id?: string | null
           sequence_number?: number | null
           shared_at?: string | null

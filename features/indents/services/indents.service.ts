@@ -48,6 +48,9 @@ export interface CreateIndentInput {
   /** Optional: status is managed by DB default / backend logic. */
   status?: string | null;
   client_id?: string | null;
+  lane_id?: string | null;
+  sale_rate_basis?: "per_mt" | "per_trip" | null;
+  sale_unit_rate?: number | null;
   /** Required: vehicle type (e.g. Truck). */
   vehicle_type: string;
   /** Required: load type (e.g. FMCG). */
@@ -96,6 +99,9 @@ export interface IndentRow {
   supplier_target: number;
   status: string;
   client_id?: string | null;
+  lane_id?: string | null;
+  sale_rate_basis?: "per_mt" | "per_trip" | null;
+  sale_unit_rate?: number | null;
   vehicle_type: string | null;
   load_type: string | null;
   pickup_date: string | null;
@@ -745,9 +751,15 @@ export async function createIndent(
     ]);
     if (dropErr)
       return { error: new Error(`Drop location: ${dropErr}`), indent: null };
-    const priceErr = positiveAmount()(data.client_price);
-    if (priceErr)
-      return { error: new Error(`Client price: ${priceErr}`), indent: null };
+    const perMt =
+      data.sale_rate_basis === "per_mt" &&
+      data.sale_unit_rate != null &&
+      data.sale_unit_rate > 0;
+    if (!perMt) {
+      const priceErr = positiveAmount()(data.client_price);
+      if (priceErr)
+        return { error: new Error(`Client price: ${priceErr}`), indent: null };
+    }
     const targetErr = nonNegativeAmount()(data.supplier_target);
     if (targetErr)
       return {
@@ -766,15 +778,32 @@ export async function createIndent(
     ]);
     if (loadTypeErr)
       return { error: new Error(`Load type: ${loadTypeErr}`), indent: null };
+    const perMtWeightOptional =
+      data.sale_rate_basis === "per_mt" &&
+      data.sale_unit_rate != null &&
+      data.sale_unit_rate > 0;
     if (
-      data.weight == null ||
-      typeof data.weight !== "number" ||
-      data.weight <= 0 ||
-      data.weight > 999999
+      !perMtWeightOptional &&
+      (data.weight == null ||
+        typeof data.weight !== "number" ||
+        data.weight <= 0 ||
+        data.weight > 999999)
     ) {
       return {
         error: new Error(
           "Weight is required and must be between 0.01 and 1,000 tons.",
+        ),
+        indent: null,
+      };
+    }
+    if (
+      perMtWeightOptional &&
+      data.weight != null &&
+      (typeof data.weight !== "number" || data.weight < 0 || data.weight > 999999)
+    ) {
+      return {
+        error: new Error(
+          "Weight must be between 0 and 1,000 tons.",
         ),
         indent: null,
       };
@@ -804,6 +833,16 @@ export async function createIndent(
     pickup_area: data.pickup_area?.trim() ?? "",
     drop_location: data.drop_location?.trim() ?? "",
     client_name: client_name?.trim() ?? "",
+    client_id: data.client_id ?? null,
+    lane_id: data.lane_id ?? null,
+    sale_rate_basis:
+      data.sale_rate_basis === "per_mt" || data.sale_rate_basis === "per_trip"
+        ? data.sale_rate_basis
+        : null,
+    sale_unit_rate:
+      data.sale_unit_rate != null && Number(data.sale_unit_rate) > 0
+        ? data.sale_unit_rate
+        : null,
     client_price: Number.isFinite(data.client_price) ? data.client_price : 0,
     supplier_target: Number.isFinite(data.supplier_target)
       ? data.supplier_target
@@ -971,7 +1010,11 @@ type DraftEditableFields = Partial<
     | "pickup_area"
     | "drop_location"
     | "client_name"
+    | "client_id"
     | "client_price"
+    | "lane_id"
+    | "sale_rate_basis"
+    | "sale_unit_rate"
     | "supplier_target"
     | "vehicle_type"
     | "load_type"
@@ -1003,8 +1046,14 @@ export async function updateIndentDraft(
     payload.drop_location = updates.drop_location;
   if (updates.client_name !== undefined)
     payload.client_name = updates.client_name;
+  if (updates.client_id !== undefined) payload.client_id = updates.client_id;
   if (updates.client_price !== undefined)
     payload.client_price = updates.client_price;
+  if (updates.lane_id !== undefined) payload.lane_id = updates.lane_id;
+  if (updates.sale_rate_basis !== undefined)
+    payload.sale_rate_basis = updates.sale_rate_basis;
+  if (updates.sale_unit_rate !== undefined)
+    payload.sale_unit_rate = updates.sale_unit_rate;
   if (updates.supplier_target !== undefined)
     payload.supplier_target = updates.supplier_target;
   if (updates.vehicle_type !== undefined)

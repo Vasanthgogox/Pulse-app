@@ -14,6 +14,10 @@ export interface FormState {
   /** How many matching indent rows to create on share. Default `"1"`. */
   vehicle_count: string;
   client_price: string;
+  /** `per_mt` keeps ₹/MT so sale can be computed after loading. */
+  sale_rate_basis: "per_mt" | "per_trip";
+  /** Unit rate when `sale_rate_basis` is `per_mt`. */
+  sale_unit_rate: string;
   supplier_target: string;
   pickup_date: string;
   /** Who receives this load: connected suppliers, the open Marketplace, or both. */
