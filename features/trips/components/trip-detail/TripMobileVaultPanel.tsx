@@ -4,7 +4,7 @@
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
-import { canAddMoreTripDocs, formatVaultDocDate, isEwayBillVaultDoc, isLrVaultDoc, type TripDocItem, VAULT_DOC_LIMIT_HINT } from "@/features/trips/components/trip-detail/tripDocTypes";
+import { canAddMoreTripDocs, formatVaultDocDate, isEwayBillVaultDoc, isLrVaultDoc, type TripDocItem, VAULT_DOC_LIMIT_HINT, vaultDocHasPreviewableFile } from "@/features/trips/components/trip-detail/tripDocTypes";
 import {
   EwayBillLrStrip,
   type EwayBillStripRow,
@@ -289,11 +289,14 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
             const copy = statusCopy(doc.status);
             const isUploading = uploadingDocId === doc.id;
             const isPending = doc.status === "Pending";
+            const isVehicleDoc = doc.id === "vehicle-documents";
+            const previewDisabled =
+              isVehicleDoc && !vaultDocHasPreviewableFile(doc);
             const actionLabel = isPending
-              ? canUploadTripDocs
-                ? "Upload"
-                : doc.id === "vehicle-documents" && vehicleId
-                  ? "Open"
+              ? isVehicleDoc
+                ? "Preview"
+                : canUploadTripDocs
+                  ? "Upload"
                   : "Pending"
               : "View";
 
@@ -308,9 +311,14 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
                 <TouchableOpacity
                   onPress={() => onCardPress(doc)}
                   activeOpacity={0.88}
-                  disabled={isUploading}
+                  disabled={isUploading || previewDisabled}
                   accessibilityRole="button"
-                  accessibilityLabel={`${actionLabel} ${doc.label}`}
+                  accessibilityState={{ disabled: previewDisabled }}
+                  accessibilityLabel={
+                    previewDisabled
+                      ? `${doc.label} preview unavailable — no document on file`
+                      : `${actionLabel} ${doc.label}`
+                  }
                 >
                   <View style={styles.cardMain}>
                     <VaultDocThumb
@@ -344,7 +352,7 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
                       <Text style={styles.cardDetail} numberOfLines={2}>
                         {doc.id === "vehicle-documents"
                           ? isPending
-                            ? `Upload ${VEHICLE_COMPLIANCE_TYPE_HINT}`
+                            ? VEHICLE_COMPLIANCE_TYPE_HINT
                             : doc.files?.length
                               ? doc.files.map((file) => file.label).join(" · ")
                               : doc.type
@@ -363,7 +371,13 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
                                 ? `${doc.files?.length} files on file — tap to view`
                                 : copy.detail}
                       </Text>
-                      <Text style={styles.cardAction} numberOfLines={1}>
+                      <Text
+                        style={[
+                          styles.cardAction,
+                          previewDisabled && styles.cardActionDisabled,
+                        ]}
+                        numberOfLines={1}
+                      >
                         {isUploading ? "Uploading…" : actionLabel}
                         {canUploadTripDocs && isPending ? " · required" : ""}
                       </Text>
@@ -592,6 +606,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
     color: LINK,
+  },
+  cardActionDisabled: {
+    color: MUTED,
   },
   chevronWrap: {
     width: 28,

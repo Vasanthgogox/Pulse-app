@@ -1,4 +1,4 @@
-import { canAddMoreTripDocs, formatVaultDocDate, isPdfTripDoc, vaultDocDateToIso, vaultPickerRejectionMessage } from "../tripDocTypes";
+import { canAddMoreTripDocs, formatVaultDocDate, isPdfTripDoc, vaultDocDateToIso, vaultDocHasPreviewableFile, vaultPickerRejectionMessage } from "../tripDocTypes";
 
 describe("isPdfTripDoc", () => {
   it("detects PDF from vault type", () => {
@@ -54,6 +54,32 @@ describe("canAddMoreTripDocs", () => {
     expect(canAddMoreTripDocs({ id: "vehicle-documents" })).toBe(true);
     expect(
       canAddMoreTripDocs({ docSource: "vehicle", category: "vehicle" }),
+    ).toBe(true);
+  });
+});
+
+describe("vaultDocHasPreviewableFile", () => {
+  it("disables preview when the vehicle slot has no files", () => {
+    expect(
+      vaultDocHasPreviewableFile({ status: "Pending" }),
+    ).toBe(false);
+  });
+
+  it("enables preview when a file is on file", () => {
+    expect(
+      vaultDocHasPreviewableFile({
+        status: "Pending",
+        storagePath: "vehicles/1/rc.pdf",
+      }),
+    ).toBe(true);
+    expect(
+      vaultDocHasPreviewableFile({
+        status: "Pending",
+        files: [{ id: "rc", label: "RC", type: "PDF", storagePath: "a.pdf" }],
+      }),
+    ).toBe(true);
+    expect(
+      vaultDocHasPreviewableFile({ status: "Uploaded" }),
     ).toBe(true);
   });
 });

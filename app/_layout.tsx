@@ -28,6 +28,7 @@ import {
 import type { PreloadableTab } from '@/lib/preloadRoutes';
 import { pathnameHasRootTopNav } from '@/lib/rootChromeRoutes';
 import { ROUTES } from '@/lib/routes';
+import { rememberCurrentPath } from '@/lib/lastRoute';
 import {
   DemoTabBarAutoHideShell,
   DemoTabBarScrollProvider,
@@ -463,6 +464,9 @@ function RootLayoutNav() {
   const isDispatcherChatRouteActive =
     !isDriverRole &&
     (isFloatingChatHostRoute(pathname) || isChatRoute);
+  useEffect(() => {
+    rememberCurrentPath(pathname);
+  }, [pathname]);
   useEffect(() => {
     installForegroundPruning();
     if (!__DEV__) return;

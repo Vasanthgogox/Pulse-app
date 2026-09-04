@@ -142,6 +142,19 @@ export function canAddMoreTripDocs(
   );
 }
 
+/** True when Preview can open a file (storage path, file list, or uploaded status). */
+export function vaultDocHasPreviewableFile(
+  doc:
+    | Pick<TripDocItem, "status" | "storagePath" | "files">
+    | null
+    | undefined,
+): boolean {
+  if (!doc) return false;
+  if ((doc.storagePath ?? "").trim()) return true;
+  if ((doc.files?.length ?? 0) > 0) return true;
+  return doc.status !== "Pending";
+}
+
 function pathLooksLikePdf(value?: string | null): boolean {
   const path = (value ?? "").toLowerCase().split("?")[0];
   return path.endsWith(".pdf");

@@ -8,7 +8,7 @@ import { PersistentTabPanel } from "@/components/PersistentTabPanel";
 import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { Theme } from "@/constants/Theme";
-import { canAddMoreTripDocs, formatVaultDocDate, isEwayBillVaultDoc, isLrVaultDoc, isPdfTripDoc, VAULT_DOC_LIMIT_HINT, VAULT_DOC_MAX_BYTES, VAULT_DOC_MAX_MB, VAULT_DOC_PICKER_TYPES, vaultPickerRejectionMessage } from "@/features/trips/components/trip-detail/tripDocTypes";
+import { canAddMoreTripDocs, formatVaultDocDate, isEwayBillVaultDoc, isLrVaultDoc, isPdfTripDoc, VAULT_DOC_LIMIT_HINT, VAULT_DOC_MAX_BYTES, VAULT_DOC_MAX_MB, VAULT_DOC_PICKER_TYPES, vaultDocHasPreviewableFile, vaultPickerRejectionMessage } from "@/features/trips/components/trip-detail/tripDocTypes";
 import { EwayBillLrStrip, buildEwayBillStripRows } from "@/features/trips/components/trip-detail/EwayBillVaultTab";
 import {
   ewayDocHasPreviewableFile,
@@ -3105,7 +3105,7 @@ export default function TripDetailScreen({
   /**
    * Press handler for the new vault cards. Branches:
    *  - Already uploaded → open preview (existing behavior).
-   *  - Vehicle Document (pending) → file picker into the vehicle vault (same as Add).
+   *  - Vehicle Document → preview when a file exists; Add opens the type chooser.
    *  - Trip Manifest / Driver POD (pending) → inline file picker → uploadTripDocument.
    *  - User can't upload (different org) → fall back to existing handleDocOpen.
    */
@@ -3113,18 +3113,13 @@ export default function TripDetailScreen({
     doc: (typeof detail.computedTripDocs)[number],
   ) => {
     const isUploaded = doc.status !== "Pending" || !!doc.storagePath;
-    if (isUploaded) {
+    if (doc.id === "vehicle-documents") {
+      if (!vaultDocHasPreviewableFile(doc)) return;
       detail.setSelectedDoc(doc);
       return;
     }
-    if (doc.id === "vehicle-documents") {
-      if (canUploadTripDocs) {
-        openVehicleDocChooser();
-        return;
-      }
-      if (trip.vehicle_id) {
-        router.push(ROUTES.vehicleDetail(trip.vehicle_id, trip.id) as never);
-      }
+    if (isUploaded) {
+      detail.setSelectedDoc(doc);
       return;
     }
     if (doc.id === "lr" || doc.category === "lr") {
@@ -5073,20 +5068,20 @@ export default function TripDetailScreen({
                             : !isPending && fileCount > 1
                               ? `${fileCount} files`
                               : doc.status;
-                      const btnLabel = isPending
-                        ? canUploadTripDocs
-                          ? "Upload"
-                          : isVehicleDoc && trip.vehicle_id
-                            ? "Open"
-                            : "Pending"
-                        : "Preview";
-                      const btnIcon = isPending
-                        ? canUploadTripDocs
-                          ? "upload"
-                          : isVehicleDoc && trip.vehicle_id
-                            ? "external-link"
-                            : "clock"
-                        : "eye";
+                      const showUploadPrimary =
+                        isPending && canUploadTripDocs && !isVehicleDoc;
+                      const previewDisabled =
+                        isVehicleDoc && !vaultDocHasPreviewableFile(doc);
+                      const btnLabel = showUploadPrimary
+                        ? "Upload"
+                        : isPending && !isVehicleDoc
+                          ? "Pending"
+                          : "Preview";
+                      const btnIcon = showUploadPrimary
+                        ? "upload"
+                        : isPending && !isVehicleDoc
+                          ? "clock"
+                          : "eye";
                       return (
                         <View
                           key={doc.id}
@@ -5096,9 +5091,15 @@ export default function TripDetailScreen({
                           ]}
                         >
                           <Feather
-                            name={isPending ? "upload-cloud" : "file-text"}
+                            name={
+                              isPending && !isVehicleDoc
+                                ? "upload-cloud"
+                                : "file-text"
+                            }
                             size={34}
-                            color={isPending ? "#cbd5e1" : "#94a3b8"}
+                            color={
+                              isPending && !isVehicleDoc ? "#cbd5e1" : "#94a3b8"
+                            }
                           />
                           <Text style={neoStyles.vaultTitle} numberOfLines={2}>
                             {doc.label}
@@ -5122,13 +5123,18 @@ export default function TripDetailScreen({
                               onPress={() => handleVaultCardPress(doc)}
                               style={[
                                 neoStyles.vaultBtn,
-                                isPending &&
-                                  canUploadTripDocs &&
-                                  neoStyles.vaultBtnUpload,
+                                showUploadPrimary && neoStyles.vaultBtnUpload,
                                 canAddMore && neoStyles.vaultBtnFlex,
+                                previewDisabled && neoStyles.vaultBtnDisabled,
                               ]}
                               activeOpacity={0.85}
-                              disabled={isUploadingThis}
+                              disabled={isUploadingThis || previewDisabled}
+                              accessibilityState={{ disabled: previewDisabled }}
+                              accessibilityLabel={
+                                previewDisabled
+                                  ? `${doc.label} preview unavailable — no document on file`
+                                  : `${btnLabel} ${doc.label}`
+                              }
                             >
                               {isUploadingThis ? (
                                 <LoadingIndicator size="small" color="#fff" />
@@ -5138,17 +5144,20 @@ export default function TripDetailScreen({
                                     name={btnIcon}
                                     size={12}
                                     color={
-                                      isPending && canUploadTripDocs
-                                        ? Theme.buttonPrimaryText
-                                        : "#fff"
+                                      previewDisabled
+                                        ? Theme.textMuted
+                                        : showUploadPrimary
+                                          ? Theme.buttonPrimaryText
+                                          : "#fff"
                                     }
                                   />
                                   <Text
                                     style={[
                                       neoStyles.vaultBtnText,
-                                      isPending &&
-                                        canUploadTripDocs &&
+                                      showUploadPrimary &&
                                         neoStyles.vaultBtnTextUpload,
+                                      previewDisabled &&
+                                        neoStyles.vaultBtnTextDisabled,
                                     ]}
                                   >
                                     {btnLabel}

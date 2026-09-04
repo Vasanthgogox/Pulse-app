@@ -11,6 +11,7 @@ import {
   isEwayBillVaultDoc,
   isLrVaultDoc,
   type TripDocItem,
+  vaultDocHasPreviewableFile,
 } from '@/features/trips/components/trip-detail/tripDocTypes';
 import { platformShadow } from '@/lib/platformShadow';
 import Feather from '@expo/vector-icons/Feather';
@@ -66,7 +67,7 @@ export function TripAssetVaultPanel({
   docs,
   canUploadTripDocs,
   uploadingDocId,
-  vehicleId,
+  vehicleId: _vehicleId,
   onCardPress,
   ewayStripRows = [],
   onViewEwayBill,
@@ -99,16 +100,23 @@ export function TripAssetVaultPanel({
           const palette = toneStyles(tone);
           const isUploading = uploadingDocId === doc.id;
           const isPending = doc.status === 'Pending';
+          const isVehicleDoc = doc.id === 'vehicle-documents';
+          const showUploadPrimary = isPending && canUploadTripDocs && !isVehicleDoc;
+          const previewDisabled =
+            isVehicleDoc && !vaultDocHasPreviewableFile(doc);
           const actionLabel = isPending
-            ? canUploadTripDocs
-              ? 'Upload'
-              : doc.id === 'vehicle-documents' && vehicleId
-                ? 'Open'
+            ? isVehicleDoc
+              ? 'Preview'
+              : canUploadTripDocs
+                ? 'Upload'
                 : 'Pending'
             : 'View';
-          const actionIcon =
-            isPending && canUploadTripDocs ? 'upload' : 'external-link';
-          const showPrimaryAction = isPending && canUploadTripDocs;
+          const actionIcon = showUploadPrimary
+            ? 'upload'
+            : isPending && !isVehicleDoc
+              ? 'external-link'
+              : 'eye';
+          const showPrimaryAction = showUploadPrimary;
 
           const isLrDoc = isLrVaultDoc(doc);
 
@@ -166,12 +174,18 @@ export function TripAssetVaultPanel({
                 style={[
                   styles.actionBtn,
                   showPrimaryAction && styles.actionBtnPrimary,
+                  previewDisabled && styles.actionBtnDisabled,
                 ]}
                 onPress={() => onCardPress(doc)}
                 activeOpacity={0.88}
-                disabled={isUploading}
+                disabled={isUploading || previewDisabled}
                 accessibilityRole="button"
-                accessibilityLabel={`${actionLabel} ${doc.label}`}
+                accessibilityState={{ disabled: previewDisabled }}
+                accessibilityLabel={
+                  previewDisabled
+                    ? `${doc.label} preview unavailable — no document on file`
+                    : `${actionLabel} ${doc.label}`
+                }
               >
                 {isUploading ? (
                   <LoadingIndicator size="small" color={Theme.textMuted} />
@@ -180,12 +194,19 @@ export function TripAssetVaultPanel({
                     <Feather
                       name={actionIcon}
                       size={12}
-                      color={showPrimaryAction ? Theme.brandBlueInk : Theme.textMuted}
+                      color={
+                        previewDisabled
+                          ? Theme.textMuted
+                          : showPrimaryAction
+                            ? Theme.brandBlueInk
+                            : Theme.textMuted
+                      }
                     />
                     <Text
                       style={[
                         styles.actionText,
                         showPrimaryAction && styles.actionTextPrimary,
+                        previewDisabled && styles.actionTextDisabled,
                       ]}
                     >
                       {actionLabel}
@@ -415,5 +436,11 @@ const styles = StyleSheet.create({
   },
   actionTextPrimary: {
     color: Theme.brandBlueInk,
+  },
+  actionBtnDisabled: {
+    opacity: 0.55,
+  },
+  actionTextDisabled: {
+    color: Theme.textMuted,
   },
 });

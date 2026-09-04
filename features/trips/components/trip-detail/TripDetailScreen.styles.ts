@@ -2985,6 +2985,14 @@ export const neoStyles = StyleSheet.create({
   vaultBtnTextUpload: {
     color: Theme.buttonPrimaryText,
   },
+  vaultBtnDisabled: {
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  vaultBtnTextDisabled: {
+    color: Theme.textMuted,
+  },
   sideCard: {
     backgroundColor: "#fff",
     borderRadius: 36,
