@@ -1,4 +1,4 @@
-import { canAddMoreTripDocs, isPdfTripDoc, vaultPickerRejectionMessage } from "../tripDocTypes";
+import { canAddMoreTripDocs, formatVaultDocDate, isPdfTripDoc, vaultDocDateToIso, vaultPickerRejectionMessage } from "../tripDocTypes";
 
 describe("isPdfTripDoc", () => {
   it("detects PDF from vault type", () => {
@@ -43,6 +43,8 @@ describe("isPdfTripDoc", () => {
 describe("canAddMoreTripDocs", () => {
   it("allows extra files for trip-scoped vault slots", () => {
     expect(canAddMoreTripDocs({ category: "lr" })).toBe(true);
+    expect(canAddMoreTripDocs({ category: "eway" })).toBe(false);
+    expect(canAddMoreTripDocs({ id: "eway_bill" })).toBe(false);
     expect(canAddMoreTripDocs({ category: "trip" })).toBe(true);
     expect(canAddMoreTripDocs({ category: "driver" })).toBe(true);
   });
@@ -80,5 +82,24 @@ describe("vaultPickerRejectionMessage", () => {
         { name: "pod.jpg", mimeType: "image/jpeg", size: 500_000 },
       ]),
     ).toBeNull();
+  });
+});
+
+describe("formatVaultDocDate", () => {
+  it("formats ISO dates", () => {
+    expect(formatVaultDocDate("2026-09-04T10:00:00.000Z")).toBe("04-Sep-26");
+  });
+
+  it("formats DD-MM-YYYY from OCR", () => {
+    expect(formatVaultDocDate("28-08-2026")).toBe("28-Aug-26");
+    expect(formatVaultDocDate("04-09-2026 18:00")).toBe("04-Sep-26");
+  });
+});
+
+describe("vaultDocDateToIso", () => {
+  it("converts display and typed dates to YYYY-MM-DD", () => {
+    expect(vaultDocDateToIso("04-Sep-26")).toBe("2026-09-04");
+    expect(vaultDocDateToIso("28-08-2026")).toBe("2026-08-28");
+    expect(vaultDocDateToIso("2026-09-03")).toBe("2026-09-03");
   });
 });

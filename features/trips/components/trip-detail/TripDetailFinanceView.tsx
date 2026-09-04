@@ -277,7 +277,7 @@ export interface TripDetailFinanceViewProps {
 }
 
 export type { DocCategory, TripDocItem } from './tripDocTypes';
-import type { TripDocItem } from './tripDocTypes';
+import { isEwayBillVaultDoc, type TripDocItem } from './tripDocTypes';
 
 const DEFAULT_TRIP_DOCS: TripDocItem[] = [
   {
@@ -319,7 +319,7 @@ function TripDocsGrid({
         <Text style={styles.docSectionTitle}>Documents</Text>
       </View>
       <View style={styles.docGrid}>
-        {tripDocs.map((doc) => {
+        {tripDocs.filter((doc) => !isEwayBillVaultDoc(doc)).map((doc) => {
           const isUploaded =
             doc.status === "Uploaded" || doc.status === "Verified";
           const statusColor =

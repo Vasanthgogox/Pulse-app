@@ -23,7 +23,7 @@ Trip (shared):
 
 Per POD — header:
 - LR number: On the document this field is often labeled "LR No." or "LR NO" or "POD number". Extract the value (e.g. "GOGOX AG 1343", "259", "AG259", "LSC589489") into pods[].header.lr_number only.
-- TRIP DATE → pods[].header.date
+- TRIP DATE / LR DATE / Date → pods[].header.date
 - SALES INVOICE NO → pods[].header.invoice_number
 - GIR / eWay Bill → pods[].header.gir_number, eway_bill_number
 

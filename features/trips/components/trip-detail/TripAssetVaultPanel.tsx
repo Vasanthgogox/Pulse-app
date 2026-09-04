@@ -1,7 +1,17 @@
 import { LoadingIndicator } from '@/components/LoadingIndicator';
 import Layout from '@/constants/Layout';
 import { Theme } from '@/constants/Theme';
-import type { TripDocItem } from '@/features/trips/components/trip-detail/tripDocTypes';
+import {
+  EwayBillLrStrip,
+  type EwayBillStripRow,
+  type EwayFieldValues,
+} from '@/features/trips/components/trip-detail/EwayBillVaultTab';
+import {
+  formatVaultDocDate,
+  isEwayBillVaultDoc,
+  isLrVaultDoc,
+  type TripDocItem,
+} from '@/features/trips/components/trip-detail/tripDocTypes';
 import { platformShadow } from '@/lib/platformShadow';
 import Feather from '@expo/vector-icons/Feather';
 import { MotiView } from 'moti';
@@ -46,6 +56,10 @@ type Props = {
   uploadingDocId: string | null;
   vehicleId: string | null;
   onCardPress: (doc: TripDocItem) => void;
+  ewayStripRows?: EwayBillStripRow[];
+  onViewEwayBill?: (rowId: string) => void;
+  canEditEwayBill?: boolean;
+  onSaveEwayBill?: (values: EwayFieldValues) => Promise<boolean>;
 };
 
 export function TripAssetVaultPanel({
@@ -54,8 +68,13 @@ export function TripAssetVaultPanel({
   uploadingDocId,
   vehicleId,
   onCardPress,
+  ewayStripRows = [],
+  onViewEwayBill,
+  canEditEwayBill,
+  onSaveEwayBill,
 }: Props) {
-  const verifiedCount = docs.filter((doc) => doc.status !== 'Pending').length;
+  const cardDocs = docs.filter((doc) => !isEwayBillVaultDoc(doc));
+  const verifiedCount = cardDocs.filter((doc) => doc.status !== 'Pending').length;
 
   return (
     <View style={styles.wrap}>
@@ -69,13 +88,13 @@ export function TripAssetVaultPanel({
         </View>
         <View style={styles.headerBadge}>
           <Text style={styles.headerBadgeText}>
-            {verifiedCount}/{docs.length}
+            {verifiedCount}/{cardDocs.length}
           </Text>
         </View>
       </View>
 
-      <View style={[styles.grid, docs.length <= 3 && styles.gridCompact]}>
-        {docs.map((doc, index) => {
+      <View style={[styles.grid, cardDocs.length <= 3 && styles.gridCompact]}>
+        {cardDocs.map((doc, index) => {
           const tone = resolveDocTone(doc.status);
           const palette = toneStyles(tone);
           const isUploading = uploadingDocId === doc.id;
@@ -91,6 +110,8 @@ export function TripAssetVaultPanel({
             isPending && canUploadTripDocs ? 'upload' : 'external-link';
           const showPrimaryAction = isPending && canUploadTripDocs;
 
+          const isLrDoc = isLrVaultDoc(doc);
+
           return (
             <MotiView
               key={doc.id}
@@ -101,7 +122,11 @@ export function TripAssetVaultPanel({
                 duration: 320,
                 delay: index * 60,
               }}
-              style={[styles.card, docs.length <= 3 && styles.cardCompact]}
+              style={[
+                styles.card,
+                cardDocs.length <= 3 && styles.cardCompact,
+                isLrDoc && styles.cardLr,
+              ]}
             >
               <View style={styles.cardTopRow}>
                 <View style={[styles.cardIconWrap, palette.iconWrap]}>
@@ -113,13 +138,22 @@ export function TripAssetVaultPanel({
                 </View>
                 <View style={[styles.statusChip, palette.chip]}>
                   <Text style={[styles.statusText, palette.chipText]} numberOfLines={1}>
-                    {!isPending && (doc.files?.length ?? 0) > 1
+                    {!isPending && isLrVaultDoc(doc)
+                      ? [
+                          doc.documentNumber?.trim(),
+                          formatVaultDocDate(doc.documentDate),
+                        ]
+                          .filter(Boolean)
+                          .join(' · ') || doc.status
+                      : !isPending && (doc.files?.length ?? 0) > 1
                       ? doc.id === 'vehicle-documents'
                         ? doc.type
                         : `${doc.files?.length} files`
-                      : doc.id === 'vehicle-documents'
-                        ? doc.type
-                        : doc.status}
+                      : doc.documentNumber?.trim()
+                        ? doc.documentNumber.trim()
+                        : doc.id === 'vehicle-documents'
+                          ? doc.type
+                          : doc.status}
                   </Text>
                 </View>
               </View>
@@ -159,6 +193,14 @@ export function TripAssetVaultPanel({
                   </>
                 )}
               </TouchableOpacity>
+              {isLrDoc ? (
+                <EwayBillLrStrip
+                  rows={ewayStripRows}
+                  onView={onViewEwayBill ?? (() => undefined)}
+                  canEdit={canEditEwayBill}
+                  onSave={onSaveEwayBill}
+                />
+              ) : null}
             </MotiView>
           );
         })}
@@ -265,6 +307,12 @@ const styles = StyleSheet.create({
     width: undefined,
     flex: 1,
     flexBasis: 0,
+  },
+  cardLr: {
+    width: '100%',
+    flexBasis: '100%',
+    flexGrow: 1,
+    minHeight: 0,
   },
   cardTopRow: {
     flexDirection: 'row',

@@ -2909,6 +2909,11 @@ export const neoStyles = StyleSheet.create({
     shadowOpacity: 0.03,
     shadowRadius: 8,
   },
+  vaultCardLr: {
+    flexBasis: "100%",
+    width: "100%",
+    alignItems: "center",
+  },
   vaultTitle: {
     marginTop: 8,
     color: "#0f172a",
@@ -2925,6 +2930,21 @@ export const neoStyles = StyleSheet.create({
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 0.8,
+  },
+  vaultLrNumber: {
+    marginTop: 6,
+    color: "#0f172a",
+    fontSize: 11,
+    fontWeight: "800",
+    textAlign: "center",
+    letterSpacing: 0.2,
+  },
+  vaultLrDate: {
+    marginTop: 2,
+    color: "#64748b",
+    fontSize: 10,
+    fontWeight: "700",
+    textAlign: "center",
   },
   vaultBtn: {
     marginTop: 10,

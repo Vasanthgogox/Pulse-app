@@ -4,7 +4,7 @@
  * them without creating an inverted dependency on a UI component.
  */
 
-export type DocCategory = "vehicle" | "trip" | "driver" | "lr";
+export type DocCategory = "vehicle" | "trip" | "driver" | "lr" | "eway";
 
 export interface TripDocFile {
   id: string;
@@ -29,6 +29,12 @@ export interface TripDocItem {
   category?: DocCategory;
   /** Extra files nested in this slot (one card, many uploads). */
   files?: TripDocFile[];
+  /** Printed LR / e-way bill number when the user entered one or OCR extracted it. */
+  documentNumber?: string | null;
+  /** Printed LR date from OCR when available. */
+  documentDate?: string | null;
+  /** Upload timestamp for the latest file in this slot (ISO). */
+  uploadedAt?: string | null;
 }
 
 /** Matches trip-documents + vehicle-documents bucket limits (10 MB). */
@@ -106,6 +112,18 @@ export function vaultPickerRejectionMessage(
   return null;
 }
 
+export function isEwayBillVaultDoc(
+  doc: Pick<TripDocItem, "category" | "id"> | null | undefined,
+): boolean {
+  return doc?.id === "eway_bill" || doc?.category === "eway";
+}
+
+export function isLrVaultDoc(
+  doc: Pick<TripDocItem, "category" | "id"> | null | undefined,
+): boolean {
+  return doc?.id === "lr" || doc?.category === "lr";
+}
+
 export function canAddMoreTripDocs(
   doc: Pick<TripDocItem, "category" | "docSource" | "id"> | null | undefined,
 ): boolean {
@@ -117,7 +135,11 @@ export function canAddMoreTripDocs(
   ) {
     return true;
   }
-  return doc.category === "lr" || doc.category === "trip" || doc.category === "driver";
+  return (
+    doc.category === "lr" ||
+    doc.category === "trip" ||
+    doc.category === "driver"
+  );
 }
 
 function pathLooksLikePdf(value?: string | null): boolean {
@@ -137,4 +159,85 @@ export function isPdfTripDoc(doc: {
   if ((doc.mimeType ?? "").toLowerCase().includes("pdf")) return true;
   if (pathLooksLikePdf(doc.fileName)) return true;
   return pathLooksLikePdf(doc.storagePath);
+}
+
+const VAULT_DATE_MONTHS = [
+  "Jan",
+  "Feb",
+  "Mar",
+  "Apr",
+  "May",
+  "Jun",
+  "Jul",
+  "Aug",
+  "Sep",
+  "Oct",
+  "Nov",
+  "Dec",
+] as const;
+
+function padDay(value: string): string {
+  return value.padStart(2, "0");
+}
+
+function formatDayMonthYear(day: number, monthIndex: number, year: number): string | null {
+  if (day < 1 || day > 31 || monthIndex < 1 || monthIndex > 12 || !Number.isFinite(year)) {
+    return null;
+  }
+  return `${padDay(String(day))}-${VAULT_DATE_MONTHS[monthIndex - 1]}-${String(year).slice(-2)}`;
+}
+
+/** Card-face date, e.g. 04-Sep-26. Accepts ISO, DD-MM-YYYY, or already-formatted values. */
+export function formatVaultDocDate(value?: string | null): string | null {
+  if (!value) return null;
+  const raw = value.trim();
+  if (!raw) return null;
+  if (/^\d{2}-[A-Za-z]{3}-\d{2}$/.test(raw)) return raw;
+
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) {
+    return formatDayMonthYear(Number(iso[3]), Number(iso[2]), Number(iso[1]));
+  }
+
+  const dmy = raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
+  if (dmy) {
+    const day = Number(dmy[1]);
+    const monthIndex = Number(dmy[2]);
+    const yearPart = dmy[3];
+    const year = yearPart.length === 2 ? 2000 + Number(yearPart) : Number(yearPart);
+    return formatDayMonthYear(day, monthIndex, year);
+  }
+
+  return null;
+}
+
+/** Convert a vault date (ISO, DD-MM-YYYY, or 04-Sep-26) to `YYYY-MM-DD` for date pickers. */
+export function vaultDocDateToIso(value?: string | null): string | null {
+  if (!value) return null;
+  const raw = value.trim();
+  if (!raw) return null;
+
+  const iso = raw.match(/^(\d{4})-(\d{2})-(\d{2})/);
+  if (iso) return `${iso[1]}-${iso[2]}-${iso[3]}`;
+
+  const pretty = raw.match(/^(\d{2})-([A-Za-z]{3})-(\d{2})$/);
+  if (pretty) {
+    const monthIndex = VAULT_DATE_MONTHS.findIndex(
+      (month) => month.toLowerCase() === pretty[2].toLowerCase(),
+    );
+    if (monthIndex < 0) return null;
+    const year = 2000 + Number(pretty[3]);
+    return `${year}-${String(monthIndex + 1).padStart(2, "0")}-${pretty[1]}`;
+  }
+
+  const dmy = raw.match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{2,4})/);
+  if (!dmy) return null;
+  const day = Number(dmy[1]);
+  const monthIndex = Number(dmy[2]);
+  const yearPart = dmy[3];
+  const year = yearPart.length === 2 ? 2000 + Number(yearPart) : Number(yearPart);
+  if (day < 1 || day > 31 || monthIndex < 1 || monthIndex > 12 || !Number.isFinite(year)) {
+    return null;
+  }
+  return `${year}-${String(monthIndex).padStart(2, "0")}-${padDay(String(day))}`;
 }

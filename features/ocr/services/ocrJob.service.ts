@@ -153,6 +153,20 @@ export async function linkTripDocumentOcrJob(
   if (error) throw new Error(error.message);
 }
 
+export async function listOcrJobsForTripDocuments(
+  tripDocumentIds: string[],
+): Promise<OcrJobRow[]> {
+  const ids = tripDocumentIds.filter(Boolean);
+  if (ids.length === 0) return [];
+  const { data, error } = await supabase()
+    .from("ocr_jobs")
+    .select("*")
+    .in("trip_document_id", ids)
+    .order("created_at", { ascending: false });
+  if (error) throw new Error(error.message);
+  return (data ?? []).map((row) => mapJob(row as Record<string, unknown>));
+}
+
 export async function linkExpenseEntryOcrJob(
   expenseKind: ExpenseOcrKind,
   entryId: string,

@@ -177,13 +177,22 @@ function buildSlotCard(
       category: slot.category,
     };
   }
-  const files = rows.map((row, index) => ({
-    id: `${slot.id}-${row.id}`,
-    label: rows.length > 1 ? `${slot.label} ${index + 1}` : slot.label,
-    type: tripDocItemType(row),
-    storagePath: row.storage_path,
-    documentId: row.id,
-  }));
+  const files = rows.map((row, index) => {
+    const number = row.document_number?.trim();
+    return {
+      id: `${slot.id}-${row.id}`,
+      label: number
+        ? `${slot.label} · ${number}`
+        : rows.length > 1
+          ? `${slot.label} ${index + 1}`
+          : slot.label,
+      type: tripDocItemType(row),
+      storagePath: row.storage_path,
+      documentId: row.id,
+    };
+  });
+  const documentNumber =
+    rows.map((row) => row.document_number?.trim()).find(Boolean) ?? null;
   return {
     id: slot.id,
     label: slot.label,
@@ -193,6 +202,9 @@ function buildSlotCard(
     documentId: files[0].documentId,
     category: slot.category,
     files,
+    documentNumber,
+    documentDate: rows[0]?.document_date ?? null,
+    uploadedAt: rows[0]?.uploaded_at ?? null,
   };
 }
 
@@ -964,6 +976,15 @@ export function useTripDetail({
       buildSlotCard(
         tripDocuments.filter((d) => d.document_type === "lr"),
         { id: "lr", label: "LR Document", pendingType: "PDF", category: "lr" },
+      ),
+      buildSlotCard(
+        tripDocuments.filter((d) => d.document_type === "eway_bill"),
+        {
+          id: "eway_bill",
+          label: "Eway Bill",
+          pendingType: "PDF",
+          category: "eway",
+        },
       ),
       buildSlotCard(
         tripDocuments.filter((d) => d.document_type === "manifest"),
@@ -1741,13 +1762,13 @@ export function useTripDetail({
     setRefreshing(true);
     setFinanceRefreshKey((k) => k + 1);
     refetchTransactionsRef.current();
+    loadTripDocuments();
     if (bundleActive && tripId) {
       void queryClient.invalidateQueries({ queryKey: queryKeys.trips.bundle(tripId) });
     } else {
       load();
       loadAdjustments();
       loadAssignmentAudit();
-      loadTripDocuments();
     }
   }, [load, loadAdjustments, loadAssignmentAudit, loadTripDocuments, tripId, queryClient, bundleActive]);
 
@@ -2305,13 +2326,8 @@ export function useTripDetail({
         ? bundle.adjustments
         : []) as unknown as TripAdjustment[],
     );
-    const docs = Array.isArray(bundle.documents) ? bundle.documents : [];
-    setTripDocuments(
-      docs.map((d) => ({
-        ...(d as unknown as tripDocumentsService.TripDocumentRow),
-        document_type: d.document_type ?? 'pod',
-      })),
-    );
+    // document_number is not in the bundle payload — load the table rows instead.
+    loadTripDocuments();
 
     if (bundle.otp) {
       setTripOtp({ code: bundle.otp.code, expires_at: bundle.otp.expires_at });
@@ -2385,7 +2401,7 @@ export function useTripDetail({
           : null,
       );
     }
-  }, [bundle]);
+  }, [bundle, loadTripDocuments]);
 
   // Stash: preloaded trip from load-flow
   useEffect(() => {
@@ -2426,12 +2442,11 @@ export function useTripDetail({
     if (tripId) loadAssignmentAudit();
   }, [tripId, loadAssignmentAudit, bundleActive]);
 
-  // Trip documents — skipped on bundle path (bundle seeding effect provides documents)
+  // Trip documents include document_number, which the bundle RPC does not return.
   useEffect(() => {
-    if (bundleActive) return;
     if (trip?.id) loadTripDocuments();
     else setTripDocuments([]);
-  }, [trip?.id, loadTripDocuments, bundleActive]);
+  }, [trip?.id, loadTripDocuments]);
 
   useEffect(() => {
     if (!selectedDoc) {
@@ -2982,6 +2997,7 @@ export function useTripDetail({
 
     // Documents
     tripDocuments,
+    loadTripDocuments,
     computedTripDocs,
     vehiclePreviewDocs,
     vehiclePreviewUrls,
