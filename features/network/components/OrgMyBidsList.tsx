@@ -11,6 +11,7 @@
  */
 import Theme from "@/constants/Theme";
 import {
+  type FeePaymentStatus,
   type MyOrgMarketBidRow,
   type MyOrgMarketBidStatus,
 } from "@/features/network/services/findLoadsForOrg.service";
@@ -70,6 +71,24 @@ function routeLabel(bid: MyOrgMarketBidRow): string {
   const from = (bid.pickup_area ?? "").trim() || "Pickup";
   const to = (bid.drop_location ?? "").trim() || "Drop";
   return `${from} → ${to}`;
+}
+
+/** A8.6.2 — the Marketplace fee gates trip creation now, not just award. */
+function feePaymentGateSatisfied(status: FeePaymentStatus): boolean {
+  return status === "paid" || status === "not_required";
+}
+
+function feePendingLabel(status: FeePaymentStatus, feeAmount: number | null): string {
+  const feeLabel = feeAmount != null ? formatAmount(feeAmount) : "the Marketplace fee";
+  switch (status) {
+    case "pending":
+      return `Payment of ${feeLabel} is processing…`;
+    case "failed":
+      return `Payment of ${feeLabel} failed — retry to unlock this load.`;
+    case "required":
+    default:
+      return `Pay ${feeLabel} to Pulse to unlock this load.`;
+  }
 }
 
 export function OrgMyBidsList({
@@ -162,6 +181,7 @@ function BidCard({ bid }: { bid: MyOrgMarketBidRow }) {
   const isAccepted = bid.status === "accepted";
   const isRejected = bid.status === "rejected";
   const phoneDisplay = bid.owner_phone ?? bid.owner_masked_phone;
+  const feeGateSatisfied = feePaymentGateSatisfied(bid.fee_payment_status);
   const [isNavigating, setIsNavigating] = useState(false);
 
   // Reuses the existing Indent allocation flow end to end (same as Load Center's
@@ -232,7 +252,7 @@ function BidCard({ bid }: { bid: MyOrgMarketBidRow }) {
         </Text>
       ) : null}
 
-      {isAccepted ? (
+      {isAccepted && feeGateSatisfied ? (
         <Pressable
           onPress={handleAssignVehicle}
           disabled={isNavigating}
@@ -249,6 +269,17 @@ function BidCard({ bid }: { bid: MyOrgMarketBidRow }) {
             <ChevronRight size={14} color={Theme.positive} />
           </View>
         </Pressable>
+      ) : null}
+
+      {/* A8.6.2: award happened, but the Marketplace fee still gates
+          allocation -- no payment provider exists yet (A8.7), so this is
+          informational only, not an actionable "Pay" button. */}
+      {isAccepted && !feeGateSatisfied ? (
+        <View style={styles.feeGateRow}>
+          <Text style={styles.feeGateLabel}>
+            {feePendingLabel(bid.fee_payment_status, bid.platform_fee_amount)}
+          </Text>
+        </View>
       ) : null}
 
       <Text style={styles.submitted}>Submitted {formatSubmittedAt(bid.created_at)}</Text>
@@ -327,4 +358,14 @@ const styles = StyleSheet.create({
   assignRowLabel: { fontSize: 12, fontWeight: "600", color: Theme.primaryText },
   assignRowCta: { flexDirection: "row", alignItems: "center", gap: 2 },
   assignRowCtaText: { fontSize: 13, fontWeight: "800", color: Theme.positive },
+  feeGateRow: {
+    marginTop: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.warningMuted,
+    backgroundColor: Theme.warningMuted,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  feeGateLabel: { fontSize: 12, fontWeight: "600", color: Theme.warning },
 });

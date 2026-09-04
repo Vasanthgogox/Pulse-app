@@ -11,6 +11,14 @@ import { supabase } from '@/lib/supabase';
 
 export type MarketBidStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'superseded';
 
+/**
+ * A8.6.2 — independent of MarketBidStatus (award outcome). not_required =
+ * fee engine inactive/resolved to 0 at award time; required = fee >0 and
+ * unpaid; pending = payment initiated with a provider (A8.7); paid =
+ * confirmed server-side; failed = retryable, no auto-expiry in this phase.
+ */
+export type FeePaymentStatus = 'not_required' | 'required' | 'pending' | 'paid' | 'failed' | 'expired';
+
 export type MarketBidForIndentRow = {
   id: string;
   indent_id: string;
@@ -21,12 +29,14 @@ export type MarketBidForIndentRow = {
   bidder_organization_name: string | null;
   /** Always populated (last-4 masked). */
   bidder_masked_phone: string | null;
-  /** Unmasked — only non-null once the bid is 'accepted'; enforced server-side. */
+  /** Unmasked — only non-null once accepted AND fee_payment_status is paid/not_required. */
   bidder_phone: string | null;
   is_fleet_owner: boolean;
   amount: number;
   note: string | null;
   status: MarketBidStatus;
+  fee_payment_status: FeePaymentStatus;
+  platform_fee_amount: number | null;
   created_at: string;
   updated_at: string;
   accepted_at: string | null;
@@ -83,10 +93,45 @@ export async function calculateMarketplacePlatformFee(
   return { error: null, calc: (data as MarketplacePlatformFeeCalc) ?? null };
 }
 
-export async function acceptMarketBid(
+/**
+ * A8.6.2 — award only. Never creates a trip for either bidder type anymore
+ * (that split is exactly the point: the platform fee gates trip creation).
+ * DCO callers must follow a successful award with
+ * createMarketTripAfterFeePayment() once fee_payment_status is
+ * paid/not_required; organization callers proceed to their existing
+ * self-allocation flow, which now itself refuses to create a trip until
+ * paid (see create_trip_from_assigned_indent).
+ */
+export async function awardMarketBid(bidId: string): Promise<{
+  error: Error | null;
+  status: MarketBidStatus | null;
+  feePaymentStatus: FeePaymentStatus | null;
+  platformFeeAmount: number | null;
+}> {
+  const { data, error } = await supabase().rpc('award_market_bid', {
+    p_bid_id: bidId,
+  });
+  if (error) {
+    return { error: new Error(error.message), status: null, feePaymentStatus: null, platformFeeAmount: null };
+  }
+  const result = data as {
+    status?: MarketBidStatus;
+    fee_payment_status?: FeePaymentStatus;
+    platform_fee_amount?: number;
+  } | null;
+  return {
+    error: null,
+    status: result?.status ?? null,
+    feePaymentStatus: result?.fee_payment_status ?? null,
+    platformFeeAmount: result?.platform_fee_amount ?? null,
+  };
+}
+
+/** DCO only — creates the trip once fee_payment_status is paid/not_required. */
+export async function createMarketTripAfterFeePayment(
   bidId: string,
 ): Promise<{ error: Error | null; tripId: string | null }> {
-  const { data, error } = await supabase().rpc('accept_market_bid', {
+  const { data, error } = await supabase().rpc('create_market_trip_after_fee_payment', {
     p_bid_id: bidId,
   });
   if (error) return { error: new Error(error.message), tripId: null };

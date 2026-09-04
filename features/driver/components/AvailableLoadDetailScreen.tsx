@@ -1,5 +1,7 @@
 /**
  * Phase A/B — load detail with a real Bid flow (submit_market_bid).
+ * Accepted bids resolve to the awarded Market trip and render as a job card
+ * (same pattern as Reach awarded loads), not a dead-end "View Awards" gate.
  */
 import {
   DRIVER_DETAIL_HORIZONTAL_PAD,
@@ -20,18 +22,24 @@ import {
   formatMarketBidSubmitError,
   marketBidStatusLabel,
   submitMarketBid,
+  type FeePaymentStatus,
 } from '@/features/driver/services/marketBids.service';
+import { calculateMarketplacePlatformFee } from '@/features/network/services/marketBids.service';
 import {
   ownerVehicleSubtitle,
   ownerVehicleTitle,
 } from '@/features/driver/services/ownerVehicles.service';
 import { useFleetOwnerOpenLoadsQuery } from '@/lib/queries/useFleetOwnerOpenLoadsQuery';
+import { useMyMarketAwardsQuery } from '@/lib/queries/useMyMarketAwardsQuery';
 import { useMyMarketBidForIndentQuery } from '@/lib/queries/useMyMarketBidForIndentQuery';
 import { useMyMarketBidsQuery } from '@/lib/queries/useMyMarketBidsQuery';
 import { useOwnerVehiclesQuery } from '@/lib/queries/useOwnerVehiclesQuery';
+import { formatINR } from '@/lib/format';
 import { ROUTES } from '@/lib/routes';
-import { useLocalSearchParams, useRouter } from 'expo-router';
-import { useMemo, useState } from 'react';
+import type { DriverTripRow } from '@/types/trip-views';
+import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
+import { ArrowRight } from 'lucide-react-native';
+import React, { useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -42,6 +50,37 @@ import {
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+
+function isAssignedNotStarted(status: string): boolean {
+  const s = (status || '').toLowerCase();
+  return s === 'assigned' || s === 'pending' || s === 'scheduled';
+}
+
+function isActiveMission(status: string): boolean {
+  const s = (status || '').toLowerCase();
+  return (
+    s === 'in_progress' ||
+    s === 'in_transit' ||
+    s === 'transit' ||
+    s === 'picked_up' ||
+    s === 'pickup' ||
+    s === 'started'
+  );
+}
+
+function awardedEarningsLabel(trip: DriverTripRow, bidAmount: number | null | undefined): string {
+  const commission = trip.driver_commission;
+  if (commission != null && Number.isFinite(Number(commission)) && Number(commission) > 0) {
+    return formatINR(Number(commission));
+  }
+  if (bidAmount != null && Number.isFinite(Number(bidAmount)) && Number(bidAmount) > 0) {
+    return formatMarketBidAmount(bidAmount) || formatINR(Number(bidAmount));
+  }
+  if (trip.client_price != null && Number.isFinite(Number(trip.client_price))) {
+    return formatINR(Number(trip.client_price));
+  }
+  return 'Rate on request';
+}
 
 export default function AvailableLoadDetailScreen() {
   const insets = useSafeAreaInsets();
@@ -62,6 +101,10 @@ export default function AvailableLoadDetailScreen() {
     invalidate: invalidateMyBid,
   } = useMyMarketBidForIndentQuery(indentId, uid);
   const { invalidate: invalidateMyBids } = useMyMarketBidsQuery(uid);
+  const {
+    awards,
+    isLoading: awardsLoading,
+  } = useMyMarketAwardsQuery(uid);
 
   const [amountText, setAmountText] = useState('');
   const [note, setNote] = useState('');
@@ -69,11 +112,36 @@ export default function AvailableLoadDetailScreen() {
   const [busy, setBusy] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [justSubmitted, setJustSubmitted] = useState(false);
+  // A8.6.2 — only show the fee disclosure while a Marketplace fee config is
+  // actually active; don't warn pilot users about a hypothetical charge
+  // while the fee stays off. Checked once per screen visit, not per keystroke.
+  const [feeConfigActive, setFeeConfigActive] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void calculateMarketplacePlatformFee(1).then(({ calc }) => {
+      if (!cancelled) setFeeConfigActive(Boolean(calc?.is_active_config_found));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   const load = useMemo(
     () => loads.find((l) => l.id === indentId) ?? null,
     [loads, indentId],
   );
+  const awardedTrip = useMemo(() => {
+    if (!indentId) return null;
+    let best: DriverTripRow | null = null;
+    for (const trip of awards) {
+      if (trip.indent_id !== indentId && trip.source_indent_id !== indentId) continue;
+      if (!best || (best.status === 'cancelled' && trip.status !== 'cancelled')) {
+        best = trip;
+      }
+    }
+    return best;
+  }, [awards, indentId]);
   const compatible = useMemo(
     () =>
       load
@@ -135,6 +203,25 @@ export default function AvailableLoadDetailScreen() {
     }
   };
 
+  const openAwardedJob = (trip: DriverTripRow) => {
+    // Assigned / in-progress Market awards surface as JobRequestCard on Dashboard.
+    // Terminal trips open History detail.
+    if (isAssignedNotStarted(trip.status) || isActiveMission(trip.status)) {
+      router.replace(ROUTES.DRIVER_ROOT as Href);
+      return;
+    }
+    router.push(`/(driver)/trip-history/${trip.id}` as Href);
+  };
+
+  const showAwardedJobCard = myBid?.status === 'accepted' && !error;
+
+  useEffect(() => {
+    if (!showAwardedJobCard || !awardedTrip) return;
+    if (isAssignedNotStarted(awardedTrip.status) || isActiveMission(awardedTrip.status)) {
+      router.replace(ROUTES.DRIVER_ROOT as Href);
+    }
+  }, [showAwardedJobCard, awardedTrip, router]);
+
   return (
     <View style={[styles.root, { backgroundColor: pageBg }]}>
       <DriverSubScreenHeader
@@ -147,40 +234,49 @@ export default function AvailableLoadDetailScreen() {
         }
       />
 
-      {isLoading || (!load && bidLoading) ? (
+      {isLoading || bidLoading || (showAwardedJobCard && awardsLoading && !awardedTrip) ? (
         <ActivityIndicator color={colors.emerald} style={{ marginTop: 40 }} />
+      ) : showAwardedJobCard ? (
+        <ScrollView
+          contentContainerStyle={{
+            paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
+            paddingBottom: Math.max(insets.bottom, 16) + 24,
+            paddingTop: 12,
+            gap: 12,
+          }}
+        >
+          <AwardedMarketJobCard
+            trip={awardedTrip}
+            bidAmount={myBid?.amount}
+            feePaymentStatus={myBid?.fee_payment_status ?? 'not_required'}
+            platformFeeAmount={myBid?.platform_fee_amount ?? null}
+            shipperName={load?.creator_organization_name ?? awardedTrip?.organization_name ?? null}
+            isDark={isDark}
+            colors={colors}
+            onOpenJob={() => {
+              if (awardedTrip) openAwardedJob(awardedTrip);
+              else router.replace(ROUTES.DRIVER_ROOT as Href);
+            }}
+          />
+        </ScrollView>
       ) : error || !load ? (
         <View style={styles.gate}>
           <Text style={[styles.gateTitle, { color: colors.text }]}>
-            {myBid?.status === 'accepted'
-              ? 'Awarded to you'
-              : myBid?.status === 'rejected'
-                ? 'Not selected'
-                : myBid?.status === 'superseded'
-                  ? 'Bid superseded'
-                  : 'Load unavailable'}
+            {myBid?.status === 'rejected'
+              ? 'Not selected'
+              : myBid?.status === 'superseded'
+                ? 'Bid superseded'
+                : 'Load unavailable'}
           </Text>
           <Text style={[styles.gateBody, { color: colors.textMuted }]}>
             {error instanceof Error
               ? error.message
-              : myBid?.status === 'accepted'
-                ? 'This load was awarded to your bid. Find the trip under Awards.'
-                : myBid?.status === 'rejected'
-                  ? 'The business selected another bid for this load.'
-                  : myBid?.status === 'superseded'
-                    ? 'Another load was awarded to you, so this bid is no longer active.'
-                    : 'It may have closed or been awarded.'}
+              : myBid?.status === 'rejected'
+                ? 'The business selected another bid for this load.'
+                : myBid?.status === 'superseded'
+                  ? 'Another load was awarded to you, so this bid is no longer active.'
+                  : 'It may have closed or been awarded.'}
           </Text>
-          {myBid?.status === 'accepted' ? (
-            <Pressable
-              onPress={() =>
-                router.push(ROUTES.driverMarketAwards() as Parameters<typeof router.push>[0])
-              }
-              style={[styles.bidCta, { backgroundColor: Theme.buttonPrimary, borderColor: Theme.buttonPrimaryBorder }]}
-            >
-              <Text style={styles.bidCtaText}>View Awards</Text>
-            </Pressable>
-          ) : null}
         </View>
       ) : (
         <ScrollView
@@ -262,6 +358,12 @@ export default function AvailableLoadDetailScreen() {
                   Winning still requires the business to accept your bid — the
                   Driver App never creates trips or indents directly.
                 </Text>
+                {feeConfigActive ? (
+                  <Text style={[styles.body, { color: colors.textMuted }]}>
+                    If your bid is awarded, you will pay the Marketplace fee to
+                    Pulse separately. The client will pay you the full bid amount.
+                  </Text>
+                ) : null}
 
                 <Text style={[styles.label, { color: colors.textMuted }]}>
                   Your amount
@@ -387,11 +489,197 @@ export default function AvailableLoadDetailScreen() {
   );
 }
 
+function feePendingHint(status: FeePaymentStatus, feeAmount: number | null): string {
+  const feeLabel = feeAmount != null ? formatMarketBidAmount(feeAmount) : 'the Marketplace fee';
+  switch (status) {
+    case 'pending':
+      return `Payment of ${feeLabel} is processing…`;
+    case 'failed':
+      return `Payment of ${feeLabel} failed — retry to unlock this job.`;
+    case 'required':
+    default:
+      return `Pay ${feeLabel} to Pulse to unlock this job.`;
+  }
+}
+
+function AwardedMarketJobCard({
+  trip,
+  bidAmount,
+  feePaymentStatus,
+  platformFeeAmount,
+  shipperName,
+  isDark,
+  colors,
+  onOpenJob,
+}: {
+  trip: DriverTripRow | null;
+  bidAmount: number | null | undefined;
+  feePaymentStatus: FeePaymentStatus;
+  platformFeeAmount: number | null;
+  shipperName?: string | null;
+  isDark: boolean;
+  colors: ReturnType<typeof useDriverThemeColors>;
+  onOpenJob: () => void;
+}) {
+  const pickup = trip?.pickup_location?.trim() || 'Pickup';
+  const drop = trip?.dropoff_location?.trim() || 'Drop';
+  const earnings = trip
+    ? awardedEarningsLabel(trip, bidAmount)
+    : formatMarketBidAmount(bidAmount) || 'Rate on request';
+  // A8.6.2 fix: !trip no longer means "still connecting" -- once the
+  // Marketplace fee gates trip creation, an accepted-but-unpaid bid stays
+  // trip-less indefinitely, so the old unconditional "Connecting your
+  // awarded job…" would spin forever. Branch on the actual fee state.
+  const feePending = feePaymentStatus !== 'paid' && feePaymentStatus !== 'not_required';
+  const statusHint = !trip
+    ? feePending
+      ? feePendingHint(feePaymentStatus, platformFeeAmount)
+      : 'Connecting your awarded job…'
+    : isAssignedNotStarted(trip.status)
+      ? 'Opening on Dashboard…'
+      : isActiveMission(trip.status)
+        ? 'In progress — opening Dashboard…'
+        : trip.status === 'completed'
+          ? 'Completed'
+          : marketBidStatusLabel('accepted');
+
+  return (
+    <View
+      style={[
+        styles.jobCard,
+        {
+          backgroundColor: isDark ? colors.surface : Theme.positiveMuted,
+          borderColor: Theme.darkGreen ?? colors.emerald,
+        },
+      ]}
+    >
+      <View style={styles.jobTop}>
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          {shipperName ? (
+            <Text style={[styles.jobShipper, { color: colors.text }]} numberOfLines={1}>
+              {shipperName}
+            </Text>
+          ) : null}
+          <Text style={[styles.jobKicker, { color: colors.emerald }]}>Job · Awarded</Text>
+        </View>
+        <View style={styles.awardedPill}>
+          <Text style={styles.awardedPillText}>Awarded</Text>
+        </View>
+      </View>
+
+      <View style={styles.routeBlock}>
+        <View style={styles.routeCityCol}>
+          <Text style={[styles.routeCity, { color: colors.text }]} numberOfLines={1}>
+            {pickup}
+          </Text>
+          <Text style={[styles.routeMeta, { color: colors.textMuted }]}>Pickup</Text>
+        </View>
+        <View style={styles.routeArrowWrap}>
+          <ArrowRight size={14} color={colors.textMuted} strokeWidth={2.2} />
+        </View>
+        <View style={[styles.routeCityCol, styles.routeCityColEnd]}>
+          <Text style={[styles.routeCity, styles.routeCityEnd, { color: colors.text }]} numberOfLines={1}>
+            {drop}
+          </Text>
+          <Text style={[styles.routeMeta, styles.routeMetaEnd, { color: colors.textMuted }]}>
+            Drop
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.earningsRow}>
+        <Text style={[styles.earningsLabel, { color: colors.textMuted }]}>Your payout</Text>
+        <Text style={[styles.earningsValue, { color: Theme.warning }]}>{earnings}</Text>
+      </View>
+
+      <Text style={[styles.jobHint, { color: colors.textMuted }]}>{statusHint}</Text>
+
+      {/* A8.6.2: no trip exists yet while the fee is unpaid, and no payment
+          action exists in this phase (A8.7) -- disable rather than let this
+          silently bounce to Dashboard with nothing to show. */}
+      {!trip && feePending ? (
+        <View
+          style={[
+            styles.bidCta,
+            { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle },
+          ]}
+        >
+          <Text style={[styles.bidCtaText, { color: colors.textMuted }]}>Awaiting payment</Text>
+        </View>
+      ) : (
+        <Pressable
+          onPress={onOpenJob}
+          style={({ pressed }) => [
+            styles.bidCta,
+            {
+              backgroundColor: Theme.buttonPrimary,
+              borderColor: Theme.buttonPrimaryBorder,
+              opacity: pressed ? 0.88 : 1,
+              marginTop: 4,
+            },
+          ]}
+        >
+          <Text style={styles.bidCtaText}>Open job</Text>
+        </Pressable>
+      )}
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
   gate: { padding: 20, gap: 8 },
   gateTitle: { fontSize: 17, fontWeight: '800' },
   gateBody: { fontSize: 13, lineHeight: 19 },
+  jobCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 16,
+    gap: 12,
+  },
+  jobTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  jobShipper: { fontSize: 14, fontWeight: '700' },
+  jobKicker: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
+  awardedPill: {
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    backgroundColor: Theme.positiveMuted,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.positiveMutedDarkBorder,
+  },
+  awardedPillText: { fontSize: 11, fontWeight: '800', color: Theme.positive },
+  routeBlock: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  routeCityCol: { flex: 1, minWidth: 0, gap: 2 },
+  routeCityColEnd: { alignItems: 'flex-end' },
+  routeCity: { fontSize: 16, fontWeight: '800', letterSpacing: -0.2 },
+  routeCityEnd: { textAlign: 'right' },
+  routeMeta: { fontSize: 11, fontWeight: '600' },
+  routeMetaEnd: { textAlign: 'right' },
+  routeArrowWrap: { paddingHorizontal: 2 },
+  earningsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  earningsLabel: { fontSize: 12, fontWeight: '600' },
+  earningsValue: { fontSize: 22, fontWeight: '800' },
+  jobHint: { fontSize: 12, fontWeight: '500', lineHeight: 17 },
   card: {
     borderRadius: 16,
     borderWidth: StyleSheet.hairlineWidth,
