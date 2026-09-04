@@ -165,7 +165,7 @@ function normalizeRawVehicleInput(s: string): string {
 }
 
 /**
- * Format for display: e.g. "TN25CM7892" or "TN 25 CM 7892" → "TN 25 CM 7892".
+ * Format for display: e.g. "TN 25 CM 7892" → "TN25CM7892" (no spaces).
  * Non-Indian values (e.g. "TRK-SEED-001") are returned trimmed, unchanged.
  */
 export function formatIndianVehicleNumber(raw: string | null | undefined): string {
@@ -176,7 +176,7 @@ export function formatIndianVehicleNumber(raw: string | null | undefined): strin
   if (!normalized) return trimmed;
   const parts = splitIndianVehicleSegments(normalized);
   if (!parts) return trimmed;
-  return parts.join(' ');
+  return parts.join('');
 }
 
 /**
@@ -217,21 +217,13 @@ export function parsePlate(normalized: string): PlateShape {
 }
 
 /**
- * Format as user types in vehicle number input.
- * Mask spacing, series segment flexes to 1 or 2 letters:
- *   "TN17AS2202" → "TN 17 AS 2202"
- *   "TN05C9811"  → "TN 05 C 9811"
+ * Format as user types in vehicle number input (no spaces).
+ *   "TN 17 AS 2202" → "TN17AS2202"
+ *   "TN 05 C 9811"  → "TN05C9811"
  */
 export function formatIndianVehicleNumberInput(next: string): string {
   const raw = normalizeRawVehicleInput(next);
-  // Cap total length at 10 (2-letter series) rather than assuming it — a
-  // fixed .slice(0, 10) is still correct for both 9- and 10-char plates
-  // since neither exceeds 10, it only needs to stop growing past it.
-  const normalized = raw.slice(0, 10);
-  if (!normalized) return "";
-  const p = parsePlate(normalized);
-  const parts = [p.state, p.district, p.series, p.number].filter((seg) => seg.length > 0);
-  return parts.join(" ");
+  return raw.slice(0, 10);
 }
 
 /**

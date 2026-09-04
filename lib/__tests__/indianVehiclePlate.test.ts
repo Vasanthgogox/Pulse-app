@@ -67,10 +67,10 @@ describe("Indian vehicle plate entry", () => {
     },
   );
 
-  it("formats TN18D2522 as a 1-letter series, not TN 18 D2 522", () => {
-    expect(formatIndianVehicleNumberInput("TN18D2522")).toBe("TN 18 D 2522");
-    expect(formatIndianVehicleNumber("TN18D2522")).toBe("TN 18 D 2522");
-    expect(formatIndianVehicleNumberInput("TN18DC2522")).toBe("TN 18 DC 2522");
+  it("formats TN18D2522 as a 1-letter series, not TN18D2522 split as D2 522", () => {
+    expect(formatIndianVehicleNumberInput("TN18D2522")).toBe("TN18D2522");
+    expect(formatIndianVehicleNumber("TN18D2522")).toBe("TN18D2522");
+    expect(formatIndianVehicleNumberInput("TN18DC2522")).toBe("TN18DC2522");
   });
 
   it("keeps the system keyboard on letters after the first series character so digits still type", () => {
@@ -79,7 +79,7 @@ describe("Indian vehicle plate entry", () => {
       letters: true,
       digits: true,
     });
-    expect(appendIndianVehicleChar("TN 18 D", "2")).toBe("TN 18 D 2");
+    expect(appendIndianVehicleChar("TN 18 D", "2")).toBe("TN18D2");
   });
 
   it.each([
@@ -102,16 +102,16 @@ describe("Indian vehicle plate entry", () => {
     }
   });
 
-  it("formats input with flexible series spacing", () => {
-    expect(formatIndianVehicleNumberInput("tn17as2202")).toBe("TN 17 AS 2202");
-    expect(formatIndianVehicleNumberInput("TN17")).toBe("TN 17");
-    expect(formatIndianVehicleNumberInput("TN17AS")).toBe("TN 17 AS");
-    expect(formatIndianVehicleNumberInput("TN18D")).toBe("TN 18 D");
+  it("formats input without spaces", () => {
+    expect(formatIndianVehicleNumberInput("tn17as2202")).toBe("TN17AS2202");
+    expect(formatIndianVehicleNumberInput("TN17")).toBe("TN17");
+    expect(formatIndianVehicleNumberInput("TN17AS")).toBe("TN17AS");
+    expect(formatIndianVehicleNumberInput("TN18D")).toBe("TN18D");
   });
 
-  it("formats stored plates for display and leaves non-Indian values alone", () => {
-    expect(formatIndianVehicleNumber("TN17AS2202")).toBe("TN 17 AS 2202");
-    expect(formatIndianVehicleNumber("tn 17 as 2202")).toBe("TN 17 AS 2202");
+  it("formats stored plates for display without spaces and leaves non-Indian values alone", () => {
+    expect(formatIndianVehicleNumber("TN17AS2202")).toBe("TN17AS2202");
+    expect(formatIndianVehicleNumber("tn 17 as 2202")).toBe("TN17AS2202");
     expect(formatIndianVehicleNumber("TRK-SEED-001")).toBe("TRK-SEED-001");
   });
 
@@ -146,8 +146,8 @@ describe("Indian vehicle plate entry", () => {
   });
 
   it("rejects a letter during the district segment", () => {
-    expect(appendIndianVehicleChar("TN 1", "A")).toBe("TN 1");
-    expect(appendIndianVehicleChar("TN 17", "A")).toBe("TN 17 A");
+    expect(appendIndianVehicleChar("TN 1", "A")).toBe("TN1");
+    expect(appendIndianVehicleChar("TN 17", "A")).toBe("TN17A");
   });
 
   it("hints match the flexible series mask", () => {
