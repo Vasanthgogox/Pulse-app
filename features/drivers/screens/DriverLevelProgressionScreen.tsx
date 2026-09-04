@@ -58,6 +58,7 @@ export default function LevelProgressionScreen() {
   const [ratings, setRatings] = useState<RatingRow[]>([]);
   const [isVerified, setIsVerified] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [linkedDriverIds, setLinkedDriverIds] = useState<string[]>([]);
 
   const load = useCallback((showLoading = true) => {
     if (!profile?.uid) {
@@ -79,6 +80,8 @@ export default function LevelProgressionScreen() {
 
         const drivers = driversRes.drivers ?? [];
         const driverIds = drivers.map((d) => d.id);
+        // Same id set the trips query below uses — drives the realtime subscription filter.
+        setLinkedDriverIds(driverIds);
         if (driverIds.length === 0) {
           setTripsCount(0);
           setRatings([]);
@@ -108,15 +111,23 @@ export default function LevelProgressionScreen() {
     }, [load]),
   );
 
+  // Shared with DriverProfileScreen's identical subscription (same signed-in user
+  // resolves the same driverIds) — same key means the realtime registry dedupes to one
+  // channel instead of two when both screens are mounted. Scoped to this user's own
+  // driver_id(s) — a driver's trips can span multiple orgs, so organization_id can't be
+  // used here; waits for linkedDriverIds to resolve before subscribing.
+  const linkedDriverIdsKey = linkedDriverIds.join(',');
   useEffect(() => {
+    if (!profile?.uid || linkedDriverIds.length === 0) return;
     return subscribeSharedPostgresChanges(
-      'driver-app:trips:all',
-      [{ event: '*', schema: 'public', table: 'trips' }],
+      `driver-app:trips:driver:${profile.uid}`,
+      [{ event: '*', schema: 'public', table: 'trips', filter: `driver_id=in.(${linkedDriverIdsKey})` }],
       () => {
         load(false);
       },
     );
-  }, [load]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- linkedDriverIdsKey is the stable dep for linkedDriverIds
+  }, [profile?.uid, linkedDriverIdsKey, load]);
 
   const experience = useMemo(
     () =>

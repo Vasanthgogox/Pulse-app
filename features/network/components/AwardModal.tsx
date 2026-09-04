@@ -20,8 +20,10 @@ import { submitDriverDirectBidCounterOffer } from "@/features/network/services/b
 import { MarketBidCard } from "@/features/network/components/MarketBidCard";
 import {
   acceptMarketBid,
+  calculateMarketplacePlatformFee,
   rejectMarketBid,
 } from "@/features/network/services/marketBids.service";
+import { formatMarketplaceTransactionError } from "@/features/marketplace/utils/marketplaceErrorFormat.util";
 import { useMarketBidsForIndentQuery } from "@/lib/queries/useBidsQuery";
 import { useInvalidateIndents } from "@/lib/queries";
 import { queryKeys } from "@/lib/queryKeys";
@@ -84,11 +86,40 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
   } = useMarketBidsForIndentQuery(currentLoad?.id ?? null);
 
   const handleAcceptMarketBid = useCallback(
-    async (bidId: string, amount: number, bidderLabel: string) => {
+    async (bidId: string, amount: number, bidderLabel: string, bidderType: "dco" | "organization") => {
+      const bidAmountLabel = `₹${Number(amount ?? 0).toLocaleString("en-IN")}`;
+
+      // A9.2: accept_market_bid()'s organization branch deliberately awards
+      // the indent WITHOUT creating a trip -- the winning org still has to
+      // self-assign a vehicle/driver via their own "My Bids" screen
+      // (OrgMyBidsList's Assign Vehicle action) before a trip exists. Only
+      // the DCO branch creates a trip immediately. The confirm/success copy
+      // must not claim a trip is created for an organization award.
+      let message =
+        bidderType === "organization"
+          ? `Award this bid from ${bidderLabel} for ${bidAmountLabel}? The load will be assigned to their organization -- they'll need to assign a vehicle and driver before a trip is created. Any other pending offers on this load will be rejected.`
+          : `Accept this bid from ${bidderLabel} for ${bidAmountLabel}? This creates a trip and rejects any other pending offers on this load.`;
+
+      // A8.3: Marketplace platform fee applies only to DCO bidders, business-
+      // side only -- the bidder never sees this. Organization-bidder awards
+      // (relationship/business-to-business Marketplace bidding) are untouched.
+      if (bidderType === "dco") {
+        const { calc } = await calculateMarketplacePlatformFee(amount);
+        if (calc && calc.is_active_config_found && calc.resolved_fee > 0) {
+          const feeLabel = `₹${Number(calc.resolved_fee).toLocaleString("en-IN")}`;
+          const totalLabel = `₹${Number(calc.client_price).toLocaleString("en-IN")}`;
+          message =
+            `Winning bid ${bidAmountLabel}\n` +
+            `Pulse Marketplace fee ${feeLabel}\n` +
+            `Total client price ${totalLabel}\n\n` +
+            `This creates a trip and rejects any other pending offers on this load.`;
+        }
+      }
+
       const confirmed = await confirmDialog({
-        title: "Accept Market bid",
-        message: `Accept this bid from ${bidderLabel} for ₹${Number(amount ?? 0).toLocaleString("en-IN")}? This creates a trip and rejects any other pending offers on this load.`,
-        confirmLabel: "Accept",
+        title: bidderType === "organization" ? "Award Market bid" : "Accept Market bid",
+        message,
+        confirmLabel: bidderType === "organization" ? "Award" : "Accept",
         destructive: false,
       });
       if (!confirmed) return;
@@ -96,7 +127,7 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
         setMarketBidActionId(bidId);
         const { error } = await acceptMarketBid(bidId);
         if (error) {
-          showAppAlert("Could not accept bid", error.message);
+          showAppAlert("Could not accept bid", formatMarketplaceTransactionError(error.message));
           return;
         }
         if (currentLoad?.id) {
@@ -108,9 +139,16 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
           invalidateIndents(currentLoad.organization_id);
         }
         queryClient.invalidateQueries({ queryKey: ["indents", "offer-counts"] });
-        showAppAlert("Bid accepted", "Trip created from this Market bid.");
+        if (bidderType === "organization") {
+          showAppAlert(
+            "Bid awarded",
+            "The winning organization has been selected. They'll assign a vehicle and driver to create the trip.",
+          );
+        } else {
+          showAppAlert("Bid accepted", "Trip created from this Market bid.");
+        }
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Unknown error.";
+        const msg = e instanceof Error ? formatMarketplaceTransactionError(e.message) : "Something went wrong. Please try again.";
         showAppAlert("Could not accept bid", msg);
       } finally {
         setMarketBidActionId(null);
@@ -132,7 +170,7 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
         setMarketBidActionId(bidId);
         const { error } = await rejectMarketBid(bidId);
         if (error) {
-          showAppAlert("Could not reject bid", error.message);
+          showAppAlert("Could not reject bid", formatMarketplaceTransactionError(error.message));
           return;
         }
         if (currentLoad?.id) {
@@ -141,7 +179,7 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
           });
         }
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Unknown error.";
+        const msg = e instanceof Error ? formatMarketplaceTransactionError(e.message) : "Something went wrong. Please try again.";
         showAppAlert("Could not reject bid", msg);
       } finally {
         setMarketBidActionId(null);
@@ -427,6 +465,7 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
                                   bid.id,
                                   bid.amount,
                                   bid.bidder_display_name,
+                                  bid.bidder_type,
                                 )
                             : undefined
                         }

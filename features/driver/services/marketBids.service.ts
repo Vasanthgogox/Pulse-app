@@ -6,6 +6,7 @@
  * @see supabase/migrations/20270301060000_accept_reject_market_bid.sql
  */
 import { supabase } from '@/lib/supabase';
+import { formatMarketplaceTransactionError } from '@/features/marketplace/utils/marketplaceErrorFormat.util';
 
 export type MarketBidStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'superseded';
 
@@ -99,14 +100,11 @@ export function marketBidStatusLabel(status: MarketBidStatus): string {
   }
 }
 
-/** A6.4: translate a raw RPC error into a driver-facing line. Only handles
- * codes this Market bid-submission path can actually raise -- unmatched
- * messages pass through unchanged (same posture as Reach's
- * formatDirectBidError). */
+/**
+ * A9.2: delegates to the shared Marketplace error formatter (do not
+ * duplicate the mapping here) -- kept as a thin, named wrapper since
+ * AvailableLoadDetailScreen.tsx already imports it from this module.
+ */
 export function formatMarketBidSubmitError(message: string): string {
-  const m = (message ?? '').toLowerCase();
-  if (m.includes('driver_unavailable')) {
-    return "You're currently on an active trip. Complete it before bidding on another load.";
-  }
-  return message.trim() || 'Could not submit bid.';
+  return formatMarketplaceTransactionError(message);
 }

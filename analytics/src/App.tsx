@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Shield, Moon, Sun, ChevronRightSquare, Coins, Users, SlidersHorizontal, Rocket, Ticket, UserRound, LogOut, Loader2, UserCog } from 'lucide-react';
+import { Shield, Moon, Sun, ChevronRightSquare, Coins, Users, SlidersHorizontal, Rocket, Ticket, UserRound, LogOut, Loader2, UserCog, Wallet } from 'lucide-react';
 import { AdminDataProvider, useAdmin } from '@/context/AdminDataProvider';
 import { AdminAuthProvider, useAdminAuth } from '@/context/AdminAuthProvider';
 import { AdminLoginScreen } from '@/components/auth/AdminLoginScreen';
@@ -11,6 +11,7 @@ import { VerificationActionPanel } from '@/components/workspace/VerificationActi
 import { CreditsPanel } from '@/components/credits/CreditsPanel';
 import { ReferralsPanel } from '@/components/growth/ReferralsPanel';
 import { RewardRulesPanel } from '@/components/growth/RewardRulesPanel';
+import { MarketplaceFeeSettingsPanel } from '@/components/marketplace/MarketplaceFeeSettingsPanel';
 import { BoostControlCenterPanel } from '@/components/growth/BoostControlCenterPanel';
 import { SupportPanel } from '@/components/support/SupportPanel';
 import { AdminUsersPanel } from '@/components/admin/AdminUsersPanel';
@@ -30,6 +31,7 @@ type ConsoleView =
   | 'credits'
   | 'referrals'
   | 'reward-rules'
+  | 'marketplace-fees'
   | 'boost-ops'
   | 'support'
   | 'admin-users';
@@ -58,6 +60,7 @@ function Topbar({
   const { applications } = useAdmin();
   const { permissions } = useAdminAuth();
   const canManageAdmins = permissions.includes('platform_admin.manage');
+  const canManageMarketplaceFees = permissions.includes('marketplace_fees.manage');
   const pendingCount   = applications.filter(a => ['Pending', 'Under Review'].includes(a.status)).length;
   const escalatedCount = applications.filter(a => a.status === 'Escalated').length;
   const [supportUpdateCount, setSupportUpdateCount] = useState(0);
@@ -130,6 +133,14 @@ function Topbar({
           >
             <SlidersHorizontal className="size-3 shrink-0" /> Growth · Reward Rules
           </button>
+          {canManageMarketplaceFees ? (
+            <button
+              onClick={() => setView('marketplace-fees')}
+              className={navTabClass(view === 'marketplace-fees')}
+            >
+              <Wallet className="size-3 shrink-0" /> Marketplace · Fees
+            </button>
+          ) : null}
           <button
             onClick={() => setView('boost-ops')}
             className={navTabClass(view === 'boost-ops')}
@@ -258,6 +269,8 @@ function AdminShell() {
           <ReferralsPanel />
         ) : view === 'reward-rules' ? (
           <RewardRulesPanel />
+        ) : view === 'marketplace-fees' ? (
+          <MarketplaceFeeSettingsPanel />
         ) : view === 'boost-ops' ? (
           <BoostControlCenterPanel />
         ) : view === 'support' ? (

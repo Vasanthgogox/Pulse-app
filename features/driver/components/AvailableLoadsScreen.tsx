@@ -23,7 +23,7 @@ import { useFleetOwnerOpenLoadsQuery } from '@/lib/queries/useFleetOwnerOpenLoad
 import { useMyMarketBidsQuery } from '@/lib/queries/useMyMarketBidsQuery';
 import { useOwnerVehiclesQuery } from '@/lib/queries/useOwnerVehiclesQuery';
 import { ROUTES } from '@/lib/routes';
-import { useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronRight, MapPin, Truck } from 'lucide-react-native';
 import { useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
@@ -48,7 +48,12 @@ export default function AvailableLoadsScreen() {
   const { isDark } = useDriverTheme();
   const colors = useDriverThemeColors();
   const pageBg = driverDetailPageBackground(isDark, colors.background);
-  const [segment, setSegment] = useState<'find' | 'mybids'>('find');
+  // A7.3: the DCO Available surface's "My Bids" entry deep-links here with
+  // ?segment=mybids so it lands directly on this segment instead of Find Work.
+  const { segment: initialSegment } = useLocalSearchParams<{ segment?: string }>();
+  const [segment, setSegment] = useState<'find' | 'mybids'>(
+    initialSegment === 'mybids' ? 'mybids' : 'find',
+  );
   const cardBorder = isDark ? colors.borderSubtle : 'rgba(226,232,240,0.95)';
 
   return (

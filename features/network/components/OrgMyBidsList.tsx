@@ -14,9 +14,12 @@ import {
   type MyOrgMarketBidRow,
   type MyOrgMarketBidStatus,
 } from "@/features/network/services/findLoadsForOrg.service";
-import { Inbox } from "lucide-react-native";
-import { useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { getTripByIndentId } from "@/features/trips/services/trips.service";
+import { ROUTES } from "@/lib/routes";
+import { useRouter } from "expo-router";
+import { ChevronRight, Inbox } from "lucide-react-native";
+import { useMemo, useState } from "react";
+import { Pressable, StyleSheet, Text, View } from "react-native";
 
 function formatAmount(amount: number | null | undefined): string {
   if (amount == null || !Number.isFinite(Number(amount))) return "—";
@@ -108,18 +111,18 @@ export function OrgMyBidsList({
     );
   }
 
-  return (
+    return (
     <View style={styles.listContent}>
-      {groups.pending.length > 0 ? (
-        <Section title="Pending" count={groups.pending.length}>
-          {groups.pending.map((b) => (
+      {groups.awarded.length > 0 ? (
+        <Section title="Awarded" count={groups.awarded.length}>
+          {groups.awarded.map((b) => (
             <BidCard key={b.id} bid={b} />
           ))}
         </Section>
       ) : null}
-      {groups.awarded.length > 0 ? (
-        <Section title="Awarded" count={groups.awarded.length}>
-          {groups.awarded.map((b) => (
+      {groups.pending.length > 0 ? (
+        <Section title="Pending" count={groups.pending.length}>
+          {groups.pending.map((b) => (
             <BidCard key={b.id} bid={b} />
           ))}
         </Section>
@@ -155,9 +158,29 @@ function Section({
 }
 
 function BidCard({ bid }: { bid: MyOrgMarketBidRow }) {
+  const router = useRouter();
   const isAccepted = bid.status === "accepted";
   const isRejected = bid.status === "rejected";
   const phoneDisplay = bid.owner_phone ?? bid.owner_masked_phone;
+  const [isNavigating, setIsNavigating] = useState(false);
+
+  // Reuses the existing Indent allocation flow end to end (same as Load Center's
+  // "Get Load -> Allocate" CTA) -- mirrors IndentDetailScreen's handleSupplierAllocate:
+  // route to the trip if allocation already happened elsewhere, otherwise open Allocation.
+  const handleAssignVehicle = async () => {
+    if (isNavigating) return;
+    setIsNavigating(true);
+    try {
+      const res = await getTripByIndentId(bid.indent_id);
+      if (res.trip?.id) {
+        router.push(ROUTES.tripAssignment(res.trip.id, "vehicle") as never);
+      } else {
+        router.push(ROUTES.indentAllocation(bid.indent_id) as never);
+      }
+    } finally {
+      setIsNavigating(false);
+    }
+  };
 
   return (
     <View
@@ -207,6 +230,25 @@ function BidCard({ bid }: { bid: MyOrgMarketBidRow }) {
         <Text style={styles.note} numberOfLines={2}>
           {statusExplanation(bid.status)}
         </Text>
+      ) : null}
+
+      {isAccepted ? (
+        <Pressable
+          onPress={handleAssignVehicle}
+          disabled={isNavigating}
+          style={({ pressed }) => [
+            styles.assignRow,
+            pressed && styles.assignRowPressed,
+          ]}
+        >
+          <Text style={styles.assignRowLabel}>Your bid was accepted</Text>
+          <View style={styles.assignRowCta}>
+            <Text style={styles.assignRowCtaText}>
+              {isNavigating ? "Opening…" : "Assign Vehicle"}
+            </Text>
+            <ChevronRight size={14} color={Theme.positive} />
+          </View>
+        </Pressable>
       ) : null}
 
       <Text style={styles.submitted}>Submitted {formatSubmittedAt(bid.created_at)}</Text>
@@ -269,4 +311,20 @@ const styles = StyleSheet.create({
   contact: { fontSize: 12, fontWeight: "600", color: Theme.primaryText, marginTop: 2 },
   note: { fontSize: 12, fontStyle: "italic", color: Theme.textSecondary },
   submitted: { fontSize: 11, color: Theme.textMuted, marginTop: 2 },
+  assignRow: {
+    marginTop: 4,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.positiveMutedDarkBorder,
+    backgroundColor: Theme.positiveMuted,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  assignRowPressed: { opacity: 0.7 },
+  assignRowLabel: { fontSize: 12, fontWeight: "600", color: Theme.primaryText },
+  assignRowCta: { flexDirection: "row", alignItems: "center", gap: 2 },
+  assignRowCtaText: { fontSize: 13, fontWeight: "800", color: Theme.positive },
 });

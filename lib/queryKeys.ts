@@ -185,6 +185,11 @@ export const queryKeys = {
   /** Driver app home dashboard (linked drivers + pending OTP trips). */
   driverApp: {
     root: (userId: string) => ["q", "driver-app", userId] as const,
+    /** A7.3 — DCO availability truth (is_driver_available RPC), the sole
+     * gate for whether the DCO Available surface renders instead of the
+     * legacy dispatcher Home. */
+    availability: (userId: string) =>
+      ["q", "driver-app", userId, "availability"] as const,
     linkedDrivers: (userId: string) =>
       ["q", "driver-app", userId, "linked-drivers"] as const,
     pendingOtpTrips: (userId: string) =>
