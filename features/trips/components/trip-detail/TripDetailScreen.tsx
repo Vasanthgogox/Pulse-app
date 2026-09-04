@@ -8,7 +8,7 @@ import { PersistentTabPanel } from "@/components/PersistentTabPanel";
 import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { Theme } from "@/constants/Theme";
-import { canAddMoreTripDocs, isPdfTripDoc, VAULT_DOC_LIMIT_HINT, VAULT_DOC_MAX_BYTES, VAULT_DOC_MAX_MB, VAULT_DOC_PICKER_TYPES, vaultPickerRejectionMessage } from "@/features/trips/components/trip-detail/tripDocTypes";
+import { canAddMoreTripDocs, canMutateTripVaultDoc, isDriverPodVaultDoc, isPdfTripDoc, VAULT_DOC_LIMIT_HINT, VAULT_DOC_MAX_BYTES, VAULT_DOC_MAX_MB, VAULT_DOC_PICKER_TYPES, vaultPickerRejectionMessage } from "@/features/trips/components/trip-detail/tripDocTypes";
 import { TripVaultFilePreview } from "@/features/trips/components/trip-detail/TripVaultFilePreview";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
@@ -1497,6 +1497,16 @@ export default function TripDetailScreen({
       const uploaderId = detail.currentUserId;
       if (!tripIdForUpload || !uploaderId || uploadingDocId || pendingVaultUpload)
         return;
+      if (
+        isDriverPodVaultDoc(doc) &&
+        !isTripCompleted(detail.trip)
+      ) {
+        Alert.alert(
+          "Trip not completed",
+          "Driver POD can be uploaded after this trip is marked completed.",
+        );
+        return;
+      }
 
       let uri: string | null = null;
       let fileName = `${doc.id}-${Date.now()}.pdf`;
@@ -1550,7 +1560,7 @@ export default function TripDetailScreen({
       }
     },
     [
-      detail.trip?.id,
+      detail.trip,
       detail.currentUserId,
       uploadingDocId,
       pendingVaultUpload,
@@ -1686,6 +1696,16 @@ export default function TripDetailScreen({
 
   const startAddMoreForDoc = useCallback(
     (doc: (typeof detail.computedTripDocs)[number]) => {
+      if (
+        isDriverPodVaultDoc(doc) &&
+        !isTripCompleted(detail.trip)
+      ) {
+        Alert.alert(
+          "Trip not completed",
+          "Driver POD can be uploaded after this trip is marked completed.",
+        );
+        return;
+      }
       if (doc.category === "lr" || doc.id === "lr" || doc.id.startsWith("lr-")) {
         void handleLRUpload();
         return;
@@ -1696,7 +1716,7 @@ export default function TripDetailScreen({
       }
       void handleVaultUpload(doc);
     },
-    [handleLRUpload, handleVaultUpload, openVehicleDocChooser],
+    [handleLRUpload, handleVaultUpload, openVehicleDocChooser, detail.trip],
   );
 
   const openAddDocumentChooser = useCallback(() => {
@@ -1706,6 +1726,13 @@ export default function TripDetailScreen({
 
   const chooseAddDocumentType = useCallback(
     (kind: "lr" | "manifest" | "pod" | "vehicle") => {
+      if (kind === "pod" && !isTripCompleted(detail.trip)) {
+        Alert.alert(
+          "Trip not completed",
+          "Driver POD can be uploaded after this trip is marked completed.",
+        );
+        return;
+      }
       setAddDocChooserVisible(false);
       if (kind === "lr") {
         void handleLRUpload();
@@ -1723,7 +1750,7 @@ export default function TripDetailScreen({
         category: kind === "pod" ? "driver" : "trip",
       });
     },
-    [handleLRUpload, handleVaultUpload, openVehicleDocChooser],
+    [handleLRUpload, handleVaultUpload, openVehicleDocChooser, detail.trip],
   );
 
   const manifestJourneyPings = useMemo(() => {
@@ -2919,6 +2946,12 @@ export default function TripDetailScreen({
     !!currentOrganization?.id &&
     !!trip.organization_id &&
     currentOrganization.id === trip.organization_id;
+  const canUploadThisVaultDoc = (doc: (typeof detail.computedTripDocs)[number]) =>
+    canMutateTripVaultDoc({
+      doc,
+      canUploadTripDocs,
+      tripCompleted,
+    });
 
   const openDriverDetails = () => {
     if (!trip.driver_id) return;
@@ -2943,6 +2976,13 @@ export default function TripDetailScreen({
       return;
     }
     if (canUploadTripDocs) {
+      if (isDriverPodVaultDoc(doc) && !tripCompleted) {
+        Alert.alert(
+          "Trip not completed",
+          "Driver POD can be uploaded after this trip is marked completed.",
+        );
+        return;
+      }
       openTripDocumentsFlow();
       return;
     }
@@ -2981,6 +3021,13 @@ export default function TripDetailScreen({
       return;
     }
     if (canUploadTripDocs) {
+      if (!canUploadThisVaultDoc(doc)) {
+        Alert.alert(
+          "Trip not completed",
+          "Driver POD can be uploaded after this trip is marked completed.",
+        );
+        return;
+      }
       void handleVaultUpload(doc);
       return;
     }
@@ -3686,6 +3733,7 @@ export default function TripDetailScreen({
               <TripMobileVaultPanel
                 docs={vaultDocs}
                 canUploadTripDocs={canUploadTripDocs}
+                tripCompleted={tripCompleted}
                 uploadingDocId={uploadingDocId}
                 vehicleId={trip.vehicle_id ?? null}
                 onCardPress={handleVaultCardPress}
@@ -4881,10 +4929,15 @@ export default function TripDetailScreen({
                       const isUploadingThis = uploadingDocId === doc.id;
                       const isPending = doc.status === "Pending";
                       const isVehicleDoc = doc.id === "vehicle-documents";
+                      const canUploadThis = canUploadThisVaultDoc(doc);
                       const canAddMore =
-                        canUploadTripDocs &&
+                        canUploadThis &&
                         canAddMoreTripDocs(doc) &&
                         (doc.id !== "vehicle-documents" || !!trip.vehicle_id);
+                      const podUploadLocked =
+                        isDriverPodVaultDoc(doc) &&
+                        canUploadTripDocs &&
+                        !tripCompleted;
                       const fileCount = doc.files?.length ?? 0;
                       const vehicleTypeSummary = isVehicleDoc
                         ? vehicleComplianceOnFileSummary(detail.vehicleDocs)
@@ -4903,22 +4956,28 @@ export default function TripDetailScreen({
                           ]
                             .filter(Boolean)
                             .join(" · ") || VEHICLE_COMPLIANCE_TYPE_HINT
-                        : !isPending && fileCount > 1
-                          ? `${fileCount} files`
-                          : doc.status;
+                        : podUploadLocked && isPending
+                          ? "After trip completed"
+                          : !isPending && fileCount > 1
+                            ? `${fileCount} files`
+                            : doc.status;
                       const btnLabel = isPending
-                        ? canUploadTripDocs
+                        ? canUploadThis
                           ? "Upload"
-                          : isVehicleDoc && trip.vehicle_id
-                            ? "Open"
-                            : "Pending"
+                          : podUploadLocked
+                            ? "Locked"
+                            : isVehicleDoc && trip.vehicle_id
+                              ? "Open"
+                              : "Pending"
                         : "Preview";
                       const btnIcon = isPending
-                        ? canUploadTripDocs
+                        ? canUploadThis
                           ? "upload"
-                          : isVehicleDoc && trip.vehicle_id
-                            ? "external-link"
-                            : "clock"
+                          : podUploadLocked
+                            ? "lock"
+                            : isVehicleDoc && trip.vehicle_id
+                              ? "external-link"
+                              : "clock"
                         : "eye";
                       return (
                         <View key={doc.id} style={neoStyles.vaultCard}>
@@ -4937,12 +4996,18 @@ export default function TripDetailScreen({
                               style={[
                                 neoStyles.vaultBtn,
                                 isPending &&
-                                  canUploadTripDocs &&
+                                  canUploadThis &&
                                   neoStyles.vaultBtnUpload,
                                 canAddMore && neoStyles.vaultBtnFlex,
+                                isPending &&
+                                  podUploadLocked &&
+                                  neoStyles.vaultBtnDisabled,
                               ]}
                               activeOpacity={0.85}
-                              disabled={isUploadingThis}
+                              disabled={isUploadingThis || (isPending && podUploadLocked)}
+                              accessibilityState={{
+                                disabled: isPending && podUploadLocked,
+                              }}
                             >
                               {isUploadingThis ? (
                                 <LoadingIndicator size="small" color="#fff" />
@@ -4952,7 +5017,7 @@ export default function TripDetailScreen({
                                     name={btnIcon}
                                     size={12}
                                     color={
-                                      isPending && canUploadTripDocs
+                                      isPending && canUploadThis
                                         ? Theme.buttonPrimaryText
                                         : "#fff"
                                     }
@@ -4961,7 +5026,7 @@ export default function TripDetailScreen({
                                     style={[
                                       neoStyles.vaultBtnText,
                                       isPending &&
-                                        canUploadTripDocs &&
+                                        canUploadThis &&
                                         neoStyles.vaultBtnTextUpload,
                                     ]}
                                   >
@@ -5547,7 +5612,11 @@ export default function TripDetailScreen({
                         const isUploaded =
                           d.status !== "Pending" || !!d.storagePath;
                         const canUploadThis =
-                          canUploadTripDocs &&
+                          canMutateTripVaultDoc({
+                            doc: d,
+                            canUploadTripDocs,
+                            tripCompleted,
+                          }) &&
                           (d.id !== "vehicle-documents" || !!trip.vehicle_id) &&
                           (d.category === "lr" ||
                             d.category === "trip" ||
@@ -6298,6 +6367,11 @@ export default function TripDetailScreen({
 
             <View style={styles.docModalFooter}>
               {canUploadTripDocs &&
+              canMutateTripVaultDoc({
+                doc: detail.selectedDoc,
+                canUploadTripDocs,
+                tripCompleted,
+              }) &&
               canAddMoreTripDocs(detail.selectedDoc) &&
               (detail.selectedDoc?.id !== "vehicle-documents" ||
                 !!trip.vehicle_id) ? (
@@ -6327,7 +6401,11 @@ export default function TripDetailScreen({
               )}
               <View style={{ flexDirection: "row", gap: 8 }}>
                 {previewOpenUrl &&
-                canUploadTripDocs &&
+                canMutateTripVaultDoc({
+                  doc: detail.selectedDoc,
+                  canUploadTripDocs,
+                  tripCompleted,
+                }) &&
                 canAddMoreTripDocs(detail.selectedDoc) &&
                 (detail.selectedDoc?.id !== "vehicle-documents" ||
                   !!trip.vehicle_id) ? (
@@ -6553,13 +6631,24 @@ export default function TripDetailScreen({
                   { kind: "vehicle" as const, label: "Vehicle Document" },
                   { kind: "pod" as const, label: "Driver POD" },
                 ] as const
-              ).map((item) => (
+              ).map((item) => {
+                const podLocked = item.kind === "pod" && !tripCompleted;
+                return (
                 <TouchableOpacity
                   key={item.kind}
-                  style={styles.addDocTypeBtn}
+                  style={[
+                    styles.addDocTypeBtn,
+                    podLocked && { opacity: 0.45 },
+                  ]}
                   onPress={() => chooseAddDocumentType(item.kind)}
                   activeOpacity={0.85}
-                  accessibilityLabel={`Upload ${item.label}`}
+                  disabled={podLocked}
+                  accessibilityState={{ disabled: podLocked }}
+                  accessibilityLabel={
+                    podLocked
+                      ? `${item.label}, available after trip is completed`
+                      : `Upload ${item.label}`
+                  }
                 >
                   <FontAwesome name="file-text-o" size={16} color="#0f172a" />
                   <View style={{ flex: 1, minWidth: 0 }}>
@@ -6570,11 +6659,16 @@ export default function TripDetailScreen({
                       <Text style={styles.addDocTypeBtnMeta}>
                         {VEHICLE_COMPLIANCE_TYPE_HINT}
                       </Text>
+                    ) : podLocked ? (
+                      <Text style={styles.addDocTypeBtnMeta}>
+                        Available after trip is completed
+                      </Text>
                     ) : null}
                   </View>
                   <FontAwesome name="chevron-right" size={12} color="#94a3b8" />
                 </TouchableOpacity>
-              ))}
+                );
+              })}
               <Text style={styles.vaultLimitsHint}>{VAULT_DOC_LIMIT_HINT}</Text>
             </View>
           </View>

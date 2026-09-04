@@ -1,4 +1,10 @@
-import { canAddMoreTripDocs, isPdfTripDoc, vaultPickerRejectionMessage } from "../tripDocTypes";
+import {
+  canAddMoreTripDocs,
+  canMutateTripVaultDoc,
+  isDriverPodVaultDoc,
+  isPdfTripDoc,
+  vaultPickerRejectionMessage,
+} from "../tripDocTypes";
 
 describe("isPdfTripDoc", () => {
   it("detects PDF from vault type", () => {
@@ -37,6 +43,38 @@ describe("isPdfTripDoc", () => {
         storagePath: "trip-1/pod/abc.jpg",
       }),
     ).toBe(false);
+  });
+});
+
+describe("canMutateTripVaultDoc", () => {
+  it("blocks Driver POD until the trip is completed", () => {
+    expect(
+      canMutateTripVaultDoc({
+        doc: { id: "pod", category: "driver" },
+        canUploadTripDocs: true,
+        tripCompleted: false,
+      }),
+    ).toBe(false);
+    expect(
+      canMutateTripVaultDoc({
+        doc: { id: "pod", category: "driver" },
+        canUploadTripDocs: true,
+        tripCompleted: true,
+      }),
+    ).toBe(true);
+  });
+
+  it("does not gate LR or manifest on trip completion", () => {
+    expect(
+      canMutateTripVaultDoc({
+        doc: { id: "lr", category: "lr" },
+        canUploadTripDocs: true,
+        tripCompleted: false,
+      }),
+    ).toBe(true);
+    expect(isDriverPodVaultDoc({ id: "manifest", category: "trip" })).toBe(
+      false,
+    );
   });
 });
 

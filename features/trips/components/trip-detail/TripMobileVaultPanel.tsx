@@ -4,7 +4,7 @@
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
-import { canAddMoreTripDocs, type TripDocItem, VAULT_DOC_LIMIT_HINT } from "@/features/trips/components/trip-detail/tripDocTypes";
+import { canAddMoreTripDocs, canMutateTripVaultDoc, isDriverPodVaultDoc, type TripDocItem, VAULT_DOC_LIMIT_HINT } from "@/features/trips/components/trip-detail/tripDocTypes";
 import { getDocumentViewUrls } from "@/features/trips/services/tripDocuments.service";
 import { getVehicleDocumentViewUrls } from "@/features/vehicles/services/vehicleDocuments.service";
 import { VEHICLE_COMPLIANCE_TYPE_HINT } from "@/features/vehicles/utils/vehicleDocuments.util";
@@ -31,6 +31,7 @@ const THUMB = 52;
 type Props = {
   docs: TripDocItem[];
   canUploadTripDocs: boolean;
+  tripCompleted?: boolean;
   uploadingDocId: string | null;
   vehicleId: string | null;
   onCardPress: (doc: TripDocItem) => void;
@@ -182,6 +183,7 @@ const VaultDocThumb = memo(function VaultDocThumb({
 export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
   docs,
   canUploadTripDocs,
+  tripCompleted = false,
   uploadingDocId,
   vehicleId,
   onCardPress,
@@ -272,16 +274,25 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
             const copy = statusCopy(doc.status);
             const isUploading = uploadingDocId === doc.id;
             const isPending = doc.status === "Pending";
+            const canUploadThis = canMutateTripVaultDoc({
+              doc,
+              canUploadTripDocs,
+              tripCompleted,
+            });
+            const podUploadLocked =
+              isDriverPodVaultDoc(doc) && canUploadTripDocs && !tripCompleted;
             const actionLabel = isPending
-              ? canUploadTripDocs
+              ? canUploadThis
                 ? "Upload"
-                : doc.id === "vehicle-documents" && vehicleId
-                  ? "Open"
-                  : "Pending"
+                : podUploadLocked
+                  ? "Unavailable"
+                  : doc.id === "vehicle-documents" && vehicleId
+                    ? "Open"
+                    : "Pending"
               : "View";
 
             const showAddMore =
-              canUploadTripDocs &&
+              canUploadThis &&
               !!onAddMore &&
               canAddMoreTripDocs(doc) &&
               (doc.id !== "vehicle-documents" || !!vehicleId);
@@ -291,9 +302,16 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
                 <TouchableOpacity
                   onPress={() => onCardPress(doc)}
                   activeOpacity={0.88}
-                  disabled={isUploading}
+                  disabled={isUploading || (isPending && podUploadLocked)}
                   accessibilityRole="button"
-                  accessibilityLabel={`${actionLabel} ${doc.label}`}
+                  accessibilityState={{
+                    disabled: isPending && podUploadLocked,
+                  }}
+                  accessibilityLabel={
+                    podUploadLocked && isPending
+                      ? `${doc.label}, available after trip is completed`
+                      : `${actionLabel} ${doc.label}`
+                  }
                 >
                   <View style={styles.cardMain}>
                     <VaultDocThumb
@@ -331,13 +349,15 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
                             : doc.files?.length
                               ? doc.files.map((file) => file.label).join(" · ")
                               : doc.type
+                          : podUploadLocked && isPending
+                            ? "Available after the trip is completed"
                           : (doc.files?.length ?? 0) > 1
                             ? `${doc.files?.length} files on file — tap to view`
                             : copy.detail}
                       </Text>
                       <Text style={styles.cardAction} numberOfLines={1}>
                         {isUploading ? "Uploading…" : actionLabel}
-                        {canUploadTripDocs && isPending ? " · required" : ""}
+                        {canUploadThis && isPending ? " · required" : ""}
                       </Text>
                     </View>
                     <View style={styles.chevronWrap}>

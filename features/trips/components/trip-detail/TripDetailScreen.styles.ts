@@ -2955,6 +2955,9 @@ export const neoStyles = StyleSheet.create({
     borderColor: Theme.buttonPrimaryBorder,
     borderRadius: Theme.buttonPrimaryRadius,
   },
+  vaultBtnDisabled: {
+    opacity: 0.45,
+  },
   vaultBtnText: {
     color: Theme.buttonDarkText,
     fontSize: 8,
