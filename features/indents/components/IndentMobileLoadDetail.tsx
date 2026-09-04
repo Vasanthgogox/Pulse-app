@@ -61,6 +61,8 @@ export type IndentMobileLoadDetailProps = {
   marginPct?: number | null;
   clientPriceInr?: number;
   supplierTargetInr?: number;
+  vendorName?: string | null;
+  vendorRate?: string | null;
   client: IndentFreightCardClientProps;
   quoteStatus?: string | null;
   quoteAmountInr?: number | null;
@@ -365,6 +367,8 @@ export const IndentMobileLoadDetail = memo(function IndentMobileLoadDetail({
   marginPct = null,
   clientPriceInr = 0,
   supplierTargetInr = 0,
+  vendorName = null,
+  vendorRate = null,
   client,
   quoteStatus,
   quoteAmountInr,
@@ -491,11 +495,13 @@ export const IndentMobileLoadDetail = memo(function IndentMobileLoadDetail({
         : "—";
 
   const rateDelta =
-    !isOwner && counter != null
-      ? `Countered ${formatINR(counter)}`
-      : isOwner && marginInr != null && marginInr > 0
-        ? `Margin ${formatINR(marginInr)}${marginPct != null ? ` (${marginPct}%)` : ""}`
-        : null;
+    isOwner && vendorName
+      ? `Vendor · ${vendorName}`
+      : !isOwner && counter != null
+        ? `Countered ${formatINR(counter)}`
+        : isOwner && marginInr != null && marginInr > 0
+          ? `Margin ${formatINR(marginInr)}${marginPct != null ? ` (${marginPct}%)` : ""}`
+          : null;
 
   const resolvedPrimary =
     primaryActionLabel ??
@@ -776,6 +782,24 @@ export const IndentMobileLoadDetail = memo(function IndentMobileLoadDetail({
                     </Text>
                   </View>
                 </View>
+                {vendorName ? (
+                  <View style={styles.clientPartyCard}>
+                    <View style={styles.clientPartyMain}>
+                      <Text style={styles.labelXxs}>VENDOR</Text>
+                      <Text style={styles.vendorPartyName} numberOfLines={1}>
+                        {vendorName}
+                      </Text>
+                    </View>
+                    {vendorRate ? (
+                      <View style={styles.clientPartyRate}>
+                        <Text style={styles.labelXxs}>Awarded</Text>
+                        <Text style={styles.clientPartyRateValue} numberOfLines={1}>
+                          {vendorRate}
+                        </Text>
+                      </View>
+                    ) : null}
+                  </View>
+                ) : null}
                 {partiesStrip ? (
                   <View style={styles.partiesStripWrap}>{partiesStrip}</View>
                 ) : null}
@@ -1180,6 +1204,12 @@ const styles = StyleSheet.create({
   clientPartyRate: { alignItems: "flex-end", flexShrink: 0 },
   clientPartyRateValue: {
     fontSize: 12,
+    fontWeight: "700",
+    color: INK,
+    marginTop: 2,
+  },
+  vendorPartyName: {
+    fontSize: 13,
     fontWeight: "700",
     color: INK,
     marginTop: 2,

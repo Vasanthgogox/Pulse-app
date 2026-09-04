@@ -45,6 +45,11 @@ import { shareDraftIndent } from "@/features/indents/services/indents.service";
 import { resolveMarketIndentShipperLabel } from "@/features/indents/utils/indentPartyDisplay.util";
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
 import {
+  resolveAwardedVendorName,
+  resolveGiveLoadAwardedAmountInr,
+  supplierNameByLinkedOrgId,
+} from "@/features/network/utils/awardedVendorName.util";
+import {
     DONE_SUB_TABS,
     getLoadCenterStatusTabLabel,
     resolveGetLoadDoneOutcome,
@@ -119,11 +124,13 @@ import {
     useClientsQuery,
     useTripsQuery,
     useVehiclesQuery,
+    useAcceptedDirectQuotesForFinanceQuery,
 } from "@/lib/queries";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Search } from "lucide-react-native";
 import { type FlashListRef } from "@shopify/flash-list";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { STALE } from "@/lib/queryClient";
 import * as Linking from "expo-linking";
 
 
@@ -375,6 +382,78 @@ export function LoadCenterView({
     statusTabCounts,
     loadMatchesSearch,
   } = filters;
+
+  const supplierNameByOrgId = useMemo(
+    () => supplierNameByLinkedOrgId(suppliers),
+    [suppliers],
+  );
+
+  const supplierById = useMemo(() => {
+    const map = new Map<(typeof suppliers)[number]["id"], (typeof suppliers)[number]>();
+    for (const supplier of suppliers) map.set(supplier.id, supplier);
+    return map;
+  }, [suppliers]);
+
+  const { data: acceptedQuotes = [] } = useAcceptedDirectQuotesForFinanceQuery(orgId);
+
+  const awardedVendorOrgIdByIndentId = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const load of hirePartnerLoads) {
+      const assigned = String(load.assigned_supplier_id ?? "").trim();
+      if (assigned) map[load.id] = assigned;
+    }
+    for (const quote of acceptedQuotes) {
+      const indentId = (quote.indent_id ?? "").trim();
+      const orgIdKey = (quote.bidder_organization_id ?? "").trim();
+      if (indentId && orgIdKey && !map[indentId]) map[indentId] = orgIdKey;
+    }
+    for (const [indentId, trip] of tripByIndentId) {
+      if (map[indentId]) continue;
+      const supplierId = (trip.supplier_id ?? "").trim();
+      const linkedOrg = (
+        supplierById.get(supplierId)?.linked_organization_id ?? ""
+      ).trim();
+      if (linkedOrg) map[indentId] = linkedOrg;
+    }
+    return map;
+  }, [acceptedQuotes, hirePartnerLoads, supplierById, tripByIndentId]);
+
+  const acceptedQuoteAmountByIndentId = useMemo(() => {
+    const map: Record<string, number> = {};
+    for (const quote of acceptedQuotes) {
+      const indentId = (quote.indent_id ?? "").trim();
+      const amount = Number(quote.amount ?? 0);
+      if (indentId && Number.isFinite(amount) && amount > 0 && map[indentId] == null) {
+        map[indentId] = amount;
+      }
+    }
+    return map;
+  }, [acceptedQuotes]);
+
+  const awardedSupplierOrgIds = useMemo(
+    () => Array.from(new Set(Object.values(awardedVendorOrgIdByIndentId))).sort(),
+    [awardedVendorOrgIdByIndentId],
+  );
+
+  const missingAwardedOrgIds = useMemo(
+    () => awardedSupplierOrgIds.filter((id) => !supplierNameByOrgId[id]),
+    [awardedSupplierOrgIds, supplierNameByOrgId],
+  );
+
+  const { data: awardedOrgDisplayNames = {} } = useQuery({
+    queryKey: ["q", "awarded-supplier-names", missingAwardedOrgIds.join("|")],
+    queryFn: async () => {
+      const profiles = await getLinkedOrgProfilesBatch(missingAwardedOrgIds);
+      const names: Record<string, string> = {};
+      for (const [oid, profile] of Object.entries(profiles)) {
+        const n = (profile.organizationName ?? "").trim();
+        if (n) names[oid] = n;
+      }
+      return names;
+    },
+    enabled: missingAwardedOrgIds.length > 0,
+    staleTime: STALE.moderate,
+  });
 
   const giveLoadKanbanColumns = useMemo(() => {
     const buckets = bucketGiveLoadIndentsForKanban(hirePartnerLoads, quoteCounts, {
@@ -1238,10 +1317,23 @@ export function LoadCenterView({
     ) => {
       const status = (load.status || "").toLowerCase();
       const isDraft = status === "draft";
+      const isAwardedStatus = status === "awarded";
       const isAwardedPendingTrip =
-        status === "awarded" && !indentIdsWithTrip.has(load.id);
+        isAwardedStatus && !indentIdsWithTrip.has(load.id);
       const isDone = statusMatchesFilter(status, "DONE");
       const hasDirectSupplier = !!load["assigned_supplier_id"];
+      const awardedVendorOrgId = awardedVendorOrgIdByIndentId[load.id] ?? "";
+      const trip = tripByIndentId.get(load.id);
+      const tripSupplier = trip?.supplier_id
+        ? supplierById.get(trip.supplier_id)
+        : undefined;
+      const tripVendorName =
+        (tripSupplier?.name || tripSupplier?.company_name || trip?.supplier_name || "").trim();
+      const tripDriverName =
+        (trip?.driver_id
+          ? driverProfileById.get(trip.driver_id)?.name
+          : "") ||
+        (trip?.driver_display_name ?? "").trim();
       const isAwaitingSupplierDeploy =
         isAwardedPendingTrip || hasDirectSupplier;
       const bidCount = quoteCounts[load.id] ?? 0;
@@ -1255,24 +1347,16 @@ export function LoadCenterView({
       const vehicleDetail = (load.vehicle_type || "—").toUpperCase();
       const loadTypeDetail = (load.load_type || "General").toUpperCase();
       const clientName = (load.client_name || "—").trim() || "—";
-      const parseAmount = (value: unknown): number | null => {
-        if (value == null) return null;
-        if (typeof value === "number") {
-          return Number.isFinite(value) ? value : null;
-        }
-        if (typeof value === "string") {
-          const normalized = value.replace(/[^0-9.-]/g, "");
-          const parsed = Number(normalized);
-          return Number.isFinite(parsed) ? parsed : null;
-        }
-        return null;
-      };
-      const awardedAmount =
-        parseAmount(load["assigned_supplier_rate"]) ??
-        parseAmount(load["awarded_amount"]) ??
-        parseAmount(load["supplier_rate"]) ??
-        parseAmount(load.supplier_target) ??
-        parseAmount(load.client_price);
+      const awardedAmount = resolveGiveLoadAwardedAmountInr({
+        assignedSupplierRate: load["assigned_supplier_rate"],
+        awardedAmount: load["awarded_amount"],
+        indentSupplierRate: load["supplier_rate"],
+        acceptedQuoteAmount: acceptedQuoteAmountByIndentId[load.id],
+        tripSupplierRate: trip?.supplier_rate,
+        tripDriverCommission: trip?.driver_commission,
+        tripClientPrice: trip?.client_price,
+        supplierTarget: load.supplier_target,
+      });
       const showPulseToNetwork =
         indentCanBroadcastToPulseNetwork(load) &&
         !isDone &&
@@ -1291,10 +1375,20 @@ export function LoadCenterView({
           isDone,
           isDraft,
           awardedAmountInr: awardedAmount,
-          isAwarded: isAwardedPendingTrip || hasDirectSupplier,
+          isAwarded:
+            isAwardedStatus ||
+            hasDirectSupplier ||
+            Boolean(awardedVendorOrgId),
           bidCount,
           loadTypeDetail,
-          awardedByName: awardModal.lastAwardedByIndentId[load.id] ?? null,
+          awardedByName: resolveAwardedVendorName({
+            assignedSupplierOrgId:
+              awardedVendorOrgId || null,
+            sessionName: awardModal.lastAwardedByIndentId[load.id] ?? null,
+            supplierNameByOrgId,
+            orgDisplayNameById: awardedOrgDisplayNames,
+            fallbackName: tripVendorName || tripDriverName || null,
+          }),
         },
       );
 
@@ -1359,7 +1453,12 @@ export function LoadCenterView({
       );
     },
     [
+      acceptedQuoteAmountByIndentId,
+      awardModal.lastAwardedByIndentId,
       awardModal.open,
+      awardedOrgDisplayNames,
+      awardedVendorOrgIdByIndentId,
+      driverProfileById,
       clientById,
       handleBroadcastDraft,
       handlePulseStory,
@@ -1371,7 +1470,10 @@ export function LoadCenterView({
       handleCardIndentPress,
       quoteCounts,
       statusFilterTab,
+      supplierNameByOrgId,
       tripAllocationForLoad,
+      tripByIndentId,
+      supplierById,
     ],
   );
 

@@ -77,10 +77,12 @@ describe("give load ticket commerce", () => {
       ...opts,
       isAwarded: true,
       awardedAmountInr: 30000,
+      awardedByName: "Acme Logistics",
     });
     expect(c.kicker).toBe("AWARDED");
     expect(c.amountInr).toBe(30000);
     expect(c.targetRateInr).toBe(50000);
+    expect(c.awardedByName).toBe("Acme Logistics");
   });
 
   it("keeps the bid count as a caption instead of replacing the rate", () => {

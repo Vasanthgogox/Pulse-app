@@ -103,11 +103,8 @@ export interface AwardQuoteResult {
   award: (quoteIdOverride?: string) => Promise<void>;
   /**
    * indentId -> winning bidder's org name, captured in memory the instant an
-   * award succeeds (the winning DirectQuoteRow is already loaded at that
-   * point -- no new query). Session-scoped only: it does NOT persist across
-   * a reload, since there is no persisted lookup from an indent to its
-   * accepted quote's bidder name today. Closing that gap for good needs a
-   * real query addition, deliberately deferred.
+   * award succeeds. Used as an optimistic fallback until assigned_supplier_id
+   * can be resolved from the supplier list / org display batch.
    */
   lastAwardedByIndentId: Record<string, string>;
 }

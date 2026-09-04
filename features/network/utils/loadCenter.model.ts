@@ -340,11 +340,9 @@ export type LoadCenterTicketCommerce = {
   /** Shown when there is no numeric hero (bids, load type, done outcome). */
   rightCaption?: string | null;
   /**
-   * Winning bidder's org name, AWARDED tickets only. Session-scoped: only
-   * populated right after an award succeeds in this session (see
-   * useAwardQuote's lastAwardedByIndentId) -- there is no persisted lookup
-   * from indent to accepted-quote bidder name yet, so this is null again
-   * after a reload until that's added separately.
+   * Winning vendor org name, AWARDED tickets only. Resolved from the
+   * assigned supplier org (CRM / org display) with a session fallback
+   * from the award modal.
    */
   awardedByName?: string | null;
 };
@@ -447,7 +445,6 @@ export function resolveGiveLoadTicketCommerce(
     isAwarded: boolean;
     bidCount: number;
     loadTypeDetail: string;
-    /** See LoadCenterTicketCommerce.awardedByName -- session-scoped only. */
     awardedByName?: string | null;
   },
 ): LoadCenterTicketCommerce {

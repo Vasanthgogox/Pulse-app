@@ -70,6 +70,9 @@ export type IndentReviewHubCardProps = {
   liveBidsCount?: number;
   clientPriceInr?: number;
   supplierTargetInr?: number;
+  /** Awarded vendor (Give Load owner). Shown on Parties when the load is awarded. */
+  vendorName?: string | null;
+  vendorRate?: string | null;
   primaryActionLabel?: string;
   onPrimaryAction?: () => void;
   secondaryActionLabel?: string;
@@ -171,6 +174,8 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
   liveBidsCount = 0,
   clientPriceInr = 0,
   supplierTargetInr = 0,
+  vendorName = null,
+  vendorRate = null,
   primaryActionLabel,
   onPrimaryAction,
   secondaryActionLabel,
@@ -206,6 +211,8 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
         marginPct={marginPct}
         clientPriceInr={clientPriceInr}
         supplierTargetInr={supplierTargetInr}
+        vendorName={vendorName}
+        vendorRate={vendorRate}
         client={client}
         quoteStatus={quoteStatus}
         quoteAmountInr={quoteAmountInr}
@@ -448,6 +455,22 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
                   avatarSize={compact ? 28 : 32}
                 />
               </View>
+              {vendorName ? (
+                <View style={styles.vendorEntitySlot}>
+                  <Text style={styles.financeLabelLight}>VENDOR</Text>
+                  <Text
+                    style={styles.vendorName}
+                    numberOfLines={1}
+                  >
+                    {vendorName}
+                  </Text>
+                  {vendorRate ? (
+                    <Text style={styles.vendorRate} numberOfLines={1}>
+                      {vendorRate}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
             </View>
           </View>
         ) : (
@@ -808,6 +831,20 @@ const styles = StyleSheet.create({
   },
   clientEntitySlot: {
     marginTop: 0,
+  },
+  vendorEntitySlot: {
+    marginTop: 10,
+    gap: 2,
+  },
+  vendorName: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  vendorRate: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textSecondary,
   },
   marginChip: {
     alignSelf: "flex-start",
