@@ -15,7 +15,13 @@ import {
   type MyOrgMarketBidRow,
   type MyOrgMarketBidStatus,
 } from "@/features/network/services/findLoadsForOrg.service";
+import { createMarketplaceFeeOrder } from "@/features/network/services/marketBids.service";
+import {
+  RazorpayCheckoutSheet,
+  type RazorpayCheckoutResult,
+} from "@/features/marketplace/components/RazorpayCheckoutSheet";
 import { getTripByIndentId } from "@/features/trips/services/trips.service";
+import { showAppAlert } from "@/lib/appAlert";
 import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
 import { ChevronRight, Inbox } from "lucide-react-native";
@@ -94,9 +100,12 @@ function feePendingLabel(status: FeePaymentStatus, feeAmount: number | null): st
 export function OrgMyBidsList({
   bids,
   isLoading,
+  onPaymentUpdated,
 }: {
   bids: MyOrgMarketBidRow[];
   isLoading: boolean;
+  /** A8.7: called after a checkout attempt closes, so the caller can refetch bids/loads. */
+  onPaymentUpdated?: () => void;
 }) {
   const groups = useMemo(() => {
     const pending: MyOrgMarketBidRow[] = [];
@@ -135,21 +144,21 @@ export function OrgMyBidsList({
       {groups.awarded.length > 0 ? (
         <Section title="Awarded" count={groups.awarded.length}>
           {groups.awarded.map((b) => (
-            <BidCard key={b.id} bid={b} />
+            <BidCard key={b.id} bid={b} onPaymentUpdated={onPaymentUpdated} />
           ))}
         </Section>
       ) : null}
       {groups.pending.length > 0 ? (
         <Section title="Pending" count={groups.pending.length}>
           {groups.pending.map((b) => (
-            <BidCard key={b.id} bid={b} />
+            <BidCard key={b.id} bid={b} onPaymentUpdated={onPaymentUpdated} />
           ))}
         </Section>
       ) : null}
       {groups.closed.length > 0 ? (
         <Section title="Not selected" count={groups.closed.length}>
           {groups.closed.map((b) => (
-            <BidCard key={b.id} bid={b} />
+            <BidCard key={b.id} bid={b} onPaymentUpdated={onPaymentUpdated} />
           ))}
         </Section>
       ) : null}
@@ -176,13 +185,52 @@ function Section({
   );
 }
 
-function BidCard({ bid }: { bid: MyOrgMarketBidRow }) {
+function BidCard({
+  bid,
+  onPaymentUpdated,
+}: {
+  bid: MyOrgMarketBidRow;
+  onPaymentUpdated?: () => void;
+}) {
   const router = useRouter();
   const isAccepted = bid.status === "accepted";
   const isRejected = bid.status === "rejected";
   const phoneDisplay = bid.owner_phone ?? bid.owner_masked_phone;
   const feeGateSatisfied = feePaymentGateSatisfied(bid.fee_payment_status);
   const [isNavigating, setIsNavigating] = useState(false);
+  const [isStartingPayment, setIsStartingPayment] = useState(false);
+  const [checkoutOrder, setCheckoutOrder] = useState<{
+    orderId: string;
+    amount: number;
+    currency: string;
+    keyId: string;
+  } | null>(null);
+
+  const canPay = isAccepted && (bid.fee_payment_status === "required" || bid.fee_payment_status === "failed");
+
+  const handlePay = async () => {
+    if (isStartingPayment) return;
+    setIsStartingPayment(true);
+    try {
+      const { error, order } = await createMarketplaceFeeOrder(bid.id);
+      if (error || !order) {
+        showAppAlert("Could not start payment", error?.message ?? "Please try again.");
+        return;
+      }
+      setCheckoutOrder(order);
+    } finally {
+      setIsStartingPayment(false);
+    }
+  };
+
+  // A8.7: the checkout sheet's own result is advisory only -- used to
+  // decide when to close it and refetch. Only a server-confirmed
+  // fee_payment_status (via the webhook) is ever treated as proof of
+  // payment; see RazorpayCheckoutSheet's own header comment.
+  const handleCheckoutClose = (_result: RazorpayCheckoutResult) => {
+    setCheckoutOrder(null);
+    onPaymentUpdated?.();
+  };
 
   // Reuses the existing Indent allocation flow end to end (same as Load Center's
   // "Get Load -> Allocate" CTA) -- mirrors IndentDetailScreen's handleSupplierAllocate:
@@ -271,15 +319,40 @@ function BidCard({ bid }: { bid: MyOrgMarketBidRow }) {
         </Pressable>
       ) : null}
 
-      {/* A8.6.2: award happened, but the Marketplace fee still gates
-          allocation -- no payment provider exists yet (A8.7), so this is
-          informational only, not an actionable "Pay" button. */}
+      {/* A8.7: award happened, but the Marketplace fee still gates
+          allocation. required/failed states get a real "Pay" trigger;
+          pending (payment already in flight, awaiting the webhook) stays
+          informational only -- retrying while a payment may still confirm
+          would create a second, unnecessary attempt. */}
       {isAccepted && !feeGateSatisfied ? (
         <View style={styles.feeGateRow}>
           <Text style={styles.feeGateLabel}>
             {feePendingLabel(bid.fee_payment_status, bid.platform_fee_amount)}
           </Text>
+          {canPay ? (
+            <Pressable
+              onPress={handlePay}
+              disabled={isStartingPayment}
+              style={({ pressed }) => [styles.payButton, pressed && styles.assignRowPressed]}
+            >
+              <Text style={styles.payButtonText}>
+                {isStartingPayment ? "Starting…" : `Pay ${formatAmount(bid.platform_fee_amount)}`}
+              </Text>
+            </Pressable>
+          ) : null}
         </View>
+      ) : null}
+
+      {checkoutOrder ? (
+        <RazorpayCheckoutSheet
+          visible
+          orderId={checkoutOrder.orderId}
+          amount={checkoutOrder.amount}
+          currency={checkoutOrder.currency}
+          keyId={checkoutOrder.keyId}
+          description={`Marketplace fee — ${routeLabel(bid)}`}
+          onClose={handleCheckoutClose}
+        />
       ) : null}
 
       <Text style={styles.submitted}>Submitted {formatSubmittedAt(bid.created_at)}</Text>
@@ -368,4 +441,13 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
   },
   feeGateLabel: { fontSize: 12, fontWeight: "600", color: Theme.warning },
+  payButton: {
+    marginTop: 8,
+    alignSelf: "flex-start",
+    borderRadius: 8,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    backgroundColor: Theme.darkBackground,
+  },
+  payButtonText: { fontSize: 12, fontWeight: "700", color: Theme.textOnPrimary },
 });

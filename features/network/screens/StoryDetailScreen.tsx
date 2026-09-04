@@ -6,6 +6,7 @@
 import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
     getIndentDisplayNumber,
@@ -195,6 +196,7 @@ export default function StoryDetailScreen() {
     refNote?: string;
   }>();
   const { currentOrganization } = useOrganization();
+  const { status: authStatus } = useAuth();
   const myOrgId = currentOrganization?.id ?? "";
   const invalidatePosts = useInvalidatePosts(myOrgId);
   const invalidateIndents = useInvalidateIndents();
@@ -450,7 +452,11 @@ export default function StoryDetailScreen() {
   const recordView = useRecordStoryViewMutation();
   const recordViewMutate = recordView.mutate;
   useEffect(() => {
-    if (!post || isOwnPost || !myOrgId) return;
+    // authStatus === 'restoring' means the session may not be durably attached
+    // yet — recording now risks a stale-session 42501 (RLS insert denial).
+    // Don't mark the ref until we've actually recorded, so this retries once
+    // the session settles instead of silently skipping the view forever.
+    if (!post || isOwnPost || !myOrgId || authStatus === "restoring") return;
     if (recordedViewsRef.current.has(post.id)) return;
     recordedViewsRef.current.add(post.id);
     if (__DEV__) console.log('[story-views] recording view for post', post.id, 'org', myOrgId);
@@ -462,7 +468,7 @@ export default function StoryDetailScreen() {
     if (post.is_sponsored && post.reach_campaign_id) {
       recordReachEvent(post.reach_campaign_id, "view", myOrgId);
     }
-  }, [post?.id, post?.is_sponsored, post?.reach_campaign_id, isOwnPost, myOrgId, currentOrganization?.name, recordViewMutate]);
+  }, [post?.id, post?.is_sponsored, post?.reach_campaign_id, isOwnPost, myOrgId, currentOrganization?.name, recordViewMutate, authStatus]);
 
   // Fetch viewers (own posts only)
   const viewsQ = useStoryViewsQuery(isOwnPost ? (post?.id ?? null) : null, isOwnPost);

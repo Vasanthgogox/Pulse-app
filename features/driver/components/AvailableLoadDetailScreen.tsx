@@ -24,7 +24,16 @@ import {
   submitMarketBid,
   type FeePaymentStatus,
 } from '@/features/driver/services/marketBids.service';
-import { calculateMarketplacePlatformFee } from '@/features/network/services/marketBids.service';
+import {
+  calculateMarketplacePlatformFee,
+  createMarketplaceFeeOrder,
+  createMarketTripAfterFeePayment,
+} from '@/features/network/services/marketBids.service';
+import {
+  RazorpayCheckoutSheet,
+  type RazorpayCheckoutResult,
+} from '@/features/marketplace/components/RazorpayCheckoutSheet';
+import { showAppAlert } from '@/lib/appAlert';
 import {
   ownerVehicleSubtitle,
   ownerVehicleTitle,
@@ -104,6 +113,7 @@ export default function AvailableLoadDetailScreen() {
   const {
     awards,
     isLoading: awardsLoading,
+    invalidate: invalidateAwards,
   } = useMyMarketAwardsQuery(uid);
 
   const [amountText, setAmountText] = useState('');
@@ -127,6 +137,43 @@ export default function AvailableLoadDetailScreen() {
     };
   }, []);
 
+  // A8.7 — Marketplace fee checkout state for this bid.
+  const [isStartingPayment, setIsStartingPayment] = useState(false);
+  const [checkoutOrder, setCheckoutOrder] = useState<{
+    orderId: string;
+    amount: number;
+    currency: string;
+    keyId: string;
+  } | null>(null);
+  const [isCreatingTrip, setIsCreatingTrip] = useState(false);
+
+  const handlePay = async () => {
+    if (!myBid || isStartingPayment) return;
+    setIsStartingPayment(true);
+    try {
+      const { error, order } = await createMarketplaceFeeOrder(myBid.id);
+      if (error || !order) {
+        showAppAlert('Could not start payment', error?.message ?? 'Please try again.');
+        return;
+      }
+      setCheckoutOrder(order);
+    } finally {
+      setIsStartingPayment(false);
+    }
+  };
+
+  // A8.7: the checkout sheet's own result is advisory only, used to decide
+  // when to close it and refetch -- only a server-confirmed
+  // fee_payment_status (via the webhook) is ever treated as proof of
+  // payment. Once that refetch shows 'paid', the driver's own app (as the
+  // bidder) triggers create_market_trip_after_fee_payment() -- nothing
+  // else in this flow does so for the DCO branch.
+  const handleCheckoutClose = (_result: RazorpayCheckoutResult) => {
+    setCheckoutOrder(null);
+    invalidateMyBid();
+    invalidateMyBids();
+  };
+
   const load = useMemo(
     () => loads.find((l) => l.id === indentId) ?? null,
     [loads, indentId],
@@ -142,6 +189,29 @@ export default function AvailableLoadDetailScreen() {
     }
     return best;
   }, [awards, indentId]);
+
+  // A8.7: once a refetch shows the fee paid, the driver's own app (as the
+  // bidder) triggers create_market_trip_after_fee_payment() -- nothing
+  // else in this flow does so for the DCO branch. The RPC itself is
+  // idempotent (safe if this fires more than once), and isCreatingTrip
+  // guards against overlapping calls from rapid refetches.
+  useEffect(() => {
+    if (!myBid || myBid.status !== 'accepted' || myBid.fee_payment_status !== 'paid') return;
+    if (awardedTrip) return; // trip already exists
+    if (isCreatingTrip) return;
+    setIsCreatingTrip(true);
+    void createMarketTripAfterFeePayment(myBid.id)
+      .then(({ error }) => {
+        if (error) {
+          console.warn('[AvailableLoadDetailScreen] createMarketTripAfterFeePayment failed:', error.message);
+          return;
+        }
+        invalidateAwards();
+        invalidateMyBid();
+      })
+      .finally(() => setIsCreatingTrip(false));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [myBid?.id, myBid?.status, myBid?.fee_payment_status, awardedTrip]);
   const compatible = useMemo(
     () =>
       load
@@ -257,7 +327,20 @@ export default function AvailableLoadDetailScreen() {
               if (awardedTrip) openAwardedJob(awardedTrip);
               else router.replace(ROUTES.DRIVER_ROOT as Href);
             }}
+            onPay={handlePay}
+            isStartingPayment={isStartingPayment}
           />
+          {checkoutOrder ? (
+            <RazorpayCheckoutSheet
+              visible
+              orderId={checkoutOrder.orderId}
+              amount={checkoutOrder.amount}
+              currency={checkoutOrder.currency}
+              keyId={checkoutOrder.keyId}
+              description="Marketplace fee"
+              onClose={handleCheckoutClose}
+            />
+          ) : null}
         </ScrollView>
       ) : error || !load ? (
         <View style={styles.gate}>
@@ -511,6 +594,8 @@ function AwardedMarketJobCard({
   isDark,
   colors,
   onOpenJob,
+  onPay,
+  isStartingPayment,
 }: {
   trip: DriverTripRow | null;
   bidAmount: number | null | undefined;
@@ -520,6 +605,8 @@ function AwardedMarketJobCard({
   isDark: boolean;
   colors: ReturnType<typeof useDriverThemeColors>;
   onOpenJob: () => void;
+  onPay?: () => void;
+  isStartingPayment?: boolean;
 }) {
   const pickup = trip?.pickup_location?.trim() || 'Pickup';
   const drop = trip?.dropoff_location?.trim() || 'Drop';
@@ -594,10 +681,29 @@ function AwardedMarketJobCard({
 
       <Text style={[styles.jobHint, { color: colors.textMuted }]}>{statusHint}</Text>
 
-      {/* A8.6.2: no trip exists yet while the fee is unpaid, and no payment
-          action exists in this phase (A8.7) -- disable rather than let this
-          silently bounce to Dashboard with nothing to show. */}
-      {!trip && feePending ? (
+      {/* A8.7: required/failed get a real "Pay" trigger. pending (a
+          checkout already in flight, awaiting the webhook) stays
+          non-interactive -- retrying while a payment may still confirm
+          would start a second, unnecessary attempt. */}
+      {!trip && feePending && (feePaymentStatus === 'required' || feePaymentStatus === 'failed') && onPay ? (
+        <Pressable
+          onPress={onPay}
+          disabled={isStartingPayment}
+          style={({ pressed }) => [
+            styles.bidCta,
+            {
+              backgroundColor: Theme.buttonPrimary,
+              borderColor: Theme.buttonPrimaryBorder,
+              opacity: pressed || isStartingPayment ? 0.85 : 1,
+              marginTop: 4,
+            },
+          ]}
+        >
+          <Text style={styles.bidCtaText}>
+            {isStartingPayment ? 'Starting…' : `Pay ${formatMarketBidAmount(platformFeeAmount) || 'fee'}`}
+          </Text>
+        </Pressable>
+      ) : !trip && feePending ? (
         <View
           style={[
             styles.bidCta,

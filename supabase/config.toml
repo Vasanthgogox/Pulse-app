@@ -381,6 +381,14 @@ verify_jwt = false
 [functions.driver-phone-signin-unverified]
 verify_jwt = false
 
+# A8.7: public Razorpay webhook receiver -- Razorpay calls this with no
+# Supabase JWT; its own HMAC signature (verified inside the function) is
+# the trust boundary. razorpay-create-order is deliberately NOT listed
+# here -- it stays authenticated (verify_jwt defaults to true), called by
+# the bidder's own app session.
+[functions.razorpay-webhook]
+verify_jwt = false
+
 # Experimental features may be deprecated any time
 [experimental]
 # Configures Postgres storage engine to use OrioleDB (S3)

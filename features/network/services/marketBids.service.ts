@@ -144,3 +144,43 @@ export async function rejectMarketBid(bidId: string): Promise<{ error: Error | n
   if (error) return { error: new Error(error.message) };
   return { error: null };
 }
+
+export type MarketplaceFeeOrder = {
+  orderId: string;
+  amount: number;
+  currency: string;
+  keyId: string;
+};
+
+/**
+ * A8.7 — starts a Razorpay checkout for this bid's Marketplace platform
+ * fee. Calls the razorpay-create-order edge function, which reads the fee
+ * amount server-side (never client-supplied) and records the pending
+ * attempt via initiate_marketplace_fee_payment_order(). The bidder pays
+ * this fee directly to Pulse — the client/load value is unaffected.
+ */
+export async function createMarketplaceFeeOrder(
+  bidId: string,
+): Promise<{ error: Error | null; order: MarketplaceFeeOrder | null }> {
+  const { data, error } = await supabase().functions.invoke('razorpay-create-order', {
+    body: { bidId },
+  });
+  if (error) {
+    const payload = (data ?? null) as { error?: string; message?: string } | null;
+    const detail = payload?.message?.trim() || payload?.error?.trim() || error.message;
+    return { error: new Error(detail), order: null };
+  }
+  const result = data as { orderId?: string; amount?: number; currency?: string; keyId?: string } | null;
+  if (!result?.orderId || !result?.keyId) {
+    return { error: new Error('Payment order response was incomplete.'), order: null };
+  }
+  return {
+    error: null,
+    order: {
+      orderId: result.orderId,
+      amount: result.amount ?? 0,
+      currency: result.currency ?? 'INR',
+      keyId: result.keyId,
+    },
+  };
+}

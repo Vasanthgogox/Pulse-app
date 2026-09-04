@@ -38,11 +38,16 @@ export interface TripRosterShape {
   vehicle_id?: string | null;
 }
 
-/** True when trip is roster-from-LoadHub (connected/integrated): driver+vehicle from org — no OTP. */
+/** True when trip is roster-from-LoadHub (connected/integrated): driver+vehicle from org — no OTP.
+ * Market-awarded DCO trips are also identity-linked at accept time (no phone OTP claim). */
 export function isRosterTrip(trip: TripRosterShape | null | undefined): boolean {
   if (!trip) return false;
+  const source = String(trip.source ?? "").trim();
+  if (source === "market_bid" && !!(trip.driver_id && String(trip.driver_id).trim())) {
+    return true;
+  }
   return (
-    String(trip.source ?? '').trim() === 'direct_quote' &&
+    source === "direct_quote" &&
     !!(trip.driver_id && String(trip.driver_id).trim()) &&
     !!(trip.vehicle_id && String(trip.vehicle_id).trim())
   );
