@@ -6228,14 +6228,6 @@ export default function TripDetailScreen({
             ]}
           >
             <View style={styles.docModalHeader}>
-              <TouchableOpacity
-                onPress={() => detail.setSelectedDoc(null)}
-                style={styles.docModalCloseIcon}
-                activeOpacity={0.8}
-                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-              >
-                <FontAwesome name="times" size={18} color="#0f172a" />
-              </TouchableOpacity>
               <View style={styles.docModalTitleBlock}>
                 <Text style={styles.docModalTitle} numberOfLines={2}>
                   {isGalleryPreview && galleryActiveDoc
@@ -6250,25 +6242,15 @@ export default function TripDetailScreen({
                       : "Preview"}
                 </Text>
               </View>
-              {/* Delete the currently previewed file; spacer keeps the title centered when hidden. */}
-              {canUploadTripDocs &&
-              !detail.docPreviewLoading &&
-              (isGalleryPreview
-                ? !!previewGalleryDocs[detail.vehiclePreviewIndex]?.storagePath
-                : !!detail.selectedDoc?.storagePath) ? (
-                <TouchableOpacity
-                  onPress={requestDeleteCurrentPreview}
-                  style={styles.docModalDeleteIcon}
-                  activeOpacity={0.8}
-                  disabled={!!uploadingDocId}
-                  accessibilityLabel="Delete this file"
-                  hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
-                >
-                  <FontAwesome name="trash-o" size={16} color={Theme.negative} />
-                </TouchableOpacity>
-              ) : (
-                <View style={{ width: 36 }} />
-              )}
+              <TouchableOpacity
+                onPress={() => detail.setSelectedDoc(null)}
+                style={styles.docModalCloseIcon}
+                activeOpacity={0.8}
+                hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+                accessibilityLabel="Close preview"
+              >
+                <FontAwesome name="times" size={18} color="#0f172a" />
+              </TouchableOpacity>
             </View>
 
             <View style={styles.docModalBody}>
@@ -6534,6 +6516,21 @@ export default function TripDetailScreen({
                     accessibilityLabel="Open document"
                   >
                     <Text style={styles.docModalFooterCancelText}>Open</Text>
+                  </TouchableOpacity>
+                ) : null}
+                {canUploadTripDocs &&
+                !detail.docPreviewLoading &&
+                (isGalleryPreview
+                  ? !!previewGalleryDocs[detail.vehiclePreviewIndex]?.storagePath
+                  : !!detail.selectedDoc?.storagePath) ? (
+                  <TouchableOpacity
+                    style={styles.docModalFooterDeleteBtn}
+                    onPress={requestDeleteCurrentPreview}
+                    activeOpacity={0.85}
+                    disabled={!!uploadingDocId}
+                    accessibilityLabel="Delete this file"
+                  >
+                    <Text style={styles.docModalFooterDeleteText}>Delete</Text>
                   </TouchableOpacity>
                 ) : null}
                 <TouchableOpacity
