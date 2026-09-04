@@ -19,6 +19,7 @@ import {
   formatCityStateLabel,
 } from "@/lib/placeCityState.util";
 import { scrollFocusedWebInputIntoView } from "@/lib/webKeyboard";
+import { WebOverlayPortal, webFixedFill } from "@/lib/webOverlayPortal";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { MapPin, Search, X, ChevronDown } from "lucide-react-native";
 import { createTripDesktopStyles as desktopShellStyles } from "@/features/trips/components/add-trip/createTripDesktop.styles";
@@ -130,6 +131,39 @@ export function LocationSearchField({
     setDropdownOpen(false);
     onDropdownOpenChange?.(false);
   }, [onDropdownOpenChange]);
+
+  /**
+   * RN-web Modal fade uses a CSS opacity animation. Hiding the tab (copy an
+   * address from Maps) pauses that animation, so the dim overlay can stick and
+   * the office-location form looks faded on return. Web uses a portal with no
+   * fade; close if the tab hides while the picker is still open.
+   */
+  useEffect(() => {
+    if (Platform.OS !== "web" || !dropdownOpen || typeof document === "undefined") {
+      return;
+    }
+    const closeIfHidden = () => {
+      if (document.hidden) closeDropdown();
+    };
+    const closeOnBfCache = (event: Event) => {
+      if ("persisted" in event && (event as PageTransitionEvent).persisted) {
+        closeDropdown();
+      }
+    };
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") closeDropdown();
+    };
+    document.addEventListener("visibilitychange", closeIfHidden);
+    document.addEventListener("keydown", onKeyDown);
+    window.addEventListener("pagehide", closeDropdown);
+    window.addEventListener("pageshow", closeOnBfCache);
+    return () => {
+      document.removeEventListener("visibilitychange", closeIfHidden);
+      document.removeEventListener("keydown", onKeyDown);
+      window.removeEventListener("pagehide", closeDropdown);
+      window.removeEventListener("pageshow", closeOnBfCache);
+    };
+  }, [closeDropdown, dropdownOpen]);
 
   const openDropdown = useCallback(() => {
     // Sync draft with current value on open.
@@ -441,6 +475,123 @@ export function LocationSearchField({
 
   const inlineIcon = leadingIconLayout === "inline" && !!leadingIcon;
 
+  const overlayBody = (
+    <View style={[styles.modalRoot, webFixedFill]} accessibilityViewIsModal>
+      <Pressable style={styles.backdropPress} onPress={closeDropdown}>
+        <View style={styles.backdropDim} />
+      </Pressable>
+      <View style={styles.centerWrap} pointerEvents="box-none">
+        <View
+          style={[
+            styles.sheet,
+            isDesktopShell && styles.sheetWizard,
+            isSignupSheet && signupSheetStyles.sheet,
+            { width: sheetWidth, maxWidth: sheetWidth, alignSelf: "center" },
+          ]}
+        >
+          <View
+            style={[
+              styles.sheetHead,
+              isDesktopShell && styles.sheetHeadWizard,
+              compact && !isSignupSheet && !isDesktopShell && styles.sheetHeadCompact,
+              isSignupSheet && signupSheetStyles.sheetHead,
+            ]}
+          >
+            <View style={styles.sheetTitles}>
+              <Text style={sheetType.sheetTitle}>{resolvedSheetTitle}</Text>
+              <Text style={sheetType.sheetSubtitle}>{resolvedSheetSubtitle}</Text>
+            </View>
+            <TouchableOpacity
+              onPress={closeDropdown}
+              style={[
+                styles.closeBtn,
+                isDesktopShell && styles.closeBtnWizard,
+                compact && !isSignupSheet && !isDesktopShell && styles.closeBtnCompact,
+                isSignupSheet && signupSheetStyles.closeBtn,
+                webCursor,
+              ]}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
+            >
+              <X
+                size={isDesktopShell ? 18 : 14}
+                color={Theme.textMuted}
+                strokeWidth={2.5}
+              />
+            </TouchableOpacity>
+          </View>
+
+          {isSignupSheet ? (
+            <SignupSheetSearchInput
+              ref={modalInputRef}
+              value={draft}
+              onChangeText={(t) => {
+                setDraft(t);
+                onChangeText(t);
+              }}
+              placeholder={placeholder}
+              shellStyle={signupSheetStyles.searchShell}
+              autoFocus
+              onFocusScroll={onFocusScroll}
+            />
+          ) : (
+            <View
+              style={[
+                styles.sheetSearchBand,
+                isDesktopShell && styles.sheetSearchBandWizard,
+                compact && !isDesktopShell && styles.sheetSearchBandCompact,
+              ]}
+            >
+              <CreateTripSheetSearchInput
+                ref={modalInputRef}
+                value={draft}
+                onChangeText={(t) => {
+                  setDraft(t);
+                  onChangeText(t);
+                }}
+                placeholder={
+                  isDesktopShell
+                    ? "Search cities, areas, or landmarks"
+                    : placeholder
+                }
+                autoCapitalize="words"
+                spellCheck={false}
+                autoComplete="off"
+                autoFocus={false}
+                compactChat
+                compactChatSize={isDesktopShell ? "md" : "sm"}
+                shellStyle={
+                  isDesktopShell
+                    ? styles.searchShellWizard
+                    : styles.searchShellInner
+                }
+                accessibilityLabel="Search places"
+              />
+            </View>
+          )}
+
+          <ScrollView
+            style={[
+              styles.sheetScroll,
+              isDesktopShell && styles.sheetScrollWizard,
+            ]}
+            contentContainerStyle={[
+              styles.sheetScrollContent,
+              isDesktopShell && styles.sheetScrollContentWizard,
+              compact && !isDesktopShell && styles.sheetScrollContentCompact,
+            ]}
+            keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator
+            bounces
+          >
+            {dropdownListContent}
+          </ScrollView>
+        </View>
+      </View>
+    </View>
+  );
+
   return (
     <View style={[styles.wrapper, compact && styles.wrapperCompact]} collapsable={false}>
       <Text style={labelStyle}>{label}</Text>
@@ -544,130 +695,20 @@ export function LocationSearchField({
         )}
       </View>
       )}
-      {dropdownOpen && (
-        <Modal
-          visible
-          transparent
-          animationType="fade"
-          statusBarTranslucent
-          onRequestClose={closeDropdown}
-        >
-          <View style={styles.modalRoot} accessibilityViewIsModal>
-            <Pressable style={styles.backdropPress} onPress={closeDropdown}>
-              <View style={styles.backdropDim} />
-            </Pressable>
-            <View style={styles.centerWrap} pointerEvents="box-none">
-              <View
-                style={[
-                  styles.sheet,
-                  isDesktopShell && styles.sheetWizard,
-                  isSignupSheet && signupSheetStyles.sheet,
-                  { width: sheetWidth, maxWidth: sheetWidth, alignSelf: "center" },
-                ]}
-              >
-                <View
-                  style={[
-                    styles.sheetHead,
-                    isDesktopShell && styles.sheetHeadWizard,
-                    compact && !isSignupSheet && !isDesktopShell && styles.sheetHeadCompact,
-                    isSignupSheet && signupSheetStyles.sheetHead,
-                  ]}
-                >
-                  <View style={styles.sheetTitles}>
-                    <Text style={sheetType.sheetTitle}>{resolvedSheetTitle}</Text>
-                    <Text style={sheetType.sheetSubtitle}>{resolvedSheetSubtitle}</Text>
-                  </View>
-                  <TouchableOpacity
-                    onPress={closeDropdown}
-                    style={[
-                      styles.closeBtn,
-                      isDesktopShell && styles.closeBtnWizard,
-                      compact && !isSignupSheet && !isDesktopShell && styles.closeBtnCompact,
-                      isSignupSheet && signupSheetStyles.closeBtn,
-                      webCursor,
-                    ]}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                    accessibilityRole="button"
-                    accessibilityLabel="Close"
-                  >
-                    <X
-                      size={isDesktopShell ? 18 : 14}
-                      color={Theme.textMuted}
-                      strokeWidth={2.5}
-                    />
-                  </TouchableOpacity>
-                </View>
-
-                {isSignupSheet ? (
-                  <SignupSheetSearchInput
-                    ref={modalInputRef}
-                    value={draft}
-                    onChangeText={(t) => {
-                      setDraft(t);
-                      onChangeText(t);
-                    }}
-                    placeholder={placeholder}
-                    shellStyle={signupSheetStyles.searchShell}
-                    autoFocus
-                    onFocusScroll={onFocusScroll}
-                  />
-                ) : (
-                  <View
-                    style={[
-                      styles.sheetSearchBand,
-                      isDesktopShell && styles.sheetSearchBandWizard,
-                      compact && !isDesktopShell && styles.sheetSearchBandCompact,
-                    ]}
-                  >
-                    <CreateTripSheetSearchInput
-                      ref={modalInputRef}
-                      value={draft}
-                      onChangeText={(t) => {
-                        setDraft(t);
-                        onChangeText(t);
-                      }}
-                      placeholder={
-                        isDesktopShell
-                          ? "Search cities, areas, or landmarks"
-                          : placeholder
-                      }
-                      autoCapitalize="words"
-                      spellCheck={false}
-                      autoComplete="off"
-                      autoFocus={false}
-                      compactChat
-                      compactChatSize={isDesktopShell ? "md" : "sm"}
-                      shellStyle={
-                        isDesktopShell
-                          ? styles.searchShellWizard
-                          : styles.searchShellInner
-                      }
-                      accessibilityLabel="Search places"
-                    />
-                  </View>
-                )}
-
-                <ScrollView
-                  style={[
-                    styles.sheetScroll,
-                    isDesktopShell && styles.sheetScrollWizard,
-                  ]}
-                  contentContainerStyle={[
-                    styles.sheetScrollContent,
-                    isDesktopShell && styles.sheetScrollContentWizard,
-                    compact && !isDesktopShell && styles.sheetScrollContentCompact,
-                  ]}
-                  keyboardShouldPersistTaps="handled"
-                  showsVerticalScrollIndicator
-                  bounces
-                >
-                  {dropdownListContent}
-                </ScrollView>
-              </View>
-            </View>
-          </View>
-        </Modal>
-      )}
+      {dropdownOpen &&
+        (Platform.OS === "web" ? (
+          <WebOverlayPortal>{overlayBody}</WebOverlayPortal>
+        ) : (
+          <Modal
+            visible
+            transparent
+            animationType="fade"
+            statusBarTranslucent
+            onRequestClose={closeDropdown}
+          >
+            {overlayBody}
+          </Modal>
+        ))}
     </View>
   );
 }
