@@ -52,25 +52,12 @@ import {
 import { isBundleEnabled, useTripDetailBundleQuery } from "@/lib/queries/useTripDetailBundleQuery";
 import { queryKeys } from "@/lib/queryKeys";
 import * as driverLocationService from "@/features/driver/services/driverLocation.service";
-import type { DisputeRow } from "@/features/finance/services/sharedLedger.service";
-import {
-    acceptPartnerView,
-    createDispute,
-    getMoverAssetClientPaid,
-    getSharedLedgerEntriesForPartner,
-    resolveDispute,
-    resolveDisputeTableOnly,
-} from "@/features/finance/services/sharedLedger.service";
-import {
-    useOpenDisputesQuery,
-    useDisputesReceivedQuery,
-} from "@/lib/queries";
+import { getMoverAssetClientPaid } from "@/features/trips/services/moverAssetPayment.service";
 import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
 import { useQueryClient } from "@tanstack/react-query";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Alert } from "react-native";
 import { useRealtimeDriverLocations, useRealtimeTrip, useRealtimeTripDocuments } from "../../../hooks/useRealtimeTrips";
 import { useTrackingTripBroadcast } from "@/features/tracking/hooks/useTrackingTripBroadcast";
 import { isTrackingBroadcastV1Enabled } from "@/features/tracking/trackingFeatureFlags";
@@ -113,10 +100,7 @@ import type { AssignmentSource } from "../../TripAssignmentBlock";
 import type { ReassignCompletedMeta } from "../../reassign/reassign.types";
 
 export type { ReassignCompletedMeta };
-import type {
-    ReconciliationPartyInfo,
-    TripDetailTab,
-} from "../TripDetailFinanceView";
+import type { TripDetailTab } from "../TripDetailFinanceView";
 import { isPdfTripDoc, type TripDocItem } from "../tripDocTypes";
 
 import {
@@ -330,7 +314,6 @@ export function useTripDetail({
     useState<TripPartyAvatarFields | null>(null);
   const [supplierPartyAvatarFields, setSupplierPartyAvatarFields] =
     useState<TripPartyAvatarFields | null>(null);
-  const [counterpartyIntegrated, setCounterpartyIntegrated] = useState<boolean | null>(null);
   const [partnerOrgId, setPartnerOrgId] = useState<string | null>(null);
   const [clientPartyRes, setClientPartyRes] = useState<{
     name: string | null;
@@ -343,62 +326,12 @@ export function useTripDetail({
     orgId: string | null;
   } | null>(null);
 
-  // ── Disputes ──────────────────────────────────────────────────────────────
-  const qc = useQueryClient();
-  const orgId = currentOrganization?.id ?? null;
-  const { data: openDisputes } = useOpenDisputesQuery(orgId);
-  const { data: receivedDisputes } = useDisputesReceivedQuery(orgId);
-
-  const tripDisputeByType = useMemo(() => {
-    const tId = trip?.id ?? null;
-    const clientOrg = clientPartyRes?.orgId ?? null;
-    const supplierOrg = supplierPartyRes?.orgId ?? null;
-    if (!tId || (!clientOrg && !supplierOrg)) return {};
-    const matchByTrip = (d: DisputeRow) =>
-      String(d.transaction_id ?? "").toLowerCase() === String(tId).toLowerCase();
-    const receivedByOrg = new Map<string, DisputeRow>();
-    for (const d of receivedDisputes ?? []) {
-      if (!matchByTrip(d) || d.status !== "OPEN") continue;
-      if (d.raised_by_org_id) receivedByOrg.set(d.raised_by_org_id, d);
-    }
-    const byType: Partial<Record<"client" | "supplier", { dispute: DisputeRow; direction: "RAISED_BY_US" | "RECEIVED" }>> = {};
-    const pickForSide = (side: "client" | "supplier", partnerOrg: string | null) => {
-      if (!partnerOrg) return;
-      const raisedOpen = (openDisputes ?? []).find(
-        (d) => matchByTrip(d) && d.status === "OPEN" && d.partner_org_id === partnerOrg,
-      );
-      if (raisedOpen) { byType[side] = { dispute: raisedOpen, direction: "RAISED_BY_US" }; return; }
-      const receivedOpen = receivedByOrg.get(partnerOrg);
-      if (receivedOpen) byType[side] = { dispute: receivedOpen, direction: "RECEIVED" };
-    };
-    pickForSide("client", clientOrg);
-    pickForSide("supplier", supplierOrg);
-    return byType;
-  }, [openDisputes, receivedDisputes, trip?.id, clientPartyRes?.orgId, supplierPartyRes?.orgId]);
-
-  const primary = tripDisputeByType.supplier ?? tripDisputeByType.client ?? null;
-  const tripDispute = primary?.dispute ?? null;
-  const tripDisputeDirection = primary?.direction ?? null;
-  const [reconcileActionLoading, setReconcileActionLoading] = useState(false);
-  const [reconcileLoadingByType, setReconcileLoadingByType] = useState<
-    Partial<Record<"client" | "supplier", boolean>>
-  >({});
-
   // ── Finance / adjustments ─────────────────────────────────────────────────
   const [financeRefreshKey, setFinanceRefreshKey] = useState(0);
   const [adjustments, setAdjustments] = useState<TripAdjustment[]>([]);
   // Mover_asset trips: amount the aggregator has already paid the mover on the
   // linked load (read-only shared-ledger visibility; no row on mover's books).
   const [moverClientPaid, setMoverClientPaid] = useState<number>(0);
-  const [counterpartyEntries, setCounterpartyEntries] = useState<
-    Array<{
-      id: string;
-      partnerKey: string;
-      amount: number;
-      transaction_date: string;
-      reference_id?: string;
-    }>
-  >([]);
 
   // ── Assignment audit ──────────────────────────────────────────────────────
   const [assignmentAuditRows, setAssignmentAuditRows] = useState<TripAssignmentAuditRow[]>([]);
@@ -1640,18 +1573,13 @@ export function useTripDetail({
 
   useEffect(() => {
     if (!trip) {
-      setCounterpartyIntegrated(null);
       setPartnerOrgId(null);
       return;
     }
     if (!clientPartyRes && !supplierPartyRes) {
-      setCounterpartyIntegrated(null);
       setPartnerOrgId(null);
       return;
     }
-    setCounterpartyIntegrated(
-      !!(clientPartyRes?.integrated || supplierPartyRes?.integrated),
-    );
     setPartnerOrgId(supplierPartyRes?.orgId ?? clientPartyRes?.orgId ?? null);
   }, [trip, clientPartyRes, supplierPartyRes]);
 
@@ -1767,156 +1695,6 @@ export function useTripDetail({
     }
   }, [load, loadAssignmentAudit, loadAdjustments, loadTripDocuments, loadTripOtp, tripId, queryClient, bundleActive]);
 
-  // ── Reconciliation actions ────────────────────────────────────────────────
-  const refreshTripDispute = useCallback(() => {
-    if (!orgId) return;
-    void qc.invalidateQueries({ queryKey: queryKeys.disputes.all(orgId) });
-  }, [orgId, qc]);
-
-  type PartyType = "client" | "supplier";
-
-  const handleAcceptPartnerView = useCallback(
-    async (partyType?: PartyType) => {
-      const orgId = currentOrganization?.id ?? null;
-      if (!orgId || !trip?.id) return;
-      const type: "client" | "supplier" =
-        partyType ?? (trip.supplier_id ? "supplier" : "client");
-      const sideRes = type === "client" ? clientPartyRes : supplierPartyRes;
-      if (!sideRes?.integrated) {
-        Alert.alert("Partner offline", "This party is not connected on the network.");
-        return;
-      }
-      const sideContactId = type === "client" ? trip.client_id ?? null : trip.supplier_id ?? null;
-      const sidePartnerKey = sideContactId?.toString().trim().toLowerCase();
-      const sideEntries = counterpartyEntries.filter(
-        (e) => e.partnerKey.toLowerCase() === sidePartnerKey,
-      );
-      const partnerAmount = sideEntries.reduce((s, e) => s + Number(e.amount ?? 0), 0);
-      const sideDispute = tripDisputeByType[type];
-      const dispute = sideDispute?.dispute ?? null;
-      const direction = sideDispute?.direction ?? null;
-      const partnerSales =
-        dispute?.raised_sales != null ? Number(dispute.raised_sales) : partnerAmount;
-      const partnerPaid =
-        dispute?.raised_paid != null ? Number(dispute.raised_paid) : partnerAmount;
-
-      const setLoadingFn = partyType
-        ? (v: boolean) => setReconcileLoadingByType((p) => ({ ...p, [type]: v }))
-        : (v: boolean) => setReconcileActionLoading(v);
-      setLoadingFn(true);
-      try {
-        if (dispute && direction === "RECEIVED") {
-          const { error, rpcUnavailable } = await resolveDispute(dispute.id, "ACCEPT", orgId);
-          if (!error) {
-            setFinanceRefreshKey((k) => k + 1);
-            await refreshTripDispute();
-            return;
-          }
-          if (!rpcUnavailable) {
-            Alert.alert("Update failed", error.message);
-            return;
-          }
-        }
-        const { error: acceptErr } = await acceptPartnerView(
-          orgId,
-          trip.id,
-          partnerSales,
-          partnerPaid,
-          sideContactId,
-        );
-        if (acceptErr) {
-          Alert.alert("Update failed", acceptErr.message);
-          return;
-        }
-        if (dispute) await resolveDisputeTableOnly(dispute.id, orgId);
-        setFinanceRefreshKey((k) => k + 1);
-        await refreshTripDispute();
-      } finally {
-        setLoadingFn(false);
-      }
-    },
-    [
-      currentOrganization?.id,
-      trip?.id,
-      trip?.client_id,
-      trip?.supplier_id,
-      clientPartyRes,
-      supplierPartyRes,
-      tripDisputeByType,
-      counterpartyEntries,
-      refreshTripDispute,
-    ],
-  );
-
-  const handleRaiseDispute = useCallback(
-    async (partyType?: PartyType) => {
-      const orgId = currentOrganization?.id ?? null;
-      if (!orgId || !trip?.id) return;
-      const type: "client" | "supplier" =
-        partyType ?? (trip.supplier_id ? "supplier" : "client");
-      const sideRes = type === "client" ? clientPartyRes : supplierPartyRes;
-      const partnerOrgToUse = sideRes?.orgId ?? partnerOrgId;
-      if (!partnerOrgToUse) return;
-      const sidePartnerKey = (
-        type === "client" ? trip.client_id : trip.supplier_id
-      )?.toString().trim().toLowerCase();
-      const sideEntries = counterpartyEntries.filter(
-        (e) => e.partnerKey.toLowerCase() === sidePartnerKey,
-      );
-      const partnerAmount = sideEntries.reduce((s, e) => s + Number(e.amount ?? 0), 0);
-      const ourTotal = tripLedgerEntries.reduce(
-        (s, r) =>
-          r.contact_type === type
-            ? s + Number(type === "client" ? (r.amount_in ?? 0) : (r.amount_out ?? 0))
-            : s,
-        0,
-      );
-      const setLoadingFn = partyType
-        ? (v: boolean) => setReconcileLoadingByType((p) => ({ ...p, [type]: v }))
-        : (v: boolean) => setReconcileActionLoading(v);
-      setLoadingFn(true);
-      try {
-        const { error } = await createDispute({
-          orgId,
-          transaction_id: trip.id,
-          partner_org_id: partnerOrgToUse,
-          internal_snapshot: ourTotal,
-          partner_snapshot: partnerAmount,
-        });
-        if (error) {
-          Alert.alert("Error", "Failed to raise dispute. Please try again.");
-        } else {
-          setFinanceRefreshKey((k) => k + 1);
-          await refreshTripDispute();
-        }
-      } finally {
-        setLoadingFn(false);
-      }
-    },
-    [
-      currentOrganization?.id,
-      trip?.id,
-      trip?.client_id,
-      trip?.supplier_id,
-      clientPartyRes,
-      supplierPartyRes,
-      partnerOrgId,
-      counterpartyEntries,
-      tripLedgerEntries,
-      refreshTripDispute,
-    ],
-  );
-
-  const openCompareVerifyFromTrip = useCallback(
-    (partyType?: PartyType) => {
-      if (!trip?.id) return;
-      const targetPartyRes = partyType === "client" ? clientPartyRes : supplierPartyRes;
-      const orgToUse = targetPartyRes?.orgId ?? partnerOrgId;
-      if (!orgToUse) return;
-      router.push(`/(modals)/compare-verify?tripId=${trip.id}&partnerOrgId=${orgToUse}` as never);
-    },
-    [trip?.id, clientPartyRes, supplierPartyRes, partnerOrgId, router],
-  );
 
   // ── Entry modal ───────────────────────────────────────────────────────────
   const openAddEntry = useCallback(() => {
@@ -2150,121 +1928,6 @@ export function useTripDetail({
     setExpandedTimelineEntryIds((prev) => ({ ...prev, [id]: !prev[id] }));
   }, []);
 
-  // ── Reconciliation parties (for multi-party hero) ─────────────────────────
-  const reconciliationParties = useMemo<ReconciliationPartyInfo[]>(() => {
-    if (!trip) return [];
-    const out: ReconciliationPartyInfo[] = [];
-    const clientKey = trip.client_id?.toString().trim().toLowerCase() ?? null;
-    const supplierKey = trip.supplier_id?.toString().trim().toLowerCase() ?? null;
-    const receivedFromClient = tripLedgerEntries.reduce(
-      (s, r) => (r.contact_type === "client" ? s + Number(r.amount_in ?? 0) : s),
-      0,
-    );
-    const paidToSupplier = tripLedgerEntries.reduce(
-      (s, r) => (r.contact_type === "supplier" ? s + Number(r.amount_out ?? 0) : s),
-      0,
-    );
-
-    if (trip.client_id && clientPartyRes) {
-      const entries = clientKey
-        ? counterpartyEntries.filter((e) => e.partnerKey.toLowerCase() === clientKey)
-        : [];
-      const theirTotal = entries.reduce((s, e) => s + Number(e.amount ?? 0), 0);
-      const disp = tripDisputeByType.client ?? null;
-      out.push({
-        type: "client",
-        name:
-          clientPartyRes.name ?? displayClientName ?? trip.client_name ?? t("client"),
-        integrated: clientPartyRes.integrated,
-        counterpartyEntries: entries,
-        ourTotal: receivedFromClient,
-        ourTotalLabel: "Your received total",
-        theirTotal,
-        expectedAmount: Number(trip.client_price ?? 0) || undefined,
-        disputeStatus: disp ? "OPEN" : null,
-        disputeDirection: disp?.direction ?? null,
-        actionLoading: !!reconcileLoadingByType.client,
-        onAcceptPartnerView: clientPartyRes.integrated
-          ? () => void handleAcceptPartnerView("client")
-          : undefined,
-        onRaiseDispute:
-          clientPartyRes.integrated && !disp
-            ? () => void handleRaiseDispute("client")
-            : undefined,
-        onOpenCompareVerify: clientPartyRes.integrated
-          ? () => openCompareVerifyFromTrip("client")
-          : undefined,
-      });
-    }
-    if (trip.supplier_id && supplierPartyRes) {
-      const entries = supplierKey
-        ? counterpartyEntries.filter((e) => e.partnerKey.toLowerCase() === supplierKey)
-        : [];
-      const theirTotal = entries.reduce((s, e) => s + Number(e.amount ?? 0), 0);
-      const disp = tripDisputeByType.supplier ?? null;
-      out.push({
-        type: "supplier",
-        name:
-          resolvedPartnerName ??
-          supplierPartyRes.name ??
-          partnerName ??
-          trip.supplier_name ??
-          t("supplier"),
-        integrated: supplierPartyRes.integrated,
-        counterpartyEntries: entries,
-        ourTotal: paidToSupplier,
-        ourTotalLabel: "Your paid total",
-        theirTotal,
-        expectedAmount: Number(trip.supplier_rate ?? 0) || undefined,
-        disputeStatus: disp ? "OPEN" : null,
-        disputeDirection: disp?.direction ?? null,
-        actionLoading: !!reconcileLoadingByType.supplier,
-        onAcceptPartnerView: supplierPartyRes.integrated
-          ? () => void handleAcceptPartnerView("supplier")
-          : undefined,
-        onRaiseDispute:
-          supplierPartyRes.integrated && !disp
-            ? () => void handleRaiseDispute("supplier")
-            : undefined,
-        onOpenCompareVerify: supplierPartyRes.integrated
-          ? () => openCompareVerifyFromTrip("supplier")
-          : undefined,
-      });
-    }
-    const showDriverParty = trip.driver_id != null && !isAggregateTrip(trip);
-    if (showDriverParty) {
-      const expected = Number(trip.driver_commission ?? 0);
-      out.push({
-        type: "driver",
-        name: driverName ?? t("driver"),
-        integrated: false,
-        ourTotal: paidToDriver,
-        ourTotalLabel: "Paid to driver",
-        theirTotal: 0,
-        expectedAmount: expected > 0 ? expected : undefined,
-        onRecordPayment: handleRecordDriverPayment,
-      });
-    }
-    return out;
-  }, [
-    trip,
-    tripLedgerEntries,
-    counterpartyEntries,
-    clientPartyRes,
-    supplierPartyRes,
-    tripDisputeByType,
-    reconcileLoadingByType,
-    displayClientName,
-    resolvedPartnerName,
-    partnerName,
-    driverName,
-    paidToDriver,
-    handleAcceptPartnerView,
-    handleRaiseDispute,
-    handleRecordDriverPayment,
-    openCompareVerifyFromTrip,
-    t,
-  ]);
 
   // ── Effects ───────────────────────────────────────────────────────────────
 
@@ -2684,55 +2347,6 @@ export function useTripDetail({
     return () => globalThis.clearInterval(id);
   }, [driverMapDataEnabled, tripCompleted, fetchDriverLocationFromDb]);
 
-  // Counterparty entries
-  useEffect(() => {
-    const orgId = currentOrganization?.id ?? null;
-    if (!orgId || !trip?.id || counterpartyIntegrated === false) {
-      setCounterpartyEntries([]);
-      return;
-    }
-    const partnerKeys = [trip.supplier_id, trip.client_id]
-      .map((k) => (k ?? "").trim())
-      .filter(Boolean)
-      .filter((k, idx, arr) => arr.indexOf(k) === idx);
-    if (!partnerKeys.length) {
-      setCounterpartyEntries([]);
-      return;
-    }
-    let cancelled = false;
-    Promise.all(
-      partnerKeys.map((partnerKey) =>
-        getSharedLedgerEntriesForPartner(orgId, partnerKey, trip.id).then((res) => ({
-          partnerKey,
-          entries: res.entries ?? [],
-        })),
-      ),
-    )
-      .then((results) => {
-        if (cancelled) return;
-        const merged = results.flatMap((result) =>
-          result.entries.map((entry) => ({
-              id: entry.id,
-              partnerKey: result.partnerKey,
-              amount: Number(entry.amount ?? 0),
-              transaction_date: entry.transaction_date,
-              reference_id: entry.reference_id,
-            })),
-        );
-        const deduped = Array.from(new Map(merged.map((row) => [row.id, row])).values()).sort(
-          (a, b) =>
-            new Date(b.transaction_date).getTime() - new Date(a.transaction_date).getTime(),
-        );
-        setCounterpartyEntries(deduped);
-      })
-      .catch(() => {
-        if (!cancelled) setCounterpartyEntries([]);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [currentOrganization?.id, trip?.id, trip?.supplier_id, trip?.client_id, counterpartyIntegrated]);
-
   // Mover_asset: fetch how much the aggregator has paid on the linked load, so
   // the mover's receivable shows "<client> marked paid ₹X" instead of nothing.
   useEffect(() => {
@@ -2753,12 +2367,6 @@ export function useTripDetail({
       cancelled = true;
     };
   }, [trip?.id, trip?.source]);
-
-  // Dispute refresh
-  useEffect(() => {
-    void refreshTripDispute();
-  }, [refreshTripDispute, financeRefreshKey]);
-
 
   // Driver location — Mapbox/Nominatim label (no raw lat/lon in UI).
   // When broadcast is active, the store subscriber above handles geocoding instead.
@@ -2918,7 +2526,6 @@ export function useTripDetail({
     supplierAvatarUri,
     clientPartyAvatarFields,
     supplierPartyAvatarFields,
-    counterpartyIntegrated,
     partnerOrgId,
     clientPartyRes,
     supplierPartyRes,
@@ -2928,16 +2535,9 @@ export function useTripDetail({
     tripLedgerEntries,
     adjustments,
     subcontractRate,
-    counterpartyEntries,
     moverClientPaid,
     paidToDriver,
-    tripDispute,
-    tripDisputeDirection,
-    tripDisputeByType,
-    reconcileActionLoading,
-    reconcileLoadingByType,
     financeRefreshKey,
-    reconciliationParties,
 
     // Assignment
     assignmentAuditRows,
@@ -3031,9 +2631,6 @@ export function useTripDetail({
     handleReassignCompleted,
     openAddEntry,
     openAddExpense,
-    handleAcceptPartnerView,
-    handleRaiseDispute,
-    openCompareVerifyFromTrip,
     handleAddAdjustment,
     handleSaveAdjustment,
     handleVoidAdjustment,
@@ -3054,7 +2651,6 @@ export function useTripDetail({
     setDriverAvatarUri,
     setDriverLinked,
     setPartnerName,
-    setCounterpartyIntegrated,
     setPartnerOrgId,
     setClientPartyRes,
     setSupplierPartyRes,

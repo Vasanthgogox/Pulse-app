@@ -58,6 +58,8 @@ export type BidConfirmModalProps = {
   targetRate?: number | null;
   note?: string;
   submitting?: boolean;
+  /** Render inside a parent modal instead of a second RN Modal (iOS stacked-modal tap bug). */
+  embedded?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
   /** Dismiss after success celebration. */
@@ -111,6 +113,7 @@ export const BidConfirmModal = memo(function BidConfirmModal({
   targetRate,
   note,
   submitting = false,
+  embedded = false,
   onCancel,
   onConfirm,
   onSuccessDone,
@@ -319,20 +322,11 @@ export const BidConfirmModal = memo(function BidConfirmModal({
     return rows;
   }, [ownerName, routeLine, specs, note]);
 
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      statusBarTranslucent
-      onRequestClose={
-        submitting
-          ? undefined
-          : isSuccess
-            ? onSuccessDone
-            : onCancel
-      }
-    >
+  if (embedded && !visible) {
+    return null;
+  }
+
+  const sheet = (
       <View
         style={[
           styles.overlay,
@@ -633,6 +627,28 @@ export const BidConfirmModal = memo(function BidConfirmModal({
           )}
         </MotiView>
       </View>
+  );
+
+  if (embedded) {
+    return sheet;
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      onRequestClose={
+        submitting
+          ? undefined
+          : isSuccess
+            ? onSuccessDone
+            : onCancel
+      }
+    >
+      {sheet}
     </Modal>
   );
 });

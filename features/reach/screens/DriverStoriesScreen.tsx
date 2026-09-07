@@ -72,7 +72,6 @@ import {
   ChevronDown,
   Clock3,
   MapPin,
-  Megaphone,
   Package,
   Truck,
   Wallet,
@@ -331,16 +330,11 @@ export function StoriesContent({
   // updates the current screen's params in place (no new history entry), which is the existing
   // navigation mechanism already used elsewhere in this app for this exact purpose.
   const filterParams = useLocalSearchParams<{
-    source?: string;
     pickup?: string;
     drop?: string;
     status?: string;
     fitsFleet?: string;
   }>();
-  const source: 'all' | 'reach' | 'market' =
-    filterParams.source === 'reach' || filterParams.source === 'market'
-      ? filterParams.source
-      : 'all';
   const pickupFilter = filterParams.pickup || null;
   const dropFilter = filterParams.drop || null;
   const bidStatusFilter: BidStatusFilter =
@@ -349,17 +343,10 @@ export function StoriesContent({
       : 'all';
   const fitsFleetFilter = filterParams.fitsFleet === '1';
 
-  const setSource = (v: 'all' | 'reach' | 'market') => router.setParams({ source: v });
   const setPickupFilter = (v: string | null) => router.setParams({ pickup: v ?? '' });
   const setDropFilter = (v: string | null) => router.setParams({ drop: v ?? '' });
   const setBidStatusFilter = (v: BidStatusFilter) => router.setParams({ status: v });
   const setFitsFleetFilter = (v: boolean) => router.setParams({ fitsFleet: v ? '1' : '0' });
-
-  useEffect(() => {
-    if (source === 'market' && openFilterMenu === 'status') {
-      setOpenFilterMenu(null);
-    }
-  }, [source, openFilterMenu]);
 
   useEffect(() => {
     let cancelled = false;
@@ -721,33 +708,6 @@ export function StoriesContent({
           </View>
         ) : null}
 
-        <View style={[styles.sourceRow, { borderColor: colors.border }]}>
-          {(
-            [
-              { id: 'all' as const, label: 'All Work' },
-              { id: 'reach' as const, label: 'Reach' },
-              { id: 'market' as const, label: 'Market' },
-            ] as const
-          ).map((opt) => {
-            const on = source === opt.id;
-            return (
-              <Pressable
-                key={opt.id}
-                onPress={() => setSource(opt.id)}
-                style={[
-                  styles.sourceChip,
-                  on && { backgroundColor: isDark ? colors.surfaceElevated : Theme.cardWhite, borderColor: colors.border },
-                ]}
-              >
-                <Text style={[styles.sourceChipText, { color: on ? colors.text : colors.textMuted }]}>
-                  {opt.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {/* Shared feed controls — Pickup / Drop / Status as one dropdown row above Reach + Market. */}
         <View style={styles.filtersBlock}>
           <View style={styles.filterDropdownRow}>
             <FilterDropdownCell
@@ -770,18 +730,16 @@ export function StoriesContent({
                 setOpenFilterMenu((v) => (v === 'drop' ? null : 'drop'))
               }
             />
-            {source !== 'market' ? (
-              <FilterDropdownCell
-                icon={BadgeCheck}
-                label="Status"
-                value={bidStatusFilterLabel(bidStatusFilter)}
-                filled={bidStatusFilter !== 'all'}
-                active={openFilterMenu === 'status'}
-                onPress={() =>
-                  setOpenFilterMenu((v) => (v === 'status' ? null : 'status'))
-                }
-              />
-            ) : null}
+            <FilterDropdownCell
+              icon={BadgeCheck}
+              label="Status"
+              value={bidStatusFilterLabel(bidStatusFilter)}
+              filled={bidStatusFilter !== 'all'}
+              active={openFilterMenu === 'status'}
+              onPress={() =>
+                setOpenFilterMenu((v) => (v === 'status' ? null : 'status'))
+              }
+            />
           </View>
 
           {openFilterMenu === 'pickup' ? (
@@ -812,7 +770,7 @@ export function StoriesContent({
               }}
             />
           ) : null}
-          {openFilterMenu === 'status' && source !== 'market' ? (
+          {openFilterMenu === 'status' ? (
             <FilterOptionsPanel
               title="Bid status"
               selectedValue={bidStatusFilter}
@@ -867,8 +825,6 @@ export function StoriesContent({
           ) : null}
         </View>
 
-        {source !== 'market' ? (
-          <>
             <DriverPulseStoryReel
               isFleetOwner={isFleetOwner}
               avatarUri={avatarUri}
@@ -886,7 +842,9 @@ export function StoriesContent({
               </View>
             ) : null}
 
+            {storiesQ.isError || recommendedStories.length > 0 ? (
             <View style={styles.sectionPad}>
+              {recommendedStories.length > 0 ? (
               <View style={styles.sectionHeader}>
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>Reach</Text>
                 <Text style={[styles.sectionSub, { color: colors.textMuted }]}>
@@ -895,31 +853,13 @@ export function StoriesContent({
                 : 'Find work for your vehicle — bid on open loads. Awarded jobs stay in History.'}
             </Text>
           </View>
+              ) : null}
 
           {storiesQ.isError ? (
             <View style={[styles.emptyCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
               <Text style={[styles.emptyTitle, { color: colors.text }]}>Couldn't load stories</Text>
               <Text style={[styles.emptyBody, { color: colors.textMuted }]}>
                 {(storiesQ.error as Error)?.message ?? 'Unknown error'}
-              </Text>
-            </View>
-          ) : stories.length === 0 ? (
-            <View style={[styles.emptyCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
-              <Megaphone size={26} color={colors.textMuted} strokeWidth={1.8} />
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>No boosted loads right now</Text>
-              <Text style={[styles.emptyBody, { color: colors.textMuted }]}>
-                When shippers boost loads to drivers, they show up here. Loads disappear once they're
-                assigned to someone else.
-              </Text>
-            </View>
-          ) : recommendedStories.length === 0 ? (
-            <View style={[styles.emptyCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
-              <MapPin size={22} color={colors.textMuted} strokeWidth={1.8} />
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>No open loads right now</Text>
-              <Text style={[styles.emptyBody, { color: colors.textMuted }]}>
-                {pickupFilter || dropFilter
-                  ? 'Try another pickup or drop, or clear filters to see available loads.'
-                  : 'Awarded and completed jobs are not listed here — use History for those. Pull to refresh for new boosted loads.'}
               </Text>
             </View>
           ) : (
@@ -1204,10 +1144,9 @@ export function StoriesContent({
             })
           )}
         </View>
-          </>
-        ) : null}
+            ) : null}
 
-        {source !== 'reach' && footer
+        {footer
           ? footer({ pickup: pickupFilter, drop: dropFilter, fitsFleet: fitsFleetFilter })
           : null}
       </ScrollView>
@@ -1478,24 +1417,6 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.accentGold,
   },
   actionCardCtaText: { fontSize: 12, fontWeight: '800', color: Theme.textPrimaryDark },
-  sourceRow: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  sourceChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    minHeight: 34,
-    borderRadius: 999,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'transparent',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sourceChipText: { fontSize: 12, fontWeight: '700', letterSpacing: -0.1 },
   sectionPad: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 16,
@@ -1507,7 +1428,7 @@ const styles = StyleSheet.create({
 
   filtersBlock: {
     gap: 8,
-    paddingTop: 4,
+    paddingTop: 12,
     paddingBottom: 8,
     paddingHorizontal: Layout.screenPaddingHorizontal,
   },

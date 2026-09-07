@@ -10,17 +10,13 @@ import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import {
-  fleetOwnerLoadDisplayId,
   formatFleetOwnerRateOffer,
   isLoadCompatibleWithFleet,
   type FleetOwnerOpenLoad,
 } from '@/features/driver/services/fleetOwnerLoads.service';
 import { marketBidStatusLabel, type MarketBidStatus } from '@/features/driver/services/marketBids.service';
+import { DriverWorkOpportunityCard } from '@/features/driver/components/DriverWorkOpportunityCard';
 import { MyBidsContent } from '@/features/driver/components/MyBidsScreen';
-import {
-  MarketplaceRouteGrid,
-  MarketplaceSpecChips,
-} from '@/features/network/components/MarketplaceLoadCardChrome';
 import { cityOf, StoriesContent, type SharedFeedFilters } from '@/features/reach/screens/DriverStoriesScreen';
 import { useDriverFleetOwnerQuery } from '@/lib/queries/useDriverFleetOwnerQuery';
 import { useFleetOwnerOpenLoadsQuery } from '@/lib/queries/useFleetOwnerOpenLoadsQuery';
@@ -29,41 +25,9 @@ import { useOwnerVehiclesQuery } from '@/lib/queries/useOwnerVehiclesQuery';
 import { ROUTES } from '@/lib/routes';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronRight, MapPin } from 'lucide-react-native';
+import { MapPin } from 'lucide-react-native';
 import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-
-function formatPickupDate(iso: string | null): string | null {
-  if (!iso) return null;
-  try {
-    return new Date(iso).toLocaleDateString('en-IN', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-    });
-  } catch {
-    return iso;
-  }
-}
-
-/**
- * "Posted", not "Marketplace posted" — created_at is the indent's own
- * creation time, not a dedicated Marketplace-publication timestamp (an
- * indent's circulation_target can start including Marketplace later, with
- * no timestamp recorded for that change). Good enough for freshness
- * display today; don't imply more precision than the field actually has.
- */
-function postedAgoLabel(iso: string | null): string | null {
-  if (!iso) return null;
-  const diff = Date.now() - new Date(iso).getTime();
-  if (!Number.isFinite(diff) || diff < 0) return null;
-  const m = Math.floor(diff / 60000);
-  if (m < 1) return 'Posted just now';
-  if (m < 60) return `Posted ${m} min${m === 1 ? '' : 's'} ago`;
-  const h = Math.floor(m / 60);
-  if (h < 24) return `Posted ${h}h ago`;
-  return `Posted ${Math.floor(h / 24)}d ago`;
-}
 
 export default function AvailableLoadsScreen() {
   const router = useRouter();
@@ -308,12 +272,14 @@ function FindLoadsContent({ uid, filters }: { uid: string; filters: SharedFeedFi
               load={load}
               compatible={isLoadCompatibleWithFleet(load, fleetTypes)}
               bidStatus={bidStatusByIndentId.get(load.id)}
-              cardBorder={cardBorder}
-              colors={colors}
-              isDark={isDark}
-              onPress={() =>
+              onOpenDetail={() =>
                 router.push(
-                  ROUTES.driverAvailableLoad(load.id) as Parameters<
+                  ROUTES.driverAvailableLoad(load.id) as Parameters<typeof router.push>[0],
+                )
+              }
+              onBid={() =>
+                router.push(
+                  ROUTES.driverAvailableLoad(load.id, { bid: true }) as Parameters<
                     typeof router.push
                   >[0],
                 )
@@ -326,125 +292,78 @@ function FindLoadsContent({ uid, filters }: { uid: string; filters: SharedFeedFi
   );
 }
 
-function bidStatusBadgeColor(
-  status: MarketBidStatus,
-  colors: ReturnType<typeof useDriverThemeColors>,
-): string {
-  switch (status) {
-    case 'accepted':
-      return colors.emerald;
-    case 'rejected':
-      return Theme.negative;
-    // A6.4: superseded is not "still pending" — must not share pending's
-    // warning/amber color, which reads as "awaiting decision".
-    case 'superseded':
-      return colors.textMuted;
-    default:
-      return Theme.warning;
-  }
-}
-
 function LoadCard({
   load,
   compatible,
   bidStatus,
-  cardBorder,
-  colors,
-  isDark,
-  onPress,
+  onOpenDetail,
+  onBid,
 }: {
   load: FleetOwnerOpenLoad;
   compatible: boolean;
   bidStatus?: MarketBidStatus;
-  cardBorder: string;
-  colors: ReturnType<typeof useDriverThemeColors>;
-  isDark: boolean;
-  onPress: () => void;
+  onOpenDetail: () => void;
+  onBid: () => void;
 }) {
   const rate = formatFleetOwnerRateOffer(load.rate_offer);
-  const postedLabel = postedAgoLabel(load.created_at);
   const shipper = (load.creator_organization_name ?? '').trim() || 'Shipper';
-  const displayId = fleetOwnerLoadDisplayId(load);
-  const dateLabel = formatPickupDate(load.pickup_date);
-  const specChips = [
-    load.vehicle_type?.trim(),
-    load.load_type?.trim(),
-  ].filter((v): v is string => Boolean(v));
+  const isAwarded = bidStatus === 'accepted';
+  const isQuoted = bidStatus === 'pending';
+  const isClosed =
+    bidStatus === 'rejected' || bidStatus === 'superseded' || bidStatus === 'withdrawn';
+
+  let primary: Parameters<typeof DriverWorkOpportunityCard>[0]['primaryCta'] = {
+    title: 'Bid Now',
+    hint: rate ? `Shipper target ${rate}` : 'Offer your rate to the shipper',
+    onPress: onBid,
+  };
+  if (isAwarded) {
+    primary = { title: 'Open job', hint: 'Awarded — continue on Dashboard', onPress: onOpenDetail };
+  } else if (isQuoted) {
+    primary = {
+      title: 'Revise bid',
+      hint: rate ? `Target ${rate}` : 'Update your quoted bid',
+      onPress: onBid,
+      variant: 'quoted',
+    };
+  } else if (isClosed) {
+    primary = {
+      title: marketBidStatusLabel(bidStatus!),
+      variant: 'info',
+      onPress: onOpenDetail,
+    };
+  }
 
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.card,
-        {
-          // Light: white cards on slate page BG (driverDetailPageBackground).
-          // Dark: keep theme surface.
-          backgroundColor: isDark ? colors.surface : Theme.cardWhite,
-          borderColor: cardBorder,
-          opacity: pressed ? 0.92 : 1,
-        },
-      ]}
-      accessibilityRole="button"
-      accessibilityLabel={`${shipper}, ${load.pickup_area ?? 'Pickup'} to ${load.drop_location ?? 'Drop'}, ${rate ?? 'rate on request'}`}
-    >
-      <View style={styles.cardTop}>
-        <View style={styles.cardTopText}>
-          <Text style={[styles.shipper, { color: colors.textMuted }]} numberOfLines={1}>
-            {shipper}
-          </Text>
-          <Text style={[styles.metaLine, { color: colors.textMuted }]} numberOfLines={1}>
-            {[displayId, postedLabel].filter(Boolean).join(' · ')}
-          </Text>
-        </View>
-        {compatible || bidStatus ? (
-          <View style={styles.badgeStack}>
-            {compatible ? (
-              <View
-                style={[
-                  styles.fitPill,
-                  { backgroundColor: isDark ? Theme.positiveMutedDark : 'rgba(21,128,61,0.1)' },
-                ]}
-              >
-                <Text style={[styles.fitText, { color: colors.emerald }]}>Fleet fit</Text>
-              </View>
-            ) : null}
-            {bidStatus ? (
-              <View
-                style={[
-                  styles.statusPill,
-                  { backgroundColor: isDark ? colors.surfaceElevated : Theme.surfaceGray },
-                ]}
-              >
-                <Text
-                  style={[styles.statusPillText, { color: bidStatusBadgeColor(bidStatus, colors) }]}
-                >
-                  {bidStatus === 'pending' ? 'Bid in' : marketBidStatusLabel(bidStatus)}
-                </Text>
-              </View>
-            ) : null}
-          </View>
-        ) : null}
-      </View>
-
-      <MarketplaceRouteGrid pickup={load.pickup_area} drop={load.drop_location} />
-      <MarketplaceSpecChips chips={specChips} dateLabel={dateLabel} />
-
-      <View style={[styles.cardFooter, { borderTopColor: cardBorder }]}>
-        <View style={styles.rateBlock}>
-          <Text style={[styles.rateLabel, { color: colors.textMuted }]}>Target rate</Text>
-          <Text
-            style={[styles.rate, { color: rate ? Theme.accentBrownDeep : colors.textMuted }]}
-            numberOfLines={1}
-          >
-            {rate ?? 'On request'}
-          </Text>
-        </View>
-        <View style={styles.cardCta}>
-          <Text style={[styles.cardCtaText, { color: colors.emerald }]}>View</Text>
-          <ChevronRight size={13} color={colors.emerald} strokeWidth={2.4} />
-        </View>
-      </View>
-    </Pressable>
+    <DriverWorkOpportunityCard
+      orgName={shipper}
+      orgLogoUrl={load.creator_organization_logo_url}
+      orgAvatarSeed={load.creator_organization_avatar_seed}
+      orgSeed={load.creator_organization_id ?? load.id}
+      kicker={
+        isAwarded
+          ? 'Job · Awarded'
+          : isQuoted
+            ? 'Quoted bid'
+            : isClosed
+              ? marketBidStatusLabel(bidStatus!)
+              : 'Market'
+      }
+      badge={isAwarded ? 'awarded' : isQuoted ? 'quoted' : isClosed ? null : 'open'}
+      origin={load.pickup_area}
+      destination={load.drop_location}
+      vehicleType={load.vehicle_type}
+      material={load.load_type}
+      pickupDate={load.pickup_date}
+      fleetMatch={compatible && !isAwarded}
+      targetLabel={isAwarded ? 'Awarded rate' : isQuoted ? 'Shipper target' : 'Shipper target'}
+      targetValue={rate}
+      primaryCta={primary}
+      secondaryCta={{
+        title: isAwarded ? 'Open job' : 'Full view',
+        onPress: onOpenDetail,
+      }}
+    />
   );
 }
 
@@ -493,102 +412,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   segmentText: { fontSize: 12, fontWeight: '700', letterSpacing: -0.1, lineHeight: 15 },
-  card: {
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 12,
-    paddingTop: 11,
-    paddingBottom: 10,
-    gap: 8,
-  },
-  cardTop: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: 10,
-  },
-  cardTopText: { flex: 1, minWidth: 0, gap: 2 },
-  shipper: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.35,
-    textTransform: 'uppercase',
-    lineHeight: 13,
-    includeFontPadding: false,
-  },
-  metaLine: {
-    fontSize: 10,
-    fontWeight: '500',
-    lineHeight: 13,
-    includeFontPadding: false,
-  },
-  badgeStack: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'flex-end',
-    gap: 5,
-    flexShrink: 0,
-    maxWidth: '42%',
-  },
-  rate: {
-    fontSize: 14,
-    fontWeight: '700',
-    letterSpacing: -0.25,
-    lineHeight: 18,
-    includeFontPadding: false,
-  },
-  rateLabel: {
-    fontSize: 9,
-    fontWeight: '600',
-    letterSpacing: 0.35,
-    textTransform: 'uppercase',
-    lineHeight: 12,
-    includeFontPadding: false,
-  },
-  rateBlock: { flex: 1, minWidth: 0, gap: 1 },
-  cardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    marginTop: 2,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  cardCta: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 1,
-    flexShrink: 0,
-  },
-  cardCtaText: {
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 14,
-    includeFontPadding: false,
-  },
-  fitPill: {
-    borderRadius: 999,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  fitText: {
-    fontSize: 9,
-    fontWeight: '700',
-    lineHeight: 12,
-    includeFontPadding: false,
-  },
-  statusPill: {
-    borderRadius: 999,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-  },
-  statusPillText: {
-    fontSize: 9,
-    fontWeight: '700',
-    lineHeight: 12,
-    includeFontPadding: false,
-  },
   empty: {
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,

@@ -13,7 +13,7 @@
  * Slices:
  *   activeTrips    — Lightweight metadata + last 5 events per active trip.
  *                    Full message history lives in useChatStore (separate).
- *   notifications  — Salary requests + disputes as unified notification rows.
+ *   notifications  — Salary requests + B2B feed as unified notification rows.
  *   alerts         — Actionable operational alerts requiring user attention.
  *   network        — Organization link counts and partner org list.
  *
@@ -35,7 +35,6 @@ import { supabase } from '@/lib/supabase';
 import { withTimeout } from '@/lib/authEngine';
 import { fetchInboundProtocolSnapshot } from '@/lib/globalSync/inboundProtocol.util';
 import type { InboundPartnerDisplay } from '@/lib/globalSync/inboundProtocol.types';
-import { mapSharedLedgerRow } from '@/lib/globalSync/mapSharedLedgerRow';
 import {
   REGISTRY_BOOTSTRAP_SALARY_LIMIT,
   REGISTRY_LOAD_MORE_SALARY_LIMIT,
@@ -46,13 +45,10 @@ import {
 // statically via `import type`, which is erased by babel-preset-expo and
 // produces no runtime cost.
 import type { SalaryRequestWithDriverRow } from '@/features/drivers/services/salaryRequests.service';
-import type { SharedLedgerNotificationRow } from '@/features/finance/services/sharedLedgerNotifications.service';
 import type { ConnectionRequestRow } from '@/features/connections/services/connectionRequests.service';
 
 const loadSalaryRequestsService = () =>
   import('@/features/drivers/services/salaryRequests.service');
-const loadSharedLedgerNotificationsService = () =>
-  import('@/features/finance/services/sharedLedgerNotifications.service');
 const loadConnectionRequestsService = () =>
   import('@/features/connections/services/connectionRequests.service');
 import type {
@@ -114,7 +110,6 @@ interface GlobalSyncStore {
   salaryRequestRows:        SalaryRequestWithDriverRow[];
   /** True when bootstrap / load-more returned a full salary page (more may exist). */
   salaryRequestsHasMore:    boolean;
-  sharedLedgerRows:         SharedLedgerNotificationRow[];
 
   // ── Alerts slice ────────────────────────────────────────────────────────
   alertRows: GlobalAlertRow[];
@@ -135,16 +130,8 @@ interface GlobalSyncStore {
 
   /** Patch salary + unified notification slices locally (WhatsApp-style, before DB). */
   patchSalaryRequestStatusLocal: (requestId: string, status: string) => void;
-  patchSharedLedgerStatusLocal: (
-    notificationId: string,
-    status: SharedLedgerNotificationRow['status'],
-  ) => void;
   /** Optimistic reject → DB update → Realtime confirms (no list re-fetch). */
   rejectSalaryRequest: (requestId: string, orgId: string) => Promise<{ error: Error | null }>;
-  markSharedLedgerRead: (
-    notificationId: string,
-    orgId: string,
-  ) => Promise<{ error: Error | null }>;
   /** Append next salary page for registry “load more” (bounded SELECT). */
   loadMoreSalaryRequests: (orgId: string) => Promise<{ error: Error | null }>;
   /** Re-hydrate connection invites + partner avatars (2 RPCs + 1 batch). */
@@ -235,41 +222,6 @@ function salaryRowToAlert(row: Record<string, unknown>): GlobalAlertRow {
     body:        amount != null ? `Amount: ₹${amount.toLocaleString('en-IN')}` : 'Awaiting approval',
     amount,
     driver_id:   typeof row.driver_id === 'string' ? row.driver_id : null,
-    created_at:  typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
-  };
-}
-
-function disputeRowToNotification(
-  row:    Record<string, unknown>,
-  orgId:  string,
-): GlobalNotificationRow {
-  const isReceiver = String(row.partner_org_id) === orgId;
-  return {
-    id:          `dispute_${String(row.id)}`,
-    source:      'dispute',
-    source_id:   String(row.id),
-    title:       isReceiver ? 'Dispute Received' : 'Dispute Raised',
-    subtitle:    `Status: ${String(row.status ?? 'OPEN')}`,
-    amount_meta: row.partner_snapshot != null ? Number(row.partner_snapshot) : null,
-    is_read:     String(row.status ?? 'OPEN') !== 'OPEN',
-    created_at:  typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
-  };
-}
-
-function disputeRowToAlert(row: Record<string, unknown>): GlobalAlertRow {
-  const amount = row.partner_snapshot != null ? Number(row.partner_snapshot) : null;
-  return {
-    id:          `dispute_${String(row.id)}`,
-    source:      'dispute',
-    source_id:   String(row.id),
-    alert_type:  'dispute_received',
-    severity:    'critical',
-    title:       'Dispute Received',
-    body:        amount != null
-      ? `Partner raised a dispute. Amount: ₹${amount.toLocaleString('en-IN')}`
-      : 'A partner has raised a dispute against your organisation.',
-    amount,
-    driver_id:   null,
     created_at:  typeof row.created_at === 'string' ? row.created_at : new Date().toISOString(),
   };
 }
@@ -389,7 +341,6 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
     notificationUnreadCount:  0,
     salaryRequestRows:        [],
     salaryRequestsHasMore:    false,
-    sharedLedgerRows:         [],
     connectionRequestsReceived: [],
     connectionRequestsSent:     [],
     partnerDisplayByOrgId:      {},
@@ -441,10 +392,10 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
         return;
       }
 
-      // Abort if there is no valid session. Bootstrap fans out to ~5 calls plus
-      // one get_shared_ledger_entries per integrated partner; without this guard
-      // a token gap (SIGNED_OUT → SIGNED_IN, or a failed refresh while React
-      // context still holds the previous orgId) turns into a burst of 401s.
+      // Abort if there is no valid session. Bootstrap fans out to several calls;
+      // without this guard a token gap (SIGNED_OUT → SIGNED_IN, or a failed
+      // refresh while React context still holds the previous orgId) turns into
+      // a burst of 401s.
       // Leaves any already-hydrated slices intact and stays retryable —
       // bootstrappedOrgId is not set, so the next call proceeds.
       const { data: { session } } = await supabase().auth.getSession();
@@ -465,15 +416,13 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
         // negligible latency (chunk is fetched alongside the RPC).
         const [
           { getSalaryRequestsByOrganization },
-          { getSharedLedgerNotifications },
           { getConnectionRequestsReceived, getConnectionRequestsSent },
         ] = await Promise.all([
           loadSalaryRequestsService(),
-          loadSharedLedgerNotificationsService(),
           loadConnectionRequestsService(),
         ]);
 
-        const [bootstrapRes, salaryRes, sharedRes, receivedRes, sentRes] =
+        const [bootstrapRes, salaryRes, receivedRes, sentRes] =
           await withTimeout(
             Promise.all([
               supabase().rpc('get_global_app_bootstrap', { p_org_id: orgId }),
@@ -481,7 +430,6 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
                 limit: REGISTRY_BOOTSTRAP_SALARY_LIMIT,
                 offset: 0,
               }),
-              getSharedLedgerNotifications(orgId, 'all'),
               getConnectionRequestsReceived(orgId),
               getConnectionRequestsSent(orgId),
             ]),
@@ -519,7 +467,6 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
           salaryRequestRows:       salaryRes.error ? [] : salaryRes.requests,
           salaryRequestsHasMore:   !salaryRes.error &&
             salaryRes.requests.length >= REGISTRY_BOOTSTRAP_SALARY_LIMIT,
-          sharedLedgerRows:        sharedRes.notifications ?? [],
           connectionRequestsReceived: received,
           connectionRequestsSent:     sent,
           partnerDisplayByOrgId,
@@ -560,7 +507,6 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
         notificationUnreadCount: 0,
         salaryRequestRows:       [],
         salaryRequestsHasMore:   false,
-        sharedLedgerRows:        [],
         connectionRequestsReceived: [],
         connectionRequestsSent:     [],
         partnerDisplayByOrgId:      {},
@@ -575,33 +521,10 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
       set((s) => applySalaryStatusToSlices(s, requestId, status));
     },
 
-    patchSharedLedgerStatusLocal: (notificationId, status) => {
-      set((s) => ({
-        sharedLedgerRows: s.sharedLedgerRows.map((n) =>
-          n.id === notificationId ? { ...n, status } : n,
-        ),
-      }));
-    },
-
     rejectSalaryRequest: async (requestId, orgId) => {
       get().patchSalaryRequestStatusLocal(requestId, 'rejected');
       const { updateSalaryRequestStatus } = await loadSalaryRequestsService();
       const { error } = await updateSalaryRequestStatus(requestId, 'rejected');
-      if (error) {
-        void get().bootstrap(orgId, { force: true });
-        return { error };
-      }
-      return { error: null };
-    },
-
-    markSharedLedgerRead: async (notificationId, orgId) => {
-      get().patchSharedLedgerStatusLocal(notificationId, 'read');
-      const { markSharedLedgerNotificationRead } =
-        await loadSharedLedgerNotificationsService();
-      const { error } = await markSharedLedgerNotificationRead(
-        notificationId,
-        orgId,
-      );
       if (error) {
         void get().bootstrap(orgId, { force: true });
         return { error };
@@ -664,58 +587,6 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
             notificationUnreadCount: countUnread(nextNotifs),
             alertRows:               nextAlerts,
             salaryRequestRows:       salaryCache,
-          });
-        }
-        return;
-      }
-
-      // ── shared_ledger_notifications ───────────────────────────────────────
-      if (table === 'shared_ledger_notifications') {
-        const oid = String(row.organization_id ?? '');
-        if (oid !== orgId) return;
-
-        if (event === 'DELETE') {
-          const id = String(row.id ?? '');
-          if (!id) return;
-          set((s) => ({
-            sharedLedgerRows: s.sharedLedgerRows.filter((n) => n.id !== id),
-          }));
-          return;
-        }
-
-        const mapped = mapSharedLedgerRow(row);
-        set((s) => ({
-          sharedLedgerRows: upsertById(s.sharedLedgerRows, mapped),
-        }));
-        return;
-      }
-
-      // ── dispute ───────────────────────────────────────────────────────────
-      if (table === 'dispute') {
-        const notif        = disputeRowToNotification(row, orgId);
-        const isReceiver   = String(row.partner_org_id) === orgId;
-        const isOpen       = String(row.status ?? 'OPEN') === 'OPEN';
-        const alertId      = `dispute_${String(row.id)}`;
-
-        if (event === 'INSERT') {
-          const nextNotifs = upsertById(state.notificationRows, notif);
-          const nextAlerts = isReceiver && isOpen
-            ? upsertById(state.alertRows, disputeRowToAlert(row))
-            : state.alertRows;
-          set({
-            notificationRows:        nextNotifs,
-            notificationUnreadCount: countUnread(nextNotifs),
-            alertRows:               nextAlerts,
-          });
-        } else if (event === 'UPDATE') {
-          const nextNotifs = upsertById(state.notificationRows, notif);
-          const nextAlerts = isReceiver && isOpen
-            ? upsertById(state.alertRows, disputeRowToAlert(row))
-            : state.alertRows.filter(a => a.id !== alertId);
-          set({
-            notificationRows:        nextNotifs,
-            notificationUnreadCount: countUnread(nextNotifs),
-            alertRows:               nextAlerts,
           });
         }
         return;

@@ -18,6 +18,7 @@ import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Check, ChevronLeft, Route } from 'lucide-react-native';
 import React, { useCallback, useEffect, useState } from 'react';
+import { StatusBar } from 'expo-status-bar';
 import {
   Alert,
   Image,
@@ -234,12 +235,13 @@ export function DriverPodCompletionPage({
       presentationStyle="fullScreen"
       onRequestClose={previewOpen ? closePreview : onCloseToMap}
     >
-      <View style={[styles.root, { paddingTop: insets.top }]}>
+      <View style={styles.root}>
+        <StatusBar style="light" />
         <LinearGradient
           colors={[FLOW_EMERALD_DARK, FLOW_EMERALD]}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 1 }}
-          style={styles.heroChrome}
+          style={[styles.heroChrome, { paddingTop: insets.top }]}
         >
           <View style={styles.header}>
             <TouchableOpacity
@@ -571,7 +573,7 @@ export function DriverPodCompletionPage({
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: FLOW_EMERALD_DARK,
   },
   heroChrome: {
     paddingBottom: 14,
@@ -723,6 +725,7 @@ const styles = StyleSheet.create({
   },
   scroll: {
     flex: 1,
+    backgroundColor: Theme.screenBackground,
   },
   scrollContent: {
     paddingHorizontal: TRIP_SHEET_BODY_PAD.horizontal,

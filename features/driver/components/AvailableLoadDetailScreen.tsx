@@ -11,6 +11,7 @@ import {
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { DriverWorkOpportunityCard } from '@/features/driver/components/DriverWorkOpportunityCard';
 import { MarketLoadBidSheet } from '@/features/driver/components/MarketLoadBidSheet';
 import {
   fleetOwnerLoadDisplayId,
@@ -34,10 +35,6 @@ import {
   type RazorpayCheckoutResult,
 } from '@/features/marketplace/components/RazorpayCheckoutSheet';
 import { showAppAlert } from '@/lib/appAlert';
-import {
-  MarketplaceRouteGrid,
-  MarketplaceSpecChips,
-} from '@/features/network/components/MarketplaceLoadCardChrome';
 import { useFleetOwnerOpenLoadsQuery } from '@/lib/queries/useFleetOwnerOpenLoadsQuery';
 import { useMyMarketAwardsQuery } from '@/lib/queries/useMyMarketAwardsQuery';
 import { useMyMarketBidForIndentQuery } from '@/lib/queries/useMyMarketBidForIndentQuery';
@@ -47,8 +44,7 @@ import { formatINR } from '@/lib/format';
 import { ROUTES } from '@/lib/routes';
 import type { DriverTripRow } from '@/types/trip-views';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import { ArrowRight } from 'lucide-react-native';
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -95,9 +91,11 @@ export default function AvailableLoadDetailScreen() {
   const router = useRouter();
   const { profile } = useAuth();
   const uid = profile?.uid ?? '';
-  const params = useLocalSearchParams<{ indentId?: string | string[] }>();
+  const params = useLocalSearchParams<{ indentId?: string | string[]; bid?: string | string[] }>();
   const raw = Array.isArray(params.indentId) ? params.indentId[0] : params.indentId;
   const indentId = raw?.trim() || '';
+  const bidParam = Array.isArray(params.bid) ? params.bid[0] : params.bid;
+  const wantBidSheet = bidParam === '1' || bidParam === 'true';
   const { isDark } = useDriverTheme();
   const colors = useDriverThemeColors();
   const pageBg = driverDetailPageBackground(isDark, colors.background);
@@ -116,6 +114,7 @@ export default function AvailableLoadDetailScreen() {
   } = useMyMarketAwardsQuery(uid);
 
   const [bidSheetOpen, setBidSheetOpen] = useState(false);
+  const openedBidFromQuery = useRef(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   // A8.6.2 — only show the fee disclosure while a Marketplace fee config is
   // actually active; don't warn pilot users about a hypothetical charge
@@ -232,6 +231,10 @@ export default function AvailableLoadDetailScreen() {
   const handleSubmitAmount = useCallback(
     async (amountInr: number) => {
       setSubmitError(null);
+      if (!indentId) {
+        setSubmitError('This load could not be found. Go back and try again.');
+        return false;
+      }
       const preferredVehicle =
         activeVehicles.find((v) =>
           load ? isLoadCompatibleWithFleet(load, [v.vehicle_type]) : false,
@@ -264,6 +267,25 @@ export default function AvailableLoadDetailScreen() {
   };
 
   const showAwardedJobCard = myBid?.status === 'accepted' && !error;
+
+  useEffect(() => {
+    if (openedBidFromQuery.current) return;
+    if (!wantBidSheet || isLoading || bidLoading) return;
+    if (!load || showAwardedJobCard) return;
+    if (myBid && myBid.status !== 'pending') return;
+    if (activeVehicles.length === 0) return;
+    openedBidFromQuery.current = true;
+    setSubmitError(null);
+    setBidSheetOpen(true);
+  }, [
+    wantBidSheet,
+    isLoading,
+    bidLoading,
+    load,
+    showAwardedJobCard,
+    myBid,
+    activeVehicles.length,
+  ]);
 
   useEffect(() => {
     if (!showAwardedJobCard || !awardedTrip) return;
@@ -301,8 +323,12 @@ export default function AvailableLoadDetailScreen() {
             feePaymentStatus={myBid?.fee_payment_status ?? 'not_required'}
             platformFeeAmount={myBid?.platform_fee_amount ?? null}
             shipperName={load?.creator_organization_name ?? awardedTrip?.organization_name ?? null}
-            isDark={isDark}
-            colors={colors}
+            orgLogoUrl={load?.creator_organization_logo_url}
+            orgAvatarSeed={load?.creator_organization_avatar_seed}
+            orgSeed={load?.creator_organization_id}
+            vehicleType={load?.vehicle_type}
+            material={load?.load_type}
+            pickupDate={load?.pickup_date ?? awardedTrip?.pickup_scheduled_at}
             onOpenJob={() => {
               if (awardedTrip) openAwardedJob(awardedTrip);
               else router.replace(ROUTES.DRIVER_ROOT as Href);
@@ -350,65 +376,55 @@ export default function AvailableLoadDetailScreen() {
             gap: 12,
           }}
         >
-          <View
-            style={[
-              styles.card,
-              { backgroundColor: isDark ? colors.surface : Theme.cardWhite, borderColor: cardBorder },
-            ]}
-          >
-            <View style={styles.cardHeader}>
-              <Text style={[styles.eyebrow, { color: colors.emerald }]} numberOfLines={1}>
-                {fleetOwnerLoadDisplayId(load)} · Open
-              </Text>
-              {compatible ? (
-                <View
-                  style={[
-                    styles.fitPill,
-                    {
-                      backgroundColor: isDark
-                        ? Theme.positiveMutedDark
-                        : 'rgba(21,128,61,0.1)',
-                    },
-                  ]}
-                >
-                  <Text style={[styles.fitPillText, { color: colors.emerald }]}>Fleet fit</Text>
-                </View>
-              ) : null}
-            </View>
-
-            {load.creator_organization_name ? (
-              <Text style={[styles.shipper, { color: colors.textMuted }]} numberOfLines={1}>
-                {load.creator_organization_name}
-              </Text>
-            ) : null}
-
-            <MarketplaceRouteGrid pickup={load.pickup_area} drop={load.drop_location} />
-            <MarketplaceSpecChips
-              chips={[
-                load.vehicle_type?.trim(),
-                load.load_type?.trim(),
-              ].filter((v): v is string => Boolean(v))}
-              dateLabel={
-                load.pickup_date
-                  ? new Date(load.pickup_date).toLocaleDateString('en-IN', {
-                      day: 'numeric',
-                      month: 'short',
-                      year: 'numeric',
-                    })
-                  : null
-              }
-            />
-
-            <View style={[styles.rateRow, { borderTopColor: cardBorder }]}>
-              <Text style={[styles.rateLabel, { color: colors.textMuted }]}>Target rate</Text>
-              <Text
-                style={[styles.rate, { color: rate ? Theme.accentBrownDeep : colors.textMuted }]}
-                numberOfLines={1}
-              >
-                {rate ?? 'On request'}
-              </Text>
-            </View>
-          </View>
+          <DriverWorkOpportunityCard
+            orgName={(load.creator_organization_name ?? '').trim() || 'Shipper'}
+            orgLogoUrl={load.creator_organization_logo_url}
+            orgAvatarSeed={load.creator_organization_avatar_seed}
+            orgSeed={load.creator_organization_id ?? load.id}
+            kicker={
+              myBid
+                ? myBid.status === 'pending'
+                  ? 'Quoted bid'
+                  : marketBidStatusLabel(myBid.status)
+                : 'Market'
+            }
+            badge={myBid?.status === 'pending' ? 'quoted' : 'open'}
+            origin={load.pickup_area}
+            destination={load.drop_location}
+            vehicleType={load.vehicle_type}
+            material={load.load_type}
+            pickupDate={load.pickup_date}
+            fleetMatch={compatible}
+            targetLabel="Shipper target"
+            targetValue={rate}
+            primaryCta={
+              activeVehicles.length === 0
+                ? {
+                    title: 'Add a vehicle',
+                    hint: 'Required before bidding',
+                    onPress: () =>
+                      router.push(ROUTES.driverMyFleet() as Parameters<typeof router.push>[0]),
+                  }
+                : myBid
+                  ? {
+                      title: 'Revise bid',
+                      hint: `Your bid ${formatMarketBidAmount(myBid.amount)}`,
+                      variant: 'quoted',
+                      onPress: () => {
+                        setSubmitError(null);
+                        setBidSheetOpen(true);
+                      },
+                    }
+                  : {
+                      title: 'Bid Now',
+                      hint: rate ? `Shipper target ${rate}` : 'Offer your rate to the shipper',
+                      onPress: () => {
+                        setSubmitError(null);
+                        setBidSheetOpen(true);
+                      },
+                    }
+            }
+          />
 
           <View
             style={[
@@ -471,44 +487,28 @@ export default function AvailableLoadDetailScreen() {
                       </Text>
                     </Pressable>
                   </View>
-                ) : (
-                  <Pressable
-                    onPress={() => {
-                      setSubmitError(null);
-                      setBidSheetOpen(true);
-                    }}
-                    style={({ pressed }) => [
-                      styles.bidCta,
-                      {
-                        backgroundColor: Theme.buttonPrimary,
-                        borderColor: Theme.buttonPrimaryBorder,
-                        opacity: pressed ? 0.88 : 1,
-                      },
-                    ]}
-                  >
-                    <Text style={styles.bidCtaText}>Place bid</Text>
-                  </Pressable>
-                )}
+                ) : null}
               </>
             )}
           </View>
-
-          <MarketLoadBidSheet
-            visible={bidSheetOpen && !!load}
-            onClose={() => setBidSheetOpen(false)}
-            onSubmitAmount={handleSubmitAmount}
-            shipperName={load?.creator_organization_name}
-            pickup={load?.pickup_area}
-            drop={load?.drop_location}
-            vehicleType={load?.vehicle_type}
-            loadType={load?.load_type}
-            targetRateInr={targetRateInr}
-            indentDisplayId={load ? fleetOwnerLoadDisplayId(load) : null}
-            validationError={submitError ?? undefined}
-            onClearValidationError={() => setSubmitError(null)}
-          />
         </ScrollView>
       )}
+      {load && !showAwardedJobCard ? (
+        <MarketLoadBidSheet
+          visible={bidSheetOpen}
+          onClose={() => setBidSheetOpen(false)}
+          onSubmitAmount={handleSubmitAmount}
+          shipperName={load.creator_organization_name}
+          pickup={load.pickup_area}
+          drop={load.drop_location}
+          vehicleType={load.vehicle_type}
+          loadType={load.load_type}
+          targetRateInr={targetRateInr}
+          indentDisplayId={fleetOwnerLoadDisplayId(load)}
+          validationError={submitError ?? undefined}
+          onClearValidationError={() => setSubmitError(null)}
+        />
+      ) : null}
     </View>
   );
 }
@@ -532,8 +532,12 @@ function AwardedMarketJobCard({
   feePaymentStatus,
   platformFeeAmount,
   shipperName,
-  isDark,
-  colors,
+  orgLogoUrl,
+  orgAvatarSeed,
+  orgSeed,
+  vehicleType,
+  material,
+  pickupDate,
   onOpenJob,
   onPay,
   isStartingPayment,
@@ -543,8 +547,12 @@ function AwardedMarketJobCard({
   feePaymentStatus: FeePaymentStatus;
   platformFeeAmount: number | null;
   shipperName?: string | null;
-  isDark: boolean;
-  colors: ReturnType<typeof useDriverThemeColors>;
+  orgLogoUrl?: string | null;
+  orgAvatarSeed?: string | null;
+  orgSeed?: string | null;
+  vehicleType?: string | null;
+  material?: string | null;
+  pickupDate?: string | null;
   onOpenJob: () => void;
   onPay?: () => void;
   isStartingPayment?: boolean;
@@ -554,10 +562,6 @@ function AwardedMarketJobCard({
   const earnings = trip
     ? awardedEarningsLabel(trip, bidAmount)
     : formatMarketBidAmount(bidAmount) || 'Rate on request';
-  // A8.6.2 fix: !trip no longer means "still connecting" -- once the
-  // Marketplace fee gates trip creation, an accepted-but-unpaid bid stays
-  // trip-less indefinitely, so the old unconditional "Connecting your
-  // awarded job…" would spin forever. Branch on the actual fee state.
   const feePending = feePaymentStatus !== 'paid' && feePaymentStatus !== 'not_required';
   const statusHint = !trip
     ? feePending
@@ -571,105 +575,54 @@ function AwardedMarketJobCard({
           ? 'Completed'
           : marketBidStatusLabel('accepted');
 
+  const payReady =
+    !trip && feePending && (feePaymentStatus === 'required' || feePaymentStatus === 'failed') && onPay;
+  const awaitingPayment = !trip && feePending && !payReady;
+
   return (
-    <View
-      style={[
-        styles.jobCard,
-        {
-          backgroundColor: isDark ? colors.surface : Theme.positiveMuted,
-          borderColor: Theme.darkGreen ?? colors.emerald,
-        },
-      ]}
-    >
-      <View style={styles.jobTop}>
-        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-          {shipperName ? (
-            <Text style={[styles.jobShipper, { color: colors.text }]} numberOfLines={1}>
-              {shipperName}
-            </Text>
-          ) : null}
-          <Text style={[styles.jobKicker, { color: colors.emerald }]}>Job · Awarded</Text>
-        </View>
-        <View style={styles.awardedPill}>
-          <Text style={styles.awardedPillText}>Awarded</Text>
-        </View>
-      </View>
-
-      <View style={styles.routeBlock}>
-        <View style={styles.routeCityCol}>
-          <Text style={[styles.routeCity, { color: colors.text }]} numberOfLines={1}>
-            {pickup}
-          </Text>
-          <Text style={[styles.routeMeta, { color: colors.textMuted }]}>Pickup</Text>
-        </View>
-        <View style={styles.routeArrowWrap}>
-          <ArrowRight size={14} color={colors.textMuted} strokeWidth={2.2} />
-        </View>
-        <View style={[styles.routeCityCol, styles.routeCityColEnd]}>
-          <Text style={[styles.routeCity, styles.routeCityEnd, { color: colors.text }]} numberOfLines={1}>
-            {drop}
-          </Text>
-          <Text style={[styles.routeMeta, styles.routeMetaEnd, { color: colors.textMuted }]}>
-            Drop
-          </Text>
-        </View>
-      </View>
-
-      <View style={styles.earningsRow}>
-        <Text style={[styles.earningsLabel, { color: colors.textMuted }]}>Your payout</Text>
-        <Text style={[styles.earningsValue, { color: Theme.accentBrownDeep }]}>{earnings}</Text>
-      </View>
-
-      <Text style={[styles.jobHint, { color: colors.textMuted }]}>{statusHint}</Text>
-
-      {/* A8.7: required/failed get a real "Pay" trigger. pending (a
-          checkout already in flight, awaiting the webhook) stays
-          non-interactive -- retrying while a payment may still confirm
-          would start a second, unnecessary attempt. */}
-      {!trip && feePending && (feePaymentStatus === 'required' || feePaymentStatus === 'failed') && onPay ? (
-        <Pressable
-          onPress={onPay}
-          disabled={isStartingPayment}
-          style={({ pressed }) => [
-            styles.bidCta,
-            {
-              backgroundColor: Theme.buttonPrimary,
-              borderColor: Theme.buttonPrimaryBorder,
-              opacity: pressed || isStartingPayment ? 0.85 : 1,
-              marginTop: 4,
-            },
-          ]}
-        >
-          <Text style={styles.bidCtaText}>
-            {isStartingPayment ? 'Starting…' : `Pay ${formatMarketBidAmount(platformFeeAmount) || 'fee'}`}
-          </Text>
-        </Pressable>
-      ) : !trip && feePending ? (
-        <View
-          style={[
-            styles.bidCta,
-            { backgroundColor: colors.surfaceElevated, borderColor: colors.borderSubtle },
-          ]}
-        >
-          <Text style={[styles.bidCtaText, { color: colors.textMuted }]}>Awaiting payment</Text>
-        </View>
-      ) : (
-        <Pressable
-          onPress={onOpenJob}
-          style={({ pressed }) => [
-            styles.bidCta,
-            {
-              backgroundColor: Theme.buttonPrimary,
-              borderColor: Theme.buttonPrimaryBorder,
-              opacity: pressed ? 0.88 : 1,
-              marginTop: 4,
-            },
-          ]}
-        >
-          <Text style={styles.bidCtaText}>Open job</Text>
-        </Pressable>
-      )}
-    </View>
+    <DriverWorkOpportunityCard
+      orgName={(shipperName ?? '').trim() || 'Shipper'}
+      orgLogoUrl={orgLogoUrl}
+      orgAvatarSeed={orgAvatarSeed}
+      orgSeed={orgSeed ?? trip?.id ?? shipperName}
+      kicker={
+        feePending
+          ? 'Job · Payment required'
+          : trip?.status === 'completed'
+            ? 'Job · Completed'
+            : 'Job · Awarded'
+      }
+      badge="awarded"
+      origin={pickup}
+      destination={drop}
+      vehicleType={vehicleType}
+      material={material}
+      pickupDate={pickupDate}
+      targetLabel="Your payout"
+      targetValue={earnings}
+      extra={<Text style={[styles.jobHint, { color: Theme.textMuted }]}>{statusHint}</Text>}
+      primaryCta={
+        payReady
+          ? {
+              title: isStartingPayment
+                ? 'Starting…'
+                : `Pay ${formatMarketBidAmount(platformFeeAmount) || 'fee'}`,
+              hint: feePendingHint(feePaymentStatus, platformFeeAmount),
+              onPress: onPay!,
+            }
+          : awaitingPayment
+            ? {
+                title: 'Awaiting payment',
+                variant: 'info',
+                onPress: onOpenJob,
+              }
+            : {
+                title: 'Open job',
+                hint: 'Continue on Dashboard',
+                onPress: onOpenJob,
+              }
+      }
+    />
   );
 }
 
@@ -678,55 +631,6 @@ const styles = StyleSheet.create({
   gate: { padding: 20, gap: 8 },
   gateTitle: { fontSize: 15, fontWeight: '700', letterSpacing: -0.15 },
   gateBody: { fontSize: 12, lineHeight: 17 },
-  jobCard: {
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 14,
-    gap: 10,
-  },
-  jobTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  jobShipper: { fontSize: 12, fontWeight: '700' },
-  jobKicker: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.35,
-    textTransform: 'uppercase',
-    lineHeight: 13,
-  },
-  awardedPill: {
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    backgroundColor: Theme.positiveMuted,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.positiveMutedDarkBorder,
-  },
-  awardedPillText: { fontSize: 10, fontWeight: '700', color: Theme.positive },
-  routeBlock: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-  },
-  routeCityCol: { flex: 1, minWidth: 0, gap: 2 },
-  routeCityColEnd: { alignItems: 'flex-end' },
-  routeCity: { fontSize: 13, fontWeight: '700', letterSpacing: -0.15, lineHeight: 17 },
-  routeCityEnd: { textAlign: 'right' },
-  routeMeta: { fontSize: 10, fontWeight: '600' },
-  routeMetaEnd: { textAlign: 'right' },
-  routeArrowWrap: { paddingHorizontal: 2 },
-  earningsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  earningsLabel: { fontSize: 11, fontWeight: '600' },
-  earningsValue: { fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
   jobHint: { fontSize: 11, fontWeight: '500', lineHeight: 15 },
   card: {
     borderRadius: 12,
@@ -735,51 +639,6 @@ const styles = StyleSheet.create({
     paddingTop: 12,
     paddingBottom: 12,
     gap: 8,
-  },
-  cardHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-  },
-  eyebrow: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.45,
-    textTransform: 'uppercase',
-    lineHeight: 13,
-    includeFontPadding: false,
-  },
-  shipper: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
-    lineHeight: 13,
-    includeFontPadding: false,
-  },
-  fitPill: {
-    borderRadius: 999,
-    paddingHorizontal: 7,
-    paddingVertical: 3,
-    flexShrink: 0,
-  },
-  fitPillText: {
-    fontSize: 9,
-    fontWeight: '700',
-    lineHeight: 12,
-    includeFontPadding: false,
-  },
-  rateRow: {
-    flexDirection: 'row',
-    alignItems: 'baseline',
-    justifyContent: 'space-between',
-    gap: 10,
-    marginTop: 2,
-    paddingTop: 10,
-    borderTopWidth: StyleSheet.hairlineWidth,
   },
   submittedBidRow: {
     flexDirection: 'row',
@@ -825,18 +684,4 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   manageFleetLink: { fontSize: 11, fontWeight: '700' },
-  bidCta: {
-    marginTop: 10,
-    minHeight: 46,
-    borderRadius: Theme.buttonPrimaryRadius,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  bidCtaText: {
-    fontSize: 13,
-    fontWeight: '700',
-    color: Theme.buttonPrimaryText,
-    letterSpacing: -0.1,
-  },
 });

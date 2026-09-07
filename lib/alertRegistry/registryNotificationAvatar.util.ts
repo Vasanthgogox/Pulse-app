@@ -1,6 +1,5 @@
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
-import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
 import type {
   InboundPartnerDisplay,
   InboundProtocolInviteItem,
@@ -130,29 +129,6 @@ export function resolveOpsRegistryAvatar(
   }
 
   return orgAvatar(ctx.org, "System");
-}
-
-export function resolveSharedRegistryAvatar(
-  item: SharedLedgerNotificationRow,
-  ctx: {
-    org: CurrentOrganization | null | undefined;
-    partnerDisplay: Record<string, InboundPartnerDisplay>;
-    partnerAvatarUri: Record<string, string | null>;
-  },
-): RegistryNotificationAvatar {
-  if (item.partner_org_id) {
-    return partnerAvatar(
-      item.partner_org_id,
-      ctx.partnerDisplay,
-      ctx.partnerAvatarUri,
-      item.title,
-    );
-  }
-  return {
-    name: item.title?.trim() || "Partner",
-    entityType: "client",
-    initialsColorSeed: item.id,
-  };
 }
 
 /** Avatar for cross-org network notifications; keyed on the acting org. */

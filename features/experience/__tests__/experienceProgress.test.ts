@@ -8,6 +8,7 @@ import {
   formatMilestoneProgressLabel,
   formatMilestoneStatusLine,
   getMilestoneCount,
+  getMilestoneGuide,
   isMilestoneCompleted,
   isMilestoneInProgress,
 } from "@/features/experience/experienceProgress";
@@ -76,6 +77,25 @@ describe("experienceProgress", () => {
         audience: "business",
       }),
     ).toBe("0/2 five-star partner ratings");
+  });
+
+  it("explains how to complete identity verification", () => {
+    const p = computeExperienceProgress({
+      hasSignedUp: true,
+      completedTrips: 5,
+      isVerified: false,
+      fiveStarCount: 0,
+    });
+    const guide = getMilestoneGuide(p.currentLevelConfig, p, { audience: "driver" });
+    expect(guide.title).toBe("L3 Verified");
+    expect(guide.status).toBe("in_progress");
+    expect(guide.action?.kind).toBe("documents");
+    expect(guide.steps.length).toBeGreaterThan(1);
+    expect(guide.lockedHint).toBeNull();
+
+    const locked = getMilestoneGuide(p.levels[3]!, p, { audience: "driver" });
+    expect(locked.status).toBe("upcoming");
+    expect(locked.lockedHint).toMatch(/L3 Verified/);
   });
 
   it("blocks business orgs on verification until KYC is approved", () => {

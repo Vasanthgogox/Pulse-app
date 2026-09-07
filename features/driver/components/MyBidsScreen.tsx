@@ -15,23 +15,24 @@ import {
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { DriverWorkOpportunityCard } from '@/features/driver/components/DriverWorkOpportunityCard';
+import type { FleetOwnerOpenLoad } from '@/features/driver/services/fleetOwnerLoads.service';
 import {
   formatMarketBidAmount,
   marketBidStatusLabel,
   type FeePaymentStatus,
   type MarketBidRow,
-  type MarketBidStatus,
 } from '@/features/driver/services/marketBids.service';
+import { useFleetOwnerOpenLoadsQuery } from '@/lib/queries/useFleetOwnerOpenLoadsQuery';
 import { useMyMarketAwardsQuery } from '@/lib/queries/useMyMarketAwardsQuery';
 import { useMyMarketBidsQuery } from '@/lib/queries/useMyMarketBidsQuery';
 import { ROUTES } from '@/lib/routes';
 import type { DriverTripRow } from '@/types/trip-views';
 import { useRouter, type Href } from 'expo-router';
-import { ChevronRight, Inbox } from 'lucide-react-native';
+import { Inbox } from 'lucide-react-native';
 import { useMemo, type ReactNode } from 'react';
 import {
   ActivityIndicator,
-  Pressable,
   RefreshControl,
   ScrollView,
   StyleSheet,
@@ -53,47 +54,6 @@ function formatSubmittedAt(iso: string): string {
   }
 }
 
-function statusColor(status: MarketBidStatus, colors: ReturnType<typeof useDriverThemeColors>) {
-  switch (status) {
-    case 'accepted':
-      return colors.emerald;
-    case 'rejected':
-      return Theme.negative;
-    case 'superseded':
-      return colors.textMuted;
-    default:
-      return colors.textMuted;
-  }
-}
-
-function statusPillBackground(
-  status: MarketBidStatus,
-  opts: { awarded: boolean; isDark: boolean; colors: ReturnType<typeof useDriverThemeColors> },
-) {
-  if (opts.awarded) {
-    return opts.isDark ? Theme.positiveMutedDark : 'rgba(21,128,61,0.1)';
-  }
-  switch (status) {
-    case 'rejected':
-      return opts.isDark ? 'rgba(232,33,39,0.16)' : Theme.negativeMuted;
-    case 'pending':
-      return opts.isDark ? 'rgba(245,158,11,0.16)' : Theme.warningMuted;
-    default:
-      return opts.isDark ? opts.colors.surfaceElevated : Theme.surfaceGray;
-  }
-}
-
-/** A6.4: explain *why* a bid stopped mattering — 'superseded' is not a business
- * decision (rejected) or a driver choice (withdrawn), it just became moot
- * because the driver was awarded a different load. */
-function statusExplanation(status: MarketBidStatus): string | null {
-  if (status === 'superseded') {
-    return 'Another load was awarded to you, so this bid is no longer active.';
-  }
-  return null;
-}
-
-/** A8.6.2 — the Marketplace fee gates trip creation now, not just award. */
 function feePaymentGateSatisfied(status: FeePaymentStatus): boolean {
   return status === 'paid' || status === 'not_required';
 }
@@ -149,6 +109,13 @@ export function MyBidsContent({
 
   const { bids, isLoading, isRefetching, refetch, error } = useMyMarketBidsQuery(uid);
   const { awards } = useMyMarketAwardsQuery(uid);
+  const { loads } = useFleetOwnerOpenLoadsQuery(uid);
+
+  const loadById = useMemo(() => {
+    const map = new Map<string, (typeof loads)[number]>();
+    for (const load of loads) map.set(load.id, load);
+    return map;
+  }, [loads]);
 
   const awardByIndentId = useMemo(() => {
     const map = new Map<string, DriverTripRow>();
@@ -196,9 +163,7 @@ export function MyBidsContent({
       <BidCard
         key={b.id}
         bid={b}
-        colors={colors}
-        isDark={isDark}
-        cardBorder={cardBorder}
+        load={loadById.get(b.indent_id)}
         trip={trip}
         onViewTrip={(tripId) => {
           const t = awardByIndentId.get(b.indent_id);
@@ -208,6 +173,12 @@ export function MyBidsContent({
           }
           router.push(`/driver-trip/${tripId}` as Href);
         }}
+        onOpenDetail={() => router.push(ROUTES.driverAvailableLoad(b.indent_id) as Href)}
+        onBid={
+          trip
+            ? undefined
+            : () => router.push(ROUTES.driverAvailableLoad(b.indent_id, { bid: true }) as Href)
+        }
         onPress={
           trip
             ? () => {
@@ -278,11 +249,12 @@ export function MyBidsContent({
                 <BidCard
                   key={b.id}
                   bid={b}
-                  colors={colors}
-                  isDark={isDark}
-                  cardBorder={cardBorder}
-                  onPress={() =>
+                  load={loadById.get(b.indent_id)}
+                  onOpenDetail={() =>
                     router.push(ROUTES.driverAvailableLoad(b.indent_id) as Href)
+                  }
+                  onBid={() =>
+                    router.push(ROUTES.driverAvailableLoad(b.indent_id, { bid: true }) as Href)
                   }
                 />
               ))}
@@ -295,10 +267,8 @@ export function MyBidsContent({
                 <BidCard
                   key={b.id}
                   bid={b}
-                  colors={colors}
-                  isDark={isDark}
-                  cardBorder={cardBorder}
-                  onPress={() =>
+                  load={loadById.get(b.indent_id)}
+                  onOpenDetail={() =>
                     router.push(ROUTES.driverAvailableLoad(b.indent_id) as Href)
                   }
                 />
@@ -360,33 +330,25 @@ function Section({
 
 function BidCard({
   bid,
-  colors,
-  isDark,
-  cardBorder,
+  load,
   trip,
   onViewTrip,
+  onOpenDetail,
+  onBid,
   onPress,
 }: {
   bid: MarketBidRow;
-  colors: ReturnType<typeof useDriverThemeColors>;
-  isDark: boolean;
-  cardBorder: string;
+  load?: FleetOwnerOpenLoad;
   trip?: DriverTripRow;
   onViewTrip?: (tripId: string) => void;
+  onOpenDetail?: () => void;
+  onBid?: () => void;
   onPress?: () => void;
 }) {
-  const route =
-    trip && (trip.pickup_location || trip.dropoff_location)
-      ? `${trip.pickup_location?.trim() || 'Pickup'} → ${trip.dropoff_location?.trim() || 'Drop'}`
-      : null;
-  // Lifecycle fix: bid.status alone can't distinguish these -- it stays
-  // 'accepted' forever once awarded. The associated trip's own status is
-  // the real signal for what this card should say.
   const rawAccepted = bid.status === 'accepted';
   const isCompleted = rawAccepted && trip?.status === 'completed';
   const isCancelledTrip = rawAccepted && trip?.status === 'cancelled';
   const isActiveAward = rawAccepted && !isCompleted && !isCancelledTrip;
-  const showAwardedStyling = isActiveAward || isCompleted;
   const feePending = isActiveAward && !feePaymentGateSatisfied(bid.fee_payment_status);
   const statusLabel = isCompleted
     ? 'Completed'
@@ -395,113 +357,105 @@ function BidCard({
       : isActiveAward
         ? 'Awarded'
         : marketBidStatusLabel(bid.status);
-  const statusTextColor = isCompleted
-    ? colors.emerald
-    : isCancelledTrip
-      ? colors.textMuted
-      : statusColor(bid.status, colors);
-  const explanation = statusExplanation(bid.status);
   const ctaLabel =
     trip && onViewTrip
       ? isAssignedLike(trip.status) || isActiveLike(trip.status)
         ? 'Open job'
         : 'View trip'
       : null;
+  const shipper =
+    (trip?.organization_name ?? load?.creator_organization_name ?? '').trim() || 'Shipper';
+  const origin = trip?.pickup_location || load?.pickup_area;
+  const destination = trip?.dropoff_location || load?.drop_location;
+  const amount = formatMarketBidAmount(bid.amount) || 'Rate hidden';
+  const superseded =
+    bid.status === 'superseded'
+      ? 'Another load was awarded to you, so this bid is no longer active.'
+      : null;
+
+  let primary: Parameters<typeof DriverWorkOpportunityCard>[0]['primaryCta'] = null;
+  if (ctaLabel && trip && onViewTrip) {
+    primary = {
+      title: ctaLabel,
+      hint: feePending
+        ? feePendingLabel(bid.fee_payment_status, bid.platform_fee_amount)
+        : isCompleted
+          ? 'Job finished'
+          : 'Continue on Dashboard',
+      onPress: () => onViewTrip(trip.id),
+    };
+  } else if (bid.status === 'pending' && onBid) {
+    primary = {
+      title: 'Revise bid',
+      hint: `Your bid ${amount}`,
+      variant: 'quoted',
+      onPress: onBid,
+    };
+  } else {
+    primary = {
+      title: statusLabel,
+      variant: 'info',
+      onPress: onOpenDetail ?? onPress ?? (() => {}),
+    };
+  }
 
   return (
-    <Pressable
-      onPress={onPress}
-      disabled={!onPress}
-      style={({ pressed }) => [
-        styles.card,
-        showAwardedStyling && styles.cardAwarded,
-        {
-          backgroundColor: isDark ? colors.surface : Theme.cardWhite,
-          borderColor: showAwardedStyling
-            ? isDark
-              ? Theme.positiveMutedDarkBorder
-              : 'rgba(21,128,61,0.28)'
-            : cardBorder,
-          opacity: pressed && onPress ? 0.92 : 1,
-        },
-      ]}
-    >
-      {showAwardedStyling ? (
-        <View style={[styles.cardAccent, { backgroundColor: colors.emerald }]} />
-      ) : null}
-
-      <View style={styles.cardBody}>
-        <View style={styles.cardTop}>
-          <Text style={[styles.amount, { color: colors.text }]} numberOfLines={1}>
-            {formatMarketBidAmount(bid.amount) || 'Rate hidden'}
-          </Text>
-          <View
-            style={[
-              styles.statusPill,
-              {
-                backgroundColor: statusPillBackground(bid.status, {
-                  awarded: showAwardedStyling,
-                  isDark,
-                  colors,
-                }),
-              },
-            ]}
-          >
-            <Text style={[styles.statusText, { color: statusTextColor }]}>{statusLabel}</Text>
-          </View>
-        </View>
-
-        {showAwardedStyling ? (
-          <Text style={[styles.jobKicker, { color: colors.emerald }]}>
-            {isCompleted
-              ? 'Job · Completed'
-              : feePending
-                ? 'Job · Payment required'
-                : 'Job · Awarded'}
-          </Text>
-        ) : null}
-
-        {feePending ? (
-          <Text style={[styles.note, styles.noteEmphasis, { color: colors.textMuted }]}>
-            {feePendingLabel(bid.fee_payment_status, bid.platform_fee_amount)}
-          </Text>
-        ) : null}
-
-        {route ? (
-          <Text style={[styles.route, { color: colors.text }]} numberOfLines={2}>
-            {route}
-          </Text>
-        ) : null}
-
-        {bid.note ? (
-          <Text style={[styles.note, { color: colors.textMuted }]} numberOfLines={2}>
-            {bid.note}
-          </Text>
-        ) : null}
-
-        {explanation ? (
-          <Text style={[styles.note, { color: colors.textMuted }]} numberOfLines={2}>
-            {explanation}
-          </Text>
-        ) : null}
-
-        <View style={[styles.cardFooter, { borderTopColor: cardBorder }]}>
-          <Text style={[styles.meta, { color: colors.textMuted }]} numberOfLines={1}>
-            Submitted {formatSubmittedAt(bid.created_at)}
-          </Text>
-          {trip && onViewTrip && ctaLabel ? (
-            <Pressable
-              onPress={() => onViewTrip(trip.id)}
-              hitSlop={8}
-              style={({ pressed }) => [styles.viewTrip, { opacity: pressed ? 0.75 : 1 }]}
-            >
-              <Text style={[styles.viewTripText, { color: colors.emerald }]}>{ctaLabel}</Text>
-              <ChevronRight size={12} color={colors.emerald} strokeWidth={2.4} />
-            </Pressable>
+    <DriverWorkOpportunityCard
+      orgName={shipper}
+      orgLogoUrl={load?.creator_organization_logo_url}
+      orgAvatarSeed={load?.creator_organization_avatar_seed}
+      orgSeed={load?.creator_organization_id ?? bid.indent_id}
+      kicker={
+        isCompleted
+          ? 'Job · Completed'
+          : feePending
+            ? 'Job · Payment required'
+            : isActiveAward
+              ? 'Job · Awarded'
+              : bid.status === 'pending'
+                ? 'Quoted bid'
+                : statusLabel
+      }
+      badge={isActiveAward || isCompleted ? 'awarded' : bid.status === 'pending' ? 'quoted' : null}
+      origin={origin}
+      destination={destination}
+      vehicleType={load?.vehicle_type}
+      material={load?.load_type}
+      pickupDate={load?.pickup_date ?? trip?.pickup_scheduled_at}
+      targetLabel={isActiveAward || isCompleted ? 'Your payout' : 'Your bid'}
+      targetValue={amount}
+      extra={
+        <>
+          {feePending ? (
+            <Text style={styles.noteEmphasis}>
+              {feePendingLabel(bid.fee_payment_status, bid.platform_fee_amount)}
+            </Text>
           ) : null}
-        </View>
-      </View>
-    </Pressable>
+          {bid.note ? (
+            <Text style={styles.note} numberOfLines={2}>
+              {bid.note}
+            </Text>
+          ) : null}
+          {superseded ? (
+            <Text style={styles.note} numberOfLines={2}>
+              {superseded}
+            </Text>
+          ) : null}
+          <Text style={styles.meta}>Submitted {formatSubmittedAt(bid.created_at)}</Text>
+        </>
+      }
+      primaryCta={primary}
+      secondaryCta={
+        isActiveAward && trip
+          ? null
+          : onOpenDetail || onPress
+            ? {
+                title: 'Full view',
+                onPress: onOpenDetail ?? onPress ?? (() => {}),
+              }
+            : null
+      }
+    />
   );
 }
 
@@ -516,108 +470,25 @@ const styles = StyleSheet.create({
     lineHeight: 13,
     includeFontPadding: false,
   },
-  card: {
-    position: 'relative',
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    overflow: 'hidden',
-  },
-  cardAwarded: {
-    borderWidth: StyleSheet.hairlineWidth,
-  },
-  cardAccent: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
-    width: 3,
-  },
-  cardBody: {
-    paddingVertical: 11,
-    paddingHorizontal: 12,
-    paddingLeft: 14,
-    gap: 4,
-  },
-  cardTop: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    minHeight: 22,
-  },
-  amount: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 15,
-    fontWeight: '700',
-    letterSpacing: -0.25,
-    lineHeight: 20,
-    includeFontPadding: false,
-  },
-  statusPill: {
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
-    flexShrink: 0,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.1,
-    lineHeight: 13,
-    includeFontPadding: false,
-  },
-  jobKicker: {
-    fontSize: 10,
-    fontWeight: '700',
-    letterSpacing: 0.35,
-    textTransform: 'uppercase',
-    lineHeight: 13,
-    includeFontPadding: false,
-  },
-  route: {
-    fontSize: 12,
-    fontWeight: '600',
-    letterSpacing: -0.1,
-    lineHeight: 16,
-    includeFontPadding: false,
-  },
   note: {
     fontSize: 11,
     fontWeight: '500',
     lineHeight: 15,
+    color: Theme.textMuted,
     includeFontPadding: false,
   },
-  noteEmphasis: { fontWeight: '600' },
-  cardFooter: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 8,
-    marginTop: 4,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
+  noteEmphasis: {
+    fontSize: 11,
+    fontWeight: '600',
+    lineHeight: 15,
+    color: Theme.textMuted,
+    includeFontPadding: false,
   },
   meta: {
-    flex: 1,
-    minWidth: 0,
     fontSize: 10,
     fontWeight: '500',
     lineHeight: 13,
-    includeFontPadding: false,
-  },
-  viewTrip: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 1,
-    flexShrink: 0,
-  },
-  viewTripText: {
-    fontSize: 11,
-    fontWeight: '700',
-    lineHeight: 14,
+    color: Theme.textMuted,
     includeFontPadding: false,
   },
   empty: {

@@ -33,7 +33,7 @@ export function parseAlertDetailParams(raw: {
     "";
   const modeRaw = typeof raw.mode === "string" ? raw.mode : raw.mode?.[0];
   const kind: RegistryFeedKind | null =
-    kindRaw === "salary" || kindRaw === "shared" || kindRaw === "ops"
+    kindRaw === "salary" || kindRaw === "ops"
       ? kindRaw
       : null;
   const mode: AlertDetailMode = modeRaw === "archive" ? "archive" : "active";

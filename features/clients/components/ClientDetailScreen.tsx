@@ -73,7 +73,6 @@ import {
   resolveLedgerReceiptPartyAvatar,
   resolveLedgerRowPartyIdentity,
 } from "@/lib/entityIdentity";
-import { useDisputeMapQuery } from "@/lib/queries";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
@@ -539,10 +538,6 @@ export default function ClientDetailScreen({
   const linkedOrgDisplayMap = useLinkedOrgProfileMap(
     client ? [client] : [],
     suppliers,
-  );
-
-  const { disputesByTripId: _disputesByTripId } = useDisputeMapQuery(
-    currentOrganization?.id ?? null,
   );
 
   /** Fetch signed driver avatar URLs for ledger rows (same as LedgerTab / Finance cash). */

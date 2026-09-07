@@ -276,22 +276,6 @@ export function buildOpsRegistryCardPresentation(
     return buildPaymentPresentation(ops, ctx, event);
   }
 
-  if (ops.category === "dispute") {
-    const partnerOrgId =
-      typeof readMeta(event)?.receiver_org_id === "string"
-        ? (readMeta(event)!.receiver_org_id as string)
-        : null;
-    const partnerName =
-      String(readMeta(event)?.receiver_org_name ?? "").trim() || "Partner";
-    return {
-      avatar: partnerAvatarFromOrgId(partnerOrgId, partnerName, "client", ctx),
-      actorName: partnerName,
-      actionText: "raised a dispute on",
-      highlightText: ops.trip_number ?? "trip",
-      detail: ops.subtitle?.trim() || undefined,
-    };
-  }
-
   if (ops.category === "unassigned_trip") {
     return buildUnassignedPresentation(ops, ctx);
   }
@@ -321,7 +305,6 @@ function tripHasDriver(ops: GlobalOperationAlert, ctx: RegistryPartyLookup): boo
 
 export function opsRegistryActionLabel(ops: GlobalOperationAlert): string {
   if (ops.category === "payment_received") return "View payment";
-  if (ops.category === "dispute") return "Review dispute";
   if (ops.category === "unassigned_trip") return "Assign driver";
   if (ops.category === "late_log") return "View trip";
   if (ops.category === "vehicle_idle") return "View trip";

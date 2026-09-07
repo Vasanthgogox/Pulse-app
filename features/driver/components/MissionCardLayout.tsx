@@ -4,7 +4,6 @@
  * so assign → active → complete stay visually aligned.
  */
 import Theme from '@/constants/Theme';
-import { PartyAvatar } from '@/components/PartyAvatar';
 import {
   FLOW_EMERALD,
   FLOW_EMERALD_DARK,
@@ -32,6 +31,10 @@ export interface MissionCardLayoutProps {
   target: 'pickup' | 'drop' | null;
   pickupLabel: string;
   dropLabel: string;
+  /** Operational trip code — shown as the small second line under the route. */
+  tripIdLabel?: string | null;
+  /** Scheduled trip date — small, beside the route. */
+  tripDateLabel?: string | null;
   /** Road distance remaining to `target`, in km — for the progress bar fill. Null when unknown. */
   remainingKm?: number | null;
   /** Total planned route distance, in km — for the progress bar fill. Null when unknown. */
@@ -39,8 +42,6 @@ export interface MissionCardLayoutProps {
   /** Pre-formatted fallback/caption (e.g. "12 km to pickup") for when a numeric fraction isn't available. */
   distanceLabel: string;
   etaLabel: string;
-  /** trip.client_name — already on the trip row, just not shown until now. */
-  customerName?: string | null;
   /** trip.vehicle_display_number — already on the trip row. */
   vehicleNumber?: string | null;
   /** e.g. "At pickup for 12 min" — from computeTripStageMetrics(), only while a dwell is running. */
@@ -60,22 +61,28 @@ export function MissionCardLayout({
   target,
   pickupLabel,
   dropLabel,
+  tripIdLabel = null,
+  tripDateLabel = null,
   remainingKm = null,
   routeTotalKm = null,
   distanceLabel,
   etaLabel,
-  customerName = null,
   vehicleNumber = null,
   dwellLabel = null,
   guidanceMessage = null,
   onNavigate = null,
 }: MissionCardLayoutProps) {
-  const showCustomerVehicleRow = !!(customerName?.trim() || vehicleNumber?.trim());
+  const showVehicleRow = !!vehicleNumber?.trim();
 
   const destinationHeading =
     target === 'pickup' ? 'PICKUP AT' : target === 'drop' ? 'DELIVER TO' : null;
-  const destinationLabel =
-    target === 'pickup' ? pickupLabel : target === 'drop' ? dropLabel : null;
+  const routeLabel = [pickupLabel, dropLabel]
+    .map((part) => part.trim())
+    .filter((part) => part && part !== '—')
+    .join(' → ');
+  const destinationLabel = routeLabel || pickupLabel || dropLabel || null;
+  const tripRef = tripIdLabel?.trim() || null;
+  const tripDate = tripDateLabel?.trim() || null;
 
   const progressFraction =
     remainingKm != null && routeTotalKm != null && routeTotalKm > 0
@@ -134,18 +141,31 @@ export function MissionCardLayout({
       </LinearGradient>
 
       <View style={styles.contentWrap}>
-        {destinationHeading && destinationLabel ? (
+        {destinationLabel ? (
           <View style={styles.destinationBlock}>
             <View style={styles.destinationTopRow}>
               <View style={styles.destinationTextCol}>
-                <Text style={[styles.destinationHeading, { color: Theme.textMuted }]}>
-                  {destinationHeading}
-                </Text>
+                <View style={styles.routeTitleRow}>
+                  <Text
+                    style={[styles.destinationLabel, { color: Theme.textPrimaryDark }]}
+                    numberOfLines={2}
+                  >
+                    {destinationLabel}
+                  </Text>
+                  {tripDate ? (
+                    <Text
+                      style={[styles.routeDate, { color: Theme.textMuted }]}
+                      numberOfLines={1}
+                    >
+                      {tripDate}
+                    </Text>
+                  ) : null}
+                </View>
                 <Text
-                  style={[styles.destinationLabel, { color: Theme.textPrimaryDark }]}
-                  numberOfLines={2}
+                  style={[styles.destinationHeading, { color: Theme.textMuted }]}
+                  numberOfLines={1}
                 >
-                  {destinationLabel}
+                  {tripRef ?? destinationHeading}
                 </Text>
               </View>
               {onNavigate ? (
@@ -197,32 +217,14 @@ export function MissionCardLayout({
           </View>
         ) : null}
 
-        {showCustomerVehicleRow ? (
+        {showVehicleRow ? (
           <View style={styles.metaRow}>
-            {customerName?.trim() ? (
-              <View style={styles.metaLine}>
-                <PartyAvatar
-                  name={customerName}
-                  entityType="client"
-                  size={16}
-                  style={styles.metaAvatar}
-                />
-                <Text
-                  style={[styles.metaValue, { color: Theme.textPrimaryDark }]}
-                  numberOfLines={1}
-                >
-                  {customerName}
-                </Text>
-              </View>
-            ) : null}
-            {vehicleNumber?.trim() ? (
-              <Text
-                style={[styles.metaSubValue, { color: Theme.textMuted }]}
-                numberOfLines={1}
-              >
-                {vehicleNumber}
-              </Text>
-            ) : null}
+            <Text
+              style={[styles.metaSubValue, { color: Theme.textMuted }]}
+              numberOfLines={1}
+            >
+              {vehicleNumber}
+            </Text>
           </View>
         ) : null}
 
@@ -340,17 +342,30 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
   },
+  routeTitleRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    gap: 8,
+    minWidth: 0,
+  },
   destinationHeading: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 1.1,
+    marginTop: 5,
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: 0.2,
   },
   destinationLabel: {
-    marginTop: 5,
+    flexShrink: 1,
+    minWidth: 0,
     fontSize: 21,
     fontWeight: '800',
     letterSpacing: -0.4,
     lineHeight: 26,
+  },
+  routeDate: {
+    flexShrink: 0,
+    fontSize: 12,
+    fontWeight: '600',
   },
   navigateChip: {
     flexDirection: 'row',
@@ -401,23 +416,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
-    minWidth: 0,
-  },
-  metaLine: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    minWidth: 0,
-    flexShrink: 1,
-    flex: 1,
-  },
-  metaAvatar: {
-    flexShrink: 0,
-  },
-  metaValue: {
-    fontSize: 12,
-    fontWeight: '700',
-    flexShrink: 1,
     minWidth: 0,
   },
   metaSubValue: {

@@ -121,7 +121,6 @@ export function MarketLoadBidSheet({
       if (!Number.isFinite(amount) || amount <= 0) {
         return;
       }
-      celebrationLockRef.current = true;
       setPendingAmount(amount);
       setConfirmPhase('review');
       setConfirmOpen(true);
@@ -165,50 +164,55 @@ export function MarketLoadBidSheet({
   }, [confirmSubmitting, confirmPhase]);
 
   const handleCloseEntry = useCallback(() => {
-    if (confirmSubmitting || celebrationLockRef.current) return;
+    if (confirmSubmitting) return;
+    celebrationLockRef.current = false;
+    setConfirmOpen(false);
+    setConfirmPhase('review');
     onClose();
   }, [confirmSubmitting, onClose]);
 
   return (
-    <>
-      <FullscreenNumericEntry
-        visible={visible}
-        onClose={handleCloseEntry}
-        onSubmit={requestConfirm}
-        initialValue={initialValue}
-        label="Place your bid"
-        contextLine={undefined}
-        partyPreview={partyPreview}
-        type="currency"
-        prefix="₹"
-        placeholder="0"
-        allowDecimal={false}
-        maxDecimalPlaces={0}
-        submitLabel="Submit bid"
-        validationError={
-          confirmSubmitting ? 'Submitting…' : validationError
-        }
-        targetRate={target}
-      />
-
-      <BidConfirmModal
-        visible={confirmOpen}
-        phase={confirmPhase}
-        isEditMode={false}
-        amount={pendingAmount}
-        ownerName={owner}
-        origin={originCity}
-        destination={destinationCity}
-        vehicle={vehicle}
-        material={material}
-        targetRate={target}
-        submitting={confirmSubmitting}
-        onCancel={handleCancelConfirm}
-        onConfirm={() => {
-          void handleConfirm();
-        }}
-        onSuccessDone={finishAfterSuccess}
-      />
-    </>
+    <FullscreenNumericEntry
+      visible={visible}
+      onClose={handleCloseEntry}
+      onSubmit={requestConfirm}
+      initialValue={initialValue}
+      label="Place your bid"
+      contextLine={undefined}
+      partyPreview={partyPreview}
+      type="currency"
+      prefix="₹"
+      placeholder="0"
+      allowDecimal={false}
+      maxDecimalPlaces={0}
+      submitLabel="Submit bid"
+      validationError={
+        confirmSubmitting ? 'Submitting…' : validationError
+      }
+      targetRate={target}
+      overlay={
+        confirmOpen ? (
+          <BidConfirmModal
+            embedded
+            visible={confirmOpen}
+            phase={confirmPhase}
+            isEditMode={false}
+            amount={pendingAmount}
+            ownerName={owner}
+            origin={originCity}
+            destination={destinationCity}
+            vehicle={vehicle}
+            material={material}
+            targetRate={target}
+            submitting={confirmSubmitting}
+            onCancel={handleCancelConfirm}
+            onConfirm={() => {
+              void handleConfirm();
+            }}
+            onSuccessDone={finishAfterSuccess}
+          />
+        ) : null
+      }
+    />
   );
 }

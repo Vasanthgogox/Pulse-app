@@ -74,7 +74,6 @@ import {
   resolveLedgerReceiptPartyAvatar,
   resolveLedgerRowPartyIdentity,
 } from "@/lib/entityIdentity";
-import { useDisputeMapQuery } from "@/lib/queries";
 import { useTripFinanceAdjustmentsMap } from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import { useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
@@ -246,10 +245,6 @@ export default function SupplierDetailScreen({
   }, [clients]);
 
   const linkedOrgDisplayMap = useLinkedOrgProfileMap(clients, orgSuppliers);
-
-  const { disputesByTripId: _disputesByTripId } = useDisputeMapQuery(
-    currentOrganization?.id ?? null,
-  );
 
   const loadVaultKyc = useCallback(async () => {
     const orgId = currentOrganization?.id;

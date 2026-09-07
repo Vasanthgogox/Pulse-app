@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Pressable, View, Text, StyleSheet } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 import Theme from "@/constants/Theme";
@@ -56,7 +57,7 @@ function resolveHeroDetail(party: NumericEntryPartyPreview): {
 /**
  * Centered recipient block (Google Pay payout) above the amount field.
  */
-export function NumericEntryRecipientHero({
+export const NumericEntryRecipientHero = memo(function NumericEntryRecipientHero({
   party,
   caption,
   nameInline = Boolean(caption),
@@ -157,7 +158,7 @@ export function NumericEntryRecipientHero({
   }
 
   return content;
-}
+});
 
 const styles = StyleSheet.create({
   root: {

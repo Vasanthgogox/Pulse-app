@@ -13,6 +13,7 @@ import {
   SLACK_AVATAR,
   slackMobileStyles as slackSt,
 } from "@/features/chat/components/mobile/chatSlackMobile.styles";
+import { ChatFeedbackCard } from "@/features/chat/components/ChatFeedbackCard";
 import { ChatSlackMessageRow } from "@/features/chat/components/mobile/ChatSlackMessageRow";
 import { DocumentShareCard } from "@/features/chat/components/DocumentShareCard";
 import { SmartChatImage } from "@/features/chat/components/SmartChatImage";
@@ -35,6 +36,7 @@ import {
   type DriverChatMessagesPage,
 } from "@/features/chat/utils/driverChatMessageCache.util";
 import { stripChatPreviewEmojiPrefix } from "@/features/chat/utils/chatAvatar.util";
+import { isMissionDebriefMessage } from "@/features/chat/utils/missionDebrief.util";
 import { formatChatPartyHandle } from "@/features/chat/utils/partyDisplay";
 import { resolveDocumentShareDisplay } from "@/features/chat/utils/documentShareDisplay.util";
 import {
@@ -332,6 +334,7 @@ function getThreadItemType(item: ThreadRow): string {
   const mt = item.m.message_type ?? "text";
   if (mt === "image" || mt === "document_share" || mt === "document_upload") return "media";
   if (mt === "system_log" || mt === "location_log") return "location";
+  if (isMissionDebriefMessage(item.m)) return "feedback";
   return "text";
 }
 
@@ -760,6 +763,27 @@ export function DriverChatSlackThread({
 
       if (m.message_type === "ledger_event") return null;
 
+      if (isMissionDebriefMessage(m)) {
+        const shipperName =
+          (trip?.client_name ?? "").trim() ||
+          (trip?.supplier_name ?? "").trim() ||
+          (fleetName ?? "").trim() ||
+          "this shipper";
+        return (
+          <ChatFeedbackCard
+            message={m}
+            tripId={tripId}
+            audience="driver"
+            targetNameOverride={shipperName}
+            onSubmitted={() => {
+              void queryClient.invalidateQueries({
+                queryKey: driverChatMessagesQueryKey(conversationId),
+              });
+            }}
+          />
+        );
+      }
+
       const peerLabel = m.sender_name?.trim() || fleetName?.trim() || "Fleet";
       const peerAvatar = fleetAvatar;
 
@@ -781,7 +805,19 @@ export function DriverChatSlackThread({
       );
     },
     // mediaBurstIndexRef and slackGroupMetaRef are stable refs — omit from deps.
-    [mountedAtMs, selfName, ownAvatar, fleetAvatar, profile, currentOrganization, fleetName],
+    [
+      mountedAtMs,
+      selfName,
+      ownAvatar,
+      fleetAvatar,
+      profile,
+      currentOrganization,
+      fleetName,
+      trip,
+      tripId,
+      conversationId,
+      queryClient,
+    ],
   );
 
   const renderThreadRow = useCallback(
@@ -806,6 +842,22 @@ export function DriverChatSlackThread({
   const routeSubtitle = `${pickupArea || trip?.pickup_area || ""}${
     dropLocation || trip?.drop_location ? ` → ${dropLocation || trip?.drop_location}` : ""
   }`.trim();
+  const tripDateLabel = (() => {
+    const raw = String(trip?.pickup_date ?? trip?.created_at ?? "").trim();
+    if (!raw) return "";
+    try {
+      const d = new Date(raw);
+      if (Number.isNaN(d.getTime())) return "";
+      return d.toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return "";
+    }
+  })();
+  const idLine = [tripNumber || trip?.trip_number, tripDateLabel].filter(Boolean).join(" · ");
 
   const composerBottomPad = keyboardOpen
     ? 8
@@ -870,8 +922,8 @@ export function DriverChatSlackThread({
   const threadBody = (
     <View style={localStyles.threadShell}>
       <ChatSlackThreadHeader
-        title={tripNumber || trip?.trip_number || "Trip"}
-        subtitle={routeSubtitle || undefined}
+        title={routeSubtitle || tripNumber || trip?.trip_number || "Trip"}
+        subtitle={routeSubtitle ? idLine || undefined : undefined}
         avatarIdentity={fleetAvatar}
         onBack={onBack}
         compactRoleTag={driverRoleTag}

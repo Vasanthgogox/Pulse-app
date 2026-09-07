@@ -11,18 +11,19 @@ import { Building2, CheckCircle, Send, Star } from "lucide-react-native";
 import Theme from "@/constants/Theme";
 import { CHAT_ACCENT, CHAT_ACCENT_SOFT } from "@/features/chat/chatTheme";
 import { formatChatPartyName } from "@/features/chat/utils/partyDisplay";
+import { submitDriverShipperFeedback } from "@/features/ratings/services/ratings.service";
 import { useChatStore } from "../store/useChatStore";
 import type { TripMessageRow } from "../types/chat.types";
 import { parseFeedbackRequestMetadata } from "../utils/feedbackRequestMeta";
 import { isFeedbackRequestAlreadyRatedMeta } from "../utils/feedbackRequestMeta.util";
 
-/** Five smileys → 1–5 scale; persisted via `confirm_trip_feedback` / `submit_atomic_feedback`. */
-const SMILEY_OPTIONS = [
-  { emoji: "😠", score: 1, label: "Terrible", a11y: "Terrible, 1 of 5" },
-  { emoji: "😟", score: 2, label: "Poor", a11y: "Poor, 2 of 5" },
-  { emoji: "😐", score: 3, label: "Fair", a11y: "Average, 3 of 5" },
-  { emoji: "🙂", score: 4, label: "Good", a11y: "Good, 4 of 5" },
-  { emoji: "🤩", score: 5, label: "Excellent", a11y: "Excellent, 5 of 5" },
+/** Five stars → 1–5 scale; persisted via `confirm_trip_feedback` / `submit_atomic_feedback`. */
+const STAR_OPTIONS = [
+  { score: 1, label: "Terrible", a11y: "Terrible, 1 of 5" },
+  { score: 2, label: "Poor", a11y: "Poor, 2 of 5" },
+  { score: 3, label: "Fair", a11y: "Average, 3 of 5" },
+  { score: 4, label: "Good", a11y: "Good, 4 of 5" },
+  { score: 5, label: "Excellent", a11y: "Excellent, 5 of 5" },
 ] as const;
 
 type FeedbackCardPhase =
@@ -49,35 +50,45 @@ function isAlreadySubmittedMessage(s: string): boolean {
 }
 
 function labelForScore(score: number): string {
-  const row = SMILEY_OPTIONS.find((o) => o.score === score);
+  const row = STAR_OPTIONS.find((o) => o.score === score);
   return row?.label ?? "Rated";
 }
 
-function emojiForScore(score: number): string {
-  const row = SMILEY_OPTIONS.find((o) => o.score === score);
-  return row?.emoji ?? "🙂";
-}
-
 export function ChatFeedbackCard({
-  message,
+  message = null,
   tripId,
-  ratingOrganizationId,
-  currentOrgId,
+  ratingOrganizationId = "",
+  currentOrgId = "",
   onSubmitted,
+  audience = "org",
+  targetNameOverride,
+  presentation = "thread",
 }: {
-  message: TripMessageRow;
+  message?: TripMessageRow | null;
   tripId: string;
   /** Fleet org that owns the trip (`trips.organization_id`); must match viewer to submit. */
-  ratingOrganizationId: string;
-  currentOrgId: string;
+  ratingOrganizationId?: string;
+  currentOrgId?: string;
   onSubmitted: () => void;
+  /** Driver thread rates the shipper; org thread uses trip-owner confirm_trip_feedback. */
+  audience?: "org" | "driver";
+  targetNameOverride?: string;
+  /** `modal` flattens chrome for TripFeedbackModal. */
+  presentation?: "thread" | "modal";
 }) {
-  void tripId;
-  const meta = useMemo(() => parseFeedbackRequestMetadata(message), [message]);
-
-  const [phase, setPhase] = useState<FeedbackCardPhase>(() =>
-    isFeedbackRequestAlreadyRatedMeta(meta) ? "already_rated" : "pick",
+  const meta = useMemo(
+    () => (message ? parseFeedbackRequestMetadata(message) : null),
+    [message],
   );
+
+  const [phase, setPhase] = useState<FeedbackCardPhase>(() => {
+    if (isFeedbackRequestAlreadyRatedMeta(meta)) return "already_rated";
+    const raw = (message.metadata ?? {}) as Record<string, unknown>;
+    if (typeof raw.submitted_at === "string" && raw.submitted_at.trim()) {
+      return "already_rated";
+    }
+    return "pick";
+  });
   const [pickedScore, setPickedScore] = useState<number | null>(() => {
     if (!meta) return null;
     const s = meta.submitted_score ?? meta.rating;
@@ -87,12 +98,27 @@ export function ChatFeedbackCard({
   const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
+    if (!message) {
+      setPhase((p) => {
+        if (p === "success" || p === "submitting" || p === "confirm") return p;
+        return "pick";
+      });
+      return;
+    }
     const m = parseFeedbackRequestMetadata(message);
-    if (!m) return;
-    const s = m.submitted_score ?? m.rating;
-    setPickedScore(typeof s === "number" && s >= 1 && s <= 5 ? s : null);
+    const raw = (message.metadata ?? {}) as Record<string, unknown>;
+    const rawScore = Number(raw.submitted_score ?? raw.rating);
+    if (m) {
+      const s = m.submitted_score ?? m.rating;
+      setPickedScore(typeof s === "number" && s >= 1 && s <= 5 ? s : null);
+    } else if (Number.isFinite(rawScore) && rawScore >= 1 && rawScore <= 5) {
+      setPickedScore(rawScore);
+    }
     setPhase((p) => {
       if (isFeedbackRequestAlreadyRatedMeta(m)) return "already_rated";
+      if (typeof raw.submitted_at === "string" && raw.submitted_at.trim()) {
+        return "already_rated";
+      }
       if (p === "success" || p === "submitting" || p === "confirm") return p;
       return "pick";
     });
@@ -100,32 +126,57 @@ export function ChatFeedbackCard({
 
   const ownerOrg = (ratingOrganizationId ?? "").trim();
   const viewerOrg = currentOrgId.trim();
-  const canSubmit = !ownerOrg || viewerOrg === ownerOrg;
+  const canSubmit =
+    audience === "driver" ? true : !ownerOrg || viewerOrg === ownerOrg;
 
-  const targetName = formatChatPartyName(
-    meta?.rated_display_name ?? message.content,
-  );
+  const targetName =
+    (targetNameOverride ?? "").trim() ||
+    formatChatPartyName(meta?.rated_display_name ?? "");
 
   const onPickSmiley = useCallback((score: number) => {
-    if (!meta || !canSubmit) return;
+    if (!canSubmit) return;
+    if (audience !== "driver" && !meta) return;
     if (phase !== "pick") return;
     setErr(null);
     setPickedScore(score);
     setPhase("confirm");
-  }, [meta, canSubmit, phase]);
+  }, [audience, meta, canSubmit, phase]);
 
   const onCancelConfirm = useCallback(() => {
     setFeedbackComment("");
     setPickedScore(null);
     setErr(null);
-    const m = parseFeedbackRequestMetadata(message);
+    const m = message ? parseFeedbackRequestMetadata(message) : null;
     setPhase(isFeedbackRequestAlreadyRatedMeta(m) ? "already_rated" : "pick");
   }, [message]);
 
   const onSubmitDebrief = useCallback(async () => {
-    if (!meta || !canSubmit || pickedScore == null) return;
+    if (!canSubmit || pickedScore == null) return;
+    if (audience !== "driver" && !meta) return;
     setErr(null);
     setPhase("submitting");
+
+    if (audience === "driver") {
+      const { error } = await submitDriverShipperFeedback({
+        tripId,
+        messageId: message?.id ?? null,
+        score: pickedScore,
+        comment: feedbackComment.trim() || null,
+      });
+      if (error) {
+        if (isAlreadySubmittedMessage(error.message)) {
+          setPhase("success");
+          onSubmitted();
+          return;
+        }
+        setPhase("confirm");
+        setErr(error.message);
+        return;
+      }
+      setPhase("success");
+      onSubmitted();
+      return;
+    }
 
     const { error } = await useChatStore
       .getState()
@@ -146,23 +197,25 @@ export function ChatFeedbackCard({
     setPhase("success");
     onSubmitted();
   }, [
+    audience,
     meta,
     canSubmit,
     pickedScore,
-    message.id,
+    message?.id,
+    tripId,
     feedbackComment,
     onSubmitted,
   ]);
 
-  if (!meta) return null;
+  if (!meta && audience !== "driver") return null;
 
   const displayScore =
     phase === "already_rated"
-      ? (meta.submitted_score ?? meta.rating ?? pickedScore ?? 0)
+      ? (meta?.submitted_score ?? meta?.rating ?? pickedScore ?? 0)
       : (pickedScore ?? 0);
 
   return (
-    <View style={s.wrap}>
+    <View style={[s.wrap, presentation === "modal" && s.wrapModal]}>
       <View style={s.headerRow}>
         <View style={s.kickerCol}>
           <View style={s.kickerRow}>
@@ -187,10 +240,10 @@ export function ChatFeedbackCard({
       {phase === "pick" ? (
         <>
           <Text style={s.hint} numberOfLines={3}>
-            Trip closed — tap a face (1–5) to record your rating.
+            Trip closed — tap a star (1–5) to record your rating.
           </Text>
           <View style={s.smileyRow}>
-            {SMILEY_OPTIONS.map((opt) => (
+            {STAR_OPTIONS.map((opt) => (
               <TouchableOpacity
                 key={opt.score}
                 style={s.smileyBtn}
@@ -200,7 +253,20 @@ export function ChatFeedbackCard({
                 accessibilityRole="button"
                 accessibilityLabel={opt.a11y}
               >
-                <Text style={s.smileyEmoji}>{opt.emoji}</Text>
+                <Star
+                  size={22}
+                  color={
+                    pickedScore != null && opt.score <= pickedScore
+                      ? CHAT_ACCENT
+                      : Theme.borderLight
+                  }
+                  fill={
+                    pickedScore != null && opt.score <= pickedScore
+                      ? CHAT_ACCENT
+                      : "transparent"
+                  }
+                  strokeWidth={1.8}
+                />
               </TouchableOpacity>
             ))}
           </View>
@@ -210,7 +276,25 @@ export function ChatFeedbackCard({
       {phase === "confirm" ? (
         <>
           <View style={s.confirmBanner}>
-            <Text style={s.confirmEmoji}>{emojiForScore(pickedScore ?? 0)}</Text>
+            <View style={s.confirmStars}>
+              {STAR_OPTIONS.map((opt) => (
+                <Star
+                  key={opt.score}
+                  size={20}
+                  color={
+                    pickedScore != null && opt.score <= pickedScore
+                      ? CHAT_ACCENT
+                      : Theme.borderLight
+                  }
+                  fill={
+                    pickedScore != null && opt.score <= pickedScore
+                      ? CHAT_ACCENT
+                      : "transparent"
+                  }
+                  strokeWidth={1.8}
+                />
+              ))}
+            </View>
             <View style={s.confirmTextCol}>
               <Text style={s.confirmTitle} numberOfLines={2}>
                 You selected {labelForScore(pickedScore ?? 0)} (
@@ -287,18 +371,37 @@ export function ChatFeedbackCard({
       ) : null}
 
       {phase === "already_rated" ? (
-        <View style={s.doneRow}>
-          <CheckCircle size={16} color={CHAT_ACCENT} strokeWidth={2.4} />
-          <Text style={s.doneText}>
-            Feedback on file
-            {displayScore > 0 ? ` · ${displayScore}/5` : ""}
-          </Text>
+        <View style={s.doneBlock}>
+          <View style={s.confirmStars}>
+            {STAR_OPTIONS.map((opt) => (
+              <Star
+                key={opt.score}
+                size={18}
+                color={
+                  displayScore >= opt.score ? CHAT_ACCENT : Theme.borderLight
+                }
+                fill={
+                  displayScore >= opt.score ? CHAT_ACCENT : "transparent"
+                }
+                strokeWidth={1.8}
+              />
+            ))}
+          </View>
+          <View style={s.doneRow}>
+            <CheckCircle size={16} color={CHAT_ACCENT} strokeWidth={2.4} />
+            <Text style={s.doneText}>
+              Feedback on file
+              {displayScore > 0 ? ` · ${displayScore}/5` : ""}
+            </Text>
+          </View>
         </View>
       ) : null}
 
-      <View style={s.footerRow}>
-        <Text style={s.time}>{formatTime(message.created_at)}</Text>
-      </View>
+      {message?.created_at && presentation !== "modal" ? (
+        <View style={s.footerRow}>
+          <Text style={s.time}>{formatTime(message.created_at)}</Text>
+        </View>
+      ) : null}
     </View>
   );
 }
@@ -323,6 +426,18 @@ const s = StyleSheet.create({
     shadowRadius: 20,
     shadowOffset: { width: 0, height: 10 },
     elevation: 3,
+  },
+  wrapModal: {
+    maxWidth: "100%",
+    backgroundColor: "transparent",
+    borderWidth: 0,
+    borderRadius: 0,
+    marginVertical: 0,
+    paddingVertical: 18,
+    paddingHorizontal: 16,
+    paddingTop: 22,
+    shadowOpacity: 0,
+    elevation: 0,
   },
   headerRow: {
     flexDirection: "row",
@@ -414,8 +529,6 @@ const s = StyleSheet.create({
   },
   confirmBanner: {
     marginTop: 14,
-    flexDirection: "row",
-    alignItems: "center",
     gap: 12,
     padding: 12,
     borderRadius: 18,
@@ -423,9 +536,10 @@ const s = StyleSheet.create({
     borderWidth: 1,
     borderColor: "rgba(67, 56, 202, 0.12)",
   },
-  confirmEmoji: {
-    fontSize: 44,
-    lineHeight: 52,
+  confirmStars: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
   },
   confirmTextCol: { flex: 1, minWidth: 0 },
   confirmTitle: {
@@ -530,6 +644,11 @@ const s = StyleSheet.create({
     fontSize: 10,
     fontWeight: "700",
     color: Theme.textMuted,
+  },
+  doneBlock: {
+    marginTop: 14,
+    alignItems: "center",
+    gap: 10,
   },
   doneRow: {
     marginTop: 14,

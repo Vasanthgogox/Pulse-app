@@ -259,10 +259,10 @@ export default function DriverRadarScreen() {
   const driverTabBarClearance =
     Layout.tabBarDockHeight + footerPadTop + footerPadBottom;
   /**
-   * Job / mission sheet sits on the glass dock top (no air / map strip).
-   * Scroll screens still use `driverTabBarClearance` (includes footerPadTop).
+   * Lift the job/mission sheet fully above the floating glass dock
+   * (padTop + dock + home-indicator pad). Flush inset sat the CTA on the tab bar.
    */
-  const driverSheetBottomInset = Layout.tabBarDockHeight + footerPadBottom;
+  const driverSheetBottomInset = driverTabBarClearance;
   // Driver home previously used a hardcoded dark map for contrast.
   // Now it respects the "Map Style" user setting (light, dark, or auto-sync with theme).
   const mapIsDark = mapTheme === "auto" ? isDark : mapTheme === "dark";
@@ -4659,7 +4659,8 @@ export default function DriverRadarScreen() {
                 ]}
               >
                 <Text style={[styles.offlineCardTitle, { color: colors.text }]}>
-                  {getDriverTripDisplayNumber(trip, driverTripNumberById)}
+                  {trip.pickup_area?.trim() || "Pickup"} →{" "}
+                  {trip.drop_location?.trim() || "Drop-off"}
                 </Text>
                 {otpClaimTripId != null &&
                 String(otpClaimTripId).toLowerCase() ===
@@ -4704,8 +4705,7 @@ export default function DriverRadarScreen() {
                         { color: colors.textMuted, marginTop: 2 },
                       ]}
                     >
-                      {trip.pickup_area?.trim() || "Pickup"} →{" "}
-                      {trip.drop_location?.trim() || "Drop-off"}
+                      {getDriverTripDisplayNumber(trip, driverTripNumberById)}
                     </Text>
                     <Text
                       style={[
@@ -5533,9 +5533,7 @@ export default function DriverRadarScreen() {
                   contentContainerStyle={[
                     styles.olaSheetContent,
                     {
-                      // Sheet is transparent and already cleared via bottomInset —
-                      // any padding here shows as a map gap above the dock.
-                      paddingBottom: 0,
+                      paddingBottom: 8,
                       paddingHorizontal: 0,
                       // Peek is shorter than the snap — grow so surface fills
                       // to the dock (transparent leftover showed the map).

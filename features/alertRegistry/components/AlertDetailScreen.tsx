@@ -15,10 +15,6 @@ import {
   getSalaryRequestByIdForOrganization,
   type SalaryRequestWithDriverRow,
 } from "@/features/drivers/services/salaryRequests.service";
-import {
-  getSharedLedgerNotificationById,
-  type SharedLedgerNotificationRow,
-} from "@/features/finance/services/sharedLedgerNotifications.service";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import { useDriversQuery } from "@/lib/queries/useDriversQuery";
 import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
@@ -34,17 +30,10 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 function resolveTripId(input: {
   kind: RegistryFeedKind;
   salary?: SalaryRequestWithDriverRow | null;
-  shared?: SharedLedgerNotificationRow | null;
   ops?: GlobalOperationAlert | null;
 }): string | null {
   if (input.kind === "salary" && input.salary?.trip_ids?.[0]) {
     return input.salary.trip_ids[0];
-  }
-  if (input.kind === "shared") {
-    const payload = input.shared?.payload_json ?? {};
-    const fromPayload =
-      typeof payload.trip_id === "string" ? payload.trip_id : null;
-    return input.shared?.trip_id ?? fromPayload;
   }
   if (input.kind === "ops" && input.ops?.trip_id) {
     return input.ops.trip_id;
@@ -86,7 +75,6 @@ export function AlertDetailScreen({
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [salary, setSalary] = useState<SalaryRequestWithDriverRow | null>(null);
-  const [shared, setShared] = useState<SharedLedgerNotificationRow | null>(null);
   const [ops, setOps] = useState<GlobalOperationAlert | null>(null);
 
   const activeTrips = useGlobalSyncStore((s) => s.activeTrips);
@@ -140,7 +128,6 @@ export function AlertDetailScreen({
     setLoading(true);
     setError(null);
     setSalary(null);
-    setShared(null);
     setOps(null);
 
     try {
@@ -151,13 +138,6 @@ export function AlertDetailScreen({
           return;
         }
         setSalary(res.request);
-      } else if (kind === "shared") {
-        const res = await getSharedLedgerNotificationById(orgId, alertId);
-        if (res.error || !res.notification) {
-          setError(res.error?.message ?? "Notification not found");
-          return;
-        }
-        setShared(res.notification);
       } else if (kind === "ops") {
         const found =
           useGlobalSyncStore
@@ -185,13 +165,11 @@ export function AlertDetailScreen({
     kind,
     mode,
     salary,
-    shared,
     ops,
   });
 
   const hasCardContent =
     (kind === "salary" && salary != null) ||
-    (kind === "shared" && shared != null) ||
     (kind === "ops" && ops != null);
 
   const handlePrimary = useCallback(() => {
@@ -205,16 +183,11 @@ export function AlertDetailScreen({
       onNavigateAway?.();
       return;
     }
-    if (kind === "shared" && shared) {
-      finance.onSharedAction(shared);
-      onNavigateAway?.();
-      return;
-    }
     if (kind === "ops" && ops) {
       navigateToOpsAlert(router, ops);
       onNavigateAway?.();
     }
-  }, [kind, salary, shared, ops, mode, finance, router, onNavigateAway]);
+  }, [kind, salary, ops, mode, finance, router, onNavigateAway]);
 
   const handleSecondary = useCallback(() => {
     if (kind === "salary" && salary && mode === "active") {
@@ -222,27 +195,22 @@ export function AlertDetailScreen({
       onBack();
       return;
     }
-    if (kind === "shared" && shared && mode === "active") {
-      finance.onMarkSharedRead(shared.id);
-      onBack();
-      return;
-    }
     if (kind === "ops" && ops) {
       finance.onDismissOps(ops);
       onBack();
     }
-  }, [kind, salary, shared, ops, mode, finance, onBack]);
+  }, [kind, salary, ops, mode, finance, onBack]);
 
   const handleTertiary = useCallback(() => {
-    const tripId = resolveTripId({ kind, salary, shared, ops });
+    const tripId = resolveTripId({ kind, salary, ops });
     if (tripId) {
       router.push(`/trip/${tripId}` as const);
       onNavigateAway?.();
     }
-  }, [kind, salary, shared, ops, router, onNavigateAway]);
+  }, [kind, salary, ops, router, onNavigateAway]);
 
   const showTripLedgerLink =
-    resolveTripId({ kind, salary, shared, ops }) != null &&
+    resolveTripId({ kind, salary, ops }) != null &&
     mode === "active" &&
     kind !== "ops";
 
@@ -275,7 +243,6 @@ export function AlertDetailScreen({
         kind={kind}
         mode={mode}
         salary={salary}
-        shared={shared}
         ops={ops}
         driversById={driversById}
         partyCtx={partyCtx}

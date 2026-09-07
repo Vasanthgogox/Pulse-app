@@ -702,12 +702,26 @@ export const slackMobileStyles = withWebSafeShadows(
     justifyContent: "space-between",
     gap: 6,
   },
-  listRowTitle: {
+  listRowTitleWrap: {
     flex: 1,
+    minWidth: 0,
+    flexDirection: "row",
+    alignItems: "baseline",
+    gap: 6,
+  },
+  listRowTitle: {
+    flexShrink: 1,
+    minWidth: 0,
     fontSize: SLACK_TYPE.listTitle,
     fontWeight: "500",
     color: SLACK_MOBILE.textPrimary,
     letterSpacing: -0.02,
+  },
+  listRowTitleMeta: {
+    flexShrink: 0,
+    fontSize: 11,
+    fontWeight: "500",
+    color: SLACK_MOBILE.textTertiary,
   },
   listRowTime: {
     fontSize: SLACK_TYPE.listTime,
@@ -772,6 +786,28 @@ export const slackMobileStyles = withWebSafeShadows(
     lineHeight: 16,
     fontWeight: "400",
     marginTop: 2,
+  },
+  listRowPreviewStarRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    marginTop: 2,
+  },
+  listRowPreviewStarText: {
+    flex: 1,
+    minWidth: 0,
+  },
+  listRowPreviewStarBtn: {
+    width: 36,
+    height: 36,
+    marginTop: -2,
+    borderRadius: 18,
+    alignItems: "center",
+    justifyContent: "center",
+    flexShrink: 0,
+  },
+  listRowPreviewStarBtnPressed: {
+    opacity: 0.7,
   },
   listRowPreviewBelowMedia: {
     marginTop: 4,

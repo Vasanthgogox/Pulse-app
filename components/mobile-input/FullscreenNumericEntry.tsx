@@ -7,7 +7,7 @@
  *
  * Uses a custom DecimalKeypad — no native keyboard for financial inputs.
  */
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import {
   Modal,
   View,
@@ -77,6 +77,8 @@ export interface FullscreenNumericEntryProps {
    * Sets the keypad value to `amount` without submitting.
    */
   quickFill?: { label: string; amount: number } | null;
+  /** Drawn above the keypad inside this modal (e.g. confirm sheet). Avoids a second RN Modal. */
+  overlay?: ReactNode;
 }
 
 export function FullscreenNumericEntry({
@@ -97,6 +99,7 @@ export function FullscreenNumericEntry({
   validationError,
   targetRate = null,
   quickFill = null,
+  overlay = null,
 }: FullscreenNumericEntryProps) {
   const [raw, setRaw] = useState(initialValue);
   /** Value before quick-fill; second tap restores it. */
@@ -321,6 +324,7 @@ export function FullscreenNumericEntry({
               style={[styles.payFab, !hasValue && styles.payFabDisabled]}
               onPress={handleSubmit}
               disabled={!hasValue}
+              delayPressIn={0}
               accessibilityRole="button"
               accessibilityLabel={submitLabel}
               accessibilityState={{ disabled: !hasValue }}
@@ -335,6 +339,7 @@ export function FullscreenNumericEntry({
         </View>
         <DecimalKeypad onKey={handleKey} showDecimal={allowDecimal} variant="pay" />
       </View>
+      {overlay ? <View style={styles.entryOverlay}>{overlay}</View> : null}
     </View>
   ) : (
     <View
@@ -403,6 +408,7 @@ export function FullscreenNumericEntry({
       >
         <DecimalKeypad onKey={handleKey} showDecimal={allowDecimal} />
       </View>
+      {overlay ? <View style={styles.entryOverlay}>{overlay}</View> : null}
     </View>
   );
 
@@ -462,12 +468,12 @@ export function FullscreenNumericEntry({
     );
   }
 
-  // ── Mobile: full-screen slide-up (native OS sheet transition) ─────────
+  // ── Mobile: full-screen (overFullScreen so a confirm overlay can receive taps) ──
   return (
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="fullScreen"
+      presentationStyle="overFullScreen"
       onRequestClose={onClose}
       statusBarTranslucent={Platform.OS === 'android'}
       accessibilityViewIsModal
@@ -507,6 +513,11 @@ const styles = StyleSheet.create({
   },
   innerPay: {
     justifyContent: 'space-between',
+  },
+  entryOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 40,
+    elevation: 40,
   },
   payTopBar: {
     flexDirection: 'row',

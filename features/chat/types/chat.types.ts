@@ -349,6 +349,8 @@ export interface TripConversation extends TripConversationRow {
   trip_supplier_id?: string | null;
   /** From `trips.created_at` embed — trip date for hub / detail chrome. */
   trip_created_at?: string | null;
+  /** From `trips.pickup_date` — scheduled trip date. */
+  pickup_date?: string | null;
   pickup_area: string;
   drop_location: string;
   messages: TripMessageRow[];

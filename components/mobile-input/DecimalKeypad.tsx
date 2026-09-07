@@ -126,6 +126,7 @@ export const DecimalKeypad = memo(function DecimalKeypad({
           onLongPress={isBackspace ? handleDeleteLongPress : undefined}
           onPressOut={isBackspace ? stopRapidDelete : undefined}
           delayLongPress={isBackspace ? LONG_PRESS_DELETE_DELAY_MS : undefined}
+          delayPressIn={0}
           activeOpacity={keyActiveOpacity}
           accessibilityRole="button"
           accessibilityLabel={isBackspace ? 'Delete last digit' : `Key ${key}`}

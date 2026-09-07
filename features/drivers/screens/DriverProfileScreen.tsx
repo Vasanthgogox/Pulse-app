@@ -15,7 +15,10 @@ import {
   getMilestoneCount,
   isMilestoneCompleted,
   isMilestoneInProgress,
+  type ExperienceLevelConfig,
+  type MilestoneGuideActionKind,
 } from '@/features/experience/experienceProgress';
+import { MilestoneHowToModal } from '@/features/experience/components/MilestoneHowToModal';
 import {
   averageScore,
   getRatingsForDriver,
@@ -54,7 +57,7 @@ import {
   Wrench
 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Image, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, Pressable, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -102,6 +105,7 @@ export default function DriverProfileScreen() {
   const { avatarSeed, setAvatarSeed, setPreviewUri } = useDriverAvatar();
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [profileView, setProfileView] = useState<ProfileView>('main');
+  const [guideLevel, setGuideLevel] = useState<ExperienceLevelConfig | null>(null);
   const [drivers, setDrivers] = useState<driversService.DriverRow[]>([]);
   const [driverIds, setDriverIds] = useState<string[]>([]);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
@@ -351,6 +355,17 @@ export default function DriverProfileScreen() {
     experiencePct,
   } = experience;
 
+  const handleMilestoneGuideAction = (kind: MilestoneGuideActionKind) => {
+    setGuideLevel(null);
+    if (kind === 'documents') {
+      router.push('/(driver)/documents');
+      return;
+    }
+    if (kind === 'find_work') {
+      router.push(ROUTES.driverAvailableLoads());
+    }
+  };
+
   const fleetOrgName =
     (primaryDriver?.organizations as { name?: string } | null | undefined)?.name?.trim() ||
     'Fleet';
@@ -456,7 +471,14 @@ export default function DriverProfileScreen() {
             const active = isMilestoneInProgress(step.level, experience);
             const count = getMilestoneCount(step, experience.metrics);
             return (
-              <View key={step.level} style={styles.roadStep}>
+                <Pressable
+                  key={step.level}
+                  style={styles.roadStep}
+                  onPress={() => setGuideLevel(step)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`L${step.level} ${step.name}. ${step.goalText}`}
+                  accessibilityHint="Shows what to do to complete this level"
+                >
                 <View
                   style={[
                     styles.roadDot,
@@ -492,7 +514,7 @@ export default function DriverProfileScreen() {
                     </View>
                   ) : null}
                 </View>
-              </View>
+                </Pressable>
             );
           })}
         </View>
@@ -913,6 +935,15 @@ export default function DriverProfileScreen() {
             {profileView === 'vehicle' && <VehicleTechnicalView />}
         </>
       </ScrollView>
+
+      <MilestoneHowToModal
+        visible={guideLevel != null}
+        level={guideLevel}
+        progress={experience}
+        audience="driver"
+        onClose={() => setGuideLevel(null)}
+        onAction={handleMilestoneGuideAction}
+      />
 
       <EditProfileModal
         visible={showEditProfileModal}

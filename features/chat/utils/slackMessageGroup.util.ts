@@ -1,5 +1,7 @@
 /** Slack-style consecutive message grouping (same sender, within time window). */
 
+import { isMissionDebriefMessage } from "./missionDebrief.util";
+
 export type SlackMessageGroupPosition = "standalone" | "first" | "middle" | "last";
 
 export type SlackMessageGroupMeta = {
@@ -112,7 +114,12 @@ const NON_GROUPABLE_TRIP_TYPES = new Set([
   "feedback",
 ]);
 
-export function isSlackGroupableTripMessage(message: { message_type?: string | null }): boolean {
+export function isSlackGroupableTripMessage(message: {
+  message_type?: string | null;
+  content?: string | null;
+  metadata?: unknown;
+}): boolean {
+  if (isMissionDebriefMessage(message)) return false;
   const type = message.message_type ?? "text";
   return !NON_GROUPABLE_TRIP_TYPES.has(type);
 }

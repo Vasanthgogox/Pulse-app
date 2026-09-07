@@ -22,7 +22,7 @@ export function navigateToOpsAlert(router: Router, ops: GlobalOperationAlert): v
     return;
   }
 
-  if (ops.category === "payment_received" || ops.category === "dispute") {
+  if (ops.category === "payment_received") {
     router.push(ROUTES.TABS.FINANCE as Parameters<typeof router.push>[0]);
     return;
   }

@@ -9,6 +9,7 @@ import type { ConversationImagePreview } from "@/features/chat/utils/conversatio
 import { ChatSlackMirrorToggle } from "@/features/chat/components/shared/ChatSlackMirrorToggle";
 import { SLACK_STREAM_TABS } from "@/features/chat/components/shared/chatSlackStreamTabs";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
+import { CHAT_ACCENT } from "@/features/chat/chatTheme";
 import { LinearGradient } from "expo-linear-gradient";
 import LottieView from "lottie-react-native";
 import {
@@ -18,6 +19,7 @@ import {
   Plus,
   Search,
   SlidersHorizontal,
+  Star,
   X,
 } from "lucide-react-native";
 import {
@@ -31,6 +33,7 @@ import {
   Image,
   type StyleProp,
   type TextInput as TextInputType,
+  type TextStyle,
   type ViewStyle,
 } from "react-native";
 import { memo, useState } from "react";
@@ -558,9 +561,63 @@ export function ChatSlackInboxToolbar({
   );
 }
 
+function ChatListPreviewWithStar({
+  text,
+  style,
+  numberOfLines,
+  showStar,
+  starFilled,
+  onPressStar,
+}: {
+  text: string;
+  style?: StyleProp<TextStyle>;
+  numberOfLines?: number;
+  showStar?: boolean;
+  starFilled?: boolean;
+  onPressStar?: () => void;
+}) {
+  if (!showStar) {
+    return (
+      <ChatListPreviewText text={text} style={style} numberOfLines={numberOfLines} />
+    );
+  }
+  return (
+    <View style={st.listRowPreviewStarRow}>
+      <View style={st.listRowPreviewStarText}>
+        <ChatListPreviewText
+          text={text}
+          style={[style, { marginTop: 0 }]}
+          numberOfLines={numberOfLines}
+        />
+      </View>
+      <Pressable
+        onPress={(e) => {
+          e.stopPropagation();
+          onPressStar?.();
+        }}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+        style={({ pressed }) => [
+          st.listRowPreviewStarBtn,
+          pressed && st.listRowPreviewStarBtnPressed,
+        ]}
+        accessibilityRole="button"
+        accessibilityLabel={starFilled ? "View partner rating" : "Rate this partner"}
+      >
+        <Star
+          size={16}
+          color={CHAT_ACCENT}
+          fill={starFilled ? CHAT_ACCENT : "transparent"}
+          strokeWidth={2}
+        />
+      </Pressable>
+    </View>
+  );
+}
+
 function ChatSlackListRowInner({
   identity,
   title,
+  titleMeta,
   time,
   preview,
   previewKind = "default",
@@ -573,9 +630,14 @@ function ChatSlackListRowInner({
   recommended,
   unread,
   onPress,
+  showPreviewStar,
+  previewStarFilled,
+  onPressPreviewStar,
 }: {
   identity: ResolvedPartyAvatarIdentity;
   title: string;
+  /** Small label beside the title (e.g. trip date). */
+  titleMeta?: string | null;
   time?: string;
   preview?: string | null;
   previewKind?: "default" | "system" | "image" | "document" | "driver_swap" | "location";
@@ -589,6 +651,9 @@ function ChatSlackListRowInner({
   recommended?: boolean;
   unread?: number;
   onPress: () => void;
+  showPreviewStar?: boolean;
+  previewStarFilled?: boolean;
+  onPressPreviewStar?: () => void;
 }) {
   const badgeLabel =
     previewKind === "system"
@@ -627,9 +692,16 @@ function ChatSlackListRowInner({
       </View>
       <View style={st.listRowBody}>
         <View style={st.listRowTop}>
-          <Text style={st.listRowTitle} numberOfLines={1}>
-            {title}
-          </Text>
+          <View style={st.listRowTitleWrap}>
+            <Text style={st.listRowTitle} numberOfLines={1}>
+              {title}
+            </Text>
+            {titleMeta ? (
+              <Text style={st.listRowTitleMeta} numberOfLines={1}>
+                {titleMeta}
+              </Text>
+            ) : null}
+          </View>
           {time ? (
             <Text style={st.listRowTime} numberOfLines={1}>
               {time}
@@ -654,10 +726,13 @@ function ChatSlackListRowInner({
               variant="mobile"
             />
             {preview ? (
-              <ChatListPreviewText
+              <ChatListPreviewWithStar
                 text={preview}
                 style={[st.listRowPreview, st.listRowPreviewBelowMedia]}
                 numberOfLines={3}
+                showStar={showPreviewStar}
+                starFilled={previewStarFilled}
+                onPressStar={onPressPreviewStar}
               />
             ) : null}
           </>
@@ -677,17 +752,23 @@ function ChatSlackListRowInner({
               <Text style={[st.listRowPreviewBadge, badgeStyle, badgeTextStyle]}>
                 {badgeLabel}
               </Text>
-              <ChatListPreviewText
+              <ChatListPreviewWithStar
                 text={preview}
                 style={st.listRowPreview}
                 numberOfLines={2}
+                showStar={showPreviewStar}
+                starFilled={previewStarFilled}
+                onPressStar={onPressPreviewStar}
               />
             </View>
           ) : (
-            <ChatListPreviewText
+            <ChatListPreviewWithStar
               text={preview}
               style={st.listRowPreview}
               numberOfLines={2}
+              showStar={showPreviewStar}
+              starFilled={previewStarFilled}
+              onPressStar={onPressPreviewStar}
             />
           )
         ) : null}

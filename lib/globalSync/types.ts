@@ -7,9 +7,9 @@ export type GlobalSyncBootstrapStatus = 'idle' | 'loading' | 'ready' | 'error';
 // ── Notifications ─────────────────────────────────────────────────────────────
 
 export interface GlobalNotificationRow {
-  /** Prefixed ID: 'salary_<uuid>' | 'dispute_<uuid>' | 'b2b_<trip_message_uuid>' */
+  /** Prefixed ID: 'salary_<uuid>' | 'b2b_<trip_message_uuid>' */
   id: string;
-  source: 'salary_request' | 'dispute' | 'b2b_feed';
+  source: 'salary_request' | 'b2b_feed';
   source_id: string;
   title: string;
   subtitle: string | null;
@@ -21,11 +21,11 @@ export interface GlobalNotificationRow {
 // ── Operational Alerts ────────────────────────────────────────────────────────
 
 export interface GlobalAlertRow {
-  /** Prefixed ID: 'salary_<uuid>' or 'dispute_<uuid>' */
+  /** Prefixed ID: 'salary_<uuid>' */
   id: string;
-  source: 'salary_request' | 'dispute';
+  source: 'salary_request';
   source_id: string;
-  alert_type: 'salary_request_pending' | 'dispute_received';
+  alert_type: 'salary_request_pending';
   severity: 'info' | 'warning' | 'critical';
   title: string;
   body: string;
