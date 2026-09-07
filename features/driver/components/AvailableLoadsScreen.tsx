@@ -30,7 +30,7 @@ import { ROUTES } from '@/lib/routes';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronRight, MapPin } from 'lucide-react-native';
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 function formatPickupDate(iso: string | null): string | null {
@@ -80,8 +80,9 @@ export default function AvailableLoadsScreen() {
   );
   const cardBorder = isDark ? colors.borderSubtle : 'rgba(226,232,240,0.95)';
 
-  return (
-    <View style={[styles.root, { backgroundColor: pageBg }]}>
+  // Earnings-page pattern: Market chrome scrolls with the feed (not pinned).
+  const marketListHeader = (
+    <>
       <DriverSubScreenHeader
         title="Market"
         subtitle="Find work"
@@ -89,11 +90,13 @@ export default function AvailableLoadsScreen() {
           router.canGoBack() ? router.back() : router.replace(ROUTES.DRIVER_ROOT)
         }
       />
-
       <View
         style={[
           styles.segmentRow,
-          { borderColor: cardBorder, backgroundColor: isDark ? colors.surfaceElevated : Theme.surfaceGray },
+          {
+            borderColor: cardBorder,
+            backgroundColor: isDark ? colors.surfaceElevated : Theme.surfaceGray,
+          },
         ]}
       >
         {(
@@ -109,7 +112,10 @@ export default function AvailableLoadsScreen() {
               onPress={() => setSegment(seg.id)}
               style={[
                 styles.segmentBtn,
-                on && { backgroundColor: colors.surface, borderColor: cardBorder },
+                on && {
+                  backgroundColor: isDark ? colors.surface : Theme.cardWhite,
+                  borderColor: cardBorder,
+                },
               ]}
             >
               <Text style={[styles.segmentText, { color: on ? colors.text : colors.textMuted }]}>
@@ -119,11 +125,15 @@ export default function AvailableLoadsScreen() {
           );
         })}
       </View>
+    </>
+  );
 
+  return (
+    <View style={[styles.root, { backgroundColor: pageBg }]}>
       {segment === 'mybids' ? (
-        uid ? <MyBidsContent uid={uid} /> : null
+        uid ? <MyBidsContent uid={uid} listHeader={marketListHeader} /> : null
       ) : uid ? (
-        <MarketFindWorkScreen uid={uid} />
+        <MarketFindWorkScreen uid={uid} listHeader={marketListHeader} />
       ) : null}
     </View>
   );
@@ -136,7 +146,13 @@ export default function AvailableLoadsScreen() {
  * screens. No new sorting/business logic — same components, same queries,
  * new composition only.
  */
-function MarketFindWorkScreen({ uid }: { uid: string }) {
+function MarketFindWorkScreen({
+  uid,
+  listHeader,
+}: {
+  uid: string;
+  listHeader?: ReactNode;
+}) {
   const { loads, refetch: refetchLoads } = useFleetOwnerOpenLoadsQuery(uid);
   const { refetch: refetchBids } = useMyMarketBidsQuery(uid);
 
@@ -163,6 +179,7 @@ function MarketFindWorkScreen({ uid }: { uid: string }) {
 
   return (
     <StoriesContent
+      listHeader={listHeader}
       footer={(filters) => <FindLoadsContent uid={uid} filters={filters} />}
       onRefreshExtra={() => {
         void refetchLoads();

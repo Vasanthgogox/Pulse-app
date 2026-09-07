@@ -46,7 +46,9 @@ import {
     updateIndentDraft,
 } from "@/features/indents/services/indents.service";
 import {
+  INDENT_WIZARD_PROGRESS_STEPS,
   INDENT_WIZARD_STEPS,
+  indentShareSubmitLabel,
   indentStepCanAdvance,
   indentWizardStepLabel,
   type IndentWizardStep,
@@ -71,6 +73,7 @@ import {
 } from "@/features/indents/utils/indentShareSubmitGuard.util";
 import { IndentWizardMobileStep } from "@/features/indents/components/create-indent/IndentWizardMobileStep";
 import { CreateIndentNetworkTargetStep } from "@/features/indents/components/create-indent/CreateIndentNetworkTargetStep";
+import { CreateIndentShareDestinationStep } from "@/features/indents/components/create-indent/CreateIndentShareDestinationStep";
 import { SmartInput } from "@/components/mobile-input";
 import { ADD_TRIP_FORM } from "@/features/trips/components/add-trip/addTripFormTokens";
 import { AddTripModalLayout } from "@/features/trips/components/add-trip/AddTripModalLayout";
@@ -986,10 +989,11 @@ export default function CreateIndentScreen() {
       return;
     }
     if (!acquireSubmitLock(submitLockRef)) return;
-    setSubmitting(true);
     try {
       const shouldSaveDraft = await requestIndentTicketConfirm("draft");
       if (!shouldSaveDraft) return;
+
+      setSubmitting(true);
 
       const payload = buildPayload();
       const rememberVehicleCount = async (indentId: string) => {
@@ -1075,20 +1079,20 @@ export default function CreateIndentScreen() {
       );
       return;
     }
+    const errs = validateForm(form);
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+    const vehicleCount = parseIndentVehicleCount(form.vehicle_count);
+    if (vehicleCount == null || !isValidIndentVehicleCount(form.vehicle_count)) {
+      setErrors({ ...errs, vehicle_count: INDENT_VEHICLE_COUNT_ERROR });
+      return;
+    }
     if (!acquireSubmitLock(submitLockRef)) return;
-    setSubmitting(true);
     try {
-      const errs = validateForm(form);
-      setErrors(errs);
-      if (Object.keys(errs).length > 0) return;
-      const vehicleCount = parseIndentVehicleCount(form.vehicle_count);
-      if (vehicleCount == null || !isValidIndentVehicleCount(form.vehicle_count)) {
-        setErrors({ ...errs, vehicle_count: INDENT_VEHICLE_COUNT_ERROR });
-        return;
-      }
       const shouldShare = await requestIndentTicketConfirm("share");
       if (!shouldShare) return;
 
+      setSubmitting(true);
       const payload = buildPayload();
       const { error, indents } = await createSharedIndentCopies(
         orgId,
@@ -1164,7 +1168,7 @@ export default function CreateIndentScreen() {
 
   const indentWizardSteps = useMemo(
     () =>
-      INDENT_WIZARD_STEPS.map((id) => ({
+      INDENT_WIZARD_PROGRESS_STEPS.map((id) => ({
         id,
         label: indentWizardStepLabel(id),
       })),
@@ -1257,9 +1261,9 @@ export default function CreateIndentScreen() {
 
   const wizardSubmitLabel = isMobileWizard
     ? isLastWizardStep
-      ? "Share to Network"
+      ? indentShareSubmitLabel(form.circulation_target)
       : "Continue"
-    : "Share to Network";
+    : indentShareSubmitLabel(form.circulation_target);
 
   const wizardSubtitle = isMobileWizard
     ? wizardStep === "client"
@@ -1270,11 +1274,13 @@ export default function CreateIndentScreen() {
           : "Enter pickup, drop and trip date."
         : wizardStep === "prices"
           ? "Set a supplier target (or pick a margin %) before sharing."
-          : wizardStep === "vehicle"
-            ? "Vehicle type, product type and tonnage."
-            : wizardStep === "loadType"
-              ? "Product type."
-              : "Weight in tons."
+          : wizardStep === "share"
+            ? "Choose where this load should go."
+            : wizardStep === "vehicle"
+              ? "Vehicle type, product type and tonnage."
+              : wizardStep === "loadType"
+                ? "Product type."
+                : "Weight in tons."
     : "Share load details to your network.";
 
   const handleWizardPrimary = () => {
@@ -1311,19 +1317,21 @@ export default function CreateIndentScreen() {
       compactWizard &&
       ((wizardStep === "client" && Boolean(form.client_id)) ||
         wizardStep === "prices");
-    const stepIndex = INDENT_WIZARD_STEPS.indexOf(wizardStep);
-    const progressSteps = INDENT_WIZARD_STEPS.map((id) => ({
+    const progressCurrentId =
+      wizardStep === "share" ? "prices" : wizardStep;
+    const stepIndex = INDENT_WIZARD_PROGRESS_STEPS.indexOf(progressCurrentId);
+    const progressSteps = INDENT_WIZARD_PROGRESS_STEPS.map((id) => ({
       id,
       label: indentWizardStepLabel(id),
     }));
-    const desktopSteps = INDENT_WIZARD_STEPS.map((id, index) => ({
+    const desktopSteps = INDENT_WIZARD_PROGRESS_STEPS.map((id, index) => ({
       id,
       num: index + 1,
       title: indentWizardStepLabel(id),
     }));
     const handleStepPress = (stepId: string, index: number) => {
       if (index < 0 || index > stepIndex) return;
-      const target = INDENT_WIZARD_STEPS[index];
+      const target = INDENT_WIZARD_PROGRESS_STEPS[index];
       if (target) setWizardStep(target);
     };
     const routeState = {
@@ -1365,9 +1373,9 @@ export default function CreateIndentScreen() {
           insightPreset="load"
           subtitle={wizardSubtitle}
           stepIndex={stepIndex + 1}
-          stepTotal={INDENT_WIZARD_STEPS.length}
+          stepTotal={INDENT_WIZARD_PROGRESS_STEPS.length}
           submitLabel={wizardSubmitLabel}
-          canSubmit={stepCanAdvance}
+          canSubmit={stepCanAdvance && !ticketConfirmState.visible}
           submitting={submitting}
           lockPrimaryUntilValid
           validationMessage="Fill the required details to continue"
@@ -1384,13 +1392,13 @@ export default function CreateIndentScreen() {
             isDesktopEnterprise ? (
               <CreateTripDesktopStepper
                 steps={desktopSteps}
-                currentStepId={wizardStep}
+                currentStepId={progressCurrentId}
                 onStepPress={handleStepPress}
               />
             ) : (
               <AddTripWizardProgress
                 steps={progressSteps}
-                currentStepId={wizardStep}
+                currentStepId={progressCurrentId}
                 onStepPress={handleStepPress}
               />
             )
@@ -1489,14 +1497,10 @@ export default function CreateIndentScreen() {
                 onSupplierTargetChange={(value) =>
                   update({ supplier_target: value })
                 }
-                circulationTarget={form.circulation_target}
-                onCirculationTargetChange={(value) =>
-                  update({ circulation_target: value })
-                }
                 clientPrice={form.client_price}
                 errorMessage={errors.supplier_target}
                 partyPreview={
-                  compactWizard && selectedClientRow
+                  selectedClientRow
                     ? {
                         name: selectedClientRow.name ?? "Client",
                         subtitle:
@@ -1518,11 +1522,14 @@ export default function CreateIndentScreen() {
                       }
                     : undefined
                 }
-                onPartyPress={
-                  compactWizard
-                    ? () => setWizardStep("client")
-                    : undefined
-                }
+                onPartyPress={() => setWizardStep("client")}
+              />
+            ) : null}
+            {wizardStep === "share" ? (
+              <CreateIndentShareDestinationStep
+                compact={compactWizard}
+                value={form.circulation_target}
+                onChange={(value) => update({ circulation_target: value })}
               />
             ) : null}
           </View>
@@ -1596,7 +1603,7 @@ export default function CreateIndentScreen() {
         stepIndex={isMobileWizard ? wizardStepIndex + 1 : undefined}
         stepTotal={isMobileWizard ? INDENT_WIZARD_STEPS.length : undefined}
         submitLabel={wizardSubmitLabel}
-        canSubmit={stepCanAdvance}
+        canSubmit={stepCanAdvance && !ticketConfirmState.visible}
         submitting={submitting}
         validationMessage="Fill route, client, commercials, and load details to share"
         onClose={handleBackPress}

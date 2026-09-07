@@ -67,9 +67,9 @@ export const MarketBidCard = memo(function MarketBidCard({
       ? "Rejected"
       : status === "withdrawn"
         ? "Withdrawn"
-        : isSuperseded
-          ? "Superseded"
-          : isPending
+          : isSuperseded
+            ? "Deal lost"
+            : isPending
             ? "Pending"
             : status;
 
@@ -166,8 +166,7 @@ export const MarketBidCard = memo(function MarketBidCard({
       {isSuperseded ? (
         <View style={styles.noteWrap}>
           <Text style={styles.noteText} numberOfLines={2}>
-            Driver&rsquo;s bid was superseded because another opportunity was awarded to the
-            driver.
+            Not available — awarded another load.
           </Text>
         </View>
       ) : null}

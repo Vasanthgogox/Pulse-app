@@ -183,8 +183,8 @@ export const driverOpsEntryStyles = StyleSheet.create({
   section: {
     borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 14,
-    gap: 10,
+    padding: 12,
+    gap: 8,
     ...Platform.select({
       ios: {
         shadowColor: "#0f172a",
@@ -200,7 +200,7 @@ export const driverOpsEntryStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginBottom: 2,
+    marginBottom: 0,
   },
   sectionAccent: {
     // Kept for callers that may still reference it; unused on expense form.
@@ -209,17 +209,17 @@ export const driverOpsEntryStyles = StyleSheet.create({
   },
   sectionTitle: {
     ...Typography.headerTitle,
-    fontSize: 12,
-    letterSpacing: 0.8,
+    fontSize: 10,
+    letterSpacing: 0.55,
     fontWeight: "700",
   },
   sectionBody: {
-    gap: 14,
+    gap: 10,
   },
   fieldDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: Theme.borderLight,
-    marginVertical: 4,
+    marginVertical: 2,
     opacity: 0.9,
   },
   fieldLabel: {

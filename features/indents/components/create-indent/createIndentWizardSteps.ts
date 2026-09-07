@@ -1,12 +1,14 @@
 import {
   isValidIndentVehicleCount,
   type FormState,
+  type IndentDistributionChoice,
 } from "./createIndentForm.types";
 
 export type IndentWizardStep =
   | "route"
   | "client"
   | "prices"
+  | "share"
   | "vehicle"
   | "loadType"
   | "weight";
@@ -16,7 +18,25 @@ export const INDENT_WIZARD_STEPS: IndentWizardStep[] = [
   "route",
   "vehicle",
   "prices",
+  "share",
 ];
+
+/** Stepper chips — share is a follow-on page of Target, not its own step. */
+export const INDENT_WIZARD_PROGRESS_STEPS: IndentWizardStep[] =
+  INDENT_WIZARD_STEPS.filter((id) => id !== "share");
+
+export function indentShareSubmitLabel(
+  choice: IndentDistributionChoice,
+): string {
+  switch (choice) {
+    case "marketplace":
+      return "Share it to marketplace";
+    case "both":
+      return "Share it to both (network and market)";
+    default:
+      return "Share it to network";
+  }
+}
 
 export function indentWizardStepLabel(step: IndentWizardStep): string {
   switch (step) {
@@ -25,6 +45,7 @@ export function indentWizardStepLabel(step: IndentWizardStep): string {
     case "client":
       return "Client";
     case "prices":
+    case "share":
       return "Target";
     case "vehicle":
       return "Load";
@@ -66,6 +87,12 @@ export function indentStepCanAdvance(
         st > 0
       );
     }
+    case "share":
+      return (
+        form.circulation_target === "integrated_supplier" ||
+        form.circulation_target === "marketplace" ||
+        form.circulation_target === "both"
+      );
     case "vehicle":
       return Boolean(
         t(form.vehicle_type) &&
@@ -93,6 +120,7 @@ export type IndentWizardGroup = "route" | "commercial" | "load";
 
 export function indentStepToGroup(step: IndentWizardStep): IndentWizardGroup {
   if (step === "route") return "route";
-  if (step === "client" || step === "prices") return "commercial";
+  if (step === "client" || step === "prices" || step === "share")
+    return "commercial";
   return "load";
 }

@@ -1430,6 +1430,17 @@ export const fullPageWizardStyles = StyleSheet.create({
     paddingTop: 10,
     paddingBottom: 4,
   },
+  /** Popup: hug content in one column — no flex fill, no overlap with the pad. */
+  wizardKeypadBodyPopupStack: {
+    width: "100%",
+    flexGrow: 0,
+    flexShrink: 0,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+    gap: 10,
+    alignItems: "center",
+  },
   /** Popup body — room for party + field switch + amount (partner rate). */
   wizardKeypadBodyScrollPopup: {
     flexGrow: 0,
@@ -1469,9 +1480,9 @@ export const fullPageWizardStyles = StyleSheet.create({
     alignItems: "center",
   },
   wizardKeypadAccessoryPopup: {
-    paddingHorizontal: 16,
-    paddingTop: 0,
-    paddingBottom: 8,
+    paddingHorizontal: 0,
+    paddingTop: 4,
+    paddingBottom: 4,
   },
   /** Margin % chips etc. — sit directly above the number pad in the pinned dock. */
   wizardKeypadDockAccessory: {
@@ -1510,14 +1521,24 @@ export const fullPageWizardStyles = StyleSheet.create({
     flex: 0,
     flexGrow: 0,
     flexShrink: 0,
-    marginTop: 4,
+    width: "100%",
+    marginTop: 0,
+    paddingTop: 4,
+    gap: 0,
   },
   wizardKeypadPadDock: {
     marginTop: 0,
   },
-  /** Kill marginTop:"auto" from pay-tray dock styles inside shrink-wrap popups. */
+  /** Isolated pad tray — never share fill-shell `marginTop: auto` / zero padding. */
   wizardKeypadPadDockPopup: {
+    width: "100%",
     marginTop: 0,
+    paddingTop: 14,
+    paddingBottom: 14,
+    paddingHorizontal: 12,
+    backgroundColor: Theme.surfaceGray,
+    borderTopLeftRadius: 16,
+    borderTopRightRadius: 16,
   },
   wizardKeypadActionBar: {
     flexShrink: 0,

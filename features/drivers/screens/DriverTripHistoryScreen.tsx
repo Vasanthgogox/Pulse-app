@@ -1087,313 +1087,318 @@ export default function DriverTripsScreen() {
         { backgroundColor: colors.background },
       ]}
     >
-      <View
-        style={[
-          styles.header,
-          {
-            paddingTop: insets.top + Layout.driverHeaderTopOffset,
-            paddingHorizontal: Layout.driverHeaderHorizontalPadding,
-            paddingBottom: Layout.driverHeaderBottomPadding,
-            backgroundColor: colors.surface,
-            borderBottomColor: colors.border,
-          },
-        ]}
-      >
-        <View style={styles.headerLeft}>
-          <TouchableOpacity
-            onPress={() => router.push("/(driver)/profile")}
-            style={styles.avatarBtn}
-            activeOpacity={0.8}
-          >
-            <DriverSelfAvatar size={36} uri={avatarUri} borderColor={colors.emerald} />
-          </TouchableOpacity>
-          <View style={styles.headerTextWrap}>
-            <DriverBrandMark color={colors.textMuted} />
-            <Text
-              style={[styles.welcomeTitle, { color: colors.text }]}
-              numberOfLines={1}
-            >
-              Trips
-            </Text>
-          </View>
-        </View>
-      </View>
-      <View
-        style={[styles.creditsSection, { backgroundColor: colors.background }]}
-      >
-        <Text style={[styles.creditsTitle, { color: Theme.driverEmeraldDark }]}>
-          TRIPS.
-        </Text>
-        <Text style={[styles.creditsSubtitle, { color: colors.textMuted }]}>
-          {tripView === "active"
-            ? "In-progress trips"
-            : "Completed trips · fleet / open / attributed"}
-        </Text>
-      </View>
-      <View
-        style={[
-          styles.toolbarWrap,
-          { backgroundColor: colors.background },
-        ]}
-      >
-        <View style={styles.toolbarTopRow}>
-          <View
-            style={[
-              styles.searchWrap,
-              {
-                backgroundColor: colors.surface,
-                borderColor: isDark ? colors.borderSubtle : "rgba(16, 185, 129, 0.15)",
-              },
-            ]}
-          >
-            <SearchIcon size={16} color={colors.textMuted} strokeWidth={2} />
-            <TextInput
-              style={[styles.searchInput, { color: colors.text }]}
-              placeholder="Search trips..."
-              placeholderTextColor={colors.placeholder}
-              value={searchQuery}
-              onChangeText={setSearchQuery}
-              autoCorrect={false}
-              spellCheck={false}
-              autoComplete="off"
-              returnKeyType="search"
-            />
-          </View>
-          <View
-            style={[
-              styles.segmentOuter,
-              {
-                backgroundColor: isDark ? colors.surfaceElevated : "rgba(241, 245, 249, 0.65)",
-                borderColor: isDark ? colors.borderSubtle : "#ffffff",
-              },
-            ]}
-          >
-            <TouchableOpacity
+      <FlashList
+        data={filteredTrips}
+        keyboardShouldPersistTaps="handled"
+        ListHeaderComponent={
+          <>
+            <View
               style={[
-                styles.segmentBtn,
-                tripView === "active" && [
-                  styles.segmentBtnActive,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: isDark ? colors.borderSubtle : colors.border,
-                  },
-                ],
+                styles.header,
+                {
+                  paddingTop: insets.top + Layout.driverHeaderTopOffset,
+                  paddingHorizontal: Layout.driverHeaderHorizontalPadding,
+                  paddingBottom: Layout.driverHeaderBottomPadding,
+                  backgroundColor: colors.surface,
+                  borderBottomColor: colors.border,
+                },
               ]}
-              onPress={() => setTripView("active")}
-              activeOpacity={0.8}
             >
-              <View style={styles.segmentLabelRow}>
-                <Text
-                  style={[
-                    styles.segmentLabel,
-                    {
-                      color:
-                        tripView === "active" ? colors.emerald : colors.textMuted,
-                    },
-                  ]}
-                  numberOfLines={1}
+              <View style={styles.headerLeft}>
+                <TouchableOpacity
+                  onPress={() => router.push("/(driver)/profile")}
+                  style={styles.avatarBtn}
+                  activeOpacity={0.8}
                 >
-                  Active
-                </Text>
-              </View>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.segmentBtn,
-                tripView === "history" && [
-                  styles.segmentBtnActive,
-                  {
-                    backgroundColor: colors.surface,
-                    borderColor: isDark ? colors.borderSubtle : colors.border,
-                  },
-                ],
-              ]}
-              onPress={() => setTripView("history")}
-              activeOpacity={0.8}
-            >
-              <View style={styles.segmentLabelRow}>
-                <Text
-                  style={[
-                    styles.segmentLabel,
-                    {
-                      color:
-                        tripView === "history" ? colors.emerald : colors.textMuted,
-                    },
-                  ]}
-                  numberOfLines={1}
-                >
-                  History
-                </Text>
-                <View
-                  style={[
-                    styles.segmentCountBadge,
-                    {
-                      backgroundColor:
-                        tripView === "history" ? colors.emerald : colors.surface,
-                      borderColor: tripView === "history" ? colors.emerald : colors.border,
-                    },
-                  ]}
-                >
+                  <DriverSelfAvatar size={36} uri={avatarUri} borderColor={colors.emerald} />
+                </TouchableOpacity>
+                <View style={styles.headerTextWrap}>
+                  <DriverBrandMark color={colors.textMuted} />
                   <Text
-                    style={[
-                      styles.segmentCountBadgeText,
-                      {
-                        color:
-                          tripView === "history" ? colors.textOnPrimary : colors.textMuted,
-                      },
-                    ]}
+                    style={[styles.welcomeTitle, { color: colors.text }]}
+                    numberOfLines={1}
                   >
-                    {historyTripsCount}
+                    Trips
                   </Text>
                 </View>
               </View>
-            </TouchableOpacity>
-          </View>
-        </View>
-
-        {tripView === "history" ? (
-          <View
-            style={[
-              styles.tripsSubTabRow,
-              {
-                backgroundColor: isDark ? colors.surfaceElevated : "rgba(248,250,252,0.9)",
-                borderColor: isDark ? colors.borderSubtle : "rgba(226,232,240,0.9)",
-              },
-            ]}
-          >
-            {(
-              [
-                {
-                  id: "all" as const,
-                  label: "All",
-                  icon: "list" as const,
-                  count: historyTripsCount,
-                },
-                {
-                  id: "fleet" as const,
-                  label: "Fleet",
-                  icon: "building" as const,
-                  count: fleetTripsCount,
-                },
-                {
-                  id: "open" as const,
-                  label: "Open",
-                  icon: "road" as const,
-                  count: openTripsCount,
-                },
-                {
-                  id: "attributed" as const,
-                  label: "Attributed",
-                  icon: "check-circle" as const,
-                  count: attributedTripsCount,
-                },
-                {
-                  id: "market" as const,
-                  label: "Market",
-                  icon: "shopping-bag" as const,
-                  count: marketTripsCount,
-                },
-              ] as const
-            ).map((tab) => {
-              const active = tripsSubTab === tab.id;
-              const accent =
-                tab.id === "fleet"
-                  ? colors.emerald
-                  : tab.id === "open"
-                    ? Theme.textPrimaryDark
-                    : tab.id === "attributed"
-                      ? Theme.warning
-                      : colors.emerald;
-              return (
-                <TouchableOpacity
-                  key={tab.id}
-                  style={[
-                    styles.tripsSubTabBtn,
-                    active && [
-                      styles.tripsSubTabBtnActive,
-                      {
-                        backgroundColor:
-                          tab.id === "fleet"
-                            ? isDark
-                              ? "rgba(4,120,87,0.18)"
-                              : Theme.driverEmeraldMuted
-                            : tab.id === "open"
-                              ? isDark
-                                ? "rgba(15,23,42,0.16)"
-                                : "rgba(15,23,42,0.06)"
-                              : tab.id === "attributed"
-                                ? isDark
-                                  ? "rgba(245,158,11,0.18)"
-                                  : "rgba(245,158,11,0.10)"
-                                : isDark
-                                  ? "rgba(4,120,87,0.14)"
-                                  : Theme.driverEmeraldMuted,
-                        borderColor:
-                          tab.id === "fleet"
-                            ? isDark
-                              ? "rgba(4,120,87,0.35)"
-                              : Theme.driverEmeraldBorderSoft
-                            : tab.id === "open"
-                              ? isDark
-                                ? "rgba(148,163,184,0.35)"
-                                : "rgba(148,163,184,0.45)"
-                              : tab.id === "attributed"
-                                ? isDark
-                                  ? "rgba(245,158,11,0.35)"
-                                  : "rgba(245,158,11,0.24)"
-                                : isDark
-                                  ? "rgba(4,120,87,0.28)"
-                                  : Theme.driverEmeraldBorderSoft,
-                      },
-                    ],
-                  ]}
-                  onPress={() => setTripsSubTab(tab.id)}
-                  activeOpacity={0.85}
-                >
-                  <FontAwesome
-                    name={tab.icon}
-                    size={10}
-                    color={active ? accent : colors.textMuted}
-                  />
-                  <Text
-                    style={[
-                      styles.tripsSubTabText,
-                      { color: active ? accent : colors.textMuted },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {tab.label}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        ) : null}
-
-        <View style={styles.toolbarFooter}>
-          <Text style={[styles.resultMeta, { color: colors.textMuted }]}>
-            Showing {filteredTrips.length} of {poolCountForTab}
-            {" · "}
-            {tripView === "active" ? "Active" : "History"}
-          </Text>
-          {searchQuery.trim().length > 0 ? (
-            <TouchableOpacity
-              style={[
-                styles.clearBtn,
-                { backgroundColor: colors.surface, borderColor: colors.border },
-              ]}
-              onPress={() => setSearchQuery("")}
-              activeOpacity={0.8}
+            </View>
+            <View
+              style={[styles.creditsSection, { backgroundColor: colors.background }]}
             >
-              <Text style={[styles.clearBtnText, { color: colors.text }]}>Clear</Text>
-            </TouchableOpacity>
-          ) : (
-            <View style={styles.clearBtnPlaceholder} />
-          )}
-        </View>
-      </View>
-      <FlashList
-        data={filteredTrips}
+              <Text style={[styles.creditsTitle, { color: Theme.driverEmeraldDark }]}>
+                TRIPS.
+              </Text>
+              <Text style={[styles.creditsSubtitle, { color: colors.textMuted }]}>
+                {tripView === "active"
+                  ? "In-progress trips"
+                  : "Completed trips · fleet / open / attributed"}
+              </Text>
+            </View>
+            <View
+              style={[
+                styles.toolbarWrap,
+                { backgroundColor: colors.background },
+              ]}
+            >
+              <View style={styles.toolbarTopRow}>
+                <View
+                  style={[
+                    styles.searchWrap,
+                    {
+                      backgroundColor: colors.surface,
+                      borderColor: isDark ? colors.borderSubtle : "rgba(16, 185, 129, 0.15)",
+                    },
+                  ]}
+                >
+                  <SearchIcon size={16} color={colors.textMuted} strokeWidth={2} />
+                  <TextInput
+                    style={[styles.searchInput, { color: colors.text }]}
+                    placeholder="Search trips..."
+                    placeholderTextColor={colors.placeholder}
+                    value={searchQuery}
+                    onChangeText={setSearchQuery}
+                    autoCorrect={false}
+                    spellCheck={false}
+                    autoComplete="off"
+                    returnKeyType="search"
+                  />
+                </View>
+                <View
+                  style={[
+                    styles.segmentOuter,
+                    {
+                      backgroundColor: isDark ? colors.surfaceElevated : "rgba(241, 245, 249, 0.65)",
+                      borderColor: isDark ? colors.borderSubtle : "#ffffff",
+                    },
+                  ]}
+                >
+                  <TouchableOpacity
+                    style={[
+                      styles.segmentBtn,
+                      tripView === "active" && [
+                        styles.segmentBtnActive,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: isDark ? colors.borderSubtle : colors.border,
+                        },
+                      ],
+                    ]}
+                    onPress={() => setTripView("active")}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.segmentLabelRow}>
+                      <Text
+                        style={[
+                          styles.segmentLabel,
+                          {
+                            color:
+                              tripView === "active" ? colors.emerald : colors.textMuted,
+                          },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        Active
+                      </Text>
+                    </View>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={[
+                      styles.segmentBtn,
+                      tripView === "history" && [
+                        styles.segmentBtnActive,
+                        {
+                          backgroundColor: colors.surface,
+                          borderColor: isDark ? colors.borderSubtle : colors.border,
+                        },
+                      ],
+                    ]}
+                    onPress={() => setTripView("history")}
+                    activeOpacity={0.8}
+                  >
+                    <View style={styles.segmentLabelRow}>
+                      <Text
+                        style={[
+                          styles.segmentLabel,
+                          {
+                            color:
+                              tripView === "history" ? colors.emerald : colors.textMuted,
+                          },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        History
+                      </Text>
+                      <View
+                        style={[
+                          styles.segmentCountBadge,
+                          {
+                            backgroundColor:
+                              tripView === "history" ? colors.emerald : colors.surface,
+                            borderColor: tripView === "history" ? colors.emerald : colors.border,
+                          },
+                        ]}
+                      >
+                        <Text
+                          style={[
+                            styles.segmentCountBadgeText,
+                            {
+                              color:
+                                tripView === "history" ? colors.textOnPrimary : colors.textMuted,
+                            },
+                          ]}
+                        >
+                          {historyTripsCount}
+                        </Text>
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                </View>
+              </View>
+
+              {tripView === "history" ? (
+                <View
+                  style={[
+                    styles.tripsSubTabRow,
+                    {
+                      backgroundColor: isDark ? colors.surfaceElevated : "rgba(248,250,252,0.9)",
+                      borderColor: isDark ? colors.borderSubtle : "rgba(226,232,240,0.9)",
+                    },
+                  ]}
+                >
+                  {(
+                    [
+                      {
+                        id: "all" as const,
+                        label: "All",
+                        icon: "list" as const,
+                        count: historyTripsCount,
+                      },
+                      {
+                        id: "fleet" as const,
+                        label: "Fleet",
+                        icon: "building" as const,
+                        count: fleetTripsCount,
+                      },
+                      {
+                        id: "open" as const,
+                        label: "Open",
+                        icon: "road" as const,
+                        count: openTripsCount,
+                      },
+                      {
+                        id: "attributed" as const,
+                        label: "Attributed",
+                        icon: "check-circle" as const,
+                        count: attributedTripsCount,
+                      },
+                      {
+                        id: "market" as const,
+                        label: "Market",
+                        icon: "shopping-bag" as const,
+                        count: marketTripsCount,
+                      },
+                    ] as const
+                  ).map((tab) => {
+                    const active = tripsSubTab === tab.id;
+                    const accent =
+                      tab.id === "fleet"
+                        ? colors.emerald
+                        : tab.id === "open"
+                          ? Theme.textPrimaryDark
+                          : tab.id === "attributed"
+                            ? Theme.warning
+                            : colors.emerald;
+                    return (
+                      <TouchableOpacity
+                        key={tab.id}
+                        style={[
+                          styles.tripsSubTabBtn,
+                          active && [
+                            styles.tripsSubTabBtnActive,
+                            {
+                              backgroundColor:
+                                tab.id === "fleet"
+                                  ? isDark
+                                    ? "rgba(4,120,87,0.18)"
+                                    : Theme.driverEmeraldMuted
+                                  : tab.id === "open"
+                                    ? isDark
+                                      ? "rgba(15,23,42,0.16)"
+                                      : "rgba(15,23,42,0.06)"
+                                    : tab.id === "attributed"
+                                      ? isDark
+                                        ? "rgba(245,158,11,0.18)"
+                                        : "rgba(245,158,11,0.10)"
+                                      : isDark
+                                        ? "rgba(4,120,87,0.14)"
+                                        : Theme.driverEmeraldMuted,
+                              borderColor:
+                                tab.id === "fleet"
+                                  ? isDark
+                                    ? "rgba(4,120,87,0.35)"
+                                    : Theme.driverEmeraldBorderSoft
+                                  : tab.id === "open"
+                                    ? isDark
+                                      ? "rgba(148,163,184,0.35)"
+                                      : "rgba(148,163,184,0.45)"
+                                    : tab.id === "attributed"
+                                      ? isDark
+                                        ? "rgba(245,158,11,0.35)"
+                                        : "rgba(245,158,11,0.24)"
+                                      : isDark
+                                        ? "rgba(4,120,87,0.28)"
+                                        : Theme.driverEmeraldBorderSoft,
+                            },
+                          ],
+                        ]}
+                        onPress={() => setTripsSubTab(tab.id)}
+                        activeOpacity={0.85}
+                      >
+                        <FontAwesome
+                          name={tab.icon}
+                          size={10}
+                          color={active ? accent : colors.textMuted}
+                        />
+                        <Text
+                          style={[
+                            styles.tripsSubTabText,
+                            { color: active ? accent : colors.textMuted },
+                          ]}
+                          numberOfLines={1}
+                        >
+                          {tab.label}
+                        </Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              ) : null}
+
+              <View style={styles.toolbarFooter}>
+                <Text style={[styles.resultMeta, { color: colors.textMuted }]}>
+                  Showing {filteredTrips.length} of {poolCountForTab}
+                  {" · "}
+                  {tripView === "active" ? "Active" : "History"}
+                </Text>
+                {searchQuery.trim().length > 0 ? (
+                  <TouchableOpacity
+                    style={[
+                      styles.clearBtn,
+                      { backgroundColor: colors.surface, borderColor: colors.border },
+                    ]}
+                    onPress={() => setSearchQuery("")}
+                    activeOpacity={0.8}
+                  >
+                    <Text style={[styles.clearBtnText, { color: colors.text }]}>Clear</Text>
+                  </TouchableOpacity>
+                ) : (
+                  <View style={styles.clearBtnPlaceholder} />
+                )}
+              </View>
+            </View>
+          </>
+        }
         keyExtractor={(item) => item.id}
         renderItem={renderItem}
         contentContainerStyle={{

@@ -81,6 +81,8 @@ function badgeStyle(kind: IndentBidBadge["kind"]) {
       return styles.badgeTarget;
     case "awarded":
       return styles.badgeAwarded;
+    case "deal_lost":
+      return styles.badgeDealLost;
     default:
       return styles.badgeLowest;
   }
@@ -96,6 +98,8 @@ function badgeTextStyle(kind: IndentBidBadge["kind"]) {
       return styles.badgeTextTarget;
     case "awarded":
       return styles.badgeTextAwarded;
+    case "deal_lost":
+      return styles.badgeTextDealLost;
     default:
       return styles.badgeTextLowest;
   }
@@ -143,13 +147,20 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
   const isCountered = counterAmount != null && status === "pending";
   const isAccepted = status === "accepted";
   const isRejected = status === "rejected";
+  const isWithdrawn = status === "withdrawn";
+  const isDealLost =
+    status === "superseded" || Boolean(quote.bidderUnavailable);
   const statusLabel = isAccepted
     ? "Awarded"
     : isRejected
       ? "Rejected"
-      : isCountered
-        ? "Countered"
-        : "Pending";
+      : isWithdrawn
+        ? "Withdrawn"
+        : isDealLost
+          ? "Deal lost"
+          : isCountered
+            ? "Countered"
+            : "Pending";
   const submitted = timeAgo(quote.created_at ?? quote.updated_at);
 
   const margin = useMemo(
@@ -158,8 +169,11 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
   );
   const vsTarget = targetRateInr > 0 && amount > 0 ? amount - targetRateInr : null;
   const isLowest =
-    badges.some((b) => b.kind === "lowest" || b.kind === "recommended") ||
-    (vsTarget != null && vsTarget <= 0);
+    !isDealLost &&
+    !isRejected &&
+    !isWithdrawn &&
+    (badges.some((b) => b.kind === "lowest" || b.kind === "recommended") ||
+      (vsTarget != null && vsTarget <= 0));
 
   const footerInsight = useMemo(
     () =>
@@ -214,6 +228,7 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
           disabled && styles.cardDisabled,
           isAccepted && styles.cardAwarded,
           isRejected && styles.cardRejected,
+          isDealLost && styles.cardDealLost,
         ]}
       >
         <View style={styles.minimalTop}>
@@ -337,8 +352,12 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
         disabled && styles.cardDisabled,
         isAccepted && styles.cardAwarded,
         isRejected && styles.cardRejected,
+        isDealLost && styles.cardDealLost,
       ]}
     >
+      {selected && !disabled && !isAccepted && !isRejected ? (
+        <View style={styles.selectedAccent} pointerEvents="none" />
+      ) : null}
       <View style={styles.topSection}>
         <View style={styles.avatarWrap}>
           <EntityAvatar
@@ -400,15 +419,18 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
             <View
               style={[
                 styles.statusPill,
-                !isAccepted &&
-                  !isRejected &&
-                  !isCountered &&
-                  styles.statusPillPending,
-                isAccepted && styles.statusPillAwarded,
-                isRejected && styles.statusPillRejected,
-                isCountered && styles.statusPillCountered,
+              !isAccepted &&
+                !isRejected &&
+                !isCountered &&
+                !isDealLost &&
+                styles.statusPillPending,
+              isAccepted && styles.statusPillAwarded,
+              isRejected && styles.statusPillRejected,
+              isDealLost && styles.statusPillDealLost,
+              isCountered && styles.statusPillCountered,
                 status === "pending" &&
                   !isCountered &&
+                  !isDealLost &&
                   selected &&
                   styles.statusPillSelected,
               ]}
@@ -419,9 +441,11 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
                   !isAccepted &&
                     !isRejected &&
                     !isCountered &&
+                    !isDealLost &&
                     styles.statusTextPending,
                   isAccepted && styles.statusTextAwarded,
                   isRejected && styles.statusTextRejected,
+                  isDealLost && styles.statusTextDealLost,
                   isCountered && styles.statusTextCountered,
                   status === "pending" &&
                     !isCountered &&
@@ -508,7 +532,13 @@ export const IndentLiveBidCard = memo(function IndentLiveBidCard({
         </View>
       ) : null}
 
-      {selected && !disabled && !isAccepted && !isRejected ? (
+      {isDealLost ? (
+        <View style={styles.dealLostStrip}>
+          <Text style={styles.dealLostStripText}>
+            Not available — awarded another load
+          </Text>
+        </View>
+      ) : selected && !disabled && !isAccepted && !isRejected ? (
         hasCardActions ? (
           <View style={styles.actionStrip}>
             <View style={styles.actionLeft}>
@@ -614,11 +644,21 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
+    position: "relative",
   },
   cardSelected: {
-    borderColor: Theme.positive,
+    borderColor: Theme.primary,
     borderWidth: 1.5,
     backgroundColor: Theme.cardWhite,
+  },
+  selectedAccent: {
+    position: "absolute",
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+    backgroundColor: Theme.primary,
+    zIndex: 2,
   },
   cardAwarded: {
     borderColor: Theme.positiveMutedDarkBorder,
@@ -626,6 +666,10 @@ const styles = StyleSheet.create({
   cardRejected: {
     borderColor: Theme.borderMedium,
     opacity: 0.86,
+  },
+  cardDealLost: {
+    borderColor: Theme.borderMedium,
+    opacity: 0.92,
   },
   cardDisabled: {
     opacity: 0.72,
@@ -670,16 +714,16 @@ const styles = StyleSheet.create({
     paddingHorizontal: 6,
     paddingVertical: 2,
     borderRadius: 4,
-    backgroundColor: Theme.positiveMuted,
+    backgroundColor: Theme.brandBlueSoft,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.positiveMutedDarkBorder,
+    borderColor: Theme.brandBlue,
   },
   partnerPillText: {
     fontSize: 8,
     fontWeight: "700",
     letterSpacing: 0.3,
     textTransform: "uppercase",
-    color: Theme.positive,
+    color: Theme.primary,
   },
   partnerPillMarket: {
     backgroundColor: Theme.surface,
@@ -700,20 +744,25 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
   },
   badgeRecommended: {
-    backgroundColor: Theme.positiveMuted,
-    borderColor: Theme.positiveMutedDarkBorder,
+    backgroundColor: Theme.brandBlueSoft,
+    borderColor: Theme.brandBlue,
   },
   badgeLowest: {
-    backgroundColor: Theme.positiveMuted,
-    borderColor: Theme.positiveMutedDarkBorder,
+    backgroundColor: Theme.surface,
+    borderColor: Theme.borderMedium,
   },
   badgeTarget: {
-    backgroundColor: Theme.positiveMuted,
-    borderColor: Theme.positiveMutedDarkBorder,
+    backgroundColor: Theme.surface,
+    borderColor: Theme.borderMedium,
   },
   badgeAwarded: {
     backgroundColor: Theme.positiveMuted,
     borderColor: Theme.positiveMutedDarkBorder,
+  },
+  badgeDealLost: {
+    backgroundColor: Theme.negativeMuted,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderMedium,
   },
   badgeText: {
     fontSize: 8,
@@ -721,10 +770,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.25,
     textTransform: "uppercase",
   },
-  badgeTextRecommended: { color: Theme.positive },
-  badgeTextLowest: { color: Theme.positive },
-  badgeTextTarget: { color: Theme.positive },
+  badgeTextRecommended: { color: Theme.primary },
+  badgeTextLowest: { color: Theme.gpayListSubtitle },
+  badgeTextTarget: { color: Theme.gpayListSubtitle },
   badgeTextAwarded: { color: Theme.positive },
+  badgeTextDealLost: { color: Theme.negative },
   amountCol: {
     alignItems: "flex-end",
     justifyContent: "center",
@@ -766,18 +816,22 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderMedium,
   },
   statusPillPending: {
-    backgroundColor: Theme.positiveMuted,
-    borderColor: Theme.positiveMutedDarkBorder,
+    backgroundColor: Theme.surface,
+    borderColor: Theme.borderMedium,
   },
   statusPillSelected: {
-    backgroundColor: Theme.positiveMuted,
-    borderColor: Theme.positive,
+    backgroundColor: Theme.brandBlueSoft,
+    borderColor: Theme.primary,
   },
   statusPillAwarded: {
     backgroundColor: Theme.positiveMuted,
     borderColor: Theme.positiveMutedDarkBorder,
   },
   statusPillRejected: {
+    backgroundColor: Theme.negativeMuted,
+    borderColor: Theme.borderMedium,
+  },
+  statusPillDealLost: {
     backgroundColor: Theme.negativeMuted,
     borderColor: Theme.borderMedium,
   },
@@ -791,10 +845,11 @@ const styles = StyleSheet.create({
     letterSpacing: 0.35,
     color: Theme.textMuted,
   },
-  statusTextPending: { color: Theme.positive },
-  statusTextSelected: { color: Theme.positive },
+  statusTextPending: { color: Theme.gpayListSubtitle },
+  statusTextSelected: { color: Theme.primary },
   statusTextAwarded: { color: Theme.positive },
   statusTextRejected: { color: Theme.teslaRed },
+  statusTextDealLost: { color: Theme.negative },
   statusTextCountered: { color: Theme.aggregatePillText },
   submittedText: {
     fontSize: 9,
@@ -807,14 +862,15 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surface,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
-    paddingVertical: 8,
-    paddingHorizontal: 2,
+    paddingVertical: 10,
+    paddingHorizontal: 4,
   },
   metricCol: {
     flex: 1,
     minWidth: 0,
-    paddingHorizontal: 8,
+    paddingHorizontal: 10,
     justifyContent: "flex-start",
+    alignItems: "flex-start",
   },
   metricDivider: {
     width: StyleSheet.hairlineWidth,
@@ -828,7 +884,8 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
     textTransform: "uppercase",
     color: Theme.gpayListSubtitle,
-    marginBottom: 3,
+    marginBottom: 4,
+    width: "100%",
   },
   metricValue: {
     fontSize: 11,
@@ -836,6 +893,7 @@ const styles = StyleSheet.create({
     fontVariant: ["tabular-nums"],
     color: Theme.gpayListTitle,
     letterSpacing: -0.1,
+    width: "100%",
   },
   metricPositive: {
     color: Theme.gpayAmountReceived,
@@ -865,11 +923,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     gap: 8,
-    paddingHorizontal: 10,
+    paddingHorizontal: 12,
     paddingVertical: 8,
-    backgroundColor: Theme.positiveMuted,
+    backgroundColor: Theme.brandBlueSoft,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.positiveMutedDarkBorder,
+    borderTopColor: Theme.brandBlue,
   },
   actionLeft: {
     flexDirection: "row",
@@ -887,13 +945,13 @@ const styles = StyleSheet.create({
   },
   selectedStrip: {
     flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 6,
+    alignItems: "center",
+    gap: 8,
     paddingHorizontal: 12,
-    paddingVertical: 9,
-    backgroundColor: Theme.positiveMuted,
+    paddingVertical: 8,
+    backgroundColor: Theme.brandBlueSoft,
     borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.positiveMutedDarkBorder,
+    borderTopColor: Theme.brandBlue,
   },
   selectedStripText: {
     flex: 1,
@@ -901,23 +959,36 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     lineHeight: 15,
-    color: Theme.gpayListTitle,
+    color: Theme.primary,
+  },
+  dealLostStrip: {
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    backgroundColor: Theme.surface,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+  },
+  dealLostStripText: {
+    fontSize: 11,
+    fontWeight: "600",
+    lineHeight: 15,
+    color: Theme.textMuted,
   },
   counterBtn: {
     paddingHorizontal: 12,
-    paddingVertical: 8,
-    minHeight: 34,
-    borderRadius: 8,
+    paddingVertical: 7,
+    minHeight: 32,
+    borderRadius: 999,
     backgroundColor: Theme.cardWhite,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.positiveMutedDarkBorder,
+    borderWidth: 1,
+    borderColor: Theme.primary,
     justifyContent: "center",
     flexShrink: 0,
   },
   counterBtnText: {
     fontSize: 10,
     fontWeight: "700",
-    color: Theme.positive,
+    color: Theme.primary,
     letterSpacing: 0.2,
   },
   alertPanel: {
@@ -973,7 +1044,8 @@ const styles = StyleSheet.create({
     }),
   },
   minimalCardSelected: {
-    borderColor: Theme.positive,
+    borderColor: Theme.primary,
+    borderWidth: 1.5,
     backgroundColor: Theme.cardWhite,
   },
   minimalTop: {

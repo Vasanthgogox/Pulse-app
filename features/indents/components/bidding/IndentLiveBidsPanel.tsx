@@ -275,7 +275,7 @@ const stylesDef = {
     width: "100%",
     maxWidth: "100%",
     alignSelf: "stretch",
-    gap: 10,
+    gap: 8,
   }),
   wrapMinimal: view({
     gap: 8,
@@ -302,9 +302,8 @@ const stylesDef = {
     justifyContent: "center",
   }),
   filterPillActive: view({
-    backgroundColor: Theme.positiveMuted,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.positiveMutedDarkBorder,
+    backgroundColor: Theme.primaryText,
+    borderWidth: 0,
   }),
   filterPillText: text({
     fontSize: 10,
@@ -313,7 +312,7 @@ const stylesDef = {
     textAlign: "center",
   }),
   filterPillTextActive: text({
-    color: Theme.positive,
+    color: Theme.textOnPrimary,
     fontWeight: "700",
   }),
   emptyFilter: view({
@@ -346,8 +345,8 @@ const stylesDef = {
     paddingHorizontal: 12,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.positiveMutedDarkBorder,
-    backgroundColor: Theme.positiveMuted,
+    borderColor: Theme.brandBlue,
+    backgroundColor: Theme.brandBlueSoft,
     gap: 8,
     width: "100%",
     alignSelf: "stretch",
@@ -356,9 +355,9 @@ const stylesDef = {
     opacity: 0.92,
   }),
   recoStripSelected: view({
-    borderColor: Theme.positive,
+    borderColor: Theme.primary,
     borderWidth: 1.5,
-    backgroundColor: Theme.positiveMuted,
+    backgroundColor: Theme.brandBlueSoft,
   }),
   recoHeader: view({
     flexDirection: "row",
@@ -374,7 +373,7 @@ const stylesDef = {
     minWidth: 0,
   }),
   recoKicker: text({
-    color: Theme.positive,
+    color: Theme.primary,
     letterSpacing: 0.5,
     textTransform: "uppercase",
     fontSize: 9,
@@ -427,7 +426,7 @@ const stylesDef = {
     fontWeight: "700",
     letterSpacing: 0.3,
     textTransform: "uppercase",
-    color: Theme.positive,
+    color: Theme.primary,
   }),
 };
 

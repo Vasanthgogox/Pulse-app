@@ -636,7 +636,7 @@ const styles = StyleSheet.create({
   reviewHubModalHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 8,
     gap: 10,
     flexShrink: 0,
   },

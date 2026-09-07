@@ -253,12 +253,27 @@ export const DecimalKeypad = memo(function DecimalKeypad({
           {ROWS[3]!.map((key) => {
             if (key === '.' && !showDecimal) {
               return (
-                <View
-                  key="dot-disabled"
-                  style={[keyBase(true), styles.keyDisabled, { height: keyHeight }]}
-                  accessibilityElementsHidden
-                  importantForAccessibility="no-hide-descendants"
-                />
+                <TouchableOpacity
+                  key="double-zero"
+                  style={keyBase(true)}
+                  onPress={() => {
+                    handleKey('0');
+                    handleKey('0');
+                  }}
+                  activeOpacity={keyActiveOpacity}
+                  accessibilityRole="button"
+                  accessibilityLabel="Key 00"
+                >
+                  <Text
+                    style={[
+                      styles.keyText,
+                      styles.keyTextSpecial,
+                      { fontSize: keyTextSize - 4 },
+                    ]}
+                  >
+                    00
+                  </Text>
+                </TouchableOpacity>
               );
             }
             const isSpecial = key === '.' || key === '⌫';

@@ -1364,7 +1364,7 @@ export const DriverWalletEarningsPanel = memo(function DriverWalletEarningsPanel
           </View>
 
           <Text style={[styles.docPreviewHint, { color: colors.textMuted }]}>
-            Pinch to zoom · scroll to read · share PDF to the business anytime
+            Pinch to zoom · share PDF anytime
           </Text>
 
           <View
@@ -1372,7 +1372,7 @@ export const DriverWalletEarningsPanel = memo(function DriverWalletEarningsPanel
               styles.fullPagePreview,
               {
                 borderColor: cardBorder,
-                backgroundColor: isDark ? "#0b1220" : "#e2e8f0",
+                backgroundColor: isDark ? "#0b1220" : Theme.surfaceGray,
               },
             ]}
           >

@@ -31,6 +31,13 @@ export interface DirectQuoteRow {
   /** Pilot / FO bidder face (from profiles via list_driver_direct_bids_for_post). */
   bidder_avatar_url?: string | null;
   bidder_avatar_seed?: string | null;
+  /** Driver user id for Pilot / FO bids — used to check live availability. */
+  bidder_user_id?: string | null;
+  /**
+   * True when this offer cannot be awarded: bidder was picked on another load
+   * (`superseded`) or `is_driver_available()` is currently false.
+   */
+  bidderUnavailable?: boolean;
 }
 
 /**

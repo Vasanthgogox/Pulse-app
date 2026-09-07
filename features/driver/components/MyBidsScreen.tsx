@@ -28,7 +28,7 @@ import { ROUTES } from '@/lib/routes';
 import type { DriverTripRow } from '@/types/trip-views';
 import { useRouter, type Href } from 'expo-router';
 import { ChevronRight, Inbox } from 'lucide-react-native';
-import { useMemo } from 'react';
+import { useMemo, type ReactNode } from 'react';
 import {
   ActivityIndicator,
   Pressable,
@@ -133,7 +133,14 @@ function isActiveLike(status: string): boolean {
  * unlinked from primary nav) and inline as Market's "My Bids" segment.
  * No header/root background here; the caller owns the shell.
  */
-export function MyBidsContent({ uid }: { uid: string }) {
+export function MyBidsContent({
+  uid,
+  listHeader,
+}: {
+  uid: string;
+  /** Optional chrome that scrolls with the list (Market segment, etc.). */
+  listHeader?: ReactNode;
+}) {
   const insets = useSafeAreaInsets();
   const router = useRouter();
   const { isDark } = useDriverTheme();
@@ -218,10 +225,10 @@ export function MyBidsContent({ uid }: { uid: string }) {
 
   return (
     <ScrollView
+      style={{ flex: 1 }}
       contentContainerStyle={{
-        paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
         paddingBottom: Math.max(insets.bottom, 16) + 24,
-        paddingTop: 10,
+        paddingTop: listHeader ? 0 : 10,
         gap: 14,
       }}
       refreshControl={
@@ -231,7 +238,10 @@ export function MyBidsContent({ uid }: { uid: string }) {
           tintColor={colors.emerald}
         />
       }
+      showsVerticalScrollIndicator={false}
     >
+      {listHeader}
+      <View style={{ paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD, gap: 14 }}>
       {error ? (
         <Text style={styles.errorText}>
           {error instanceof Error ? error.message : 'Could not load your bids.'}
@@ -297,6 +307,7 @@ export function MyBidsContent({ uid }: { uid: string }) {
           ) : null}
         </>
       )}
+      </View>
     </ScrollView>
   );
 }
