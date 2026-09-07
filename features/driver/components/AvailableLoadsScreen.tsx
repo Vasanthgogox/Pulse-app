@@ -41,6 +41,25 @@ function formatPickupDate(iso: string | null): string {
   }
 }
 
+/**
+ * "Posted", not "Marketplace posted" — created_at is the indent's own
+ * creation time, not a dedicated Marketplace-publication timestamp (an
+ * indent's circulation_target can start including Marketplace later, with
+ * no timestamp recorded for that change). Good enough for freshness
+ * display today; don't imply more precision than the field actually has.
+ */
+function postedAgoLabel(iso: string | null): string | null {
+  if (!iso) return null;
+  const diff = Date.now() - new Date(iso).getTime();
+  if (!Number.isFinite(diff) || diff < 0) return null;
+  const m = Math.floor(diff / 60000);
+  if (m < 1) return 'Posted just now';
+  if (m < 60) return `Posted ${m} min${m === 1 ? '' : 's'} ago`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `Posted ${h}h ago`;
+  return `Posted ${Math.floor(h / 24)}d ago`;
+}
+
 export default function AvailableLoadsScreen() {
   const router = useRouter();
   const { profile } = useAuth();
@@ -305,6 +324,7 @@ function LoadCard({
   onPress: () => void;
 }) {
   const rate = formatFleetOwnerRateOffer(load.rate_offer);
+  const postedLabel = postedAgoLabel(load.created_at);
   return (
     <Pressable
       onPress={onPress}
@@ -321,6 +341,11 @@ function LoadCard({
         <Text style={[styles.route, { color: colors.text }]} numberOfLines={1}>
           {fleetOwnerLoadRouteLabel(load)}
         </Text>
+        {postedLabel ? (
+          <Text style={[styles.postedLabel, { color: colors.emerald }]} numberOfLines={1}>
+            {postedLabel}
+          </Text>
+        ) : null}
         <View style={styles.metaRow}>
           <Truck size={11} color={colors.textMuted} />
           <Text style={[styles.meta, { color: colors.textMuted }]} numberOfLines={1}>
@@ -422,6 +447,7 @@ const styles = StyleSheet.create({
   rowMain: { flex: 1, gap: 3 },
   rowSide: { alignItems: 'flex-end', gap: 4 },
   route: { fontSize: 13, fontWeight: '700', letterSpacing: -0.1 },
+  postedLabel: { fontSize: 11, fontWeight: '700' },
   rate: { fontSize: 14, fontWeight: '800', letterSpacing: -0.2 },
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
   meta: { fontSize: 11, fontWeight: '600' },

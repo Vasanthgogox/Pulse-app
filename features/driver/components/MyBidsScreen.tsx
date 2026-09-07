@@ -139,17 +139,65 @@ export function MyBidsContent({ uid }: { uid: string }) {
     return map;
   }, [awards]);
 
+  // Lifecycle fix: `market_bids.status` never leaves 'accepted' once
+  // awarded — the trip's own status is the only real signal of what
+  // happened next, and it's already available here via awardByIndentId.
+  // A completed trip must not keep showing under Awarded; a cancelled
+  // trip is no longer actionable either, but isn't "Completed" -- it goes
+  // to the closed/"Not selected" bucket, where BidCard renders it as
+  // "Cancelled" without needing a new DB status.
   const groups = useMemo(() => {
     const pending: MarketBidRow[] = [];
-    const accepted: MarketBidRow[] = [];
+    const awarded: MarketBidRow[] = [];
+    const completed: MarketBidRow[] = [];
     const closed: MarketBidRow[] = [];
     for (const b of bids) {
-      if (b.status === 'pending') pending.push(b);
-      else if (b.status === 'accepted') accepted.push(b);
-      else closed.push(b);
+      if (b.status === 'pending') {
+        pending.push(b);
+      } else if (b.status === 'accepted') {
+        const trip = awardByIndentId.get(b.indent_id);
+        if (trip?.status === 'completed') completed.push(b);
+        else if (trip?.status === 'cancelled') closed.push(b);
+        else awarded.push(b);
+      } else {
+        closed.push(b);
+      }
     }
-    return { pending, accepted, closed };
-  }, [bids]);
+    return { pending, awarded, completed, closed };
+  }, [bids, awardByIndentId]);
+
+  const renderAwardCard = (b: MarketBidRow) => {
+    const trip = awardByIndentId.get(b.indent_id);
+    return (
+      <BidCard
+        key={b.id}
+        bid={b}
+        colors={colors}
+        isDark={isDark}
+        cardBorder={cardBorder}
+        trip={trip}
+        onViewTrip={(tripId) => {
+          const t = awardByIndentId.get(b.indent_id);
+          if (t && (isAssignedLike(t.status) || isActiveLike(t.status))) {
+            router.replace(ROUTES.DRIVER_ROOT as Href);
+            return;
+          }
+          router.push(`/(driver)/trip-history/${tripId}` as Href);
+        }}
+        onPress={
+          trip
+            ? () => {
+                if (isAssignedLike(trip.status) || isActiveLike(trip.status)) {
+                  router.replace(ROUTES.DRIVER_ROOT as Href);
+                  return;
+                }
+                router.push(`/(driver)/trip-history/${trip.id}` as Href);
+              }
+            : () => router.push(ROUTES.driverAvailableLoad(b.indent_id) as Href)
+        }
+      />
+    );
+  };
 
   return (
     <ScrollView
@@ -185,40 +233,15 @@ export function MyBidsContent({ uid }: { uid: string }) {
         </View>
       ) : (
         <>
-          {groups.accepted.length > 0 ? (
-            <Section title="Awarded" count={groups.accepted.length} colors={colors}>
-              {groups.accepted.map((b) => {
-                const trip = awardByIndentId.get(b.indent_id);
-                return (
-                  <BidCard
-                    key={b.id}
-                    bid={b}
-                    colors={colors}
-                    isDark={isDark}
-                    cardBorder={cardBorder}
-                    trip={trip}
-                    onViewTrip={(tripId) => {
-                      const t = awardByIndentId.get(b.indent_id);
-                      if (t && (isAssignedLike(t.status) || isActiveLike(t.status))) {
-                        router.replace(ROUTES.DRIVER_ROOT as Href);
-                        return;
-                      }
-                      router.push(`/(driver)/trip-history/${tripId}` as Href);
-                    }}
-                    onPress={
-                      trip
-                        ? () => {
-                            if (isAssignedLike(trip.status) || isActiveLike(trip.status)) {
-                              router.replace(ROUTES.DRIVER_ROOT as Href);
-                              return;
-                            }
-                            router.push(`/(driver)/trip-history/${trip.id}` as Href);
-                          }
-                        : () => router.push(ROUTES.driverAvailableLoad(b.indent_id) as Href)
-                    }
-                  />
-                );
-              })}
+          {groups.awarded.length > 0 ? (
+            <Section title="Awarded" count={groups.awarded.length} colors={colors}>
+              {groups.awarded.map(renderAwardCard)}
+            </Section>
+          ) : null}
+
+          {groups.completed.length > 0 ? (
+            <Section title="Completed" count={groups.completed.length} colors={colors}>
+              {groups.completed.map(renderAwardCard)}
             </Section>
           ) : null}
 
@@ -328,8 +351,27 @@ function BidCard({
     trip && (trip.pickup_location || trip.dropoff_location)
       ? `${trip.pickup_location?.trim() || 'Pickup'} → ${trip.dropoff_location?.trim() || 'Drop'}`
       : null;
-  const isAccepted = bid.status === 'accepted';
-  const feePending = isAccepted && !feePaymentGateSatisfied(bid.fee_payment_status);
+  // Lifecycle fix: bid.status alone can't distinguish these -- it stays
+  // 'accepted' forever once awarded. The associated trip's own status is
+  // the real signal for what this card should say.
+  const rawAccepted = bid.status === 'accepted';
+  const isCompleted = rawAccepted && trip?.status === 'completed';
+  const isCancelledTrip = rawAccepted && trip?.status === 'cancelled';
+  const isActiveAward = rawAccepted && !isCompleted && !isCancelledTrip;
+  const showAwardedStyling = isActiveAward || isCompleted;
+  const feePending = isActiveAward && !feePaymentGateSatisfied(bid.fee_payment_status);
+  const statusLabel = isCompleted
+    ? 'Completed'
+    : isCancelledTrip
+      ? 'Cancelled'
+      : isActiveAward
+        ? 'Awarded'
+        : marketBidStatusLabel(bid.status);
+  const statusTextColor = isCompleted
+    ? colors.emerald
+    : isCancelledTrip
+      ? colors.textMuted
+      : statusColor(bid.status, colors);
 
   return (
     <Pressable
@@ -337,14 +379,14 @@ function BidCard({
       disabled={!onPress}
       style={({ pressed }) => [
         styles.card,
-        isAccepted && styles.cardAwarded,
+        showAwardedStyling && styles.cardAwarded,
         {
-          backgroundColor: isAccepted
+          backgroundColor: showAwardedStyling
             ? isDark
               ? colors.surface
               : Theme.positiveMuted
             : colors.surface,
-          borderColor: isAccepted ? Theme.darkGreen : cardBorder,
+          borderColor: showAwardedStyling ? Theme.darkGreen : cardBorder,
           opacity: pressed && onPress ? 0.9 : 1,
         },
       ]}
@@ -357,7 +399,7 @@ function BidCard({
           style={[
             styles.statusPill,
             {
-              backgroundColor: isAccepted
+              backgroundColor: showAwardedStyling
                 ? Theme.positiveMuted
                 : isDark
                   ? colors.surfaceElevated
@@ -365,15 +407,13 @@ function BidCard({
             },
           ]}
         >
-          <Text style={[styles.statusText, { color: statusColor(bid.status, colors) }]}>
-            {isAccepted ? 'Awarded' : marketBidStatusLabel(bid.status)}
-          </Text>
+          <Text style={[styles.statusText, { color: statusTextColor }]}>{statusLabel}</Text>
         </View>
       </View>
 
-      {isAccepted ? (
+      {showAwardedStyling ? (
         <Text style={[styles.jobKicker, { color: colors.emerald }]}>
-          {feePending ? 'Job · Payment required' : 'Job · Awarded'}
+          {isCompleted ? 'Job · Completed' : feePending ? 'Job · Payment required' : 'Job · Awarded'}
         </Text>
       ) : null}
 
