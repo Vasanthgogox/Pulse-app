@@ -8,8 +8,10 @@ import {
   TRIP_SHEET_BTN_HEIGHT,
   TRIP_SHEET_TOP_RADIUS,
 } from '@/components/driver/DriverTripSheetLayout';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { useInvalidateDriverHomeDashboard } from '@/lib/queries/useInvalidateDriverHomeDashboard';
 import { useDriverChat } from '@/features/chat/contexts/DriverChatContext';
 import {
   sendDocumentShareMessage,
@@ -374,6 +376,8 @@ export function DriverTripFlowCard({
 }: DriverTripFlowCardProps) {
   const colors = useDriverThemeColors();
   const { profile } = useAuth();
+  const queryClient = useQueryClient();
+  const invalidateDriverHomeDashboard = useInvalidateDriverHomeDashboard();
   const router = useRouter();
   const { conversations, ensureDriverTripConversation } = useDriverChat();
 
@@ -1325,6 +1329,15 @@ export function DriverTripFlowCard({
     setLocalTrip(next);
     onTripUpdated?.(next);
     await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
+    // Neither cache was invalidated on completion before -- the Dashboard's
+    // availability gate and DriverTripOpsContext's own "current active job"
+    // query could both keep showing this trip as active until something
+    // unrelated happened to refresh them. is_driver_available() remains the
+    // sole backend authority; this only catches the client's cache up to it.
+    if (profile?.uid) {
+      void invalidateDriverHomeDashboard(profile.uid);
+      void queryClient.invalidateQueries({ queryKey: ['driver-ops-trips', profile.uid] });
+    }
     onTripCompleted?.();
   };
 

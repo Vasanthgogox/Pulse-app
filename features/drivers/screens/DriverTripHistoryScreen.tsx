@@ -929,7 +929,7 @@ export default function DriverTripsScreen() {
           },
         ]}
         onPress={() => {
-          router.push(`/(driver)/trip-history/${item.id}` as Href);
+          router.push(`/driver-trip/${item.id}` as Href);
         }}
         onPressIn={() => setPressedCardId(item.id)}
         onPressOut={() => setPressedCardId(null)}

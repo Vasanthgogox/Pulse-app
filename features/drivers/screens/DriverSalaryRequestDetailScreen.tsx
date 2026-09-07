@@ -196,7 +196,7 @@ export default function DriverSalaryRequestDetailScreen() {
               <TouchableOpacity
                 key={trip.id}
                 style={[styles.tripRow, { borderTopColor: colors.borderSubtle }]}
-                onPress={() => router.push(`/(driver)/trip-history/${trip.id}` as import('expo-router').Href)}
+                onPress={() => router.push(`/driver-trip/${trip.id}` as import('expo-router').Href)}
                 activeOpacity={0.82}
               >
                 <View style={styles.tripRowMain}>

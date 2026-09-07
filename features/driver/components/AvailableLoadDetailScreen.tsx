@@ -280,7 +280,7 @@ export default function AvailableLoadDetailScreen() {
       router.replace(ROUTES.DRIVER_ROOT as Href);
       return;
     }
-    router.push(`/(driver)/trip-history/${trip.id}` as Href);
+    router.push(`/driver-trip/${trip.id}` as Href);
   };
 
   const showAwardedJobCard = myBid?.status === 'accepted' && !error;

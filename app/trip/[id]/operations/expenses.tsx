@@ -57,7 +57,7 @@ export default function TripExpenseControlRoute() {
       const query = new URLSearchParams({ tab: "operations" });
       if (eventIdRaw) query.set("eventId", eventIdRaw);
       const href =
-        `/(driver)/trip-history/${encodeURIComponent(trip.id)}?${query.toString()}` as Href;
+        `/driver-trip/${encodeURIComponent(trip.id)}?${query.toString()}` as Href;
       return <Redirect href={href} />;
     }
 

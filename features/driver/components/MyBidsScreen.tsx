@@ -182,7 +182,7 @@ export function MyBidsContent({ uid }: { uid: string }) {
             router.replace(ROUTES.DRIVER_ROOT as Href);
             return;
           }
-          router.push(`/(driver)/trip-history/${tripId}` as Href);
+          router.push(`/driver-trip/${tripId}` as Href);
         }}
         onPress={
           trip
@@ -191,7 +191,7 @@ export function MyBidsContent({ uid }: { uid: string }) {
                   router.replace(ROUTES.DRIVER_ROOT as Href);
                   return;
                 }
-                router.push(`/(driver)/trip-history/${trip.id}` as Href);
+                router.push(`/driver-trip/${trip.id}` as Href);
               }
             : () => router.push(ROUTES.driverAvailableLoad(b.indent_id) as Href)
         }

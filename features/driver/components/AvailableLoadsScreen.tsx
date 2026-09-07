@@ -23,9 +23,10 @@ import { useFleetOwnerOpenLoadsQuery } from '@/lib/queries/useFleetOwnerOpenLoad
 import { useMyMarketBidsQuery } from '@/lib/queries/useMyMarketBidsQuery';
 import { useOwnerVehiclesQuery } from '@/lib/queries/useOwnerVehiclesQuery';
 import { ROUTES } from '@/lib/routes';
+import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { ChevronRight, MapPin, Truck } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
 function formatPickupDate(iso: string | null): string {
@@ -180,10 +181,23 @@ function FindLoadsContent({ uid, filters }: { uid: string; filters: SharedFeedFi
   const { isDark } = useDriverTheme();
   const colors = useDriverThemeColors();
   const { isFleetOwner, isLoading: ownerLoading } = useDriverFleetOwnerQuery(uid);
-  const { loads, isLoading, error } = useFleetOwnerOpenLoadsQuery(uid);
+  const { loads, isLoading, error, refetch: refetchLoads } = useFleetOwnerOpenLoadsQuery(uid);
   const { vehicles } = useOwnerVehiclesQuery(uid);
   const { bids } = useMyMarketBidsQuery(uid);
   const cardBorder = isDark ? colors.borderSubtle : 'rgba(226,232,240,0.95)';
+
+  // refetchOnWindowFocus is inert on React Native without an app-wide
+  // TanStack Query focus manager registered (none exists in this app), so
+  // returning to Find Work -- including right after completing a trip --
+  // otherwise shows stale indents until a manual pull-to-refresh. Mirrors
+  // the same useFocusEffect pattern DriverTripHistoryScreen.tsx already
+  // uses for itself.
+  useFocusEffect(
+    useCallback(() => {
+      if (!uid) return;
+      void refetchLoads();
+    }, [uid, refetchLoads]),
+  );
 
   const fleetTypes = useMemo(
     () => vehicles.map((v) => v.vehicle_type),
