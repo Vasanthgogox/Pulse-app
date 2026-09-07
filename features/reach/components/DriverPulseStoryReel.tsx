@@ -3,7 +3,6 @@
  * Mine (+ capacity) → Fleet availability bubbles → Boosted LOAD bubbles.
  */
 import { PartyAvatar } from '@/components/PartyAvatar';
-import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import type { FleetOwnerCapacityStory } from '@/features/driver/services/fleetOwnerCapacityStory.service';
@@ -88,17 +87,14 @@ function LoadPreview({
 }) {
   return (
     <View style={[styles.loadPreview, { width: AVATAR, height: AVATAR, borderRadius: AVATAR / 2 }]}>
-      <Text style={styles.loadPreviewVehicle} numberOfLines={2}>
+      <Text style={styles.loadPreviewVehicle} numberOfLines={1}>
         {vehicle}
       </Text>
       <Text style={styles.loadPreviewRoute} numberOfLines={1}>
         {origin}
       </Text>
-      <Text style={styles.loadPreviewArrow} numberOfLines={1}>
-        →
-      </Text>
       <Text style={styles.loadPreviewRoute} numberOfLines={1}>
-        {destination}
+        → {destination}
       </Text>
     </View>
   );
@@ -182,65 +178,52 @@ export function DriverPulseStoryReel({
         contentContainerStyle={styles.scroll}
       >
         {isFleetOwner ? (
-          <View style={styles.mineCluster}>
-            <StoryBubble
-              label="Mine"
-              ringColors={hasCapacity ? RING_MINE_ACTIVE : RING_MINE_IDLE}
-              onPress={() => {
-                if (capacityStories[0]) {
-                  onPressCapacity(capacityStories[0]);
-                  return;
-                }
-                onAddCapacity();
-              }}
-              accessibilityLabel="My availability"
-              badge={
-                <View
-                  style={styles.addBadge}
-                  {...(Platform.OS === 'web'
-                    ? {
-                        onClick: (e: { stopPropagation: () => void }) => {
-                          e.stopPropagation();
-                          onAddCapacity();
-                        },
-                      }
-                    : {
-                        onStartShouldSetResponder: () => true,
-                        onResponderRelease: () => onAddCapacity(),
-                      })}
-                  hitSlop={8}
-                  {...(Platform.OS !== 'web' && { accessibilityRole: 'button' as const })}
-                  accessibilityLabel="Share capacity"
-                >
-                  <Plus size={12} color={Theme.textPrimaryDark} strokeWidth={2.6} />
-                </View>
+          <StoryBubble
+            label="Mine"
+            ringColors={hasCapacity ? RING_MINE_ACTIVE : RING_MINE_IDLE}
+            onPress={() => {
+              if (capacityStories[0]) {
+                onPressCapacity(capacityStories[0]);
+                return;
               }
-            >
-              {avatarUri ? (
-                <Image source={{ uri: avatarUri }} style={styles.mineAvatarImg} />
-              ) : (
-                <PartyAvatar
-                  name={mineName}
-                  entityType="driver"
-                  size={AVATAR}
-                  style={styles.avatarPlain}
-                  borderStyle={styles.avatarPlain}
-                />
-              )}
-            </StoryBubble>
-            <View style={styles.pulseStoryWatermark} pointerEvents="none">
-              <PulseBrandMark size="lg" textStyle={styles.watermarkPulse} />
-              <Text style={styles.watermarkStory}>story</Text>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.mineCluster}>
-            <View style={styles.pulseStoryWatermarkSolo} pointerEvents="none">
-              <PulseBrandMark size="lg" textStyle={styles.watermarkPulse} />
-              <Text style={styles.watermarkStory}>story</Text>
-            </View>
-          </View>
-        )}
+              onAddCapacity();
+            }}
+            accessibilityLabel="My availability"
+            badge={
+              <View
+                style={styles.addBadge}
+                {...(Platform.OS === 'web'
+                  ? {
+                      onClick: (e: { stopPropagation: () => void }) => {
+                        e.stopPropagation();
+                        onAddCapacity();
+                      },
+                    }
+                  : {
+                      onStartShouldSetResponder: () => true,
+                      onResponderRelease: () => onAddCapacity(),
+                    })}
+                hitSlop={8}
+                {...(Platform.OS !== 'web' && { accessibilityRole: 'button' as const })}
+                accessibilityLabel="Share capacity"
+              >
+                <Plus size={12} color={Theme.textPrimaryDark} strokeWidth={2.6} />
+              </View>
+            }
+          >
+            {avatarUri ? (
+              <Image source={{ uri: avatarUri }} style={styles.mineAvatarImg} />
+            ) : (
+              <PartyAvatar
+                name={mineName}
+                entityType="driver"
+                size={AVATAR}
+                style={styles.avatarPlain}
+                borderStyle={styles.avatarPlain}
+              />
+            )}
+          </StoryBubble>
+        ) : null}
 
         {capacityStories.map((story) => (
           <StoryBubble
@@ -292,49 +275,17 @@ export function DriverPulseStoryReel({
 const styles = StyleSheet.create({
   wrap: {
     paddingTop: 8,
-    paddingBottom: 6,
+    paddingBottom: 8,
     backgroundColor: Theme.surfaceGray,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
   },
   scroll: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    gap: 8,
+    gap: 12,
     alignItems: 'flex-start',
-    paddingRight: 12,
-    paddingTop: 2,
-    paddingBottom: 8,
-  },
-  mineCluster: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 8,
-    marginRight: 2,
-    flexShrink: 0,
-    paddingVertical: 2,
-  },
-  pulseStoryWatermark: {
-    justifyContent: 'center',
-    opacity: 0.12,
-    minWidth: 46,
-    marginTop: Math.max(0, (RING - 34) / 2),
-  },
-  pulseStoryWatermarkSolo: {
-    justifyContent: 'center',
-    opacity: 0.16,
-    minWidth: 46,
-    paddingVertical: 6,
-  },
-  watermarkPulse: { fontWeight: '700' },
-  watermarkStory: {
-    fontSize: 14,
-    fontWeight: '600',
-    fontStyle: 'italic',
-    color: Theme.textPrimaryDark,
-    letterSpacing: -0.3,
-    lineHeight: 17,
-    alignSelf: 'flex-end',
-    marginTop: -2,
+    paddingTop: 4,
+    paddingBottom: 6,
   },
   storyItem: {
     width: ITEM_W,
@@ -376,15 +327,16 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
     alignItems: 'center',
     justifyContent: 'center',
-    gap: 0,
-    paddingHorizontal: 4,
+    gap: 1,
+    paddingHorizontal: 5,
   },
   loadPreviewVehicle: {
-    fontSize: 6,
+    fontSize: 7,
     fontWeight: '800',
     color: Theme.textPrimaryDark,
     textAlign: 'center',
-    lineHeight: 7,
+    lineHeight: 8,
+    includeFontPadding: false,
   },
   loadPreviewRoute: {
     fontSize: 6,
@@ -392,17 +344,11 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
     textAlign: 'center',
     lineHeight: 7,
-  },
-  loadPreviewArrow: {
-    fontSize: 6,
-    fontWeight: '600',
-    color: Theme.textMuted,
-    textAlign: 'center',
-    lineHeight: 7,
+    includeFontPadding: false,
   },
   storyName: {
     marginTop: 5,
-    fontSize: 9,
+    fontSize: 10,
     lineHeight: 12,
     fontWeight: '700',
     color: Theme.brandBlueInk,

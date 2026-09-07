@@ -132,6 +132,10 @@ function referralStatusChip(story: DriverReachStoryRow): {
   }
 }
 
+/** Fixed lead column width — icon + label; chips (and Fits) share one left edge. */
+const FILTER_LEAD_WIDTH = 76;
+const FILTER_ROW_GAP = 8;
+
 function FilterChip({
   label,
   selected,
@@ -546,7 +550,9 @@ export function StoriesContent({
         contentContainerStyle={[
           styles.listContent,
           {
-            paddingBottom: Layout.tabBarHeight + insets.bottom + 32,
+            // Floating glass dock sits above the home indicator — clear its full
+            // height (not just tabBarHeight) so the last marketplace card isn't clipped.
+            paddingBottom: Layout.tabBarDockHeight + insets.bottom + 48,
           },
         ]}
         refreshControl={
@@ -639,11 +645,14 @@ export function StoriesContent({
             equivalent), so it's hidden when only Marketplace is showing. */}
         <View style={styles.filtersBlock}>
           <View style={styles.filterRow}>
-            <MapPin size={11} color={Theme.textMuted} strokeWidth={2.2} />
-            <Text style={styles.filterLabel}>Pickup</Text>
+            <View style={styles.filterLead}>
+              <MapPin size={12} color={Theme.textMuted} strokeWidth={2.2} />
+              <Text style={styles.filterLabel}>Pickup</Text>
+            </View>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
+              style={styles.filterChipsScroll}
               contentContainerStyle={styles.filterChips}
             >
               <FilterChip
@@ -662,11 +671,14 @@ export function StoriesContent({
             </ScrollView>
           </View>
           <View style={styles.filterRow}>
-            <MapPin size={11} color={Theme.textMuted} strokeWidth={2.2} />
-            <Text style={styles.filterLabel}>Drop</Text>
+            <View style={styles.filterLead}>
+              <MapPin size={12} color={Theme.textMuted} strokeWidth={2.2} />
+              <Text style={styles.filterLabel}>Drop</Text>
+            </View>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
+              style={styles.filterChipsScroll}
               contentContainerStyle={styles.filterChips}
             >
               <FilterChip
@@ -686,11 +698,14 @@ export function StoriesContent({
           </View>
           {source !== 'market' ? (
             <View style={styles.filterRow}>
-              <BadgeCheck size={11} color={Theme.textMuted} strokeWidth={2.2} />
-              <Text style={styles.filterLabel}>Status</Text>
+              <View style={styles.filterLead}>
+                <BadgeCheck size={12} color={Theme.textMuted} strokeWidth={2.2} />
+                <Text style={styles.filterLabel}>Status</Text>
+              </View>
               <ScrollView
                 horizontal
                 showsHorizontalScrollIndicator={false}
+                style={styles.filterChipsScroll}
                 contentContainerStyle={styles.filterChips}
               >
                 {BID_STATUS_FILTERS.map((f) => (
@@ -705,7 +720,7 @@ export function StoriesContent({
             </View>
           ) : null}
           {fleetVehicleTypes.length > 0 ? (
-            <View style={styles.filterRow}>
+            <View style={[styles.filterRow, styles.filterRowFits]}>
               <FilterChip
                 label="Fits my fleet"
                 selected={fitsFleetFilter}
@@ -1345,54 +1360,80 @@ const styles = StyleSheet.create({
     gap: 8,
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 12,
-    paddingBottom: 4,
+    paddingBottom: 8,
   },
   sourceChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+    minHeight: 34,
     borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'transparent',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
-  sourceChipText: { fontSize: 12, fontWeight: '700' },
+  sourceChipText: { fontSize: 12, fontWeight: '700', letterSpacing: -0.1 },
   sectionPad: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 12,
-    gap: 10,
+    paddingTop: 16,
+    gap: 12,
   },
-  sectionHeader: { gap: 2, marginBottom: 2 },
-  sectionTitle: { fontSize: 13, fontWeight: '800', letterSpacing: -0.15 },
-  sectionSub: { fontSize: 11, fontWeight: '500', lineHeight: 15 },
+  sectionHeader: { gap: 4, marginBottom: 4 },
+  sectionTitle: { fontSize: 15, fontWeight: '800', letterSpacing: -0.25 },
+  sectionSub: { fontSize: 12, fontWeight: '500', lineHeight: 17 },
 
   filtersBlock: {
     gap: 8,
-    paddingVertical: 2,
+    paddingTop: 2,
+    paddingBottom: 8,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
   },
   filterRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    minHeight: 32,
+    gap: FILTER_ROW_GAP,
+    minHeight: 30,
+  },
+  /** Indent Fits to the same left edge as Pickup/Drop/Status chips. */
+  filterRowFits: {
+    paddingLeft: FILTER_LEAD_WIDTH + FILTER_ROW_GAP,
+  },
+  /** Fixed lead column so chip columns line up across Pickup / Drop / Status / Fits. */
+  filterLead: {
+    width: FILTER_LEAD_WIDTH,
+    height: 30,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    flexShrink: 0,
   },
   filterLabel: {
-    width: 52,
+    flex: 1,
+    minWidth: 0,
     fontSize: 10,
     fontWeight: '700',
     color: Theme.textMuted,
-    letterSpacing: 0.3,
+    letterSpacing: 0.35,
     textTransform: 'uppercase',
+    lineHeight: 12,
+    includeFontPadding: false,
+    textAlignVertical: 'center',
+  },
+  filterChipsScroll: {
+    flex: 1,
+    minWidth: 0,
   },
   filterChips: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 5,
-    paddingRight: 8,
+    gap: 6,
+    paddingRight: 4,
   },
   filterChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    minHeight: 28,
-    borderRadius: 6,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    minHeight: 30,
+    borderRadius: 8,
     backgroundColor: Theme.surfaceGray,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
@@ -1400,19 +1441,25 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   filterChipSelected: {
-    backgroundColor: Theme.brandBlueSoft,
-    borderColor: Theme.brandBlueInk,
+    backgroundColor: Theme.cardWhite,
+    borderColor: Theme.borderMedium,
   },
   filterChipText: {
     fontSize: 11,
     fontWeight: '600',
     color: Theme.textSecondary,
+    lineHeight: 14,
+    includeFontPadding: false,
   },
   filterChipTextSelected: {
-    color: Theme.brandBlueInk,
+    color: Theme.textPrimaryDark,
     fontWeight: '700',
   },
-  clearFilters: { alignSelf: 'flex-start', paddingVertical: 2 },
+  clearFilters: {
+    alignSelf: 'flex-start',
+    marginLeft: FILTER_LEAD_WIDTH + FILTER_ROW_GAP,
+    paddingVertical: 2,
+  },
   clearFiltersText: {
     fontSize: 11,
     fontWeight: '600',
@@ -1420,14 +1467,15 @@ const styles = StyleSheet.create({
   },
 
   emptyCard: {
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: 12,
+    alignItems: 'flex-start',
+    gap: 8,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
   },
-  emptyTitle: { fontSize: 13, fontWeight: '700' },
-  emptyBody: { fontSize: 11, fontWeight: '500', textAlign: 'center', lineHeight: 15 },
+  emptyTitle: { fontSize: 14, fontWeight: '700', letterSpacing: -0.15 },
+  emptyBody: { fontSize: 12, fontWeight: '500', textAlign: 'left', lineHeight: 17 },
 
   recCard: {
     borderRadius: 12,

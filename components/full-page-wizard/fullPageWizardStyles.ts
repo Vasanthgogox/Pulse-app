@@ -416,6 +416,7 @@ export const fullPageWizardStyles = StyleSheet.create({
     gap: 10,
     width: "100%",
     alignSelf: "stretch",
+    alignItems: "stretch",
   },
   partyRowStack: {
     flexDirection: "column",
@@ -426,11 +427,11 @@ export const fullPageWizardStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
-    gap: 10,
-    backgroundColor: Theme.surface,
-    paddingVertical: 10,
+    gap: 12,
+    backgroundColor: Theme.cardWhite,
+    paddingVertical: 12,
     paddingHorizontal: 12,
-    minHeight: 56,
+    minHeight: 64,
     borderRadius: 14,
     borderWidth: 1,
     borderColor: Theme.borderLight,
@@ -441,7 +442,8 @@ export const fullPageWizardStyles = StyleSheet.create({
   },
   /** Hit target wrapping partyCardFlat — keep card height + center content. */
   partyCardPressableHit: {
-    width: "100%",
+    flex: 1,
+    minWidth: 0,
     alignSelf: "stretch",
     justifyContent: "center",
   },
@@ -463,19 +465,19 @@ export const fullPageWizardStyles = StyleSheet.create({
   /** Embedded allocation picker rows — light outline, no fill. */
   partyCardFlat: {
     backgroundColor: Theme.cardWhite,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderWidth: 1,
     borderColor: Theme.borderLight,
-    borderRadius: 12,
-    paddingVertical: 10,
+    borderRadius: 14,
+    paddingVertical: 12,
     paddingHorizontal: 12,
-    minHeight: 56,
+    minHeight: 64,
     flex: 1,
     minWidth: 0,
     alignSelf: "stretch",
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "flex-start",
-    gap: 10,
+    gap: 12,
   },
   /** Allocation text steps — tiny summary chips so the field stays readable. */
   partyCardFlatCompact: {
@@ -528,10 +530,10 @@ export const fullPageWizardStyles = StyleSheet.create({
   partyLabel: {
     color: Theme.textMuted,
     fontSize: 10,
-    lineHeight: 12,
+    lineHeight: 13,
     textTransform: "uppercase",
-    letterSpacing: 0.4,
-    fontWeight: "500",
+    letterSpacing: 0.45,
+    fontWeight: "700",
     ...Platform.select({
       android: { includeFontPadding: false as const },
       default: {},
@@ -551,7 +553,7 @@ export const fullPageWizardStyles = StyleSheet.create({
   partyName: {
     color: Theme.textPrimaryDark,
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "700",
     lineHeight: 17,
     ...Platform.select({
       android: { includeFontPadding: false as const },
@@ -570,8 +572,9 @@ export const fullPageWizardStyles = StyleSheet.create({
   },
   partySubtitle: {
     color: Theme.textSecondary,
-    fontSize: 12,
+    fontSize: 11,
     lineHeight: 15,
+    fontWeight: "500",
     ...Platform.select({
       android: { includeFontPadding: false as const },
       default: {},
@@ -688,10 +691,11 @@ export const fullPageWizardStyles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    gap: 16,
+    gap: 12,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
-    paddingTop: 14,
+    paddingTop: 12,
+    paddingBottom: 2,
   },
   /** Keeps Close / Confirm (etc.) grouped on the right next to each other. */
   footerActions: {
@@ -724,11 +728,12 @@ export const fullPageWizardStyles = StyleSheet.create({
   footerSummaryInline: {
     flex: 1,
     minWidth: 0,
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
-    color: Theme.textSecondary,
+    color: Theme.textMuted,
     textAlign: "left",
-    lineHeight: 16,
+    lineHeight: 18,
+    paddingRight: 8,
   },
   cancelBtn: {
     flexDirection: "row",
@@ -774,7 +779,7 @@ export const fullPageWizardStyles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
-    gap: 4,
+    gap: 6,
     flexGrow: 0,
     flexShrink: 0,
     minWidth: 132,
@@ -782,7 +787,7 @@ export const fullPageWizardStyles = StyleSheet.create({
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
-    paddingHorizontal: 20,
+    paddingHorizontal: 18,
     paddingVertical: 12,
     minHeight: 48,
     borderRadius: 14,
@@ -840,6 +845,11 @@ export const fullPageWizardStyles = StyleSheet.create({
     color: Theme.buttonPrimaryText,
     fontSize: 14,
     fontWeight: "700",
+    lineHeight: 18,
+    ...Platform.select({
+      android: { includeFontPadding: false as const },
+      default: {},
+    }),
   },
   submitBtnTextDisabled: {
     color: Theme.textMuted,
@@ -949,12 +959,12 @@ export const fullPageWizardStyles = StyleSheet.create({
     color: WIZARD_ACCENT,
   },
   wizardPickerFooterHint: {
-    fontSize: 11,
-    lineHeight: 16,
+    fontSize: 12,
+    lineHeight: 17,
     fontWeight: "500",
     color: Theme.textMuted,
-    textAlign: "center",
-    marginTop: 2,
+    textAlign: "left",
+    marginTop: 4,
   },
   wizardPickerSecondaryBtn: {
     alignSelf: "stretch",
@@ -1099,15 +1109,19 @@ export const fullPageWizardStyles = StyleSheet.create({
     minHeight: 56,
   },
   shipperWarningCard: {
-    backgroundColor: WIZARD_ACCENT_MUTED,
-    padding: 10,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
     gap: 8,
   },
   shipperWarningText: {
-    color: "#4D3636",
-    fontSize: 11,
-    lineHeight: 16,
-    fontWeight: "600",
+    color: Theme.textSecondary,
+    fontSize: 13,
+    lineHeight: 19,
+    fontWeight: "500",
   },
   addClientBtn: {
     alignSelf: "stretch",
@@ -1117,6 +1131,9 @@ export const fullPageWizardStyles = StyleSheet.create({
     paddingVertical: 10,
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
   },
   addClientBtnText: {
     color: Theme.textPrimaryDark,
@@ -1124,9 +1141,10 @@ export const fullPageWizardStyles = StyleSheet.create({
     fontWeight: "700",
   },
   addClientBtnFlat: {
-    backgroundColor: "transparent",
+    backgroundColor: Theme.cardWhite,
     minHeight: 44,
-    paddingVertical: 8,
+    paddingVertical: 10,
+    marginTop: 2,
   },
   /** Wizard step field label — matches attribution block titles. */
   wizardFieldLabel: {
@@ -1169,8 +1187,8 @@ export const fullPageWizardStyles = StyleSheet.create({
   },
   wizardStepBody: {
     width: "100%",
-    gap: 12,
-    paddingBottom: 4,
+    gap: 14,
+    paddingBottom: 8,
   },
   /**
    * Keypad allocate steps: pageRootKeypad has no side pad — chrome above the
@@ -1253,7 +1271,7 @@ export const fullPageWizardStyles = StyleSheet.create({
     gap: 10,
   },
   blockFlatEmbedded: {
-    gap: 8,
+    gap: 10,
   },
   wizardPickerBtn: {
     flexDirection: "row",

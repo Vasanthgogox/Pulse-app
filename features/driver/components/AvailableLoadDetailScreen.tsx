@@ -11,9 +11,9 @@ import {
 import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { MarketLoadBidSheet } from '@/features/driver/components/MarketLoadBidSheet';
 import {
   fleetOwnerLoadDisplayId,
-  fleetOwnerLoadRouteLabel,
   formatFleetOwnerRateOffer,
   isLoadCompatibleWithFleet,
 } from '@/features/driver/services/fleetOwnerLoads.service';
@@ -35,9 +35,9 @@ import {
 } from '@/features/marketplace/components/RazorpayCheckoutSheet';
 import { showAppAlert } from '@/lib/appAlert';
 import {
-  ownerVehicleSubtitle,
-  ownerVehicleTitle,
-} from '@/features/driver/services/ownerVehicles.service';
+  MarketplaceRouteGrid,
+  MarketplaceSpecChips,
+} from '@/features/network/components/MarketplaceLoadCardChrome';
 import { useFleetOwnerOpenLoadsQuery } from '@/lib/queries/useFleetOwnerOpenLoadsQuery';
 import { useMyMarketAwardsQuery } from '@/lib/queries/useMyMarketAwardsQuery';
 import { useMyMarketBidForIndentQuery } from '@/lib/queries/useMyMarketBidForIndentQuery';
@@ -48,14 +48,13 @@ import { ROUTES } from '@/lib/routes';
 import type { DriverTripRow } from '@/types/trip-views';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import { ArrowRight } from 'lucide-react-native';
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   ActivityIndicator,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
-  TextInput,
   View,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -116,12 +115,8 @@ export default function AvailableLoadDetailScreen() {
     invalidate: invalidateAwards,
   } = useMyMarketAwardsQuery(uid);
 
-  const [amountText, setAmountText] = useState('');
-  const [note, setNote] = useState('');
-  const [vehicleId, setVehicleId] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [bidSheetOpen, setBidSheetOpen] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
-  const [justSubmitted, setJustSubmitted] = useState(false);
   // A8.6.2 — only show the fee disclosure while a Marketplace fee config is
   // actually active; don't warn pilot users about a hypothetical charge
   // while the fee stays off. Checked once per screen visit, not per keystroke.
@@ -228,50 +223,35 @@ export default function AvailableLoadDetailScreen() {
   );
 
   const cardBorder = isDark ? colors.borderSubtle : 'rgba(226,232,240,0.95)';
-  const inputBg = isDark ? colors.surfaceElevated : Theme.surfaceGray;
   const rate = load ? formatFleetOwnerRateOffer(load.rate_offer) : null;
+  const targetRateInr =
+    load?.rate_offer != null && Number.isFinite(Number(load.rate_offer))
+      ? Number(load.rate_offer)
+      : null;
 
-  // amountText holds digits only -- see handleAmountChange. The input's displayed `value` is a
-  // separately-computed formatted string (formatMarketBidAmount), so the RPC always gets a clean
-  // number regardless of what's shown on screen.
-  const parsedAmount = amountText ? Number(amountText) : NaN;
-  const amountValid = Number.isFinite(parsedAmount) && parsedAmount > 0;
-
-  /**
-   * Strips anything that isn't a digit on every change -- covers typed input AND pasted text
-   * identically, since paste fires this same handler with the full new value. Non-numeric
-   * characters never make it into state, so there's nothing left to validate away later; the
-   * only remaining invalid state is "empty" or "0", both handled by amountValid.
-   */
-  const handleAmountChange = (text: string) => {
-    setAmountText(text.replace(/[^0-9]/g, ''));
-  };
-
-  const handleSubmitBid = async () => {
-    if (!amountValid) {
-      setSubmitError('Enter a bid amount greater than ₹0.');
-      return;
-    }
-    setBusy(true);
-    setSubmitError(null);
-    try {
+  const handleSubmitAmount = useCallback(
+    async (amountInr: number) => {
+      setSubmitError(null);
+      const preferredVehicle =
+        activeVehicles.find((v) =>
+          load ? isLoadCompatibleWithFleet(load, [v.vehicle_type]) : false,
+        ) ?? activeVehicles[0];
       const { error: bidError } = await submitMarketBid({
         indentId,
-        amount: parsedAmount,
-        note,
-        ownerVehicleId: vehicleId,
+        amount: amountInr,
+        note: '',
+        ownerVehicleId: preferredVehicle?.id ?? null,
       });
       if (bidError) {
         setSubmitError(formatMarketBidSubmitError(bidError.message));
-        return;
+        return false;
       }
-      setJustSubmitted(true);
       invalidateMyBid();
       invalidateMyBids();
-    } finally {
-      setBusy(false);
-    }
-  };
+      return true;
+    },
+    [activeVehicles, indentId, invalidateMyBid, invalidateMyBids, load],
+  );
 
   const openAwardedJob = (trip: DriverTripRow) => {
     // Assigned / in-progress Market awards surface as JobRequestCard on Dashboard.
@@ -373,162 +353,112 @@ export default function AvailableLoadDetailScreen() {
           <View
             style={[
               styles.card,
-              { backgroundColor: colors.surface, borderColor: cardBorder },
+              { backgroundColor: isDark ? colors.surface : Theme.cardWhite, borderColor: cardBorder },
             ]}
           >
-            <Text style={[styles.eyebrow, { color: colors.emerald }]}>
-              {fleetOwnerLoadDisplayId(load)} · OPEN
-            </Text>
-            <Text style={[styles.route, { color: colors.text }]}>
-              {fleetOwnerLoadRouteLabel(load)}
-            </Text>
-            <Text style={[styles.rate, { color: Theme.warning }]}>
-              {rate ?? 'Rate on request'}
-            </Text>
-            <Text style={[styles.meta, { color: colors.textMuted }]}>
-              {[
-                load.vehicle_type?.trim() || 'Vehicle TBA',
-                load.load_type?.trim() || null,
+            <View style={styles.cardHeader}>
+              <Text style={[styles.eyebrow, { color: colors.emerald }]} numberOfLines={1}>
+                {fleetOwnerLoadDisplayId(load)} · Open
+              </Text>
+              {compatible ? (
+                <View
+                  style={[
+                    styles.fitPill,
+                    {
+                      backgroundColor: isDark
+                        ? Theme.positiveMutedDark
+                        : 'rgba(21,128,61,0.1)',
+                    },
+                  ]}
+                >
+                  <Text style={[styles.fitPillText, { color: colors.emerald }]}>Fleet fit</Text>
+                </View>
+              ) : null}
+            </View>
+
+            {load.creator_organization_name ? (
+              <Text style={[styles.shipper, { color: colors.textMuted }]} numberOfLines={1}>
+                {load.creator_organization_name}
+              </Text>
+            ) : null}
+
+            <MarketplaceRouteGrid pickup={load.pickup_area} drop={load.drop_location} />
+            <MarketplaceSpecChips
+              chips={[
+                load.vehicle_type?.trim(),
+                load.load_type?.trim(),
+              ].filter((v): v is string => Boolean(v))}
+              dateLabel={
                 load.pickup_date
                   ? new Date(load.pickup_date).toLocaleDateString('en-IN', {
                       day: 'numeric',
                       month: 'short',
                       year: 'numeric',
                     })
-                  : 'Date TBA',
-              ]
-                .filter(Boolean)
-                .join(' · ')}
-            </Text>
-            {load.creator_organization_name ? (
-              <Text style={[styles.meta, { color: colors.textMuted }]}>
-                Posted by {load.creator_organization_name}
+                  : null
+              }
+            />
+
+            <View style={[styles.rateRow, { borderTopColor: cardBorder }]}>
+              <Text style={[styles.rateLabel, { color: colors.textMuted }]}>Target rate</Text>
+              <Text
+                style={[styles.rate, { color: rate ? Theme.accentBrownDeep : colors.textMuted }]}
+                numberOfLines={1}
+              >
+                {rate ?? 'On request'}
               </Text>
-            ) : null}
-            {compatible ? (
-              <Text style={[styles.fit, { color: colors.emerald }]}>
-                Compatible with a vehicle in My Fleet
-              </Text>
-            ) : null}
+            </View>
           </View>
 
           <View
             style={[
               styles.card,
-              { backgroundColor: colors.surface, borderColor: cardBorder },
+              { backgroundColor: isDark ? colors.surface : Theme.cardWhite, borderColor: cardBorder },
             ]}
           >
             {bidLoading ? (
               <ActivityIndicator color={colors.emerald} />
-            ) : myBid || justSubmitted ? (
+            ) : myBid ? (
               <>
                 <Text style={[styles.section, { color: colors.text }]}>Your bid</Text>
-                <Text style={[styles.rate, { color: Theme.warning }]}>
-                  {formatMarketBidAmount(myBid?.amount) || amountText}
+                <View style={styles.submittedBidRow}>
+                  <Text style={[styles.rateLabel, { color: colors.textMuted }]}>Amount</Text>
+                  <Text style={[styles.rate, { color: Theme.accentBrownDeep }]}>
+                    {formatMarketBidAmount(myBid.amount)}
+                  </Text>
+                </View>
+                <Text style={[styles.body, { color: colors.textMuted }]}>
+                  {marketBidStatusLabel(myBid.status)}
                 </Text>
                 <Text style={[styles.body, { color: colors.textMuted }]}>
-                  {myBid ? marketBidStatusLabel(myBid.status) : 'Submitted — awaiting the business.'}
-                </Text>
-                <Text style={[styles.body, { color: colors.textMuted }]}>
-                  Winning still requires the business to accept your bid — the
-                  Driver App never creates trips or indents directly.
+                  Winning still requires the business to accept your bid — the Driver App never
+                  creates trips or indents directly.
                 </Text>
               </>
             ) : (
               <>
-                <Text style={[styles.section, { color: colors.text }]}>Bid</Text>
+                <Text style={[styles.section, { color: colors.text }]}>Bid on this load</Text>
                 <Text style={[styles.body, { color: colors.textMuted }]}>
-                  Winning still requires the business to accept your bid — the
-                  Driver App never creates trips or indents directly.
+                  Enter your amount on the next screen. Winning still requires the business to
+                  accept your bid.
                 </Text>
                 {feeConfigActive ? (
                   <Text style={[styles.body, { color: colors.textMuted }]}>
-                    If your bid is awarded, you will pay the Marketplace fee to
-                    Pulse separately. The client will pay you the full bid amount.
+                    If awarded, you will pay the Marketplace fee to Pulse separately. The client
+                    pays you the full bid amount.
                   </Text>
                 ) : null}
 
-                <Text style={[styles.label, { color: colors.textMuted }]}>
-                  Your amount
-                </Text>
-                <TextInput
-                  value={amountText ? formatMarketBidAmount(parsedAmount) : ''}
-                  onChangeText={handleAmountChange}
-                  placeholder={rate ? `e.g. ${rate}` : 'e.g. ₹18,500'}
-                  keyboardType="numeric"
-                  placeholderTextColor={colors.textMuted}
-                  style={[
-                    styles.input,
-                    {
-                      color: colors.text,
-                      backgroundColor: inputBg,
-                      borderColor: amountText.length > 0 && !amountValid ? Theme.negative : cardBorder,
-                    },
-                  ]}
-                />
-                {amountText.length > 0 && !amountValid ? (
-                  <Text style={styles.error}>Enter a bid amount greater than ₹0.</Text>
-                ) : null}
-
-                <Text style={[styles.label, { color: colors.textMuted, marginTop: 10 }]}>
-                  Note (optional)
-                </Text>
-                <TextInput
-                  value={note}
-                  onChangeText={setNote}
-                  placeholder="Anything the business should know"
-                  placeholderTextColor={colors.textMuted}
-                  multiline
-                  style={[
-                    styles.input,
-                    styles.noteInput,
-                    { color: colors.text, backgroundColor: inputBg, borderColor: cardBorder },
-                  ]}
-                />
-
-                {activeVehicles.length > 0 ? (
-                  <>
-                    <Text style={[styles.label, { color: colors.textMuted, marginTop: 10 }]}>
-                      Vehicle (optional)
-                    </Text>
-                    <View style={styles.vehicleList}>
-                      {activeVehicles.map((v) => {
-                        const on = vehicleId === v.id;
-                        return (
-                          <Pressable
-                            key={v.id}
-                            onPress={() => setVehicleId(on ? null : v.id)}
-                            style={[
-                              styles.vehicleChip,
-                              {
-                                borderColor: on ? colors.emerald : cardBorder,
-                                backgroundColor: on
-                                  ? isDark
-                                    ? colors.emeraldMuted
-                                    : 'rgba(167,243,208,0.4)'
-                                  : inputBg,
-                              },
-                            ]}
-                          >
-                            <Text style={[styles.vehicleTitle, { color: colors.text }]}>
-                              {ownerVehicleTitle(v)}
-                            </Text>
-                            <Text style={[styles.vehicleSub, { color: colors.textMuted }]}>
-                              {ownerVehicleSubtitle(v)}
-                            </Text>
-                          </Pressable>
-                        );
-                      })}
-                    </View>
-                    <Text style={[styles.hint, { color: colors.textMuted }]}>
-                      {vehicleId ? 'Tap again to skip vehicle.' : 'No vehicle selected — that’s fine.'}
-                    </Text>
-                  </>
-                ) : (
-                  <View style={[styles.noVehicleWrap, { borderColor: cardBorder, backgroundColor: inputBg }]}>
-                    <Text style={[styles.label, { color: colors.textMuted }]}>Vehicle</Text>
+                {activeVehicles.length === 0 ? (
+                  <View
+                    style={[
+                      styles.noVehicleWrap,
+                      { borderColor: cardBorder, backgroundColor: Theme.surfaceGray },
+                    ]}
+                  >
+                    <Text style={[styles.label, { color: colors.textMuted }]}>Vehicle required</Text>
                     <Text style={[styles.body, { color: colors.textMuted }]}>
-                      No active vehicles. Add or activate a vehicle to place a bid on this load.
+                      Add or activate a vehicle in My Fleet before placing a bid.
                     </Text>
                     <Pressable
                       onPress={() =>
@@ -541,31 +471,42 @@ export default function AvailableLoadDetailScreen() {
                       </Text>
                     </Pressable>
                   </View>
+                ) : (
+                  <Pressable
+                    onPress={() => {
+                      setSubmitError(null);
+                      setBidSheetOpen(true);
+                    }}
+                    style={({ pressed }) => [
+                      styles.bidCta,
+                      {
+                        backgroundColor: Theme.buttonPrimary,
+                        borderColor: Theme.buttonPrimaryBorder,
+                        opacity: pressed ? 0.88 : 1,
+                      },
+                    ]}
+                  >
+                    <Text style={styles.bidCtaText}>Place bid</Text>
+                  </Pressable>
                 )}
-
-                {submitError ? <Text style={styles.error}>{submitError}</Text> : null}
-
-                <Pressable
-                  onPress={() => void handleSubmitBid()}
-                  disabled={busy || !amountValid}
-                  style={[
-                    styles.bidCta,
-                    {
-                      backgroundColor: Theme.buttonPrimary,
-                      borderColor: Theme.buttonPrimaryBorder,
-                      opacity: busy || !amountValid ? 0.65 : 1,
-                    },
-                  ]}
-                >
-                  {busy ? (
-                    <ActivityIndicator color={Theme.buttonPrimaryText} />
-                  ) : (
-                    <Text style={styles.bidCtaText}>Submit Bid</Text>
-                  )}
-                </Pressable>
               </>
             )}
           </View>
+
+          <MarketLoadBidSheet
+            visible={bidSheetOpen && !!load}
+            onClose={() => setBidSheetOpen(false)}
+            onSubmitAmount={handleSubmitAmount}
+            shipperName={load?.creator_organization_name}
+            pickup={load?.pickup_area}
+            drop={load?.drop_location}
+            vehicleType={load?.vehicle_type}
+            loadType={load?.load_type}
+            targetRateInr={targetRateInr}
+            indentDisplayId={load ? fleetOwnerLoadDisplayId(load) : null}
+            validationError={submitError ?? undefined}
+            onClearValidationError={() => setSubmitError(null)}
+          />
         </ScrollView>
       )}
     </View>
@@ -676,7 +617,7 @@ function AwardedMarketJobCard({
 
       <View style={styles.earningsRow}>
         <Text style={[styles.earningsLabel, { color: colors.textMuted }]}>Your payout</Text>
-        <Text style={[styles.earningsValue, { color: Theme.warning }]}>{earnings}</Text>
+        <Text style={[styles.earningsValue, { color: Theme.accentBrownDeep }]}>{earnings}</Text>
       </View>
 
       <Text style={[styles.jobHint, { color: colors.textMuted }]}>{statusHint}</Text>
@@ -735,13 +676,13 @@ function AwardedMarketJobCard({
 const styles = StyleSheet.create({
   root: { flex: 1 },
   gate: { padding: 20, gap: 8 },
-  gateTitle: { fontSize: 17, fontWeight: '800' },
-  gateBody: { fontSize: 13, lineHeight: 19 },
+  gateTitle: { fontSize: 15, fontWeight: '700', letterSpacing: -0.15 },
+  gateBody: { fontSize: 12, lineHeight: 17 },
   jobCard: {
-    borderRadius: 16,
-    borderWidth: 1,
-    padding: 16,
-    gap: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 14,
+    gap: 10,
   },
   jobTop: {
     flexDirection: 'row',
@@ -749,22 +690,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
-  jobShipper: { fontSize: 14, fontWeight: '700' },
+  jobShipper: { fontSize: 12, fontWeight: '700' },
   jobKicker: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 0.3,
+    letterSpacing: 0.35,
     textTransform: 'uppercase',
+    lineHeight: 13,
   },
   awardedPill: {
     borderRadius: 999,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     backgroundColor: Theme.positiveMuted,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.positiveMutedDarkBorder,
   },
-  awardedPillText: { fontSize: 11, fontWeight: '800', color: Theme.positive },
+  awardedPillText: { fontSize: 10, fontWeight: '700', color: Theme.positive },
   routeBlock: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -772,9 +714,9 @@ const styles = StyleSheet.create({
   },
   routeCityCol: { flex: 1, minWidth: 0, gap: 2 },
   routeCityColEnd: { alignItems: 'flex-end' },
-  routeCity: { fontSize: 16, fontWeight: '800', letterSpacing: -0.2 },
+  routeCity: { fontSize: 13, fontWeight: '700', letterSpacing: -0.15, lineHeight: 17 },
   routeCityEnd: { textAlign: 'right' },
-  routeMeta: { fontSize: 11, fontWeight: '600' },
+  routeMeta: { fontSize: 10, fontWeight: '600' },
   routeMetaEnd: { textAlign: 'right' },
   routeArrowWrap: { paddingHorizontal: 2 },
   earningsRow: {
@@ -783,79 +725,118 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 8,
   },
-  earningsLabel: { fontSize: 12, fontWeight: '600' },
-  earningsValue: { fontSize: 22, fontWeight: '800' },
-  jobHint: { fontSize: 12, fontWeight: '500', lineHeight: 17 },
+  earningsLabel: { fontSize: 11, fontWeight: '600' },
+  earningsValue: { fontSize: 15, fontWeight: '700', letterSpacing: -0.2 },
+  jobHint: { fontSize: 11, fontWeight: '500', lineHeight: 15 },
   card: {
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 16,
+    paddingHorizontal: 12,
+    paddingTop: 12,
+    paddingBottom: 12,
+    gap: 8,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
     gap: 8,
   },
   eyebrow: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 0.8,
+    letterSpacing: 0.45,
     textTransform: 'uppercase',
+    lineHeight: 13,
+    includeFontPadding: false,
   },
-  route: { fontSize: 20, fontWeight: '800', letterSpacing: -0.3 },
-  rate: { fontSize: 24, fontWeight: '800' },
-  meta: { fontSize: 13, fontWeight: '600' },
-  fit: { fontSize: 12, fontWeight: '700', marginTop: 4 },
-  section: { fontSize: 14, fontWeight: '800' },
-  body: { fontSize: 13, lineHeight: 19 },
-  bidDisabled: {
-    marginTop: 8,
-    minHeight: 48,
-    borderRadius: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
+  shipper: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+    lineHeight: 13,
+    includeFontPadding: false,
   },
-  bidDisabledText: { fontSize: 14, fontWeight: '700' },
+  fitPill: {
+    borderRadius: 999,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
+    flexShrink: 0,
+  },
+  fitPillText: {
+    fontSize: 9,
+    fontWeight: '700',
+    lineHeight: 12,
+    includeFontPadding: false,
+  },
+  rateRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: 10,
+    marginTop: 2,
+    paddingTop: 10,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  submittedBidRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  rateLabel: {
+    fontSize: 9,
+    fontWeight: '600',
+    letterSpacing: 0.35,
+    textTransform: 'uppercase',
+    lineHeight: 12,
+    includeFontPadding: false,
+  },
+  rate: {
+    fontSize: 15,
+    fontWeight: '700',
+    letterSpacing: -0.25,
+    lineHeight: 19,
+    includeFontPadding: false,
+  },
+  section: {
+    fontSize: 13,
+    fontWeight: '700',
+    letterSpacing: -0.15,
+    lineHeight: 17,
+  },
+  body: { fontSize: 11, lineHeight: 16, fontWeight: '500' },
   label: {
     fontSize: 10,
     fontWeight: '700',
-    letterSpacing: 0.35,
+    letterSpacing: 0.4,
     textTransform: 'uppercase',
-    marginBottom: 4,
+    lineHeight: 13,
+    includeFontPadding: false,
   },
-  input: {
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
-    fontSize: 13,
-    fontWeight: '600',
-    minHeight: 40,
-  },
-  noteInput: { minHeight: 64, textAlignVertical: 'top' },
-  vehicleList: { gap: 8 },
-  vehicleChip: {
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 10,
-    paddingVertical: 9,
-    gap: 2,
-  },
-  vehicleTitle: { fontSize: 12, fontWeight: '700' },
-  vehicleSub: { fontSize: 10, fontWeight: '500' },
-  hint: { fontSize: 11, fontWeight: '500', marginTop: 4 },
   noVehicleWrap: {
-    marginTop: 10,
+    marginTop: 4,
     borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 10,
+    padding: 11,
     gap: 6,
   },
-  manageFleetLink: { fontSize: 12, fontWeight: '700' },
-  error: { fontSize: 12, fontWeight: '600', color: Theme.negative, marginTop: 8 },
+  manageFleetLink: { fontSize: 11, fontWeight: '700' },
   bidCta: {
-    marginTop: 12,
-    minHeight: 48,
-    borderRadius: 14,
+    marginTop: 10,
+    minHeight: 46,
+    borderRadius: Theme.buttonPrimaryRadius,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     alignItems: 'center',
     justifyContent: 'center',
   },
-  bidCtaText: { fontSize: 14, fontWeight: '700', color: Theme.buttonPrimaryText },
+  bidCtaText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: Theme.buttonPrimaryText,
+    letterSpacing: -0.1,
+  },
 });

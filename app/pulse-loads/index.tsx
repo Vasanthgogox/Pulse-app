@@ -13,7 +13,7 @@ import { useMemberAccess } from "@/lib/useMemberAccess";
 import Theme from "@/constants/Theme";
 import { useRouter } from "expo-router";
 import React from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { StyleSheet, Text, View } from "react-native";
 
 export default function PulseLoadsScreen() {
   const layout = useLayoutInsets();
@@ -47,17 +47,6 @@ export default function PulseLoadsScreen() {
 
   return (
     <View style={[styles.root, { paddingTop: contentTopInset }]}>
-      {/* A4.3: sibling destination, not a Load Center tab — Get Load stays
-          relationship-based; Find Loads is the open-Marketplace surface. */}
-      <Pressable
-        style={styles.findLoadsBanner}
-        onPress={() => router.push(ROUTES.FIND_LOADS as import("expo-router").Href)}
-      >
-        <Text style={styles.findLoadsBannerTitle}>Find Loads</Text>
-        <Text style={styles.findLoadsBannerSubtitle}>
-          Open Marketplace opportunities →
-        </Text>
-      </Pressable>
       <LoadCenterView
         onCreateIndentPress={() => {
           if (!canSurface("tripops.indents.create")) return;
@@ -83,14 +72,4 @@ const styles = StyleSheet.create({
     backgroundColor: LOADS_HUB_PAGE_BG,
   },
   message: { fontSize: 16, color: Theme.textSecondary },
-  findLoadsBanner: {
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 4,
-    padding: 14,
-    borderRadius: 14,
-    backgroundColor: Theme.brandBlueSoft,
-  },
-  findLoadsBannerTitle: { fontSize: 15, fontWeight: "700", color: Theme.brandBlueInk },
-  findLoadsBannerSubtitle: { fontSize: 13, color: Theme.brandBlueInk, marginTop: 2 },
 });

@@ -10,13 +10,17 @@ import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import {
-  fleetOwnerLoadRouteLabel,
+  fleetOwnerLoadDisplayId,
   formatFleetOwnerRateOffer,
   isLoadCompatibleWithFleet,
   type FleetOwnerOpenLoad,
 } from '@/features/driver/services/fleetOwnerLoads.service';
 import { marketBidStatusLabel, type MarketBidStatus } from '@/features/driver/services/marketBids.service';
 import { MyBidsContent } from '@/features/driver/components/MyBidsScreen';
+import {
+  MarketplaceRouteGrid,
+  MarketplaceSpecChips,
+} from '@/features/network/components/MarketplaceLoadCardChrome';
 import { cityOf, StoriesContent, type SharedFeedFilters } from '@/features/reach/screens/DriverStoriesScreen';
 import { useDriverFleetOwnerQuery } from '@/lib/queries/useDriverFleetOwnerQuery';
 import { useFleetOwnerOpenLoadsQuery } from '@/lib/queries/useFleetOwnerOpenLoadsQuery';
@@ -25,12 +29,12 @@ import { useOwnerVehiclesQuery } from '@/lib/queries/useOwnerVehiclesQuery';
 import { ROUTES } from '@/lib/routes';
 import { useFocusEffect } from '@react-navigation/native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
-import { ChevronRight, MapPin, Truck } from 'lucide-react-native';
+import { ChevronRight, MapPin } from 'lucide-react-native';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
 
-function formatPickupDate(iso: string | null): string {
-  if (!iso) return 'Date TBA';
+function formatPickupDate(iso: string | null): string | null {
+  if (!iso) return null;
   try {
     return new Date(iso).toLocaleDateString('en-IN', {
       weekday: 'short',
@@ -266,7 +270,10 @@ function FindLoadsContent({ uid, filters }: { uid: string; filters: SharedFeedFi
           <View
             style={[
               styles.empty,
-              { backgroundColor: colors.surface, borderColor: cardBorder },
+              {
+                backgroundColor: isDark ? colors.surface : Theme.cardWhite,
+                borderColor: cardBorder,
+              },
             ]}
           >
             <MapPin size={22} color={colors.emerald} />
@@ -339,68 +346,86 @@ function LoadCard({
 }) {
   const rate = formatFleetOwnerRateOffer(load.rate_offer);
   const postedLabel = postedAgoLabel(load.created_at);
+  const shipper = (load.creator_organization_name ?? '').trim() || 'Shipper';
+  const displayId = fleetOwnerLoadDisplayId(load);
+  const dateLabel = formatPickupDate(load.pickup_date);
+  const specChips = [
+    load.vehicle_type?.trim(),
+    load.load_type?.trim(),
+  ].filter((v): v is string => Boolean(v));
+
   return (
     <Pressable
       onPress={onPress}
       style={({ pressed }) => [
-        styles.row,
+        styles.card,
         {
-          backgroundColor: colors.surface,
+          // Light: white cards on slate page BG (driverDetailPageBackground).
+          // Dark: keep theme surface.
+          backgroundColor: isDark ? colors.surface : Theme.cardWhite,
           borderColor: cardBorder,
           opacity: pressed ? 0.92 : 1,
         },
       ]}
+      accessibilityRole="button"
+      accessibilityLabel={`${shipper}, ${load.pickup_area ?? 'Pickup'} to ${load.drop_location ?? 'Drop'}, ${rate ?? 'rate on request'}`}
     >
-      <View style={styles.rowMain}>
-        <Text style={[styles.route, { color: colors.text }]} numberOfLines={1}>
-          {fleetOwnerLoadRouteLabel(load)}
-        </Text>
-        {postedLabel ? (
-          <Text style={[styles.postedLabel, { color: colors.emerald }]} numberOfLines={1}>
-            {postedLabel}
+      <View style={styles.cardTop}>
+        <View style={styles.cardTopText}>
+          <Text style={[styles.shipper, { color: colors.textMuted }]} numberOfLines={1}>
+            {shipper}
           </Text>
+          <Text style={[styles.metaLine, { color: colors.textMuted }]} numberOfLines={1}>
+            {[displayId, postedLabel].filter(Boolean).join(' · ')}
+          </Text>
+        </View>
+        {compatible || bidStatus ? (
+          <View style={styles.badgeStack}>
+            {compatible ? (
+              <View
+                style={[
+                  styles.fitPill,
+                  { backgroundColor: isDark ? Theme.positiveMutedDark : 'rgba(21,128,61,0.1)' },
+                ]}
+              >
+                <Text style={[styles.fitText, { color: colors.emerald }]}>Fleet fit</Text>
+              </View>
+            ) : null}
+            {bidStatus ? (
+              <View
+                style={[
+                  styles.statusPill,
+                  { backgroundColor: isDark ? colors.surfaceElevated : Theme.surfaceGray },
+                ]}
+              >
+                <Text
+                  style={[styles.statusPillText, { color: bidStatusBadgeColor(bidStatus, colors) }]}
+                >
+                  {bidStatus === 'pending' ? 'Bid in' : marketBidStatusLabel(bidStatus)}
+                </Text>
+              </View>
+            ) : null}
+          </View>
         ) : null}
-        <View style={styles.metaRow}>
-          <Truck size={11} color={colors.textMuted} />
-          <Text style={[styles.meta, { color: colors.textMuted }]} numberOfLines={1}>
-            {load.vehicle_type?.trim() || 'Vehicle TBA'}
-            {load.load_type ? ` · ${load.load_type}` : ''} · {formatPickupDate(load.pickup_date)}
-          </Text>
-        </View>
-        <View style={styles.badgeRow}>
-          {compatible ? (
-            <View
-              style={[
-                styles.fitPill,
-                { backgroundColor: isDark ? colors.emeraldMuted : 'rgba(167,243,208,0.45)' },
-              ]}
-            >
-              <Text style={[styles.fitText, { color: colors.emerald }]}>Fits my fleet</Text>
-            </View>
-          ) : null}
-          {bidStatus ? (
-            <View
-              style={[
-                styles.statusPill,
-                { backgroundColor: isDark ? colors.surfaceElevated : Theme.surfaceGray },
-              ]}
-            >
-              <Text style={[styles.statusPillText, { color: bidStatusBadgeColor(bidStatus, colors) }]}>
-                {bidStatus === 'pending' ? 'Bid submitted' : marketBidStatusLabel(bidStatus)}
-              </Text>
-            </View>
-          ) : null}
-        </View>
       </View>
-      <View style={styles.rowSide}>
-        {rate ? (
-          <Text style={[styles.rate, { color: Theme.warning }]} numberOfLines={1}>
-            {rate}
+
+      <MarketplaceRouteGrid pickup={load.pickup_area} drop={load.drop_location} />
+      <MarketplaceSpecChips chips={specChips} dateLabel={dateLabel} />
+
+      <View style={[styles.cardFooter, { borderTopColor: cardBorder }]}>
+        <View style={styles.rateBlock}>
+          <Text style={[styles.rateLabel, { color: colors.textMuted }]}>Target rate</Text>
+          <Text
+            style={[styles.rate, { color: rate ? Theme.accentBrownDeep : colors.textMuted }]}
+            numberOfLines={1}
+          >
+            {rate ?? 'On request'}
           </Text>
-        ) : (
-          <Text style={[styles.meta, { color: colors.textMuted }]}>On request</Text>
-        )}
-        <ChevronRight size={16} color={colors.textMuted} />
+        </View>
+        <View style={styles.cardCta}>
+          <Text style={[styles.cardCtaText, { color: colors.emerald }]}>View</Text>
+          <ChevronRight size={13} color={colors.emerald} strokeWidth={2.4} />
+        </View>
       </View>
     </Pressable>
   );
@@ -408,32 +433,33 @@ function LoadCard({
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  gateBody: { fontSize: 13, lineHeight: 19 },
-  marketSection: { paddingTop: 16, gap: 10, paddingBottom: 4 },
+  gateBody: { fontSize: 12, lineHeight: 17 },
+  marketSection: { paddingTop: 16, gap: 10, paddingBottom: 8 },
   marketGate: {
     paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
-    paddingTop: 16,
+    paddingTop: 14,
     paddingBottom: 8,
     gap: 8,
   },
   marketListPad: { paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD, gap: 8 },
   marketplaceDivider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(148,163,184,0.4)',
+    backgroundColor: 'rgba(148,163,184,0.35)',
     marginHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
-    marginBottom: 8,
+    marginBottom: 2,
   },
   marketplaceLabel: {
     fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.8,
+    fontWeight: '700',
+    letterSpacing: 0.7,
     paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
-    marginBottom: 6,
+    marginBottom: 2,
   },
   segmentRow: {
     flexDirection: 'row',
     marginHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
     marginTop: 10,
+    marginBottom: 2,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     padding: 3,
@@ -445,56 +471,123 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'transparent',
     paddingVertical: 8,
+    minHeight: 38,
     alignItems: 'center',
+    justifyContent: 'center',
   },
-  segmentText: { fontSize: 13, fontWeight: '700' },
-  row: {
+  segmentText: { fontSize: 12, fontWeight: '700', letterSpacing: -0.1, lineHeight: 15 },
+  card: {
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 12,
+    paddingTop: 11,
+    paddingBottom: 10,
+    gap: 8,
+  },
+  cardTop: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: 10,
+  },
+  cardTopText: { flex: 1, minWidth: 0, gap: 2 },
+  shipper: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.35,
+    textTransform: 'uppercase',
+    lineHeight: 13,
+    includeFontPadding: false,
+  },
+  metaLine: {
+    fontSize: 10,
+    fontWeight: '500',
+    lineHeight: 13,
+    includeFontPadding: false,
+  },
+  badgeStack: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+    gap: 5,
+    flexShrink: 0,
+    maxWidth: '42%',
+  },
+  rate: {
+    fontSize: 14,
+    fontWeight: '700',
+    letterSpacing: -0.25,
+    lineHeight: 18,
+    includeFontPadding: false,
+  },
+  rateLabel: {
+    fontSize: 9,
+    fontWeight: '600',
+    letterSpacing: 0.35,
+    textTransform: 'uppercase',
+    lineHeight: 12,
+    includeFontPadding: false,
+  },
+  rateBlock: { flex: 1, minWidth: 0, gap: 1 },
+  cardFooter: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 10,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
+    marginTop: 2,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
   },
-  rowMain: { flex: 1, gap: 3 },
-  rowSide: { alignItems: 'flex-end', gap: 4 },
-  route: { fontSize: 13, fontWeight: '700', letterSpacing: -0.1 },
-  postedLabel: { fontSize: 11, fontWeight: '700' },
-  rate: { fontSize: 14, fontWeight: '800', letterSpacing: -0.2 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  meta: { fontSize: 11, fontWeight: '600' },
-  badgeRow: { flexDirection: 'row', gap: 6, marginTop: 1 },
+  cardCta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 1,
+    flexShrink: 0,
+  },
+  cardCtaText: {
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 14,
+    includeFontPadding: false,
+  },
   fitPill: {
-    alignSelf: 'flex-start',
     borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
-  fitText: { fontSize: 10, fontWeight: '700' },
+  fitText: {
+    fontSize: 9,
+    fontWeight: '700',
+    lineHeight: 12,
+    includeFontPadding: false,
+  },
   statusPill: {
-    alignSelf: 'flex-start',
     borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingHorizontal: 7,
+    paddingVertical: 3,
   },
-  statusPillText: { fontSize: 10, fontWeight: '700' },
+  statusPillText: {
+    fontSize: 9,
+    fontWeight: '700',
+    lineHeight: 12,
+    includeFontPadding: false,
+  },
   empty: {
-    borderRadius: 16,
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 18,
-    gap: 8,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    gap: 6,
   },
-  emptyTitle: { fontSize: 15, fontWeight: '800' },
-  emptyBody: { fontSize: 13, lineHeight: 19 },
+  emptyTitle: { fontSize: 13, fontWeight: '700', letterSpacing: -0.15 },
+  emptyBody: { fontSize: 12, lineHeight: 17 },
   cta: {
-    minHeight: 48,
-    borderRadius: 14,
+    minHeight: 44,
+    borderRadius: 12,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 6,
+    marginTop: 4,
   },
-  ctaText: { color: Theme.textOnPrimary, fontSize: 14, fontWeight: '700' },
-  errorText: { color: Theme.negative, fontSize: 13, fontWeight: '600' },
+  ctaText: { color: Theme.textOnPrimary, fontSize: 13, fontWeight: '700' },
+  errorText: { color: Theme.negative, fontSize: 12, fontWeight: '600' },
 });

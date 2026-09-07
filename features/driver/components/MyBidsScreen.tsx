@@ -66,6 +66,23 @@ function statusColor(status: MarketBidStatus, colors: ReturnType<typeof useDrive
   }
 }
 
+function statusPillBackground(
+  status: MarketBidStatus,
+  opts: { awarded: boolean; isDark: boolean; colors: ReturnType<typeof useDriverThemeColors> },
+) {
+  if (opts.awarded) {
+    return opts.isDark ? Theme.positiveMutedDark : 'rgba(21,128,61,0.1)';
+  }
+  switch (status) {
+    case 'rejected':
+      return opts.isDark ? 'rgba(232,33,39,0.16)' : Theme.negativeMuted;
+    case 'pending':
+      return opts.isDark ? 'rgba(245,158,11,0.16)' : Theme.warningMuted;
+    default:
+      return opts.isDark ? opts.colors.surfaceElevated : Theme.surfaceGray;
+  }
+}
+
 /** A6.4: explain *why* a bid stopped mattering — 'superseded' is not a business
  * decision (rejected) or a driver choice (withdrawn), it just became moot
  * because the driver was awarded a different load. */
@@ -204,8 +221,8 @@ export function MyBidsContent({ uid }: { uid: string }) {
       contentContainerStyle={{
         paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
         paddingBottom: Math.max(insets.bottom, 16) + 24,
-        paddingTop: 12,
-        gap: 16,
+        paddingTop: 10,
+        gap: 14,
       }}
       refreshControl={
         <RefreshControl
@@ -224,7 +241,7 @@ export function MyBidsContent({ uid }: { uid: string }) {
       {isLoading ? (
         <ActivityIndicator color={colors.emerald} style={{ marginTop: 28 }} />
       ) : bids.length === 0 ? (
-        <View style={[styles.empty, { backgroundColor: colors.surface, borderColor: cardBorder }]}>
+        <View style={[styles.empty, { backgroundColor: isDark ? colors.surface : Theme.cardWhite, borderColor: cardBorder }]}>
           <Inbox size={22} color={colors.emerald} />
           <Text style={[styles.emptyTitle, { color: colors.text }]}>No bids yet</Text>
           <Text style={[styles.emptyBody, { color: colors.textMuted }]}>
@@ -321,11 +338,11 @@ function Section({
   children: React.ReactNode;
 }) {
   return (
-    <View style={{ gap: 8 }}>
+    <View style={styles.section}>
       <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
         {title.toUpperCase()} · {count}
       </Text>
-      <View style={{ gap: 8 }}>{children}</View>
+      <View style={styles.sectionCards}>{children}</View>
     </View>
   );
 }
@@ -372,6 +389,13 @@ function BidCard({
     : isCancelledTrip
       ? colors.textMuted
       : statusColor(bid.status, colors);
+  const explanation = statusExplanation(bid.status);
+  const ctaLabel =
+    trip && onViewTrip
+      ? isAssignedLike(trip.status) || isActiveLike(trip.status)
+        ? 'Open job'
+        : 'View trip'
+      : null;
 
   return (
     <Pressable
@@ -381,120 +405,217 @@ function BidCard({
         styles.card,
         showAwardedStyling && styles.cardAwarded,
         {
-          backgroundColor: showAwardedStyling
+          backgroundColor: isDark ? colors.surface : Theme.cardWhite,
+          borderColor: showAwardedStyling
             ? isDark
-              ? colors.surface
-              : Theme.positiveMuted
-            : colors.surface,
-          borderColor: showAwardedStyling ? Theme.darkGreen : cardBorder,
-          opacity: pressed && onPress ? 0.9 : 1,
+              ? Theme.positiveMutedDarkBorder
+              : 'rgba(21,128,61,0.28)'
+            : cardBorder,
+          opacity: pressed && onPress ? 0.92 : 1,
         },
       ]}
     >
-      <View style={styles.cardTop}>
-        <Text style={[styles.amount, { color: colors.text }]}>
-          {formatMarketBidAmount(bid.amount) || 'Rate hidden'}
-        </Text>
-        <View
-          style={[
-            styles.statusPill,
-            {
-              backgroundColor: showAwardedStyling
-                ? Theme.positiveMuted
-                : isDark
-                  ? colors.surfaceElevated
-                  : Theme.surfaceGray,
-            },
-          ]}
-        >
-          <Text style={[styles.statusText, { color: statusTextColor }]}>{statusLabel}</Text>
+      {showAwardedStyling ? (
+        <View style={[styles.cardAccent, { backgroundColor: colors.emerald }]} />
+      ) : null}
+
+      <View style={styles.cardBody}>
+        <View style={styles.cardTop}>
+          <Text style={[styles.amount, { color: colors.text }]} numberOfLines={1}>
+            {formatMarketBidAmount(bid.amount) || 'Rate hidden'}
+          </Text>
+          <View
+            style={[
+              styles.statusPill,
+              {
+                backgroundColor: statusPillBackground(bid.status, {
+                  awarded: showAwardedStyling,
+                  isDark,
+                  colors,
+                }),
+              },
+            ]}
+          >
+            <Text style={[styles.statusText, { color: statusTextColor }]}>{statusLabel}</Text>
+          </View>
+        </View>
+
+        {showAwardedStyling ? (
+          <Text style={[styles.jobKicker, { color: colors.emerald }]}>
+            {isCompleted
+              ? 'Job · Completed'
+              : feePending
+                ? 'Job · Payment required'
+                : 'Job · Awarded'}
+          </Text>
+        ) : null}
+
+        {feePending ? (
+          <Text style={[styles.note, styles.noteEmphasis, { color: colors.textMuted }]}>
+            {feePendingLabel(bid.fee_payment_status, bid.platform_fee_amount)}
+          </Text>
+        ) : null}
+
+        {route ? (
+          <Text style={[styles.route, { color: colors.text }]} numberOfLines={2}>
+            {route}
+          </Text>
+        ) : null}
+
+        {bid.note ? (
+          <Text style={[styles.note, { color: colors.textMuted }]} numberOfLines={2}>
+            {bid.note}
+          </Text>
+        ) : null}
+
+        {explanation ? (
+          <Text style={[styles.note, { color: colors.textMuted }]} numberOfLines={2}>
+            {explanation}
+          </Text>
+        ) : null}
+
+        <View style={[styles.cardFooter, { borderTopColor: cardBorder }]}>
+          <Text style={[styles.meta, { color: colors.textMuted }]} numberOfLines={1}>
+            Submitted {formatSubmittedAt(bid.created_at)}
+          </Text>
+          {trip && onViewTrip && ctaLabel ? (
+            <Pressable
+              onPress={() => onViewTrip(trip.id)}
+              hitSlop={8}
+              style={({ pressed }) => [styles.viewTrip, { opacity: pressed ? 0.75 : 1 }]}
+            >
+              <Text style={[styles.viewTripText, { color: colors.emerald }]}>{ctaLabel}</Text>
+              <ChevronRight size={12} color={colors.emerald} strokeWidth={2.4} />
+            </Pressable>
+          ) : null}
         </View>
       </View>
-
-      {showAwardedStyling ? (
-        <Text style={[styles.jobKicker, { color: colors.emerald }]}>
-          {isCompleted ? 'Job · Completed' : feePending ? 'Job · Payment required' : 'Job · Awarded'}
-        </Text>
-      ) : null}
-
-      {feePending ? (
-        <Text style={[styles.note, { color: colors.textMuted, fontWeight: '700' }]}>
-          {feePendingLabel(bid.fee_payment_status, bid.platform_fee_amount)}
-        </Text>
-      ) : null}
-
-      {route ? (
-        <Text style={[styles.route, { color: colors.text }]} numberOfLines={1}>
-          {route}
-        </Text>
-      ) : null}
-
-      {bid.note ? (
-        <Text style={[styles.note, { color: colors.textMuted }]} numberOfLines={2}>
-          {bid.note}
-        </Text>
-      ) : null}
-
-      {statusExplanation(bid.status) ? (
-        <Text style={[styles.note, { color: colors.textMuted }]}>
-          {statusExplanation(bid.status)}
-        </Text>
-      ) : null}
-
-      <Text style={[styles.meta, { color: colors.textMuted }]}>
-        Submitted {formatSubmittedAt(bid.created_at)}
-      </Text>
-
-      {trip && onViewTrip ? (
-        <Pressable
-          onPress={() => onViewTrip(trip.id)}
-          style={({ pressed }) => [styles.viewTrip, { opacity: pressed ? 0.85 : 1 }]}
-        >
-          <Text style={[styles.viewTripText, { color: colors.emerald }]}>
-            {isAssignedLike(trip.status) || isActiveLike(trip.status) ? 'Open job' : 'View Trip'}
-          </Text>
-          <ChevronRight size={14} color={colors.emerald} />
-        </Pressable>
-      ) : null}
     </Pressable>
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  sectionTitle: { fontSize: 11, fontWeight: '700', letterSpacing: 0.4 },
+  section: { gap: 7 },
+  sectionCards: { gap: 8 },
+  sectionTitle: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.55,
+    lineHeight: 13,
+    includeFontPadding: false,
+  },
   card: {
-    borderRadius: 16,
+    position: 'relative',
+    borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 14,
-    gap: 6,
+    overflow: 'hidden',
   },
   cardAwarded: {
-    borderWidth: 1,
+    borderWidth: StyleSheet.hairlineWidth,
   },
-  cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
-  amount: { fontSize: 18, fontWeight: '800', letterSpacing: -0.2 },
-  statusPill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
-  statusText: { fontSize: 11, fontWeight: '700' },
-  jobKicker: {
-    fontSize: 11,
+  cardAccent: {
+    position: 'absolute',
+    left: 0,
+    top: 0,
+    bottom: 0,
+    width: 3,
+  },
+  cardBody: {
+    paddingVertical: 11,
+    paddingHorizontal: 12,
+    paddingLeft: 14,
+    gap: 4,
+  },
+  cardTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 10,
+    minHeight: 22,
+  },
+  amount: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 15,
     fontWeight: '700',
-    letterSpacing: 0.3,
-    textTransform: 'uppercase',
+    letterSpacing: -0.25,
+    lineHeight: 20,
+    includeFontPadding: false,
   },
-  route: { fontSize: 14, fontWeight: '700' },
-  note: { fontSize: 12, fontWeight: '500', lineHeight: 17 },
-  meta: { fontSize: 11, fontWeight: '600' },
+  statusPill: {
+    borderRadius: 999,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    flexShrink: 0,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.1,
+    lineHeight: 13,
+    includeFontPadding: false,
+  },
+  jobKicker: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.35,
+    textTransform: 'uppercase',
+    lineHeight: 13,
+    includeFontPadding: false,
+  },
+  route: {
+    fontSize: 12,
+    fontWeight: '600',
+    letterSpacing: -0.1,
+    lineHeight: 16,
+    includeFontPadding: false,
+  },
+  note: {
+    fontSize: 11,
+    fontWeight: '500',
+    lineHeight: 15,
+    includeFontPadding: false,
+  },
+  noteEmphasis: { fontWeight: '600' },
+  cardFooter: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    marginTop: 4,
+    paddingTop: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  meta: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 10,
+    fontWeight: '500',
+    lineHeight: 13,
+    includeFontPadding: false,
+  },
   viewTrip: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 2,
-    marginTop: 4,
-    alignSelf: 'flex-start',
+    gap: 1,
+    flexShrink: 0,
   },
-  viewTripText: { fontSize: 12, fontWeight: '700' },
-  empty: { borderRadius: 16, borderWidth: StyleSheet.hairlineWidth, padding: 18, gap: 8 },
-  emptyTitle: { fontSize: 15, fontWeight: '800' },
-  emptyBody: { fontSize: 13, lineHeight: 19 },
-  errorText: { color: Theme.negative, fontSize: 13, fontWeight: '600' },
+  viewTripText: {
+    fontSize: 11,
+    fontWeight: '700',
+    lineHeight: 14,
+    includeFontPadding: false,
+  },
+  empty: {
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 16,
+    gap: 6,
+  },
+  emptyTitle: { fontSize: 14, fontWeight: '700', letterSpacing: -0.15 },
+  emptyBody: { fontSize: 12, lineHeight: 17 },
+  errorText: { color: Theme.negative, fontSize: 12, fontWeight: '600' },
 });

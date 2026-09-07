@@ -190,7 +190,7 @@ export function FullPageWizardFooter({
               <Pressable style={actionStyles.footerGhostBtn} onPress={onSecondaryPress}>
                 <Text style={actionStyles.footerGhostBtnText}>{secondaryLabel}</Text>
               </Pressable>
-            ) : !isRegistry ? (
+            ) : !isRegistry && !summary ? (
               <View style={styles.footerBackSpacer} />
             ) : null}
 

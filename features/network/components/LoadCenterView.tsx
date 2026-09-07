@@ -121,7 +121,7 @@ import {
     useVehiclesQuery,
 } from "@/lib/queries";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { Search } from "lucide-react-native";
+import { Compass, Search } from "lucide-react-native";
 import { type FlashListRef } from "@shopify/flash-list";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Linking from "expo-linking";
@@ -981,6 +981,7 @@ export function LoadCenterView({
                     autoCorrect={false}
                   />
                 </View>
+                {renderFindLoadsButton()}
               </View>
             </View>
           </View>
@@ -988,6 +989,22 @@ export function LoadCenterView({
         </View>
       </View>
     </View>
+  );
+
+  const openFindLoads = () => {
+    router.push(ROUTES.FIND_LOADS as import("expo-router").Href);
+  };
+
+  const renderFindLoadsButton = (size: "compact" | "default" = "default") => (
+    <PulsePillButton
+      label="Find Loads"
+      size={size}
+      variant="outline"
+      showPlusIcon
+      IconComponent={Compass}
+      onPress={openFindLoads}
+      accessibilityLabel="Find Loads — open Marketplace opportunities"
+    />
   );
 
   const renderAddLoadButton = () => {
@@ -1720,6 +1737,7 @@ export function LoadCenterView({
           activeDoneSubTab={doneSubTab}
           onDoneSubTabChange={(id) => setDoneSubTab(id as DoneSubTab)}
           onCreateIndentPress={onCreateIndentPress}
+          findLoadsAction={renderFindLoadsButton("compact")}
         />
       ) : null}
 
