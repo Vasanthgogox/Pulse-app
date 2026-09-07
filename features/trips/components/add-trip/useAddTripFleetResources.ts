@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useFocusEffect } from "expo-router";
 
+import { useAuth } from "@/contexts/AuthContext";
 import {
   getDriversByOrganization,
   type DriverRow,
@@ -35,6 +36,7 @@ export function useAddTripFleetResources(
   state: AddTripFormState,
   setters: ReturnType<typeof useAddTripForm>["setters"],
 ) {
+  const { status } = useAuth();
   const [drivers, setDrivers] = useState<DriverRow[]>([]);
   const [vehicles, setVehicles] = useState<VehicleRow[]>([]);
   const [suppliers, setSuppliers] = useState<SupplierRow[]>([]);
@@ -49,7 +51,7 @@ export function useAddTripFleetResources(
   const driverPhoneLookupGenRef = useRef(0);
 
   const fetchFleet = useCallback(() => {
-    if (!organizationId) return;
+    if (!organizationId || status === "restoring") return;
     setFleetLoading(true);
     void Promise.all([
       getDriversByOrganization(organizationId),
@@ -80,7 +82,7 @@ export function useAddTripFleetResources(
       );
       setFleetLoading(false);
     });
-  }, [organizationId]);
+  }, [organizationId, status]);
 
   const fetchSuppliers = useCallback(() => {
     if (!organizationId) return;
@@ -91,15 +93,15 @@ export function useAddTripFleetResources(
   }, [organizationId]);
 
   useEffect(() => {
-    if (organizationId) fetchFleet();
-  }, [organizationId, fetchFleet]);
+    if (organizationId && status !== "restoring") fetchFleet();
+  }, [organizationId, status, fetchFleet]);
 
   useFocusEffect(
     useCallback(() => {
-      if (!organizationId) return;
+      if (!organizationId || status === "restoring") return;
       fetchFleet();
       fetchSuppliers();
-    }, [organizationId, fetchFleet, fetchSuppliers]),
+    }, [organizationId, status, fetchFleet, fetchSuppliers]),
   );
 
   useEffect(() => {

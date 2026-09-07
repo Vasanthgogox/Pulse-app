@@ -1334,22 +1334,24 @@ function NetworkScreenInner() {
                 </View>
               )}
               {isMobileLayout ? discoverToolsPanel : null}
-              <DiscoverView
-                orgId={orgId}
-                embedded
-                search={discoverOrgSearch}
-                onSearchChange={setDiscoverSearch}
-                showSearchChrome={false}
-                suppressGrowSectionHeader
-                onOpenProfile={handleOpenProfileFromDiscover}
-                onPressMutuals={handlePressMutuals}
-                onPressMutual={handleOpenMutualProfile}
-                inviteDailyCapReached={discoverInviteCount >= discoverInviteLimit}
-                onInviteCountChange={(count, limit) => {
-                  setDiscoverInviteCount(count);
-                  setDiscoverInviteLimit(limit);
-                }}
-              />
+              {entityQueriesReady ? (
+                <DiscoverView
+                  orgId={orgId}
+                  embedded
+                  search={discoverOrgSearch}
+                  onSearchChange={setDiscoverSearch}
+                  showSearchChrome={false}
+                  suppressGrowSectionHeader
+                  onOpenProfile={handleOpenProfileFromDiscover}
+                  onPressMutuals={handlePressMutuals}
+                  onPressMutual={handleOpenMutualProfile}
+                  inviteDailyCapReached={discoverInviteCount >= discoverInviteLimit}
+                  onInviteCountChange={(count, limit) => {
+                    setDiscoverInviteCount(count);
+                    setDiscoverInviteLimit(limit);
+                  }}
+                />
+              ) : null}
             </View>
           </View>
           ) : null}

@@ -3,8 +3,10 @@ import * as driverLocationService from "@/features/driver/services/driverLocatio
 import { resolveMapLocationLabel } from "@/lib/mapLocationLabel.service";
 import { TRIP_TRACKING_HISTORY_FETCH_LIMIT } from "@/lib/trackingLocation.constants";
 import { subscribeSharedPostgresChanges } from "@/lib/realtimeRegistry";
+import { useAuth } from "@/contexts/AuthContext";
 
 export function useDriverLocation(tripId: string | undefined) {
+  const { status } = useAuth();
   const [driverLocation, setDriverLocation] =
     useState<driverLocationService.DriverLocationRow | null>(null);
   const [driverLocationLoading, setDriverLocationLoading] = useState(false);
@@ -16,7 +18,7 @@ export function useDriverLocation(tripId: string | undefined) {
   >(null);
 
   const fetchDriverLocationFromDb = useCallback(async () => {
-    if (!tripId) return;
+    if (!tripId || status === "restoring") return;
     setDriverLocationLoading(true);
     try {
       const [locRes, histRes] = await Promise.all([
@@ -34,10 +36,10 @@ export function useDriverLocation(tripId: string | undefined) {
     } finally {
       setDriverLocationLoading(false);
     }
-  }, [tripId]);
+  }, [tripId, status]);
 
   useEffect(() => {
-    if (!tripId) return;
+    if (!tripId || status === "restoring") return;
 
     // Initial fetch (location + history)
     fetchDriverLocationFromDb();
@@ -61,7 +63,7 @@ export function useDriverLocation(tripId: string | undefined) {
         }
       },
     );
-  }, [tripId, fetchDriverLocationFromDb]);
+  }, [tripId, status, fetchDriverLocationFromDb]);
 
   useEffect(() => {
     if (!driverLocation) {

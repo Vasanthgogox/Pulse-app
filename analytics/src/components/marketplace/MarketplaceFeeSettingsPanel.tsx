@@ -53,6 +53,9 @@ interface FeeConfigRow {
 type FeeCalcResult = {
   is_active_config_found: boolean;
   resolved_fee: number;
+  /** The winning bid amount — under the A8.6.2 model this IS the client/load value; it is never increased by the fee. */
+  bid_amount: number;
+  /** A8.3 field name kept as-is on the RPC response; no longer shown as a distinct "total" in this panel. */
   client_price: number;
   capped?: boolean;
   components?: Array<{
@@ -315,16 +318,35 @@ export function MarketplaceFeeSettingsPanel() {
                       <div className="text-amber-600">Capped at max fee</div>
                     ) : null}
                     <div className="flex justify-between border-t border-border pt-1 font-semibold text-foreground">
-                      <span>Pulse Marketplace fee</span>
+                      <span>Marketplace fee</span>
                       <span className="tabular-nums">₹{previewResult.resolved_fee.toLocaleString('en-IN')}</span>
                     </div>
                     <div className="flex justify-between font-semibold text-foreground">
-                      <span>Total client price</span>
-                      <span className="tabular-nums">₹{previewResult.client_price.toLocaleString('en-IN')}</span>
+                      <span>Bidder pays Pulse</span>
+                      <span className="tabular-nums">₹{previewResult.resolved_fee.toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex justify-between text-muted-foreground">
+                      <span>Client/load value</span>
+                      <span className="tabular-nums">
+                        ₹{(previewResult.bid_amount ?? (Number(previewAmount) || 0)).toLocaleString('en-IN')}
+                      </span>
+                    </div>
+                    <div className="flex justify-between border-t border-border pt-1 font-semibold text-foreground">
+                      <span>Bidder&apos;s effective net</span>
+                      <span className="tabular-nums">
+                        ₹
+                        {(
+                          (previewResult.bid_amount ?? (Number(previewAmount) || 0)) - previewResult.resolved_fee
+                        ).toLocaleString('en-IN')}
+                      </span>
                     </div>
                   </div>
                 )
               ) : null}
+              <p className="mt-2 text-[10px] text-muted-foreground">
+                The client pays the winning bidder the full bid amount. The winning bidder separately pays
+                the Marketplace fee to Pulse before the trip and shipper contact details are unlocked.
+              </p>
             </section>
 
             {configs.length === 0 ? (

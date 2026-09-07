@@ -10,6 +10,9 @@ import { formatMarketplaceTransactionError } from '@/features/marketplace/utils/
 
 export type MarketBidStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'superseded';
 
+/** A8.6.2 — independent of MarketBidStatus; see network/services/marketBids.service.ts for full doc. */
+export type FeePaymentStatus = 'not_required' | 'required' | 'pending' | 'paid' | 'failed' | 'expired';
+
 export type MarketBidRow = {
   id: string;
   indent_id: string;
@@ -20,13 +23,15 @@ export type MarketBidRow = {
   amount: number;
   note: string | null;
   status: MarketBidStatus;
+  fee_payment_status: FeePaymentStatus;
+  platform_fee_amount: number | null;
   created_at: string;
   updated_at: string;
   accepted_at: string | null;
 };
 
 const MARKET_BID_COLUMNS =
-  'id,indent_id,bidder_type,bidder_user_id,bidder_organization_id,owner_vehicle_id,amount,note,status,created_at,updated_at,accepted_at';
+  'id,indent_id,bidder_type,bidder_user_id,bidder_organization_id,owner_vehicle_id,amount,note,status,fee_payment_status,platform_fee_amount,created_at,updated_at,accepted_at';
 
 /** DCO bid — p_bidder_organization_id stays NULL; the Business-bidder path is not yet implemented backend-side. */
 export async function submitMarketBid(input: {

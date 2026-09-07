@@ -18,6 +18,7 @@ import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeCont
 import {
   formatMarketBidAmount,
   marketBidStatusLabel,
+  type FeePaymentStatus,
   type MarketBidRow,
   type MarketBidStatus,
 } from '@/features/driver/services/marketBids.service';
@@ -73,6 +74,41 @@ function statusExplanation(status: MarketBidStatus): string | null {
     return 'Another load was awarded to you, so this bid is no longer active.';
   }
   return null;
+}
+
+/** A8.6.2 — the Marketplace fee gates trip creation now, not just award. */
+function feePaymentGateSatisfied(status: FeePaymentStatus): boolean {
+  return status === 'paid' || status === 'not_required';
+}
+
+function feePendingLabel(status: FeePaymentStatus, feeAmount: number | null): string {
+  const feeLabel = feeAmount != null ? formatMarketBidAmount(feeAmount) : 'the Marketplace fee';
+  switch (status) {
+    case 'pending':
+      return `Payment of ${feeLabel} is processing…`;
+    case 'failed':
+      return `Payment of ${feeLabel} failed — retry to unlock this job.`;
+    case 'required':
+    default:
+      return `Pay ${feeLabel} to Pulse to unlock this job.`;
+  }
+}
+
+function isAssignedLike(status: string): boolean {
+  const s = (status || '').toLowerCase();
+  return s === 'assigned' || s === 'pending' || s === 'scheduled';
+}
+
+function isActiveLike(status: string): boolean {
+  const s = (status || '').toLowerCase();
+  return (
+    s === 'in_progress' ||
+    s === 'in_transit' ||
+    s === 'transit' ||
+    s === 'picked_up' ||
+    s === 'pickup' ||
+    s === 'started'
+  );
 }
 
 /**
@@ -149,6 +185,43 @@ export function MyBidsContent({ uid }: { uid: string }) {
         </View>
       ) : (
         <>
+          {groups.accepted.length > 0 ? (
+            <Section title="Awarded" count={groups.accepted.length} colors={colors}>
+              {groups.accepted.map((b) => {
+                const trip = awardByIndentId.get(b.indent_id);
+                return (
+                  <BidCard
+                    key={b.id}
+                    bid={b}
+                    colors={colors}
+                    isDark={isDark}
+                    cardBorder={cardBorder}
+                    trip={trip}
+                    onViewTrip={(tripId) => {
+                      const t = awardByIndentId.get(b.indent_id);
+                      if (t && (isAssignedLike(t.status) || isActiveLike(t.status))) {
+                        router.replace(ROUTES.DRIVER_ROOT as Href);
+                        return;
+                      }
+                      router.push(`/(driver)/trip-history/${tripId}` as Href);
+                    }}
+                    onPress={
+                      trip
+                        ? () => {
+                            if (isAssignedLike(trip.status) || isActiveLike(trip.status)) {
+                              router.replace(ROUTES.DRIVER_ROOT as Href);
+                              return;
+                            }
+                            router.push(`/(driver)/trip-history/${trip.id}` as Href);
+                          }
+                        : () => router.push(ROUTES.driverAvailableLoad(b.indent_id) as Href)
+                    }
+                  />
+                );
+              })}
+            </Section>
+          ) : null}
+
           {groups.pending.length > 0 ? (
             <Section title="Pending" count={groups.pending.length} colors={colors}>
               {groups.pending.map((b) => (
@@ -163,32 +236,6 @@ export function MyBidsContent({ uid }: { uid: string }) {
                   }
                 />
               ))}
-            </Section>
-          ) : null}
-
-          {groups.accepted.length > 0 ? (
-            <Section title="Accepted" count={groups.accepted.length} colors={colors}>
-              {groups.accepted.map((b) => {
-                const trip = awardByIndentId.get(b.indent_id);
-                return (
-                  <BidCard
-                    key={b.id}
-                    bid={b}
-                    colors={colors}
-                    isDark={isDark}
-                    cardBorder={cardBorder}
-                    trip={trip}
-                    onViewTrip={(tripId) =>
-                      router.push(`/(driver)/trip-history/${tripId}` as Href)
-                    }
-                    onPress={
-                      trip
-                        ? () => router.push(`/(driver)/trip-history/${trip.id}` as Href)
-                        : () => router.push(ROUTES.driverAvailableLoad(b.indent_id) as Href)
-                    }
-                  />
-                );
-              })}
             </Section>
           ) : null}
 
@@ -281,6 +328,8 @@ function BidCard({
     trip && (trip.pickup_location || trip.dropoff_location)
       ? `${trip.pickup_location?.trim() || 'Pickup'} → ${trip.dropoff_location?.trim() || 'Drop'}`
       : null;
+  const isAccepted = bid.status === 'accepted';
+  const feePending = isAccepted && !feePaymentGateSatisfied(bid.fee_payment_status);
 
   return (
     <Pressable
@@ -288,7 +337,16 @@ function BidCard({
       disabled={!onPress}
       style={({ pressed }) => [
         styles.card,
-        { backgroundColor: colors.surface, borderColor: cardBorder, opacity: pressed && onPress ? 0.9 : 1 },
+        isAccepted && styles.cardAwarded,
+        {
+          backgroundColor: isAccepted
+            ? isDark
+              ? colors.surface
+              : Theme.positiveMuted
+            : colors.surface,
+          borderColor: isAccepted ? Theme.darkGreen : cardBorder,
+          opacity: pressed && onPress ? 0.9 : 1,
+        },
       ]}
     >
       <View style={styles.cardTop}>
@@ -299,15 +357,31 @@ function BidCard({
           style={[
             styles.statusPill,
             {
-              backgroundColor: isDark ? colors.surfaceElevated : Theme.surfaceGray,
+              backgroundColor: isAccepted
+                ? Theme.positiveMuted
+                : isDark
+                  ? colors.surfaceElevated
+                  : Theme.surfaceGray,
             },
           ]}
         >
           <Text style={[styles.statusText, { color: statusColor(bid.status, colors) }]}>
-            {marketBidStatusLabel(bid.status)}
+            {isAccepted ? 'Awarded' : marketBidStatusLabel(bid.status)}
           </Text>
         </View>
       </View>
+
+      {isAccepted ? (
+        <Text style={[styles.jobKicker, { color: colors.emerald }]}>
+          {feePending ? 'Job · Payment required' : 'Job · Awarded'}
+        </Text>
+      ) : null}
+
+      {feePending ? (
+        <Text style={[styles.note, { color: colors.textMuted, fontWeight: '700' }]}>
+          {feePendingLabel(bid.fee_payment_status, bid.platform_fee_amount)}
+        </Text>
+      ) : null}
 
       {route ? (
         <Text style={[styles.route, { color: colors.text }]} numberOfLines={1}>
@@ -336,7 +410,9 @@ function BidCard({
           onPress={() => onViewTrip(trip.id)}
           style={({ pressed }) => [styles.viewTrip, { opacity: pressed ? 0.85 : 1 }]}
         >
-          <Text style={[styles.viewTripText, { color: colors.emerald }]}>View Trip</Text>
+          <Text style={[styles.viewTripText, { color: colors.emerald }]}>
+            {isAssignedLike(trip.status) || isActiveLike(trip.status) ? 'Open job' : 'View Trip'}
+          </Text>
           <ChevronRight size={14} color={colors.emerald} />
         </Pressable>
       ) : null}
@@ -353,10 +429,19 @@ const styles = StyleSheet.create({
     padding: 14,
     gap: 6,
   },
+  cardAwarded: {
+    borderWidth: 1,
+  },
   cardTop: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' },
   amount: { fontSize: 18, fontWeight: '800', letterSpacing: -0.2 },
   statusPill: { borderRadius: 999, paddingHorizontal: 10, paddingVertical: 4 },
   statusText: { fontSize: 11, fontWeight: '700' },
+  jobKicker: {
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.3,
+    textTransform: 'uppercase',
+  },
   route: { fontSize: 14, fontWeight: '700' },
   note: { fontSize: 12, fontWeight: '500', lineHeight: 17 },
   meta: { fontSize: 11, fontWeight: '600' },

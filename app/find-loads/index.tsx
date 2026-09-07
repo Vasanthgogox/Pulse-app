@@ -222,7 +222,15 @@ export default function FindLoadsScreen() {
 
       {segment === "myBids" ? (
         <ScrollView contentContainerStyle={styles.myBidsScroll}>
-          <OrgMyBidsList bids={myBids} isLoading={myBidsQ.isLoading} />
+          <OrgMyBidsList
+            bids={myBids}
+            isLoading={myBidsQ.isLoading}
+            onPaymentUpdated={() => {
+              if (orgId) {
+                queryClient.invalidateQueries({ queryKey: queryKeys.findLoadsForOrg.myBids(orgId) });
+              }
+            }}
+          />
         </ScrollView>
       ) : (
         <>

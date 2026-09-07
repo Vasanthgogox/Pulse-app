@@ -1,6 +1,12 @@
 -- Persist client sale basis (₹/MT vs trip total) on indent + trip so
 -- after-load weight can recompute client_price. Indent→trip RPCs copy
 -- via trigger so we do not rewrite each deploy function.
+--
+-- Reconstructed from the live database (this file was applied to the
+-- linked project as version 20270308103000 but the .sql file itself was
+-- never committed to this repo). Byte-accurate: pulled directly from
+-- supabase_migrations.schema_migrations.statements for this version via
+-- `supabase db query --linked`, not retyped from memory.
 
 ALTER TABLE public.indents
   ADD COLUMN IF NOT EXISTS client_id uuid,
@@ -109,6 +115,7 @@ END;
 $$;
 
 DROP TRIGGER IF EXISTS trips_apply_sale_rate_snapshot ON public.trips;
+
 CREATE TRIGGER trips_apply_sale_rate_snapshot
   BEFORE INSERT OR UPDATE OF load_tons, sale_unit_rate, sale_rate_basis, indent_id
   ON public.trips
