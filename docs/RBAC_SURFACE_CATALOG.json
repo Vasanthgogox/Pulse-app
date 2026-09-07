@@ -35,7 +35,6 @@
         "Reports & insights": [
           { "id": "finance.business_pulse", "label": "Business Pulse", "hint": "Business pulse dashboard", "requires": "finance.view" },
           { "id": "finance.reports", "label": "Finance reports", "hint": "Report tab / export summaries", "requires": "finance.view" },
-          { "id": "finance.shared_ledger", "label": "Shared ledger", "hint": "Integrated party shared ledger views", "requires": "finance.view" },
           { "id": "finance.trip_ledger", "label": "Trip ledger page", "hint": "Open /trip-ledger and trip cash history", "requires": "finance.view" },
           { "id": "finance.documents_center", "label": "Documents center", "hint": "Org documents vault / documents-center", "requires": "finance.view" }
         ],
@@ -65,7 +64,6 @@
           { "id": "sales.network.discover", "label": "Discover network", "hint": "Discover orgs / grow network", "requires": "sales.tab" },
           { "id": "sales.network.stories", "label": "Stories & feed", "hint": "View / interact with network stories", "requires": "sales.tab" },
           { "id": "sales.load_board", "label": "Load board", "hint": "Open load board marketplace", "requires": "sales.tab" },
-          { "id": "sales.from_clients", "label": "From clients", "hint": "Loads / requests from clients hub", "requires": "sales.tab" },
           { "id": "sales.chat", "label": "Business chat", "hint": "Org / partner chat threads", "requires": "sales.tab" }
         ],
         "Suppliers": [

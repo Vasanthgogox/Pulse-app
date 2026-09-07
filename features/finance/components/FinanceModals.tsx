@@ -115,7 +115,7 @@ export interface FinanceModalsProps {
     data: FinancialRowData;
     entityType: "CLIENT" | "SUPPLIER" | "VEHICLE" | "DRIVER";
     subTab: FinanceSubTab;
-    initialDetailTab?: "main" | "ledger" | "shared_ledger";
+    initialDetailTab?: "main" | "ledger";
   } | null;
   selectedEntityTrips: TripRow[];
   selectedEntityTransactions: LedgerRow[] | null;

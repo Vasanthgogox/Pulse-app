@@ -16,8 +16,6 @@ import {
   type TripRow,
 } from "@/features/trips/services/trips.service";
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
-import { getClientById } from "@/features/clients/services/clients.service";
-import { getSupplierById } from "@/features/suppliers/services/suppliers.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useFocusEffect } from "@react-navigation/native";
 import { useRouter } from "expo-router";

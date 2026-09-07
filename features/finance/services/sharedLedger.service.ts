@@ -4,17 +4,6 @@
  * See docs/SHARED_LEDGER_BACKEND_CONTRACT.md for backend contract.
  */
 import { supabase } from '@/lib/supabase';
-import type { TripAdjustment } from '@/features/trips/services/tripAdjustments';
-
-export interface VerifiedBalance {
-  partnerKey: string;
-  balance: number;
-}
-
-export interface SharedLedgerConnection {
-  partner_org_id: string;
-  contact_id?: string;
-}
 
 export interface SharedLedgerEntry {
   id: string;
@@ -83,86 +72,6 @@ function isDisputeConflictError(error: {
     joined.includes('unique') ||
     joined.includes('duplicate')
   );
-}
-
-/**
- * Get aggregated verified balances per partner for an org.
- * RPC get_verified_balances(org_id) returns { partner_key, balance }[].
- */
-export async function getVerifiedBalances(orgId: string): Promise<{
-  error: Error | null;
-  balances: VerifiedBalance[];
-}> {
-  const { data, error } = await supabase().rpc('get_verified_balances', {
-    org_id: orgId,
-  });
-  if (error) return { error: new Error(error.message), balances: [] };
-  const rows = (Array.isArray(data) ? data : []) as Array<{ partner_key: string; balance: number }>;
-  const balances: VerifiedBalance[] = rows.map((r) => ({
-    partnerKey: r.partner_key ?? '',
-    balance: Number(r.balance ?? 0),
-  }));
-  return { error: null, balances };
-}
-
-/**
- * Get active shared-ledger connections for an org.
- * RPC get_shared_ledger_connections(org_id) or table shared_ledger_connection.
- */
-function isMissingSchemaObjectError(error: {
-  code?: string | null;
-  message?: string | null;
-  details?: string | null;
-  hint?: string | null;
-} | null): boolean {
-  if (!error) return false;
-  const code = String(error.code ?? '');
-  if (code === 'PGRST202' || code === 'PGRST205' || code === '42P01') return true;
-  const joined = [error.message, error.details, error.hint].filter(Boolean).join(' ').toLowerCase();
-  return (
-    joined.includes('does not exist') ||
-    joined.includes('could not find') ||
-    joined.includes('not found') ||
-    joined.includes('schema cache')
-  );
-}
-
-export async function getSharedLedgerConnections(orgId: string): Promise<{
-  error: Error | null;
-  connections: SharedLedgerConnection[];
-}> {
-  const { data: tableData, error: tableError } = await supabase()
-    .from('shared_ledger_connection')
-    .select('org_a_id, org_b_id')
-    .or(`org_a_id.eq.${orgId},org_b_id.eq.${orgId}`)
-    .eq('status', 'ACTIVE');
-  if (!tableError) {
-    const rows = (tableData ?? []) as Array<{ org_a_id: string; org_b_id: string }>;
-    const connections: SharedLedgerConnection[] = rows.map((row) => ({
-      partner_org_id: row.org_a_id === orgId ? row.org_b_id : row.org_a_id,
-    }));
-    return { error: null, connections };
-  }
-  if (!isMissingSchemaObjectError(tableError)) {
-    const { data, error } = await supabase().rpc('get_shared_ledger_connections', {
-      org_id: orgId,
-    });
-    if (!error) {
-      const rows = (Array.isArray(data) ? data : []) as Array<{
-        partner_org_id: string;
-        contact_id?: string;
-      }>;
-      const connections: SharedLedgerConnection[] = rows.map((r) => ({
-        partner_org_id: r.partner_org_id ?? '',
-        contact_id: r.contact_id,
-      }));
-      return { error: null, connections };
-    }
-    if (!isMissingSchemaObjectError(error)) {
-      return { error: new Error(error.message), connections: [] };
-    }
-  }
-  return { error: null, connections: [] };
 }
 
 /**
@@ -246,72 +155,6 @@ export async function getSharedLedgerTripSummary(
     partner_paid: Number(r.partner_paid ?? 0),
   }));
   return { error: null, rows };
-}
-
-/**
- * Trip adjustments for Compare & Verify from both orgs (shared trips + mission_key match). RPC: get_shared_trip_finance_adjustments.
- */
-export async function getSharedTripFinanceAdjustments(
-  orgId: string,
-  partnerKey: string,
-): Promise<{ error: Error | null; adjustments: TripAdjustment[] }> {
-  const { data, error } = await supabase().rpc('get_shared_trip_finance_adjustments', {
-    org_id: orgId,
-    partner_key: partnerKey,
-  });
-  if (error) return { error: new Error(error.message), adjustments: [] };
-  const raw = (Array.isArray(data) ? data : []) as Array<{
-    id: string;
-    trip_id: string;
-    organization_id: string;
-    type: string;
-    impact: string;
-    amount: number | string;
-    reason: string;
-    mission_key?: string | null;
-    created_at?: string;
-    voided_at?: string | null;
-    void_reason?: string | null;
-  }>;
-  const adjustments: TripAdjustment[] = raw.map((r) => ({
-    id: r.id,
-    trip_id: r.trip_id,
-    organization_id: r.organization_id,
-    type: r.type === 'cost' ? 'cost' : 'revenue',
-    impact: r.impact === 'minus' ? 'minus' : 'plus',
-    amount: Number(r.amount ?? 0),
-    reason: String(r.reason ?? ''),
-    created_at: r.created_at,
-    mission_key: r.mission_key ?? null,
-    voided_at: r.voided_at ?? null,
-    void_reason: r.void_reason ?? null,
-  }));
-  return { error: null, adjustments };
-}
-
-/**
- * Partner-org trip UUIDs that share the same indent as the viewer's trip (TRP labels differ per org).
- * RPC: get_partner_trip_ids_for_shared_ledger_focus.
- */
-export async function getPartnerTripIdsForSharedLedgerFocus(
-  orgId: string,
-  partnerKey: string,
-  viewerTripId: string,
-): Promise<{ error: Error | null; tripIds: string[] }> {
-  const { data, error } = await supabase().rpc(
-    'get_partner_trip_ids_for_shared_ledger_focus',
-    {
-      org_id: orgId,
-      partner_key: partnerKey,
-      viewer_trip_id: viewerTripId,
-    },
-  );
-  if (error) return { error: new Error(error.message), tripIds: [] };
-  const raw = Array.isArray(data) ? data : [];
-  const tripIds = raw
-    .map((u) => (u == null ? '' : String(u)))
-    .filter((s) => s.length > 0);
-  return { error: null, tripIds };
 }
 
 /**

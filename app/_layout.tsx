@@ -514,7 +514,7 @@ function RootLayoutNav() {
                 options={{ presentation: 'fullScreenModal', animation: 'slide_from_right', headerShown: false }}
               />
               <Stack.Screen name="trip" options={{ animation: 'slide_from_right', headerShown: false }} />
-              <Stack.Screen name="driver-trip/[tripId]" options={{ animation: 'slide_from_right', headerShown: false }} />
+              <Stack.Screen name="driver-trip" options={{ animation: 'slide_from_right', headerShown: false }} />
               <Stack.Screen name="track" options={{ animation: 'slide_from_right', headerShown: false }} />
               <Stack.Screen name="fleet-operations" options={{ animation: 'slide_from_right', headerShown: false }} />
               <Stack.Screen name="create-indent" options={{ presentation: 'fullScreenModal' }} />
