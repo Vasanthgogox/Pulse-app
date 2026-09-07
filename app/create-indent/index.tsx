@@ -303,6 +303,7 @@ const initialFormState: FormState = {
   sale_rate_basis: "per_trip",
   sale_unit_rate: "",
   supplier_target: "",
+  supplier_rate_basis: "per_trip",
   pickup_date: getToday(),
   circulation_target: "integrated_supplier",
 };
@@ -663,6 +664,8 @@ export default function CreateIndentScreen() {
               indent.supplier_target != null
                 ? String(Number(indent.supplier_target))
                 : "",
+            supplier_rate_basis:
+              indent.supplier_rate_basis === "per_mt" ? "per_mt" : "per_trip",
             pickup_date: String(indent.pickup_date ?? getToday()),
             vehicle_count: resolvedDraftVehicleCount(
               await AsyncStorage.getItem(
@@ -1050,6 +1053,7 @@ export default function CreateIndentScreen() {
       lane_id: selectedLaneId,
       supplier_target:
         parseFloat(String(form.supplier_target).replace(/,/g, "")) || 0,
+      supplier_rate_basis: form.supplier_rate_basis,
       vehicle_type: form.vehicle_type.trim(),
       load_type: form.load_type.trim(),
       weight: (parseFloat((form.weight ?? "").replace(/,/g, "")) || 0) * 1000,
@@ -1258,6 +1262,17 @@ export default function CreateIndentScreen() {
     if (!isMobileWizard) return canSubmit;
     return indentStepCanAdvance(wizardStep, form);
   }, [canSubmit, form, isMobileWizard, wizardStep]);
+
+  /** "₹3,200/MT x 38.83 t = ₹1,24,256 per trip" under the per-MT target. */
+  const supplierPerMtTripPreview = useMemo(() => {
+    if (form.supplier_rate_basis !== "per_mt") return null;
+    const rate = parseFloat(String(form.supplier_target).replace(/,/g, ""));
+    const tons = parseFloat(String(form.weight ?? "").replace(/,/g, ""));
+    if (!Number.isFinite(rate) || rate <= 0) return null;
+    if (!Number.isFinite(tons) || tons <= 0) return null;
+    const total = Math.round(rate * tons);
+    return `₹${rate.toLocaleString("en-IN")}/MT x ${tons} t = ₹${total.toLocaleString("en-IN")} per trip`;
+  }, [form.supplier_rate_basis, form.supplier_target, form.weight]);
 
   const indentWizardSteps = useMemo(
     () =>
@@ -1587,6 +1602,11 @@ export default function CreateIndentScreen() {
               <CreateIndentNetworkTargetStep
                 compact={compactWizard}
                 supplierTarget={form.supplier_target}
+                supplierRateBasis={form.supplier_rate_basis}
+                onSupplierRateBasisChange={(value) =>
+                  update({ supplier_rate_basis: value })
+                }
+                weightTons={form.weight}
                 onSupplierTargetChange={(value) =>
                   update({ supplier_target: value })
                 }
@@ -2405,20 +2425,68 @@ export default function CreateIndentScreen() {
                 {!isMobileWizard ? (
                 <View style={styles.supplierSection}>
                   <View style={styles.supplierLabelRow}>
-                    <Text style={fieldLabelStyle}>Supplier target (₹)</Text>
+                    <Text style={fieldLabelStyle}>
+                      {form.supplier_rate_basis === "per_mt"
+                        ? "Supplier target (₹/MT)"
+                        : "Supplier target (₹/trip)"}
+                    </Text>
                     <View style={styles.estBadge}>
                       <Text style={styles.estBadgeText}>Est. target</Text>
                     </View>
                   </View>
+                  {/*
+                    The basis must be explicit: an unlabelled number left ₹/MT
+                    rates and trip totals indistinguishable in the DB, so read
+                    surfaces showed a ₹1.24L trip as ₹3,200.
+                  */}
+                  <View style={styles.supplierBasisRow}>
+                    {(["per_trip", "per_mt"] as const).map((basis) => {
+                      const selected = form.supplier_rate_basis === basis;
+                      return (
+                        <Pressable
+                          key={basis}
+                          onPress={() => update({ supplier_rate_basis: basis })}
+                          style={[
+                            styles.supplierBasisChip,
+                            selected && styles.supplierBasisChipSelected,
+                          ]}
+                          accessibilityRole="radio"
+                          accessibilityState={{ checked: selected }}
+                          accessibilityLabel={
+                            basis === "per_mt" ? "Per metric tonne" : "Per trip"
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.supplierBasisChipText,
+                              selected && styles.supplierBasisChipTextSelected,
+                            ]}
+                          >
+                            {basis === "per_mt" ? "Per MT" : "Per trip"}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
                   <SmartInput
                     type="currency"
-                    label="Supplier target"
+                    label={
+                      form.supplier_rate_basis === "per_mt"
+                        ? "Supplier target (₹/MT)"
+                        : "Supplier target (₹/trip)"
+                    }
                     value={form.supplier_target}
                     onChange={(raw) => update({ supplier_target: raw })}
                     variant="field"
                     placeholder="Enter target"
                     errorMessage={errors.supplier_target}
                   />
+                  {form.supplier_rate_basis === "per_mt" ? (
+                    <Text style={styles.supplierBasisHint}>
+                      {supplierPerMtTripPreview ??
+                        "Add tonnage to see the trip total."}
+                    </Text>
+                  ) : null}
                 </View>
                 ) : null}
 
@@ -2439,7 +2507,10 @@ export default function CreateIndentScreen() {
                       },
                       {
                         id: "supplier",
-                        label: "Supplier target",
+                        label:
+                          form.supplier_rate_basis === "per_mt"
+                            ? "Supplier target (₹/MT)"
+                            : "Supplier target (₹/trip)",
                         rawValue: currencyFieldToRaw(form.supplier_target),
                         onRawValueChange: (raw) => update({ supplier_target: raw }),
                         errorMessage: errors.supplier_target,
@@ -4154,6 +4225,37 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 6,
+  },
+  supplierBasisRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 8,
+  },
+  supplierBasisChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    backgroundColor: Theme.surface,
+  },
+  supplierBasisChipSelected: {
+    borderColor: Theme.primary,
+    backgroundColor: Theme.primaryLight,
+  },
+  supplierBasisChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+  },
+  supplierBasisChipTextSelected: {
+    color: Theme.primary,
+  },
+  supplierBasisHint: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textSecondary,
   },
   estBadge: {
     backgroundColor: "rgba(59, 130, 246, 0.12)",

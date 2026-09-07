@@ -63,9 +63,19 @@ function activeMarginPct(
 
 export type IndentDistributionChoice = "integrated_supplier" | "marketplace" | "both";
 
+export type SupplierRateBasis = "per_mt" | "per_trip";
+
 export type CreateIndentNetworkTargetStepProps = {
   supplierTarget: string;
   onSupplierTargetChange: (value: string) => void;
+  /**
+   * Unit of the target. `per_mt` means the entered number is a ₹/MT rate that
+   * downstream pricing multiplies by tonnage; `per_trip` is a lump sum.
+   */
+  supplierRateBasis?: SupplierRateBasis;
+  onSupplierRateBasisChange?: (value: SupplierRateBasis) => void;
+  /** Tonnes from the load step — powers the live "x N t = ₹Total" preview. */
+  weightTons?: string;
   /** Client sale — shown under target with live margin + presets. */
   clientPrice?: string;
   errorMessage?: string;
@@ -210,10 +220,87 @@ function MarginPresetChips({
   );
 }
 
+const BASIS_OPTIONS: { value: SupplierRateBasis; label: string; hint: string }[] = [
+  { value: "per_trip", label: "Per trip", hint: "One lump sum" },
+  { value: "per_mt", label: "Per MT", hint: "Rate x tonnage" },
+];
+
+/**
+ * Which unit the supplier target is quoted in.
+ *
+ * Without this the number was ambiguous in the database: a ₹3,200/MT rate and
+ * a ₹3,200 trip total were stored identically, so every read surface guessed —
+ * and showed a ₹1.24L trip as ₹3,200 (IND197 Bhandara -> Hosur).
+ */
+function SupplierRateBasisSelector({
+  value,
+  onChange,
+  target,
+  weightTons,
+}: {
+  value: SupplierRateBasis;
+  onChange: (value: SupplierRateBasis) => void;
+  target: string;
+  weightTons?: string;
+}) {
+  const tons = parseAmount(weightTons ?? "");
+  const rate = parseAmount(target);
+  const tripTotal =
+    value === "per_mt" && tons != null && tons > 0 && rate != null && rate > 0
+      ? Math.round(rate * tons)
+      : null;
+
+  return (
+    <View style={styles.basisWrap}>
+      <Text style={styles.basisLabel}>How is this target quoted?</Text>
+      <View style={styles.basisOptions}>
+        {BASIS_OPTIONS.map((opt) => {
+          const selected = value === opt.value;
+          return (
+            <Pressable
+              key={opt.value}
+              onPress={() => onChange(opt.value)}
+              style={[
+                styles.basisOption,
+                selected && styles.basisOptionSelected,
+              ]}
+              accessibilityRole="radio"
+              accessibilityState={{ checked: selected }}
+              accessibilityLabel={`${opt.label} — ${opt.hint}`}
+            >
+              <Text
+                style={[
+                  styles.basisOptionLabel,
+                  selected && styles.basisOptionLabelSelected,
+                ]}
+              >
+                {opt.label}
+              </Text>
+              <Text style={styles.basisOptionHint}>{opt.hint}</Text>
+            </Pressable>
+          );
+        })}
+      </View>
+      {value === "per_mt" ? (
+        <Text style={styles.basisPreview}>
+          {tripTotal != null
+            ? `₹${rate?.toLocaleString("en-IN")}/MT x ${tons} t = ₹${tripTotal.toLocaleString("en-IN")} per trip`
+            : tons == null || tons === 0
+              ? "Add tonnage on the load step to see the trip total."
+              : "Enter a ₹/MT rate to see the trip total."}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 export const CreateIndentNetworkTargetStep = memo(
   function CreateIndentNetworkTargetStep({
     supplierTarget,
     onSupplierTargetChange,
+    supplierRateBasis = "per_trip",
+    onSupplierRateBasisChange,
+    weightTons,
     clientPrice = "",
     errorMessage,
     compact = false,
@@ -235,13 +322,16 @@ export const CreateIndentNetworkTargetStep = memo(
       () => [
         {
           id: "supplierTarget",
-          label: "Supplier target",
+          label:
+            supplierRateBasis === "per_mt"
+              ? "Supplier target (₹/MT)"
+              : "Supplier target (₹/trip)",
           rawValue: raw,
           onRawValueChange: handleRawChange,
           errorMessage,
         },
       ],
-      [raw, handleRawChange, errorMessage],
+      [raw, handleRawChange, errorMessage, supplierRateBasis],
     );
 
     const marginStrip = (
@@ -260,6 +350,15 @@ export const CreateIndentNetworkTargetStep = memo(
         onPick={onSupplierTargetChange}
       />
     );
+
+    const basisSelector = onSupplierRateBasisChange ? (
+      <SupplierRateBasisSelector
+        value={supplierRateBasis}
+        onChange={onSupplierRateBasisChange}
+        target={supplierTarget}
+        weightTons={weightTons}
+      />
+    ) : null;
 
     const distributionSelector = onCirculationTargetChange ? (
       <DistributionTargetSelector
@@ -281,6 +380,7 @@ export const CreateIndentNetworkTargetStep = memo(
             dockAccessory={
               <View style={styles.dockStack}>
                 {marginChips}
+                {basisSelector}
                 {distributionSelector}
               </View>
             }
@@ -300,7 +400,11 @@ export const CreateIndentNetworkTargetStep = memo(
           <View style={s.fieldSection}>
             <SmartInput
               type="currency"
-              label="Supplier target *"
+              label={
+                supplierRateBasis === "per_mt"
+                  ? "Supplier target (₹/MT) *"
+                  : "Supplier target (₹/trip) *"
+              }
               value={supplierTarget}
               onChange={onSupplierTargetChange}
               variant="field"
@@ -313,6 +417,7 @@ export const CreateIndentNetworkTargetStep = memo(
             {marginStrip}
             {marginChips}
           </View>
+          {basisSelector}
           {distributionSelector}
         </View>
       </View>
@@ -321,6 +426,55 @@ export const CreateIndentNetworkTargetStep = memo(
 );
 
 const styles = StyleSheet.create({
+  basisWrap: {
+    // Matches distributionWrap so both dock blocks share one column width.
+    width: "100%",
+    maxWidth: 320,
+    alignSelf: "center",
+    gap: 8,
+  },
+  basisLabel: {
+    color: Theme.textSecondary,
+    fontSize: 12,
+    fontWeight: "700",
+  },
+  basisOptions: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 8,
+  },
+  basisOption: {
+    flex: 1,
+    minWidth: 0,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    borderRadius: 10,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    gap: 2,
+  },
+  basisOptionSelected: {
+    borderColor: Theme.primary,
+    backgroundColor: Theme.primaryLight,
+  },
+  basisOptionLabel: {
+    color: Theme.textPrimary,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  basisOptionLabelSelected: {
+    color: Theme.primary,
+  },
+  basisOptionHint: {
+    color: Theme.textSecondary,
+    fontSize: 11,
+    fontWeight: "500",
+  },
+  basisPreview: {
+    color: Theme.textSecondary,
+    fontSize: 11,
+    fontWeight: "600",
+  },
   hint: {
     color: Theme.textSecondary,
     fontSize: 12,

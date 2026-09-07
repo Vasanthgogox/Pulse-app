@@ -50,6 +50,8 @@ export interface CreateIndentInput {
   client_id?: string | null;
   lane_id?: string | null;
   sale_rate_basis?: "per_mt" | "per_trip" | null;
+  /** Unit of supplier_target — independent of the client sale basis. */
+  supplier_rate_basis?: "per_mt" | "per_trip" | null;
   sale_unit_rate?: number | null;
   /** Required: vehicle type (e.g. Truck). */
   vehicle_type: string;
@@ -101,6 +103,8 @@ export interface IndentRow {
   client_id?: string | null;
   lane_id?: string | null;
   sale_rate_basis?: "per_mt" | "per_trip" | null;
+  /** Unit of supplier_target — independent of the client sale basis. */
+  supplier_rate_basis?: "per_mt" | "per_trip" | null;
   sale_unit_rate?: number | null;
   vehicle_type: string | null;
   load_type: string | null;
@@ -689,15 +693,29 @@ export function getIndentDisplayNumber(row: IndentRow): string {
  */
 export async function getBroadcastIndentTarget(
   indentId: string | null | undefined,
-): Promise<{ supplier_target: number | null } | null> {
+): Promise<{
+  supplier_target: number | null;
+  supplier_rate_basis: "per_mt" | "per_trip" | null;
+  weight: number | null;
+} | null> {
   const id = (indentId ?? "").trim();
   if (!id) return null;
   const { data, error } = await supabase().rpc("indent_target_for_broadcast", {
     indent_id: id,
   });
   if (error || !Array.isArray(data) || data.length === 0) return null;
-  const row = data[0] as { supplier_target: number | null };
-  return { supplier_target: row.supplier_target ?? null };
+  const row = data[0] as {
+    supplier_target: number | null;
+    supplier_rate_basis?: "per_mt" | "per_trip" | null;
+    weight?: number | null;
+  };
+  return {
+    supplier_target: row.supplier_target ?? null,
+    // Older deploys of indent_target_for_broadcast return neither column;
+    // null degrades to per_trip, which is the pre-fix behaviour.
+    supplier_rate_basis: row.supplier_rate_basis ?? null,
+    weight: row.weight ?? null,
+  };
 }
 
 /** Supplier-facing target rate (not load-giver client sales price). */
@@ -707,11 +725,18 @@ export function resolveSupplierTargetDisplayRate(
   supplierTarget: number | null | undefined,
   clientPrice?: number | null | undefined,
   fallback?: number | null | undefined,
+  options?: {
+    saleRateBasis?: "per_mt" | "per_trip" | string | null;
+    /** indents.weight, in KG. Required to expand a per-MT target. */
+    weightKg?: number | null;
+  },
 ): number | null {
   // Supplier-facing rate only — never client_price (load owner's client sales price).
   void clientPrice;
   return resolveCommercialPricing({
     supplierTarget,
+    saleRateBasis: options?.saleRateBasis,
+    weightKg: options?.weightKg,
     rateOffer: fallback,
     bidCount: 0,
   }).displayPrice;
@@ -839,6 +864,11 @@ export async function createIndent(
       data.sale_rate_basis === "per_mt" || data.sale_rate_basis === "per_trip"
         ? data.sale_rate_basis
         : null,
+    supplier_rate_basis:
+      data.supplier_rate_basis === "per_mt" ||
+      data.supplier_rate_basis === "per_trip"
+        ? data.supplier_rate_basis
+        : null,
     sale_unit_rate:
       data.sale_unit_rate != null && Number(data.sale_unit_rate) > 0
         ? data.sale_unit_rate
@@ -940,6 +970,7 @@ export async function updateIndent(
       | "circulation_target"
       | "weight"
       | "status"
+      | "supplier_rate_basis"
     >
   >,
 ): Promise<{ error: Error | null; indent: IndentRow | null }> {
@@ -954,6 +985,8 @@ export async function updateIndent(
     payload.client_price = updates.client_price;
   if (updates.supplier_target !== undefined)
     payload.supplier_target = updates.supplier_target;
+  if (updates.supplier_rate_basis !== undefined)
+    payload.supplier_rate_basis = updates.supplier_rate_basis;
   if (updates.vehicle_type !== undefined)
     payload.vehicle_type = updates.vehicle_type;
   if (updates.load_type !== undefined) payload.load_type = updates.load_type;
@@ -1016,6 +1049,7 @@ type DraftEditableFields = Partial<
     | "sale_rate_basis"
     | "sale_unit_rate"
     | "supplier_target"
+    | "supplier_rate_basis"
     | "vehicle_type"
     | "load_type"
     | "pickup_date"

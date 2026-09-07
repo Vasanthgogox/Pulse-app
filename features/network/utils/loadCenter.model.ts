@@ -4,6 +4,7 @@
  */
 
 import Theme from "@/constants/Theme";
+import { resolveCommercialPricing } from "@/features/marketplace/domain/commercialPricing";
 import { formatINR } from "@/lib/format";
 
 export type LoadSubTab = "GIVE_LOAD" | "GET_LOAD" | "AWARDED";
@@ -350,7 +351,14 @@ export type LoadCenterTicketCommerce = {
 export function resolveGetLoadTicketCommerce(
   statusFilterTab: StatusFilterTab,
   _doneSubTab: DoneSubTab,
-  load: { id: string; status?: string | null; supplier_target?: number | null },
+  load: {
+    id: string;
+    status?: string | null;
+    supplier_target?: number | null;
+    supplier_rate_basis?: string | null;
+    /** indents.weight in KG — expands a per-MT supplier_target. */
+    weight?: number | null;
+  },
   existingQuote:
     | {
         status?: string | null;
@@ -361,7 +369,15 @@ export function resolveGetLoadTicketCommerce(
   indentIdsWithTrip: ReadonlySet<string>,
   awardedToMe = false,
 ): LoadCenterTicketCommerce {
-  const targetRateInr = Number(load.supplier_target ?? 0);
+  // supplier_target may be a ₹/MT unit rate; resolveCommercialPricing turns
+  // it into the trip total the card and the bid sheet both need.
+  const targetRateInr =
+    resolveCommercialPricing({
+      supplierTarget: load.supplier_target,
+      saleRateBasis: load.supplier_rate_basis,
+      weightKg: load.weight,
+      bidCount: 0,
+    }).displayPrice ?? 0;
   const quoteStatus = (existingQuote?.status ?? "").toLowerCase();
   const quoteAmount = Number(existingQuote?.amount ?? 0);
   const hasQuote = quoteAmount > 0;
@@ -437,6 +453,9 @@ export function resolveGiveLoadTicketCommerce(
   load: {
     client_price?: number | null;
     supplier_target?: number | null;
+    supplier_rate_basis?: string | null;
+    /** indents.weight in KG — expands a per-MT supplier_target. */
+    weight?: number | null;
   },
   options: {
     isDone: boolean;
@@ -452,7 +471,14 @@ export function resolveGiveLoadTicketCommerce(
     const n = Number(value ?? 0);
     return Number.isFinite(n) && n > 0 ? n : null;
   };
-  const targetRateInr = positive(load.supplier_target);
+  const targetRateInr = positive(
+    resolveCommercialPricing({
+      supplierTarget: load.supplier_target,
+      saleRateBasis: load.supplier_rate_basis,
+      weightKg: load.weight,
+      bidCount: 0,
+    }).displayPrice,
+  );
   const clientRateInr = positive(load.client_price);
   const awardedInr = positive(options.awardedAmountInr);
 

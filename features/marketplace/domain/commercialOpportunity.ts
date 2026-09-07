@@ -47,6 +47,10 @@ export type ResolveCommercialOpportunityInput = {
 
   bidCount?: number;
   supplierTarget?: number | null;
+  /** Unit of supplierTarget — "per_mt" needs weightKg to reach a trip total. */
+  saleRateBasis?: "per_mt" | "per_trip" | string | null;
+  /** Indent weight in KG (indents.weight). */
+  weightKg?: number | null;
   snapshotTargetPrice?: number | null;
   rateOffer?: number | null;
   currentBestBid?: number | null;
