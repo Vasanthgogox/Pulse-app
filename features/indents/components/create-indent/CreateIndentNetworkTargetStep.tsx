@@ -19,6 +19,8 @@ import { createTripDesktopStyles as s } from "@/features/trips/components/add-tr
 
 const MARGIN_PRESETS = [5, 10, 15, 20] as const;
 
+export type SupplierRateBasis = "per_mt" | "per_trip";
+
 function fieldToRaw(value: string): string {
   const trimmed = value.trim();
   if (!trimmed) return "";
@@ -33,13 +35,41 @@ function parseAmount(raw: string): number | null {
   return n;
 }
 
-/** Supplier target for a margin % of client sale (rounded to nearest rupee). */
+/**
+ * Client sale expressed in the SAME unit as the supplier target.
+ *
+ * `client_price` is always a trip total, but the supplier target may be a ₹/MT
+ * rate. Comparing the two directly mixed units: a 5% margin preset on a
+ * ₹1,27,680 sale wrote 1,21,296 into a ₹/MT field, which then multiplied out
+ * to ₹46,09,248. On a per-MT basis the sale must be divided by tonnage first
+ * so both sides are ₹/MT (₹3,360/MT sale -> ₹3,192/MT target at 5%).
+ *
+ * Returns null on a per-MT basis with no usable tonnage — margin cannot be
+ * expressed per-MT until tonnage is known, so the presets disable instead of
+ * producing a wrong number.
+ */
+export function effectiveSaleForBasis(
+  clientPrice: string,
+  basis: SupplierRateBasis,
+  weightTons?: string,
+): number | null {
+  const sale = parseAmount(clientPrice);
+  if (sale == null || sale <= 0) return null;
+  if (basis !== "per_mt") return sale;
+  const tons = parseAmount(weightTons ?? "");
+  if (tons == null || tons <= 0) return null;
+  return sale / tons;
+}
+
+/** Supplier target for a margin % of client sale, in the target's own unit. */
 export function supplierTargetForMarginPct(
   clientPrice: string,
   marginPct: number,
+  basis: SupplierRateBasis = "per_trip",
+  weightTons?: string,
 ): string | null {
-  const sale = parseAmount(clientPrice);
-  if (sale == null || sale <= 0) return null;
+  const sale = effectiveSaleForBasis(clientPrice, basis, weightTons);
+  if (sale == null) return null;
   const target = Math.round(sale * (1 - marginPct / 100));
   if (target < 0) return null;
   return toRawString(target);
@@ -48,12 +78,19 @@ export function supplierTargetForMarginPct(
 function activeMarginPct(
   clientPrice: string,
   supplierTarget: string,
+  basis: SupplierRateBasis = "per_trip",
+  weightTons?: string,
 ): number | null {
-  const sale = parseAmount(clientPrice);
+  const sale = effectiveSaleForBasis(clientPrice, basis, weightTons);
   const target = parseAmount(supplierTarget);
-  if (sale == null || sale <= 0 || target == null) return null;
+  if (sale == null || target == null) return null;
   for (const pct of MARGIN_PRESETS) {
-    const expected = supplierTargetForMarginPct(clientPrice, pct);
+    const expected = supplierTargetForMarginPct(
+      clientPrice,
+      pct,
+      basis,
+      weightTons,
+    );
     if (expected != null && Math.abs(Number(expected) - target) < 0.5) {
       return pct;
     }
@@ -62,8 +99,6 @@ function activeMarginPct(
 }
 
 export type IndentDistributionChoice = "integrated_supplier" | "marketplace" | "both";
-
-export type SupplierRateBasis = "per_mt" | "per_trip";
 
 export type CreateIndentNetworkTargetStepProps = {
   supplierTarget: string;
@@ -171,13 +206,18 @@ function MarginPresetChips({
   clientPrice,
   supplierTarget,
   onPick,
+  basis = "per_trip",
+  weightTons,
 }: {
   clientPrice: string;
   supplierTarget: string;
   onPick: (raw: string) => void;
+  basis?: SupplierRateBasis;
+  weightTons?: string;
 }) {
-  const sale = parseAmount(clientPrice);
-  const active = activeMarginPct(clientPrice, supplierTarget);
+  // Per-MT margin needs tonnage; effectiveSaleForBasis returns null without it.
+  const sale = effectiveSaleForBasis(clientPrice, basis, weightTons);
+  const active = activeMarginPct(clientPrice, supplierTarget, basis, weightTons);
   const disabled = sale == null || sale <= 0;
 
   return (
@@ -191,7 +231,12 @@ function MarginPresetChips({
               key={pct}
               disabled={disabled}
               onPress={() => {
-                const next = supplierTargetForMarginPct(clientPrice, pct);
+                const next = supplierTargetForMarginPct(
+                  clientPrice,
+                  pct,
+                  basis,
+                  weightTons,
+                );
                 if (next != null) onPick(next);
               }}
               style={[
@@ -284,10 +329,10 @@ function SupplierRateBasisSelector({
       {value === "per_mt" ? (
         <Text style={styles.basisPreview}>
           {tripTotal != null
-            ? `₹${rate?.toLocaleString("en-IN")}/MT x ${tons} t = ₹${tripTotal.toLocaleString("en-IN")} per trip`
+            ? `₹${rate?.toLocaleString("en-IN")}/MT x ${tons} t ≈ ₹${tripTotal.toLocaleString("en-IN")} — final on loading`
             : tons == null || tons === 0
-              ? "Add tonnage on the load step to see the trip total."
-              : "Enter a ₹/MT rate to see the trip total."}
+              ? "Add tonnage on the load step to estimate the trip total."
+              : "Enter a ₹/MT rate to estimate the trip total."}
         </Text>
       ) : null}
     </View>
@@ -334,12 +379,17 @@ export const CreateIndentNetworkTargetStep = memo(
       [raw, handleRawChange, errorMessage, supplierRateBasis],
     );
 
+    const perMtTons =
+      supplierRateBasis === "per_mt" ? parseAmount(weightTons ?? "") : null;
+
     const marginStrip = (
       <PartnerRateSaleMarginStrip
         saleValue={clientPrice}
         partnerRate={supplierTarget}
         saleLabel="Client"
         rateEmptyHint="Type target"
+        saleDivisorTons={perMtTons}
+        unitSuffix={supplierRateBasis === "per_mt" && perMtTons ? "/MT" : ""}
       />
     );
 
@@ -348,6 +398,8 @@ export const CreateIndentNetworkTargetStep = memo(
         clientPrice={clientPrice}
         supplierTarget={supplierTarget}
         onPick={onSupplierTargetChange}
+        basis={supplierRateBasis}
+        weightTons={weightTons}
       />
     );
 

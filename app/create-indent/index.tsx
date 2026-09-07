@@ -1263,6 +1263,34 @@ export default function CreateIndentScreen() {
     return indentStepCanAdvance(wizardStep, form);
   }, [canSubmit, form, isMobileWizard, wizardStep]);
 
+  /**
+   * Switching basis re-expresses the existing target in the new unit instead
+   * of leaving a trip total sitting in a ₹/MT field (which then multiplies out
+   * by tonnage into a nonsense figure).
+   */
+  const handleSupplierBasisChange = useCallback(
+    (basis: "per_mt" | "per_trip") => {
+      if (basis === form.supplier_rate_basis) return;
+      const current = parseFloat(String(form.supplier_target).replace(/,/g, ""));
+      const tons = parseFloat(String(form.weight ?? "").replace(/,/g, ""));
+      if (
+        !Number.isFinite(current) ||
+        current <= 0 ||
+        !Number.isFinite(tons) ||
+        tons <= 0
+      ) {
+        update({ supplier_rate_basis: basis });
+        return;
+      }
+      const next =
+        basis === "per_mt"
+          ? Math.round(current / tons)
+          : Math.round(current * tons);
+      update({ supplier_rate_basis: basis, supplier_target: String(next) });
+    },
+    [form.supplier_rate_basis, form.supplier_target, form.weight, update],
+  );
+
   /** "₹3,200/MT x 38.83 t = ₹1,24,256 per trip" under the per-MT target. */
   const supplierPerMtTripPreview = useMemo(() => {
     if (form.supplier_rate_basis !== "per_mt") return null;
@@ -1603,9 +1631,7 @@ export default function CreateIndentScreen() {
                 compact={compactWizard}
                 supplierTarget={form.supplier_target}
                 supplierRateBasis={form.supplier_rate_basis}
-                onSupplierRateBasisChange={(value) =>
-                  update({ supplier_rate_basis: value })
-                }
+                onSupplierRateBasisChange={handleSupplierBasisChange}
                 weightTons={form.weight}
                 onSupplierTargetChange={(value) =>
                   update({ supplier_target: value })
@@ -2445,7 +2471,7 @@ export default function CreateIndentScreen() {
                       return (
                         <Pressable
                           key={basis}
-                          onPress={() => update({ supplier_rate_basis: basis })}
+                          onPress={() => handleSupplierBasisChange(basis)}
                           style={[
                             styles.supplierBasisChip,
                             selected && styles.supplierBasisChipSelected,

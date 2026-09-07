@@ -35,7 +35,7 @@ function driversTableBuilder(opts: {
 }) {
   const builder: Record<string, unknown> = {};
   let lastInsertPayload: Record<string, unknown> | undefined;
-  for (const m of ['select', 'eq', 'or', 'limit', 'order', 'range', 'update']) {
+  for (const m of ['select', 'eq', 'or', 'is', 'not', 'neq', 'limit', 'order', 'range', 'update']) {
     builder[m] = jest.fn(() => builder);
   }
   builder.insert = jest.fn((payload: Record<string, unknown>) => {
@@ -113,6 +113,39 @@ describe('createDriver — relationship provenance on the manual-add path', () =
       relationship_status: 'independent',
     });
     expect(builder.__lastInsertPayload).not.toHaveProperty('tracking_only');
+  });
+
+  it('reuses a tracking-only stub with the same last-10 digits instead of inserting', async () => {
+    const builder = driversTableBuilder({
+      lookupResult: {
+        data: {
+          id: 'stub-1',
+          organization_id: 'org-1',
+          phone: '8056362146',
+          user_id: null,
+          left_at: null,
+          tracking_only: true,
+          name: 'Siva',
+        },
+        error: null,
+      },
+      insertResult: { data: { id: 'stub-1' }, error: null },
+    });
+    mockFrom.mockReturnValue(builder);
+
+    const { error, driver } = await createDriver('org-1', {
+      name: 'J123',
+      phone: '+918056362146',
+    });
+
+    expect(error).toBeNull();
+    expect(driver?.id).toBe('stub-1');
+    expect(builder.insert).not.toHaveBeenCalled();
+    const updateCalls = (builder.update as jest.Mock).mock.calls;
+    expect(updateCalls[0][0]).toMatchObject({
+      name: 'J123',
+      tracking_only: false,
+    });
   });
 });
 

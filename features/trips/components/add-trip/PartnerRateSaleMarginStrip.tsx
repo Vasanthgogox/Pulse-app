@@ -24,6 +24,14 @@ export type PartnerRateSaleMarginStripProps = {
   saleLabel?: string;
   /** Placeholder when sale exists but rate is empty. */
   rateEmptyHint?: string;
+  /**
+   * Divide the sale by this tonnage before comparing, so a ₹/MT partner rate
+   * is measured against a ₹/MT sale rather than a trip total. Omit (or pass
+   * null) when both sides are already trip-level.
+   */
+  saleDivisorTons?: number | null;
+  /** Suffix after each amount, e.g. "/MT". */
+  unitSuffix?: string;
 };
 
 /**
@@ -34,8 +42,16 @@ export const PartnerRateSaleMarginStrip = memo(function PartnerRateSaleMarginStr
   partnerRate,
   saleLabel = "Sale",
   rateEmptyHint = "Type rate",
+  saleDivisorTons,
+  unitSuffix = "",
 }: PartnerRateSaleMarginStripProps) {
-  const sale = useMemo(() => parseAmount(saleValue), [saleValue]);
+  const sale = useMemo(() => {
+    const raw = parseAmount(saleValue);
+    if (raw == null) return null;
+    // Per-MT entry: compare rate-to-rate, not rate-to-total.
+    if (saleDivisorTons != null && saleDivisorTons > 0) return raw / saleDivisorTons;
+    return raw;
+  }, [saleValue, saleDivisorTons]);
   const rate = useMemo(() => parseAmount(partnerRate), [partnerRate]);
 
   const margin = sale != null && rate != null ? sale - rate : null;
@@ -63,7 +79,7 @@ export const PartnerRateSaleMarginStrip = memo(function PartnerRateSaleMarginStr
       style={styles.root}
       accessibilityLabel={
         hasSale && margin != null
-          ? `${saleLabel} ${formatInr(sale!)}, margin ${formatInr(margin)}${
+          ? `${saleLabel} ${formatInr(sale!)}${unitSuffix}, margin ${formatInr(margin)}${unitSuffix}${
               marginPct != null ? `, ${marginPct.toFixed(0)} percent` : ""
             }`
           : hasSale
@@ -74,7 +90,7 @@ export const PartnerRateSaleMarginStrip = memo(function PartnerRateSaleMarginStr
       <View style={styles.cell}>
         <Text style={styles.label}>{saleLabel}</Text>
         <Text style={styles.value} numberOfLines={1}>
-          {hasSale ? formatInr(sale!) : "—"}
+          {hasSale ? `${formatInr(sale!)}${unitSuffix}` : "—"}
         </Text>
       </View>
 
@@ -94,6 +110,7 @@ export const PartnerRateSaleMarginStrip = memo(function PartnerRateSaleMarginStr
             >
               {margin < 0 ? "−" : ""}
               {formatInr(Math.abs(margin))}
+              {unitSuffix}
             </Text>
             {marginPct != null ? (
               <Text
