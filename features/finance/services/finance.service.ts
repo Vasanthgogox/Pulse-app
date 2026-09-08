@@ -1025,7 +1025,7 @@ export async function getTransactionsByOrganizationAndParty(
   return { error: null, transactions: rows.map(toLedgerRow) };
 }
 
-/** Fetch ledger transactions for a specific contact (client/supplier id). Used for dispute audit. */
+/** Fetch ledger transactions for a specific contact (client/supplier id). */
 export async function getTransactionsByOrganizationAndContactId(
   orgId: string,
   contactId: string,
