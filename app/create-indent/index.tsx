@@ -1415,13 +1415,10 @@ export default function CreateIndentScreen() {
           : "Enter pickup, drop and trip date."
         : wizardStep === "prices"
           ? "Set a supplier target (or pick a margin %) before sharing."
-<<<<<<< HEAD
           : wizardStep === "quote"
             ? "Say whether that target is a trip lump sum or a ₹/MT rate."
-=======
           : wizardStep === "share"
             ? "Choose where this load should go."
->>>>>>> pulse-vasanth/develop
             : wizardStep === "vehicle"
               ? "Vehicle type, product type and tonnage."
               : wizardStep === "loadType"
@@ -1462,18 +1459,12 @@ export default function CreateIndentScreen() {
     const fillWizardBody =
       compactWizard &&
       ((wizardStep === "client" && Boolean(form.client_id)) ||
-<<<<<<< HEAD
         wizardStep === "prices" ||
         wizardStep === "quote");
-    const stepIndex = INDENT_WIZARD_STEPS.indexOf(wizardStep);
-    const progressSteps = INDENT_WIZARD_STEPS.map((id) => ({
-=======
-        wizardStep === "prices");
     const progressCurrentId =
       wizardStep === "share" ? "prices" : wizardStep;
     const stepIndex = INDENT_WIZARD_PROGRESS_STEPS.indexOf(progressCurrentId);
     const progressSteps = INDENT_WIZARD_PROGRESS_STEPS.map((id) => ({
->>>>>>> pulse-vasanth/develop
       id,
       label: indentWizardStepLabel(id),
     }));
