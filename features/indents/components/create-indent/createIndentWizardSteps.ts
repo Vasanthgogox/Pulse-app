@@ -7,6 +7,7 @@ export type IndentWizardStep =
   | "route"
   | "client"
   | "prices"
+  | "quote"
   | "vehicle"
   | "loadType"
   | "weight";
@@ -16,6 +17,7 @@ export const INDENT_WIZARD_STEPS: IndentWizardStep[] = [
   "route",
   "vehicle",
   "prices",
+  "quote",
 ];
 
 export function indentWizardStepLabel(step: IndentWizardStep): string {
@@ -26,6 +28,8 @@ export function indentWizardStepLabel(step: IndentWizardStep): string {
       return "Client";
     case "prices":
       return "Target";
+    case "quote":
+      return "Quote";
     case "vehicle":
       return "Load";
     case "loadType":
@@ -66,6 +70,11 @@ export function indentStepCanAdvance(
         st > 0
       );
     }
+    case "quote":
+      return (
+        form.supplier_rate_basis === "per_mt" ||
+        form.supplier_rate_basis === "per_trip"
+      );
     case "vehicle": {
       const w = parseFloat(String(form.weight ?? "").replace(/,/g, ""));
       const unit = parseFloat(String(form.sale_unit_rate ?? "").replace(/,/g, ""));
@@ -96,6 +105,7 @@ export type IndentWizardGroup = "route" | "commercial" | "load";
 
 export function indentStepToGroup(step: IndentWizardStep): IndentWizardGroup {
   if (step === "route") return "route";
-  if (step === "client" || step === "prices") return "commercial";
+  if (step === "client" || step === "prices" || step === "quote")
+    return "commercial";
   return "load";
 }

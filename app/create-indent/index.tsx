@@ -79,6 +79,7 @@ import {
 } from "@/features/indents/utils/indentShareSubmitGuard.util";
 import { IndentWizardMobileStep } from "@/features/indents/components/create-indent/IndentWizardMobileStep";
 import { CreateIndentNetworkTargetStep } from "@/features/indents/components/create-indent/CreateIndentNetworkTargetStep";
+import { CreateIndentQuoteBasisStep } from "@/features/indents/components/create-indent/CreateIndentQuoteBasisStep";
 import { SmartInput } from "@/components/mobile-input";
 import { ADD_TRIP_FORM } from "@/features/trips/components/add-trip/addTripFormTokens";
 import { AddTripModalLayout } from "@/features/trips/components/add-trip/AddTripModalLayout";
@@ -1410,11 +1411,13 @@ export default function CreateIndentScreen() {
           : "Enter pickup, drop and trip date."
         : wizardStep === "prices"
           ? "Set a supplier target (or pick a margin %) before sharing."
-          : wizardStep === "vehicle"
-            ? "Vehicle type, product type and tonnage."
-            : wizardStep === "loadType"
-              ? "Product type."
-              : "Weight in tons."
+          : wizardStep === "quote"
+            ? "Say whether that target is a trip lump sum or a ₹/MT rate."
+            : wizardStep === "vehicle"
+              ? "Vehicle type, product type and tonnage."
+              : wizardStep === "loadType"
+                ? "Product type."
+                : "Weight in tons."
     : "Share load details to your network.";
 
   const handleWizardPrimary = () => {
@@ -1450,7 +1453,8 @@ export default function CreateIndentScreen() {
     const fillWizardBody =
       compactWizard &&
       ((wizardStep === "client" && Boolean(form.client_id)) ||
-        wizardStep === "prices");
+        wizardStep === "prices" ||
+        wizardStep === "quote");
     const stepIndex = INDENT_WIZARD_STEPS.indexOf(wizardStep);
     const progressSteps = INDENT_WIZARD_STEPS.map((id) => ({
       id,
@@ -1626,12 +1630,20 @@ export default function CreateIndentScreen() {
                 vehicleCountErrorMessage={errors.vehicle_count}
               />
             ) : null}
+            {wizardStep === "quote" ? (
+              <CreateIndentQuoteBasisStep
+                compact={compactWizard}
+                supplierTarget={form.supplier_target}
+                supplierRateBasis={form.supplier_rate_basis}
+                onSupplierRateBasisChange={handleSupplierBasisChange}
+                weightTons={form.weight}
+              />
+            ) : null}
             {wizardStep === "prices" ? (
               <CreateIndentNetworkTargetStep
                 compact={compactWizard}
                 supplierTarget={form.supplier_target}
                 supplierRateBasis={form.supplier_rate_basis}
-                onSupplierRateBasisChange={handleSupplierBasisChange}
                 weightTons={form.weight}
                 onSupplierTargetChange={(value) =>
                   update({ supplier_target: value })
