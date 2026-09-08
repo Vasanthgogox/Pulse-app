@@ -3,6 +3,7 @@ import { Shield, Moon, Sun, ChevronRightSquare, Coins, Users, SlidersHorizontal,
 import { AdminDataProvider, useAdmin } from '@/context/AdminDataProvider';
 import { AdminAuthProvider, useAdminAuth } from '@/context/AdminAuthProvider';
 import { AdminLoginScreen } from '@/components/auth/AdminLoginScreen';
+import { PermissionGate, AccessDenied } from '@/components/auth/PermissionGate';
 import { ApplicationQueue } from '@/components/queue/ApplicationQueue';
 import { AuditTrail } from '@/components/queue/AuditTrail';
 import { OrgWorkspace } from '@/components/workspace/OrgWorkspace';
@@ -59,8 +60,17 @@ function Topbar({
 }) {
   const { applications } = useAdmin();
   const { permissions } = useAdminAuth();
-  const canManageAdmins = permissions.includes('platform_admin.manage');
+
+  // Permission-based navigation
+  const canReview = permissions.includes('verification.review') || permissions.includes('verification.approve');
+  const canReviewDriver = permissions.includes('driver.kyc.review') || permissions.includes('driver.kyc.approve');
+  const canManageCredits = permissions.includes('credits.manage');
+  const canManageReach = permissions.includes('reach.manage') || permissions.includes('reach.approve');
   const canManageMarketplaceFees = permissions.includes('marketplace_fees.manage');
+  const canManageSupport = permissions.includes('support.manage');
+  const canManageBoost = permissions.includes('system.flags.manage');
+  const canManageAdmins = permissions.includes('platform_admin.manage');
+
   const pendingCount   = applications.filter(a => ['Pending', 'Under Review'].includes(a.status)).length;
   const escalatedCount = applications.filter(a => a.status === 'Escalated').length;
   const [supportUpdateCount, setSupportUpdateCount] = useState(0);
@@ -103,69 +113,83 @@ function Topbar({
         </div>
 
         <nav className="ml-1 flex min-w-0 flex-1 items-center gap-1 overflow-x-auto border-l border-border pl-3 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-          <button
-            onClick={() => setView('verification')}
-            className={navTabClass(view === 'verification')}
-          >
-            Verification
-          </button>
-          <button
-            onClick={() => setView('driver-kyc')}
-            className={navTabClass(view === 'driver-kyc')}
-          >
-            <UserRound className="size-3 shrink-0" /> Driver KYC
-          </button>
-          <button
-            onClick={() => setView('credits')}
-            className={navTabClass(view === 'credits')}
-          >
-            <Coins className="size-3 shrink-0" /> Growth · Credits
-          </button>
-          <button
-            onClick={() => setView('referrals')}
-            className={navTabClass(view === 'referrals')}
-          >
-            <Users className="size-3 shrink-0" /> Growth · Referrals
-          </button>
-          <button
-            onClick={() => setView('reward-rules')}
-            className={navTabClass(view === 'reward-rules')}
-          >
-            <SlidersHorizontal className="size-3 shrink-0" /> Growth · Reward Rules
-          </button>
-          {canManageMarketplaceFees ? (
+          {canReview && (
+            <button
+              onClick={() => setView('verification')}
+              className={navTabClass(view === 'verification')}
+            >
+              Verification
+            </button>
+          )}
+          {canReviewDriver && (
+            <button
+              onClick={() => setView('driver-kyc')}
+              className={navTabClass(view === 'driver-kyc')}
+            >
+              <UserRound className="size-3 shrink-0" /> Driver KYC
+            </button>
+          )}
+          {canManageCredits && (
+            <button
+              onClick={() => setView('credits')}
+              className={navTabClass(view === 'credits')}
+            >
+              <Coins className="size-3 shrink-0" /> Growth · Credits
+            </button>
+          )}
+          {canManageReach && (
+            <>
+              <button
+                onClick={() => setView('referrals')}
+                className={navTabClass(view === 'referrals')}
+              >
+                <Users className="size-3 shrink-0" /> Growth · Referrals
+              </button>
+              <button
+                onClick={() => setView('reward-rules')}
+                className={navTabClass(view === 'reward-rules')}
+              >
+                <SlidersHorizontal className="size-3 shrink-0" /> Growth · Reward Rules
+              </button>
+            </>
+          )}
+          {canManageMarketplaceFees && (
             <button
               onClick={() => setView('marketplace-fees')}
               className={navTabClass(view === 'marketplace-fees')}
             >
               <Wallet className="size-3 shrink-0" /> Marketplace · Fees
             </button>
-          ) : null}
-          <button
-            onClick={() => setView('boost-ops')}
-            className={navTabClass(view === 'boost-ops')}
-          >
-            <Rocket className="size-3 shrink-0" /> Boost · Control Center
-          </button>
-          <button
-            onClick={() => setView('support')}
-            className={navTabClass(view === 'support')}
-          >
-            <Ticket className="size-3 shrink-0" /> Support
-            {supportUpdateCount > 0 ? (
-              <span className="inline-flex min-w-[1.1rem] shrink-0 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold leading-4 text-white">
-                {formatSupportUnreadBadge(supportUpdateCount)}
-              </span>
-            ) : null}
-          </button>
-          {canManageAdmins ? (
+          )}
+          {canManageBoost && (
+            <button
+              onClick={() => setView('boost-ops')}
+              className={navTabClass(view === 'boost-ops')}
+            >
+              <Rocket className="size-3 shrink-0" /> Boost · Control Center
+            </button>
+          )}
+          {canManageSupport && (
+            <button
+              onClick={() => setView('support')}
+              className={navTabClass(view === 'support')}
+            >
+              <Ticket className="size-3 shrink-0" /> Support
+              {supportUpdateCount > 0 ? (
+                <span className="inline-flex min-w-[1.1rem] shrink-0 items-center justify-center rounded-full bg-amber-500 px-1 text-[9px] font-bold leading-4 text-white">
+                  {formatSupportUnreadBadge(supportUpdateCount)}
+                </span>
+              ) : null}
+            </button>
+          )}
+          {canManageAdmins && (
             <button
               onClick={() => setView('admin-users')}
               className={navTabClass(view === 'admin-users')}
             >
               <UserCog className="size-3 shrink-0" /> Admin Users
             </button>
-          ) : null}
+          )}
         </nav>
       </div>
 
@@ -262,44 +286,60 @@ function AdminShell() {
         <Topbar dark={dark} setDark={setDark} view={view} setView={setView} />
 
         {view === 'driver-kyc' ? (
-          <DriverKycPanel />
+          <PermissionGate permission={['driver.kyc.review', 'driver.kyc.approve']} fallback={<AccessDenied />}>
+            <DriverKycPanel />
+          </PermissionGate>
         ) : view === 'credits' ? (
-          <CreditsPanel />
+          <PermissionGate permission="credits.manage" fallback={<AccessDenied />}>
+            <CreditsPanel />
+          </PermissionGate>
         ) : view === 'referrals' ? (
-          <ReferralsPanel />
+          <PermissionGate permission={['reach.manage', 'reach.approve']} fallback={<AccessDenied />}>
+            <ReferralsPanel />
+          </PermissionGate>
         ) : view === 'reward-rules' ? (
-          <RewardRulesPanel />
+          <PermissionGate permission={['reach.manage', 'reach.approve']} fallback={<AccessDenied />}>
+            <RewardRulesPanel />
+          </PermissionGate>
         ) : view === 'marketplace-fees' ? (
-          <MarketplaceFeeSettingsPanel />
+          <PermissionGate permission="marketplace_fees.manage" fallback={<AccessDenied />}>
+            <MarketplaceFeeSettingsPanel />
+          </PermissionGate>
         ) : view === 'boost-ops' ? (
-          <BoostControlCenterPanel />
+          <PermissionGate permission="system.flags.manage" fallback={<AccessDenied />}>
+            <BoostControlCenterPanel />
+          </PermissionGate>
         ) : view === 'support' ? (
-          <SupportPanel />
+          <PermissionGate permission="support.manage" fallback={<AccessDenied />}>
+            <SupportPanel />
+          </PermissionGate>
         ) : view === 'admin-users' ? (
           <AdminUsersPanel />
         ) : (
-          <div className="flex flex-1 overflow-hidden">
-            {/* Left sidebar: queue (60%) + audit (40%) */}
-            <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-border">
-              <div className="flex-[3] overflow-hidden border-b border-border">
-                <ApplicationQueue />
-              </div>
-              <div className="flex-[2] overflow-hidden">
-                <AuditTrail />
-              </div>
-            </aside>
+          <PermissionGate permission={['verification.review', 'verification.approve']} fallback={<AccessDenied />}>
+            <div className="flex flex-1 overflow-hidden">
+              {/* Left sidebar: queue (60%) + audit (40%) */}
+              <aside className="flex w-72 shrink-0 flex-col overflow-hidden border-r border-border">
+                <div className="flex-[3] overflow-hidden border-b border-border">
+                  <ApplicationQueue />
+                </div>
+                <div className="flex-[2] overflow-hidden">
+                  <AuditTrail />
+                </div>
+              </aside>
 
-            {/* Main content */}
-            <main className="flex flex-1 flex-col overflow-hidden">
-              <OrgStrip />
-              {/* 3-tab workspace */}
-              <div className="flex-1 overflow-hidden">
-                <OrgWorkspace />
-              </div>
-              {/* KYC action panel — always visible */}
-              <VerificationActionPanel />
-            </main>
-          </div>
+              {/* Main content */}
+              <main className="flex flex-1 flex-col overflow-hidden">
+                <OrgStrip />
+                {/* 3-tab workspace */}
+                <div className="flex-1 overflow-hidden">
+                  <OrgWorkspace />
+                </div>
+                {/* KYC action panel — always visible */}
+                <VerificationActionPanel />
+              </main>
+            </div>
+          </PermissionGate>
         )}
       </div>
     </div>
