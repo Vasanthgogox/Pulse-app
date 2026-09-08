@@ -78,6 +78,8 @@ export const ROUTES = {
   driverGeneralExpense: () => '/(driver)/general-expense' as const,
   /** Become Fleet Owner (Phase 1 capability enablement). */
   driverBecomeFleetOwner: () => '/(driver)/become-fleet-owner' as const,
+  /** DCO (driver-cum-owner) admin-approval status request/view. */
+  driverDcoStatus: () => '/(driver)/dco-status' as const,
   /** My Fleet list (personal owner vehicles). */
   driverMyFleet: () => '/(driver)/my-fleet' as const,
   driverMyFleetAdd: () => '/(driver)/my-fleet/add' as const,

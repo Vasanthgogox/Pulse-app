@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Shield, Moon, Sun, ChevronRightSquare, Coins, Users, SlidersHorizontal, Rocket, Ticket, UserRound, LogOut, Loader2, UserCog, Wallet } from 'lucide-react';
+import { Shield, Moon, Sun, ChevronRightSquare, Coins, Users, SlidersHorizontal, Rocket, Ticket, UserRound, LogOut, Loader2, UserCog, Wallet, Gavel } from 'lucide-react';
 import { AdminDataProvider, useAdmin } from '@/context/AdminDataProvider';
 import { AdminAuthProvider, useAdminAuth } from '@/context/AdminAuthProvider';
 import { AdminLoginScreen } from '@/components/auth/AdminLoginScreen';
@@ -7,6 +7,7 @@ import { ApplicationQueue } from '@/components/queue/ApplicationQueue';
 import { AuditTrail } from '@/components/queue/AuditTrail';
 import { OrgWorkspace } from '@/components/workspace/OrgWorkspace';
 import { DriverKycPanel } from '@/components/queue/DriverKycPanel';
+import { DcoReviewPanel } from '@/components/queue/DcoReviewPanel';
 import { VerificationActionPanel } from '@/components/workspace/VerificationActionPanel';
 import { CreditsPanel } from '@/components/credits/CreditsPanel';
 import { ReferralsPanel } from '@/components/growth/ReferralsPanel';
@@ -28,6 +29,7 @@ import {
 type ConsoleView =
   | 'verification'
   | 'driver-kyc'
+  | 'dco-review'
   | 'credits'
   | 'referrals'
   | 'reward-rules'
@@ -61,6 +63,7 @@ function Topbar({
   const { permissions } = useAdminAuth();
   const canManageAdmins = permissions.includes('platform_admin.manage');
   const canManageMarketplaceFees = permissions.includes('marketplace_fees.manage');
+  const canReviewDco = permissions.includes('dco.review');
   const pendingCount   = applications.filter(a => ['Pending', 'Under Review'].includes(a.status)).length;
   const escalatedCount = applications.filter(a => a.status === 'Escalated').length;
   const [supportUpdateCount, setSupportUpdateCount] = useState(0);
@@ -115,6 +118,14 @@ function Topbar({
           >
             <UserRound className="size-3 shrink-0" /> Driver KYC
           </button>
+          {canReviewDco ? (
+            <button
+              onClick={() => setView('dco-review')}
+              className={navTabClass(view === 'dco-review')}
+            >
+              <Gavel className="size-3 shrink-0" /> DCO Review
+            </button>
+          ) : null}
           <button
             onClick={() => setView('credits')}
             className={navTabClass(view === 'credits')}
@@ -263,6 +274,8 @@ function AdminShell() {
 
         {view === 'driver-kyc' ? (
           <DriverKycPanel />
+        ) : view === 'dco-review' ? (
+          <DcoReviewPanel />
         ) : view === 'credits' ? (
           <CreditsPanel />
         ) : view === 'referrals' ? (
