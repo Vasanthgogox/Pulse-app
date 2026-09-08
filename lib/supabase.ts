@@ -32,8 +32,10 @@ try {
   SecureStore = null;
 }
 
-const REQUEST_TIMEOUT_MS = 25_000;
-const MAX_RETRIES = 3;   // 4 total attempts: initial + 3 retries
+const REQUEST_TIMEOUT_MS = 12_000;
+const MAX_RETRIES = 3;   // 4 total attempts: initial + 3 retries (HTTP 5xx / network)
+/** Timeout aborts: one extra attempt only (12s + 12s), not 4×25s LogBox storms. */
+const TIMEOUT_MAX_RETRIES = 1;
 /** Exponential backoff: attempt 1 → 2s, attempt 2 → 4s */
 function retryDelayMs(attempt: number): number {
   return Math.min(2_000 * Math.pow(2, attempt - 1), 8_000);
@@ -120,6 +122,30 @@ function recoverAuthOnce(): Promise<boolean> {
   return inflightAuthRecovery;
 }
 
+function isAbortLike(error: unknown): boolean {
+  if (!error) return false;
+  const name = (error as { name?: string }).name ?? '';
+  const msg = error instanceof Error ? error.message : String(error);
+  return (
+    name === 'AbortError' ||
+    name === 'CanceledError' ||
+    name === 'TimeoutError' ||
+    /Aborted|Request timed out|Request cancelled/i.test(msg)
+  );
+}
+
+function toTimeoutError(): Error {
+  const err = new Error('Request timed out');
+  err.name = 'TimeoutError';
+  return err;
+}
+
+function toCancelError(): Error {
+  const err = new Error('Request cancelled');
+  err.name = 'AbortError';
+  return err;
+}
+
 /** Fetch with timeout and retry to cope with flaky networks and backend outages. */
 async function fetchWithTimeoutAndRetry(
   input: RequestInfo | URL,
@@ -128,9 +154,13 @@ async function fetchWithTimeoutAndRetry(
   const isAuthToken = isAuthTokenRequest(input);
   const maxRetries = isAuthToken ? AUTH_TOKEN_MAX_RETRIES : MAX_RETRIES;
   const delayForAttempt = isAuthToken ? authTokenRetryDelayMs : retryDelayMs;
-  const doFetch = (signal?: AbortSignal) => {
+  const doFetch = (signal?: AbortSignal): Promise<Response> => {
     const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+    let timedOut = false;
+    const timeoutId = setTimeout(() => {
+      timedOut = true;
+      controller.abort();
+    }, REQUEST_TIMEOUT_MS);
     const combinedSignal = signal
       ? abortSignalAny(controller.signal, signal)
       : controller.signal;
@@ -138,7 +168,13 @@ async function fetchWithTimeoutAndRetry(
       ...init,
       signal: combinedSignal,
     };
-    return fetch(input, merged).finally(() => clearTimeout(timeoutId));
+    return fetch(input, merged)
+      .catch((e) => {
+        if (signal?.aborted) throw toCancelError();
+        if (timedOut || isAbortLike(e)) throw toTimeoutError();
+        throw e instanceof Error ? e : new Error(String(e));
+      })
+      .finally(() => clearTimeout(timeoutId));
   };
   let lastError: Error | null = null;
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
@@ -162,12 +198,20 @@ async function fetchWithTimeoutAndRetry(
       return res;
     } catch (e) {
       lastError = e instanceof Error ? e : new Error(String(e));
+      if (init?.signal?.aborted || lastError.name === 'AbortError') {
+        throw lastError.name === 'AbortError' ? lastError : toCancelError();
+      }
+      const isTimeout = lastError.name === 'TimeoutError';
       const isRetryable =
-        attempt < maxRetries &&
-        (lastError.name === 'AbortError' ||
+        (isTimeout
+          ? attempt < TIMEOUT_MAX_RETRIES
+          : attempt < maxRetries) &&
+        (isTimeout ||
           lastError.message === 'Network request failed' ||
           lastError.message === 'Load failed' ||
-          /timeout|network|failed|access control checks/i.test(lastError.message));
+          /timeout|network|failed|access control checks|schema cache/i.test(
+            lastError.message,
+          ));
       if (!isRetryable) throw lastError;
       await new Promise((r) => setTimeout(r, delayForAttempt(attempt)));
     }

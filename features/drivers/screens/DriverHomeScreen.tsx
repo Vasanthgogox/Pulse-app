@@ -597,12 +597,16 @@ export default function DriverRadarScreen() {
 
   useEffect(() => {
     const tokenAtRead = acceptedTripIdClearTokenRef.current;
-    AsyncStorage.getItem(DRIVER_ACCEPTED_TRIP_ID_KEY).then((id) => {
-      if (tokenAtRead === acceptedTripIdClearTokenRef.current && id != null && id !== "") {
-        setAcceptedTripId(id);
-      }
-      setAcceptedTripIdResolved(true);
-    });
+    AsyncStorage.getItem(DRIVER_ACCEPTED_TRIP_ID_KEY)
+      .then((id) => {
+        if (tokenAtRead === acceptedTripIdClearTokenRef.current && id != null && id !== "") {
+          setAcceptedTripId(id);
+        }
+        setAcceptedTripIdResolved(true);
+      })
+      .catch(() => {
+        setAcceptedTripIdResolved(true);
+      });
     AsyncStorage.getItem(DRIVER_NOTIFY_ONLY_AFTER_MISSION_KEY).then((v) => {
       if (v === "1") setAssignableTripsNotifyOnlyAfterMission(true);
     });
@@ -699,7 +703,10 @@ export default function DriverRadarScreen() {
         return;
       }
 
-      if (!linkedDriversQuery.isFetched || linkedDriversQuery.isFetching) {
+      // First paint: wait only until we have a linked-drivers result (or cached
+      // placeholder). Do not block on background refetch — that left the dashboard
+      // blank for minutes during schema-cache / AbortError storms.
+      if (linkedDriversQuery.isPending && !linkedDriversQuery.isFetched) {
         return;
       }
 
@@ -806,10 +813,19 @@ export default function DriverRadarScreen() {
     driversFetchStatus,
     driversQueryFailed,
     linkedDriversQuery.isFetched,
-    linkedDriversQuery.isFetching,
+    linkedDriversQuery.isPending,
     linkedDriversQuery.isError,
     isOtpClaiming,
   ]);
+
+  useEffect(() => {
+    if (!loading) return;
+    const t = setTimeout(() => {
+      setLoading(false);
+      initialLoadDoneRef.current = true;
+    }, 10_000);
+    return () => clearTimeout(t);
+  }, [loading]);
 
 
   const runDeclineTrip = useCallback(
@@ -4751,10 +4767,7 @@ export default function DriverRadarScreen() {
       {!effectiveDriver &&
         invites.filter((i) => i.status === "pending").length === 0 &&
         !showDriverTripDashboard &&
-        linkedDriversQuery.isFetched &&
-        pendingOtpQuery.isFetched &&
-        !linkedDriversQuery.isFetching &&
-        !pendingOtpQuery.isFetching && (
+        !loading && (
         <View
           style={[
             styles.centerCardWrap,
@@ -5318,7 +5331,45 @@ export default function DriverRadarScreen() {
             </View>
           </View>
         ) : (
-          <View style={{ paddingTop: 10 }} />
+          <View style={[styles.centerCardWrap, styles.offlineCardContent]}>
+            <Text style={[styles.offlineCardTitle, { color: colors.text }]}>
+              {isOnline ? "Ready for the next trip" : "You are currently offline"}
+            </Text>
+            <Text
+              style={[styles.offlineCardSubtitle, { color: colors.textMuted }]}
+            >
+              {isOnline
+                ? "Assignments will show here when they arrive."
+                : "Go online to view and accept trip assignments."}
+            </Text>
+            {!isOnline ? (
+              <TouchableOpacity
+                style={[
+                  styles.searchOfflineBtn,
+                  {
+                    marginTop: 12,
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+                onPress={() => {
+                  setIsOnline(true);
+                  triggerSuccess("You are online now.");
+                  if (uid) void invalidateDriverHome(uid);
+                  setLocationStatus("loading");
+                  fetchLocation();
+                }}
+                activeOpacity={0.8}
+              >
+                <FontAwesome name="wifi" size={16} color={colors.text} />
+                <Text
+                  style={[styles.searchOfflineBtnText, { color: colors.text }]}
+                >
+                  Go online
+                </Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
         )
       ) : null}
     </>
@@ -5838,7 +5889,7 @@ export default function DriverRadarScreen() {
               <AppLoadingSplash
                 variant="preparing"
                 accentColor={colors.primary}
-                style={{ flex: 1, minHeight: 280 }}
+                style={{ flex: 1, minHeight: 280, width: "100%", alignSelf: "stretch" }}
               />
             ) : (
               <ScrollView

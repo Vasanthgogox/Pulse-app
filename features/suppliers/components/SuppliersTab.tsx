@@ -8,12 +8,13 @@ import { LiquidFillPill } from "@/components/LiquidFillPill";
 import Theme from "@/constants/Theme";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import type { EntityListFilter } from "@/features/finance/components/TreasurySummaryCard";
-import { aggregateSuppliers, type FinancialRowData, type TripPartyMap } from "@/features/finance/aggregation";
+import { aggregateSuppliersFromRpc, type FinancialRowData, type TripPartyMap } from "@/features/finance/aggregation";
 import { CUSTOMERS_SUPPLIERS } from "@/features/finance/constants/tableColumns";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
 import { useTripsQuery } from "@/lib/queries/useTripsQuery";
+import { useSupplierLedgerAggregationQuery } from "@/lib/queries/useLedgerAggregationQuery";
 import { usePaginatedScroll } from "@/lib/usePaginatedScroll";
 import { useRouter } from "expo-router";
 import type { ReactNode } from "react";
@@ -117,10 +118,13 @@ export function SuppliersTab({
   const suppliersQuery = useSuppliersQuery(isControlled ? null : organizationId);
   const tripsQuery = useTripsQuery(isControlled ? null : organizationId);
   const suppliers = isControlled ? (suppliersProp ?? []) : (suppliersQuery.data ?? []);
-  const trips = isControlled ? (tripsProp ?? []) : (tripsQuery.data ?? []);
-  const tripsWhereOrgIsClient = tripsWhereOrgIsClientProp ?? [];
-  const transactions = transactionsProp ?? [];
-  const showLoading = parentLoading || (!isControlled && (suppliersQuery.isLoading || tripsQuery.isLoading));
+  const applyAdjustments = tripFinanceAdjustmentsByTripId !== undefined;
+  const { data: supplierLedgerRpcRows = [], isPending: supplierLedgerLoading } =
+    useSupplierLedgerAggregationQuery(organizationId, applyAdjustments);
+  const showLoading =
+    parentLoading ||
+    (!isControlled && (suppliersQuery.isLoading || tripsQuery.isLoading)) ||
+    supplierLedgerLoading;
 
   const supplierAvatarById = useMemo(
     () => new Map(suppliers.map((s) => [s.id, { avatar_url: s.avatar_url, avatar_seed: s.avatar_seed }])),
@@ -128,20 +132,10 @@ export function SuppliersTab({
   );
 
   const { rows, totals } = useMemo(() => {
-    return aggregateSuppliers(
-      suppliers,
-      trips,
-      transactions,
-      tripsWhereOrgIsClient,
-      tripPartyMap,
-      tripFinanceAdjustmentsByTripId,
-    );
+    return aggregateSuppliersFromRpc(suppliers, supplierLedgerRpcRows);
   }, [
     suppliers,
-    trips,
-    transactions,
-    tripsWhereOrgIsClient,
-    tripPartyMap,
+    supplierLedgerRpcRows,
     tripFinanceAdjustmentsByTripId,
   ]);
 

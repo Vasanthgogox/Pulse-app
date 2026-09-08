@@ -46,6 +46,8 @@ async function main() {
   await tapDigits(page, PHONE, { verify: () => page.getByText('919 999 0005', { exact: false }).first().isVisible() });
   await page.getByText('Send OTP', { exact: false }).first().click();
   await page.getByText('Verification Code', { exact: false }).first().waitFor({ state: 'visible', timeout: 20_000 }).catch(() => {});
+  await page.waitForTimeout(1000);
+  await page.screenshot({ path: `${OUT}/a10-79-otp-screen.png`, fullPage: true });
   await tapDigits(page, OTP, { verify: () => page.getByText('Verify OTP', { exact: false }).first().isEnabled() });
   await page.getByText('Verify OTP', { exact: false }).first().click();
   await page.waitForURL((u) => !u.pathname.includes('driver-sign-in'), { timeout: 30_000 }).catch(() => {});
@@ -53,20 +55,46 @@ async function main() {
   await page.waitForTimeout(1500);
   log(`signed in as DCO, url=${page.url()}`);
 
-  await page.goto(`${BASE}/find-loads`, { waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => {});
+  await page.goto(`${BASE}/available-loads`, { waitUntil: 'domcontentloaded', timeout: 30_000 }).catch(() => {});
   await page.waitForLoadState('networkidle', { timeout: 30_000 }).catch(() => {});
-  await page.waitForTimeout(2500);
+  await page.waitForTimeout(6000);
   await page.screenshot({ path: `${OUT}/a10-80-dco-find-work.png`, fullPage: true });
   log(`find-loads url: ${page.url()}`);
 
-  const loadCard = page.getByText('SpaceXLogistics', { exact: true }).first();
-  const found = await loadCard.isVisible().catch(() => false);
-  log(`SpaceXLogistics load visible in DCO Find Work: ${found}`);
+  // Scroll through the whole Marketplace section to find our Chennai->Bengaluru card.
+  for (let i = 0; i < 5; i++) {
+    await page.mouse.wheel(0, 600);
+    await page.waitForTimeout(500);
+  }
+  await page.screenshot({ path: `${OUT}/a10-80b-scrolled.png`, fullPage: true });
+
+  const chennaiCard = page.getByText('Chennai', { exact: false }).first();
+  const found = await chennaiCard.isVisible().catch(() => false);
+  log(`Chennai pickup card visible in DCO Find Work: ${found}`);
 
   if (found) {
-    await loadCard.click();
-    await page.waitForTimeout(2000);
-    await page.screenshot({ path: `${OUT}/a10-81-dco-load-detail.png`, fullPage: true });
+    await chennaiCard.scrollIntoViewIfNeeded().catch(() => {});
+    await page.waitForTimeout(500);
+    // Anchor on the exact, distinctive amount "38,250" (our supplier_target), not the
+    // more ambiguous "Chennai" text, then click the nearest "Full view" to it.
+    const amountAnchor = page.getByText('38,250', { exact: false }).first();
+    await amountAnchor.scrollIntoViewIfNeeded().catch(() => {});
+    await page.waitForTimeout(400);
+    const amountBox = await amountAnchor.boundingBox();
+    const allFullView = await page.getByText('Full view', { exact: true }).all();
+    let bestBtn = null, bestDist = Infinity;
+    for (const btn of allFullView) {
+      const box = await btn.boundingBox().catch(() => null);
+      if (!box || !amountBox) continue;
+      const dist = Math.abs(box.y - amountBox.y);
+      if (dist < bestDist) { bestDist = dist; bestBtn = btn; }
+    }
+    if (!bestBtn) throw new Error('no Full view button found near amount anchor');
+    log(`closest Full view button distance: ${bestDist}px`);
+    await bestBtn.click();
+    await page.waitForLoadState('networkidle', { timeout: 20_000 }).catch(() => {});
+    await page.waitForTimeout(8000);
+    await page.screenshot({ path: `${OUT}/a10-83-dco-full-view.png`, fullPage: true });
     log(`detail url: ${page.url()}`);
   }
 
