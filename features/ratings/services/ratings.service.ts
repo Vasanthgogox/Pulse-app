@@ -118,6 +118,71 @@ export async function createRating(
   return { error: null, rating: row as RatingRow };
 }
 
+/**
+ * Assigned driver rates the shipper they operated for (client, else supplier).
+ */
+export async function submitDriverShipperFeedback(input: {
+  tripId: string;
+  messageId?: string | null;
+  score: number;
+  comment?: string | null;
+}): Promise<{ error: Error | null; submittedAt: string | null; score: number | null }> {
+  const messageId = (input.messageId ?? "").trim() || null;
+  const { data, error } = await supabase().rpc("submit_driver_shipper_feedback", {
+    p_trip_id: input.tripId,
+    p_message_id: messageId,
+    p_score: input.score,
+    p_comment: (input.comment ?? "").trim() || null,
+  });
+  if (error) {
+    const msg = error.message || "";
+    if (/does not exist|could not find the function|42883/i.test(msg)) {
+      return {
+        error: new Error("Rating isn’t available on this environment yet."),
+        submittedAt: null,
+        score: null,
+      };
+    }
+    return { error: new Error(msg), submittedAt: null, score: null };
+  }
+  const row = (data ?? {}) as {
+    error?: string;
+    ok?: boolean;
+    submitted_at?: string;
+    submitted_score?: number;
+  };
+  if (row.error) {
+    const code = String(row.error);
+    if (code === "already_submitted") {
+      return {
+        error: null,
+        submittedAt: row.submitted_at ?? new Date().toISOString(),
+        score: row.submitted_score ?? input.score,
+      };
+    }
+    if (code === "shipper_not_linked") {
+      return {
+        error: new Error("This trip has no shipper linked yet, so it can't be rated."),
+        submittedAt: null,
+        score: null,
+      };
+    }
+    if (code === "forbidden") {
+      return {
+        error: new Error("Only the driver who ran this trip can submit this rating."),
+        submittedAt: null,
+        score: null,
+      };
+    }
+    return { error: new Error("Could not save your rating. Try again."), submittedAt: null, score: null };
+  }
+  return {
+    error: null,
+    submittedAt: row.submitted_at ?? new Date().toISOString(),
+    score: row.submitted_score ?? input.score,
+  };
+}
+
 export async function getRatingsForTrip(tripId: string): Promise<{
   error: Error | null;
   ratings: RatingRow[];

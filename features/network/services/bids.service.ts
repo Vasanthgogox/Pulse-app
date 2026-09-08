@@ -96,6 +96,31 @@ export async function getDriverDirectBidsForPost(
   };
 }
 
+export async function checkDriversAvailable(
+  userIds: string[],
+): Promise<{ error: Error | null; availableByUserId: Map<string, boolean> }> {
+  const unique = [...new Set(userIds.map((id) => id.trim()).filter(Boolean))];
+  const availableByUserId = new Map<string, boolean>();
+  if (unique.length === 0) return { error: null, availableByUserId };
+
+  const results = await Promise.all(
+    unique.map(async (id) => {
+      const { data, error } = await supabase().rpc('is_driver_available', {
+        p_user_id: id,
+      });
+      return { id, available: error ? null : Boolean(data), error };
+    }),
+  );
+  const firstError = results.find((r) => r.error)?.error;
+  for (const row of results) {
+    if (row.available != null) availableByUserId.set(row.id, row.available);
+  }
+  return {
+    error: firstError ? new Error(firstError.message) : null,
+    availableByUserId,
+  };
+}
+
 export async function acceptDriverDirectBid(
   bidId: string,
 ): Promise<{ error: Error | null; tripId: string | null }> {

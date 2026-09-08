@@ -411,9 +411,9 @@ async function enrichIndentCreatorOrganizationNamesForViewer(
 }
 
 const TRIP_EMBED_FIELDS_FULL =
-  "organization_id, trip_operational_code, trip_code, trip_number, display_trip_id, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
+  "organization_id, trip_operational_code, trip_code, trip_number, display_trip_id, status, pickup_area, drop_location, pickup_date, driver_id, supplier_id, created_at";
 const TRIP_EMBED_FIELDS_LEGACY =
-  "organization_id, trip_operational_code, trip_code, trip_number, status, pickup_area, drop_location, driver_id, supplier_id, created_at";
+  "organization_id, trip_operational_code, trip_code, trip_number, status, pickup_area, drop_location, pickup_date, driver_id, supplier_id, created_at";
 
 const TRIP_MESSAGES_EMBED = `trip_messages ( id, conversation_id, content, sender_role, sender_name, sender_user_id, created_at, is_read, message_type, metadata, reactions, reply_to_id, reply_to_preview, edited_at, is_deleted )`;
 /** Newest N rows per conversation embed. Keep low — bulk loads (13+ convos × limit) can spike CPU/RAM. */
@@ -531,6 +531,7 @@ async function getConversationsByOrganizationLight(
       trip_driver_id: (trips?.driver_id as string | null) ?? null,
       trip_supplier_id: (trips?.supplier_id as string | null) ?? null,
       trip_created_at: (trips?.created_at as string | null) ?? null,
+      pickup_date: (trips?.pickup_date as string | null) ?? null,
       trip_organization_id: (trips?.organization_id as string | null | undefined) ?? null,
       pickup_area: (trips?.pickup_area as string | undefined) ?? "",
       drop_location: (trips?.drop_location as string | undefined) ?? "",
@@ -585,6 +586,7 @@ export async function getTripConversationById(
       status?: string | null;
       pickup_area?: string;
       drop_location?: string;
+      pickup_date?: string | null;
       driver_id?: string | null;
       supplier_id?: string | null;
       created_at?: string | null;
@@ -600,6 +602,7 @@ export async function getTripConversationById(
     trip_driver_id: row.trips?.driver_id ?? null,
     trip_supplier_id: row.trips?.supplier_id ?? null,
     trip_created_at: row.trips?.created_at ?? null,
+    pickup_date: row.trips?.pickup_date ?? null,
     trip_organization_id: row.trips?.organization_id ?? null,
     pickup_area: String(row.trips?.pickup_area ?? ""),
     drop_location: String(row.trips?.drop_location ?? ""),
@@ -1297,6 +1300,8 @@ export async function getConversationsByDriverIds(
     driver_display_trip_id: string | null;
     pickup_area: string | null;
     drop_location: string | null;
+    pickup_date: string | null;
+    created_at: string | null;
   };
   type DriverChatConversationRow = TripConversationRow & {
     id: string;
@@ -1327,6 +1332,8 @@ export async function getConversationsByDriverIds(
         trip_number: operational !== "—" ? operational : perDriver || tr?.trip_number || "",
         pickup_area: tr?.pickup_area ?? "",
         drop_location: tr?.drop_location ?? "",
+        pickup_date: tr?.pickup_date ?? null,
+        trip_created_at: tr?.created_at ?? null,
         messages: (
           row.trip_messages ??
           messagesByConversationId.get(String(row.id ?? "")) ??
@@ -1362,7 +1369,7 @@ export async function getConversationsByDriverIds(
       ? supabase()
           .from("trips")
           .select(
-            "id, trip_operational_code, trip_code, display_trip_id, trip_number, driver_display_trip_id, pickup_area, drop_location",
+            "id, trip_operational_code, trip_code, display_trip_id, trip_number, driver_display_trip_id, pickup_area, drop_location, pickup_date, created_at",
           )
           .in("id", tripIds)
       : Promise.resolve(emptyTripsRes),
@@ -1400,7 +1407,7 @@ async function fetchDriverInboxPreviewMessages(
   const { data, error } = await supabase()
     .from("trip_messages")
     .select(
-      "id,conversation_id,message_type,metadata,created_at,is_deleted",
+      "id,conversation_id,message_type,metadata,content,created_at,is_deleted",
     )
     .in("conversation_id", conversationIds)
     .in("message_type", DRIVER_INBOX_PREVIEW_MEDIA_TYPES)
@@ -1563,6 +1570,7 @@ function normalizeInitialStateRow(row: Record<string, unknown>): TripConversatio
     trip_driver_id:          (row.trip_driver_id    as string | null) ?? null,
     trip_supplier_id:        (row.trip_supplier_id  as string | null) ?? null,
     trip_created_at:         (row.trip_created_at   as string | null) ?? null,
+    pickup_date:             (row.pickup_date       as string | null) ?? null,
     trip_source:
       row.trip_source != null && String(row.trip_source).trim() !== ""
         ? String(row.trip_source)

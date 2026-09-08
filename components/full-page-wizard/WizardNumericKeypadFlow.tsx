@@ -9,7 +9,6 @@ import { memo, useCallback, useEffect, useMemo, type ReactNode } from "react";
 import {
   Platform,
   Pressable,
-  ScrollView,
   Text,
   useWindowDimensions,
   View,
@@ -380,60 +379,53 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
     </>
   );
 
+  if (isPopupShell) {
+    return (
+      <View style={styles.wizardKeypadRootPopup}>
+        <View style={styles.wizardKeypadBodyPopupStack}>{bodyInner}</View>
+        <View style={styles.wizardKeypadBottomDockPopup}>
+          {dockAccessory ? (
+            <View style={styles.wizardKeypadDockAccessoryPopup}>
+              {dockAccessory}
+            </View>
+          ) : null}
+          <WizardActionBarHost style={styles.wizardKeypadActionBar} />
+          <View style={styles.wizardKeypadPadDockPopup}>
+            <KeypadDock
+              onKey={handleKey}
+              showDecimal={showDecimal}
+              size="compact"
+            />
+          </View>
+        </View>
+      </View>
+    );
+  }
+
   return (
     <View
-      style={[
-        styles.wizardKeypadRoot,
-        !isPopupShell && styles.wizardKeypadRootFill,
-        isPopupShell && styles.wizardKeypadRootPopup,
-      ]}
+      style={[styles.wizardKeypadRoot, styles.wizardKeypadRootFill]}
     >
-      {isPopupShell ? (
-        <ScrollView
-          style={styles.wizardKeypadBodyScrollPopup}
-          contentContainerStyle={[
-            styles.wizardKeypadBody,
-            styles.wizardKeypadBodyMobilePay,
-            useCompactChrome && styles.wizardKeypadBodyCompact,
-            styles.wizardKeypadBodyPopup,
-          ]}
-          keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={false}
-          bounces={false}
-        >
-          {bodyInner}
-        </ScrollView>
-      ) : (
-        <View
-          style={[
-            styles.wizardKeypadBody,
-            styles.wizardKeypadBodyMobilePay,
-            useCompactChrome && styles.wizardKeypadBodyCompact,
-            styles.wizardKeypadBodyFillPad,
-            hasDockAccessory && styles.wizardKeypadBodyFillPadTall,
-          ]}
-        >
-          {bodyInner}
-        </View>
-      )}
-      {/* Absolute bottom dock on fill shells — reliable mobile GPay layout. */}
+      <View
+        style={[
+          styles.wizardKeypadBody,
+          styles.wizardKeypadBodyMobilePay,
+          useCompactChrome && styles.wizardKeypadBodyCompact,
+          styles.wizardKeypadBodyFillPad,
+          hasDockAccessory && styles.wizardKeypadBodyFillPadTall,
+        ]}
+      >
+        {bodyInner}
+      </View>
       <View
         style={[
           styles.wizardKeypadBottomDock,
-          !isPopupShell && styles.wizardKeypadBottomDockPinned,
-          isPopupShell && styles.wizardKeypadBottomDockPopup,
+          styles.wizardKeypadBottomDockPinned,
         ]}
       >
         <WizardActionBarHost style={styles.wizardKeypadActionBar} />
         {dockAccessory ? (
-          <View
-            style={[
-              styles.wizardKeypadDockAccessory,
-              isPopupShell && styles.wizardKeypadDockAccessoryPopup,
-            ]}
-          >
-            {dockAccessory}
-          </View>
+          <View style={styles.wizardKeypadDockAccessory}>{dockAccessory}</View>
         ) : null}
         <View
           style={[
@@ -441,7 +433,6 @@ export const WizardNumericKeypadFlow = memo(function WizardNumericKeypadFlow({
             flow.keypadDockWizardBleed,
             usePayTrayChrome && flow.keypadDockSignIn,
             styles.wizardKeypadPadDock,
-            isPopupShell && styles.wizardKeypadPadDockPopup,
           ]}
         >
           <KeypadDock

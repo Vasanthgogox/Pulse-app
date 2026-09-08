@@ -122,8 +122,13 @@ export const DRIVER_POLICIES: readonly PolicyRecord[] = [
     onDeny: { type: 'experience_home', experience: 'driver' },
   },
   {
-    id: 'driver.trip-history-id',
-    pattern: '/(driver)/trip-history/:tripId',
+    // Moved out of (driver) to a root-level route (app/driver-trip/[tripId])
+    // so Trip Detail renders outside the driver Tabs -- pattern updated to
+    // match; this is now the sole access-control boundary for that screen
+    // (previously also covered by (driver)/_layout.tsx's own inline gate,
+    // which no longer applies since the route left that tree).
+    id: 'driver.trip-detail',
+    pattern: '/driver-trip/:tripId',
     experience: 'driver',
     priority: 80,
     onDeny: { type: 'experience_home', experience: 'driver' },

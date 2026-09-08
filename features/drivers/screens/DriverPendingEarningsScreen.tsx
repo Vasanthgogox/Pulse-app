@@ -197,7 +197,7 @@ export default function PendingEarningsScreen() {
                       cardBg={cardBg}
                       isDark={isDark}
                       onPress={() =>
-                        router.push(`/(driver)/trip-history/${item.trip.id}` as import('expo-router').Href)
+                        router.push(`/driver-trip/${item.trip.id}` as import('expo-router').Href)
                       }
                     />
                   ))}

@@ -9,12 +9,19 @@
  * accepted, so this component never has to decide when to show it — it
  * renders owner_phone ?? owner_masked_phone as-is.
  */
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
+import {
+  MarketplaceRouteGrid,
+  MarketplaceSpecChips,
+  titleCaseWord,
+} from "@/features/network/components/MarketplaceLoadCardChrome";
 import {
   type FeePaymentStatus,
   type MyOrgMarketBidRow,
   type MyOrgMarketBidStatus,
 } from "@/features/network/services/findLoadsForOrg.service";
+import { formatStoryDate } from "@/features/network/utils/storyDisplay";
 import { createMarketplaceFeeOrder } from "@/features/network/services/marketBids.service";
 import {
   RazorpayCheckoutSheet,
@@ -25,8 +32,8 @@ import { showAppAlert } from "@/lib/appAlert";
 import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
 import { ChevronRight, Inbox } from "lucide-react-native";
-import { useMemo, useState } from "react";
-import { Pressable, StyleSheet, Text, View } from "react-native";
+import { useMemo, useState, type ReactNode } from "react";
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 function formatAmount(amount: number | null | undefined): string {
   if (amount == null || !Number.isFinite(Number(amount))) return "—";
@@ -173,14 +180,19 @@ function Section({
 }: {
   title: string;
   count: number;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === "web" && width >= 1024;
+
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>
         {title.toUpperCase()} · {count}
       </Text>
-      <View style={{ gap: 8 }}>{children}</View>
+      <View style={[styles.sectionGrid, isDesktop && styles.sectionGridDesktop]}>
+        {children}
+      </View>
     </View>
   );
 }
@@ -193,6 +205,8 @@ function BidCard({
   onPaymentUpdated?: () => void;
 }) {
   const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === "web" && width >= 1024;
   const isAccepted = bid.status === "accepted";
   const isRejected = bid.status === "rejected";
   const phoneDisplay = bid.owner_phone ?? bid.owner_masked_phone;
@@ -207,6 +221,14 @@ function BidCard({
   } | null>(null);
 
   const canPay = isAccepted && (bid.fee_payment_status === "required" || bid.fee_payment_status === "failed");
+  const shipper = titleCaseWord(
+    (bid.owner_organization_name ?? "").trim() || "Unknown shipper",
+  );
+  const specChips = [bid.load_type]
+    .map((v) => (v ?? "").trim())
+    .filter(Boolean)
+    .map(titleCaseWord);
+  const dateLabel = bid.pickup_date ? formatStoryDate(bid.pickup_date) : null;
 
   const handlePay = async () => {
     if (isStartingPayment) return;
@@ -254,12 +276,26 @@ function BidCard({
     <View
       style={[
         styles.card,
+        isDesktop && styles.cardDesktop,
         isAccepted && styles.cardAccepted,
         isRejected && styles.cardRejected,
       ]}
     >
       <View style={styles.cardTop}>
-        <Text style={styles.amount}>{formatAmount(bid.amount)}</Text>
+        <PartyAvatar
+          name={shipper}
+          initialsColorSeed={bid.owner_organization_id ?? shipper}
+          entityType="client"
+          size={32}
+        />
+        <View style={styles.cardTopText}>
+          <Text style={styles.orgName} numberOfLines={1}>
+            {shipper}
+          </Text>
+          <Text style={styles.metaLine} numberOfLines={1}>
+            {(bid.indent_number ?? "").trim() || bid.indent_id.slice(0, 8).toUpperCase()}
+          </Text>
+        </View>
         <View
           style={[
             styles.statusPill,
@@ -279,17 +315,51 @@ function BidCard({
         </View>
       </View>
 
-      <Text style={styles.route} numberOfLines={1}>
-        {routeLabel(bid)}
-      </Text>
-      <Text style={styles.meta}>{bid.owner_organization_name ?? "Unknown shipper"}</Text>
+      <MarketplaceRouteGrid pickup={bid.pickup_area} drop={bid.drop_location} />
+      <MarketplaceSpecChips chips={specChips} dateLabel={dateLabel} />
 
-      {isAccepted && phoneDisplay ? (
-        <Text style={styles.contact}>{phoneDisplay}</Text>
-      ) : null}
+      <View style={styles.cardFooter}>
+        <View style={styles.rateBlock}>
+          <Text style={styles.rateLabel}>Your bid</Text>
+          <Text style={styles.amount}>{formatAmount(bid.amount)}</Text>
+          {isAccepted && phoneDisplay ? (
+            <Text style={styles.contact} numberOfLines={1}>
+              {phoneDisplay}
+            </Text>
+          ) : null}
+        </View>
+        {isAccepted && feeGateSatisfied ? (
+          <Pressable
+            onPress={handleAssignVehicle}
+            disabled={isNavigating}
+            style={({ pressed }) => [
+              styles.assignCta,
+              pressed && styles.assignRowPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Assign vehicle"
+          >
+            <Text style={styles.assignCtaText} numberOfLines={1}>
+              {isNavigating ? "Opening…" : "Assign"}
+            </Text>
+            <ChevronRight size={13} color={Theme.positive} strokeWidth={2.4} />
+          </Pressable>
+        ) : null}
+        {isAccepted && !feeGateSatisfied && canPay ? (
+          <Pressable
+            onPress={handlePay}
+            disabled={isStartingPayment}
+            style={({ pressed }) => [styles.payButton, pressed && styles.assignRowPressed]}
+          >
+            <Text style={styles.payButtonText} numberOfLines={1}>
+              {isStartingPayment ? "Starting…" : "Pay fee"}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
 
       {bid.note?.trim() ? (
-        <Text style={styles.note} numberOfLines={2}>
+        <Text style={styles.note} numberOfLines={1}>
           &ldquo;{bid.note.trim()}&rdquo;
         </Text>
       ) : null}
@@ -300,47 +370,10 @@ function BidCard({
         </Text>
       ) : null}
 
-      {isAccepted && feeGateSatisfied ? (
-        <Pressable
-          onPress={handleAssignVehicle}
-          disabled={isNavigating}
-          style={({ pressed }) => [
-            styles.assignRow,
-            pressed && styles.assignRowPressed,
-          ]}
-        >
-          <Text style={styles.assignRowLabel}>Your bid was accepted</Text>
-          <View style={styles.assignRowCta}>
-            <Text style={styles.assignRowCtaText}>
-              {isNavigating ? "Opening…" : "Assign Vehicle"}
-            </Text>
-            <ChevronRight size={14} color={Theme.positive} />
-          </View>
-        </Pressable>
-      ) : null}
-
-      {/* A8.7: award happened, but the Marketplace fee still gates
-          allocation. required/failed states get a real "Pay" trigger;
-          pending (payment already in flight, awaiting the webhook) stays
-          informational only -- retrying while a payment may still confirm
-          would create a second, unnecessary attempt. */}
       {isAccepted && !feeGateSatisfied ? (
-        <View style={styles.feeGateRow}>
-          <Text style={styles.feeGateLabel}>
-            {feePendingLabel(bid.fee_payment_status, bid.platform_fee_amount)}
-          </Text>
-          {canPay ? (
-            <Pressable
-              onPress={handlePay}
-              disabled={isStartingPayment}
-              style={({ pressed }) => [styles.payButton, pressed && styles.assignRowPressed]}
-            >
-              <Text style={styles.payButtonText}>
-                {isStartingPayment ? "Starting…" : `Pay ${formatAmount(bid.platform_fee_amount)}`}
-              </Text>
-            </Pressable>
-          ) : null}
-        </View>
+        <Text style={styles.feeGateLabel} numberOfLines={2}>
+          {feePendingLabel(bid.fee_payment_status, bid.platform_fee_amount)}
+        </Text>
       ) : null}
 
       {checkoutOrder ? (
@@ -375,8 +408,14 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 15, fontWeight: "800", color: Theme.primaryText },
   emptyBody: { fontSize: 13, color: Theme.textSecondary, textAlign: "center" },
-  listContent: { paddingHorizontal: 16, paddingBottom: 32, gap: 16 },
+  listContent: { paddingHorizontal: 20, paddingTop: 0, paddingBottom: 32, gap: 14 },
   section: { gap: 8 },
+  sectionGrid: { gap: 12 },
+  sectionGridDesktop: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
   sectionTitle: {
     fontSize: 11,
     fontWeight: "700",
@@ -384,69 +423,115 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   card: {
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.08)",
+    borderColor: Theme.surfaceBorder,
     padding: 14,
     backgroundColor: Theme.cardWhite,
-    gap: 4,
+    gap: 12,
+    overflow: "hidden",
+    ...Platform.select({
+      web: {
+        boxSizing: "border-box",
+        boxShadow: `0 8px 20px ${Theme.actionAccentShadow}`,
+      } as object,
+      default: {
+        shadowColor: Theme.primaryText,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        elevation: 2,
+      },
+    }),
   },
-  cardAccepted: { borderColor: Theme.positiveMutedDarkBorder },
+  cardDesktop: {
+    width: "calc((100% - 36px) / 4)" as unknown as number,
+    maxWidth: "calc((100% - 36px) / 4)" as unknown as number,
+    minWidth: 0,
+    flexGrow: 0,
+    flexShrink: 0,
+    ...Platform.select({
+      web: { boxSizing: "border-box" } as object,
+      default: {},
+    }),
+  },
+  cardAccepted: {
+    borderColor: Theme.positive,
+    borderWidth: 1.5,
+    backgroundColor: Theme.cardWhite,
+  },
   cardRejected: { opacity: 0.8 },
   cardTop: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 10,
   },
-  amount: { fontSize: 16, fontWeight: "700", color: Theme.primary },
+  cardTopText: { flex: 1, minWidth: 0, gap: 2 },
+  orgName: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.1,
+  },
+  metaLine: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    letterSpacing: 0.2,
+  },
+  cardFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: 10,
+    gap: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.surfaceBorder,
+  },
+  rateBlock: { gap: 1, flex: 1, minWidth: 0 },
+  rateLabel: {
+    fontSize: 9,
+    fontWeight: "600",
+    letterSpacing: 0.45,
+    textTransform: "uppercase",
+    color: Theme.textMuted,
+  },
+  amount: { fontSize: 16, fontWeight: "700", color: Theme.primary, letterSpacing: -0.3 },
   statusPill: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
     backgroundColor: Theme.surfaceGray,
+    flexShrink: 0,
   },
   statusPillAccepted: { backgroundColor: Theme.positiveMuted },
   statusPillRejected: { backgroundColor: Theme.negativeMuted },
   statusText: { fontSize: 10, fontWeight: "700", color: Theme.textMuted },
   statusTextAccepted: { color: Theme.positive },
   statusTextRejected: { color: Theme.negative },
-  route: { fontSize: 15, fontWeight: "700", color: Theme.primaryText, marginTop: 2 },
-  meta: { fontSize: 12, color: Theme.textSecondary },
-  contact: { fontSize: 12, fontWeight: "600", color: Theme.primaryText, marginTop: 2 },
+  contact: { fontSize: 11, fontWeight: "600", color: Theme.primaryText, marginTop: 2 },
   note: { fontSize: 12, fontStyle: "italic", color: Theme.textSecondary },
-  submitted: { fontSize: 11, color: Theme.textMuted, marginTop: 2 },
-  assignRow: {
-    marginTop: 4,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: Theme.positiveMutedDarkBorder,
-    backgroundColor: Theme.positiveMuted,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+  submitted: { fontSize: 11, color: Theme.textMuted },
+  assignCta: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
-  },
-  assignRowPressed: { opacity: 0.7 },
-  assignRowLabel: { fontSize: 12, fontWeight: "600", color: Theme.primaryText },
-  assignRowCta: { flexDirection: "row", alignItems: "center", gap: 2 },
-  assignRowCtaText: { fontSize: 13, fontWeight: "800", color: Theme.positive },
-  feeGateRow: {
-    marginTop: 4,
-    borderRadius: 10,
+    gap: 2,
+    flexShrink: 0,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: Theme.positiveMuted,
     borderWidth: 1,
-    borderColor: Theme.warningMuted,
-    backgroundColor: Theme.warningMuted,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
+    borderColor: Theme.positiveMutedDarkBorder,
   },
-  feeGateLabel: { fontSize: 12, fontWeight: "600", color: Theme.warning },
+  assignCtaText: { fontSize: 12, fontWeight: "800", color: Theme.positive },
+  assignRowPressed: { opacity: 0.7 },
+  feeGateLabel: { fontSize: 11, fontWeight: "600", color: Theme.warning },
   payButton: {
-    marginTop: 8,
-    alignSelf: "flex-start",
-    borderRadius: 8,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    flexShrink: 0,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
     backgroundColor: Theme.darkBackground,
   },
   payButtonText: { fontSize: 12, fontWeight: "700", color: Theme.textOnPrimary },

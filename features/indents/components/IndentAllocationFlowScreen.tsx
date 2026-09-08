@@ -1004,16 +1004,16 @@ const styles = StyleSheet.create({
   },
   flowChrome: {
     width: "100%",
-    gap: 8,
+    gap: 14,
     flexShrink: 0,
     backgroundColor: Theme.screenBackground,
     zIndex: 2,
-    paddingBottom: 4,
+    paddingBottom: 8,
   },
   flowStep: {
     width: "100%",
     minWidth: 0,
-    gap: 10,
+    gap: 12,
   },
   confirmStep: {
     width: "100%",

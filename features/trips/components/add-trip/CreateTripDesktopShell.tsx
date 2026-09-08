@@ -34,6 +34,8 @@ export type CreateTripDesktopShellProps = {
   primaryLoading?: boolean;
   hint?: string | null;
   fillBody?: boolean;
+  /** Supplier/client amount keypad — fill the card instead of scrolling a form. */
+  dockKeypad?: boolean;
 };
 
 export function CreateTripDesktopShell({
@@ -51,6 +53,7 @@ export function CreateTripDesktopShell({
   primaryLoading = false,
   hint = null,
   fillBody = false,
+  dockKeypad = false,
 }: CreateTripDesktopShellProps) {
   const insets = useSafeAreaInsets();
   const viewportHeight = useViewportHeight();
@@ -73,15 +76,21 @@ export function CreateTripDesktopShell({
       {stepChrome}
       <View style={s.stepSurfaceDivider} />
       {fillBody ? (
-        <ScrollView
-          style={s.stepSurfaceBodyScroll}
-          contentContainerStyle={s.stepSurfaceBodyScrollContent}
-          showsVerticalScrollIndicator={false}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
-        >
-          {children}
-        </ScrollView>
+        dockKeypad ? (
+          <View style={[s.stepSurfaceBody, s.stepSurfaceBodyFill, s.stepSurfaceBodyKeypad]}>
+            {children}
+          </View>
+        ) : (
+          <ScrollView
+            style={s.stepSurfaceBodyScroll}
+            contentContainerStyle={s.stepSurfaceBodyScrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            keyboardDismissMode={Platform.OS === "ios" ? "interactive" : "on-drag"}
+          >
+            {children}
+          </ScrollView>
+        )
       ) : (
         <View style={s.stepSurfaceBody}>{children}</View>
       )}

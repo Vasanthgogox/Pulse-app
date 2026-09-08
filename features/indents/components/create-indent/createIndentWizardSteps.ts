@@ -1,6 +1,7 @@
 import {
   isValidIndentVehicleCount,
   type FormState,
+  type IndentDistributionChoice,
 } from "./createIndentForm.types";
 
 export type IndentWizardStep =
@@ -8,6 +9,7 @@ export type IndentWizardStep =
   | "client"
   | "prices"
   | "quote"
+  | "share"
   | "vehicle"
   | "loadType"
   | "weight";
@@ -18,7 +20,25 @@ export const INDENT_WIZARD_STEPS: IndentWizardStep[] = [
   "vehicle",
   "prices",
   "quote",
+  "share",
 ];
+
+/** Stepper chips — share is a follow-on page of Target, not its own step. */
+export const INDENT_WIZARD_PROGRESS_STEPS: IndentWizardStep[] =
+  INDENT_WIZARD_STEPS.filter((id) => id !== "share");
+
+export function indentShareSubmitLabel(
+  choice: IndentDistributionChoice,
+): string {
+  switch (choice) {
+    case "marketplace":
+      return "Share it to marketplace";
+    case "both":
+      return "Share it to both (network and market)";
+    default:
+      return "Share it to network";
+  }
+}
 
 export function indentWizardStepLabel(step: IndentWizardStep): string {
   switch (step) {
@@ -27,6 +47,7 @@ export function indentWizardStepLabel(step: IndentWizardStep): string {
     case "client":
       return "Client";
     case "prices":
+    case "share":
       return "Target";
     case "quote":
       return "Quote";
@@ -75,6 +96,12 @@ export function indentStepCanAdvance(
         form.supplier_rate_basis === "per_mt" ||
         form.supplier_rate_basis === "per_trip"
       );
+    case "share":
+      return (
+        form.circulation_target === "integrated_supplier" ||
+        form.circulation_target === "marketplace" ||
+        form.circulation_target === "both"
+      );
     case "vehicle": {
       const w = parseFloat(String(form.weight ?? "").replace(/,/g, ""));
       const unit = parseFloat(String(form.sale_unit_rate ?? "").replace(/,/g, ""));
@@ -105,7 +132,7 @@ export type IndentWizardGroup = "route" | "commercial" | "load";
 
 export function indentStepToGroup(step: IndentWizardStep): IndentWizardGroup {
   if (step === "route") return "route";
-  if (step === "client" || step === "prices" || step === "quote")
+  if (step === "client" || step === "prices" || step === "quote" || step === "share")
     return "commercial";
   return "load";
 }

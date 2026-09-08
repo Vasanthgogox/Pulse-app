@@ -1,15 +1,41 @@
+import { DriverShipperFeedbackModal } from "@/features/chat/components/driver/DriverShipperFeedbackModal";
 import {
   ChatSlackListHeader,
   ChatSlackListRow,
 } from "@/features/chat/components/mobile/ChatSlackMobileChrome";
 import { stripChatPreviewEmojiPrefix } from "@/features/chat/utils/chatAvatar.util";
-import type { TripConversation } from "@/features/chat/types/chat.types";
+import { resolveDriverInboxListPreview } from "@/features/chat/utils/driverChatInboxPreview.util";
+import {
+  findLatestMissionDebriefMessage,
+  isMissionDebriefPreviewText,
+} from "@/features/chat/utils/missionDebrief.util";
+import { isFeedbackRequestAlreadyRatedMeta } from "@/features/chat/utils/feedbackRequestMeta.util";
+import { parseFeedbackRequestMetadata } from "@/features/chat/utils/feedbackRequestMeta";
+import { driverChatMessagesQueryKey } from "@/features/chat/utils/driverChatMessageCache.util";
+import type { TripConversation, TripMessageRow } from "@/features/chat/types/chat.types";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
+import { useQueryClient } from "@tanstack/react-query";
 import { MessageSquare } from "lucide-react-native";
 import { FlashList } from "@shopify/flash-list";
-import { memo, useCallback } from "react";
+import { memo, useCallback, useState } from "react";
 import { Text, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+function formatTripDate(iso: string | null | undefined): string {
+  const raw = String(iso ?? "").trim();
+  if (!raw) return "";
+  try {
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return "";
+    return d.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return "";
+  }
+}
 
 function convListIdentity(conv: TripConversation): ResolvedPartyAvatarIdentity {
   return {
@@ -40,6 +66,8 @@ function DriverChatSlackInboxInner({
   bottomInset?: number;
 }) {
   const insets = useSafeAreaInsets();
+  const queryClient = useQueryClient();
+  const [feedbackConv, setFeedbackConv] = useState<TripConversation | null>(null);
 
   const renderConvItem = useCallback(
     ({ item }: { item: TripConversation }) => {
@@ -53,24 +81,52 @@ function DriverChatSlackInboxInner({
       const routeLine = [item.pickup_area, item.drop_location]
         .filter(Boolean)
         .join(" → ");
-      const preview = stripChatPreviewEmojiPrefix(
-        item.last_message_preview?.trim() ?? "",
-      );
+      const tripDate = formatTripDate(item.pickup_date ?? item.trip_created_at);
+      const listPreview = resolveDriverInboxListPreview(item);
+      const preview =
+        listPreview.preview ||
+        stripChatPreviewEmojiPrefix(item.last_message_preview?.trim() ?? "") ||
+        null;
+      const debriefMsg = findLatestMissionDebriefMessage(item.messages);
+      const showPreviewStar =
+        Boolean(debriefMsg) || isMissionDebriefPreviewText(preview);
+      const debriefMeta = debriefMsg
+        ? parseFeedbackRequestMetadata(debriefMsg)
+        : null;
+      const debriefRaw = (debriefMsg?.metadata ?? {}) as Record<string, unknown>;
+      const previewStarFilled =
+        isFeedbackRequestAlreadyRatedMeta(debriefMeta) ||
+        (typeof debriefRaw.submitted_at === "string" &&
+          debriefRaw.submitted_at.trim().length > 0);
       return (
         <ChatSlackListRow
           identity={convListIdentity(item)}
-          title={item.trip_number || "Trip"}
+          title={routeLine || item.trip_number || "Trip"}
+          titleMeta={tripDate || null}
           time={time}
-          partyLine={routeLine || "Driver"}
-          preview={preview || null}
+          partyLine={item.trip_number || "Driver"}
+          preview={preview}
+          previewKind={listPreview.previewKind}
+          previewImagePreviews={listPreview.previewImagePreviews}
           active={selectedId === item.id}
           unread={item.unread_dispatcher_count}
+          showPreviewStar={showPreviewStar}
+          previewStarFilled={previewStarFilled}
+          onPressPreviewStar={() => setFeedbackConv(item)}
           onPress={() => onOpenConv(item)}
         />
       );
     },
     [selectedId, onOpenConv],
   );
+
+  const feedbackMessage: TripMessageRow | null = feedbackConv
+    ? findLatestMissionDebriefMessage(feedbackConv.messages)
+    : null;
+  const feedbackTarget =
+    (feedbackConv?.party_name ?? "").trim() ||
+    (feedbackConv?.trip_organization_name ?? "").trim() ||
+    "this shipper";
 
   return (
     <View style={{ flex: 1, backgroundColor: "#FFFFFF" }}>
@@ -112,10 +168,25 @@ function DriverChatSlackInboxInner({
         <FlashList
           data={conversations}
           keyExtractor={(c) => c.id}
+          extraData={feedbackConv?.id}
           contentContainerStyle={{ paddingBottom: Math.max(bottomInset, 12) }}
           renderItem={renderConvItem}
         />
       )}
+      <DriverShipperFeedbackModal
+        visible={Boolean(feedbackConv)}
+        onClose={() => setFeedbackConv(null)}
+        tripId={feedbackConv?.trip_id ?? ""}
+        message={feedbackMessage}
+        targetName={feedbackTarget}
+        onSubmitted={() => {
+          if (feedbackConv?.id) {
+            void queryClient.invalidateQueries({
+              queryKey: driverChatMessagesQueryKey(feedbackConv.id),
+            });
+          }
+        }}
+      />
     </View>
   );
 }

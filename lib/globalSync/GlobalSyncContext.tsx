@@ -49,15 +49,14 @@ export function GlobalSyncProvider({ children }: { children: ReactNode }) {
   const queryClient = useQueryClient();
   const { profile } = useAuth();
   // Everything this provider fetches/subscribes to (salary requests across the
-  // org, shared-ledger notifications per linked partner, connection requests,
-  // Operations Island / Alert Registry / notification bell) is dispatcher-only
-  // UI. No screen under app/(driver)/ or features/drivers/ reads any slice of
-  // useGlobalSyncStore — confirmed by grep, not assumption. Driver sessions
-  // still resolve a valid orgId (their employer org), so without this gate the
-  // full business bootstrap (including a per-partner get_shared_ledger_entries
-  // fan-out) fires on every driver session for data no driver screen shows,
-  // and surfaces as console noise (esp. around app resume / token refresh)
-  // for work that was never going to render anywhere.
+  // org, connection requests, Operations Island / Alert Registry / notification
+  // bell) is dispatcher-only UI. No screen under app/(driver)/ or
+  // features/drivers/ reads any slice of useGlobalSyncStore — confirmed by
+  // grep, not assumption. Driver sessions still resolve a valid orgId (their
+  // employer org), so without this gate the full business bootstrap fires on
+  // every driver session for data no driver screen shows, and surfaces as
+  // console noise (esp. around app resume / token refresh) for work that was
+  // never going to render anywhere.
   const isDriver = profile?.role === 'driver';
 
   // ── Bootstrap on org change ───────────────────────────────────────────────
@@ -89,12 +88,6 @@ export function GlobalSyncProvider({ children }: { children: ReactNode }) {
           table:  'driver_salary_requests',
           filter: `organization_id=eq.${orgId}`,
         },
-        // Disputes (no filter — RLS gates delivery; client checks orgId)
-        {
-          event:  '*',
-          schema: 'public',
-          table:  'dispute',
-        },
         // Org links this org owns
         {
           event:  '*',
@@ -114,13 +107,6 @@ export function GlobalSyncProvider({ children }: { children: ReactNode }) {
           event:  '*',
           schema: 'public',
           table:  'b2b_operations_dismissals',
-          filter: `organization_id=eq.${orgId}`,
-        },
-        // Shared-ledger bell rows (registry finance section).
-        {
-          event:  '*',
-          schema: 'public',
-          table:  'shared_ledger_notifications',
           filter: `organization_id=eq.${orgId}`,
         },
         // Inbound Protocol — connection invites (from / to this org).
@@ -161,13 +147,6 @@ export function GlobalSyncProvider({ children }: { children: ReactNode }) {
         const table     = payload.table;
         const eventType = payload.eventType;
         const row       = (payload.new ?? payload.old ?? {}) as Record<string, unknown>;
-
-        // Dispute events arrive for ALL orgs (no channel filter) — gate client-side.
-        if (table === 'dispute') {
-          const raised  = row.raised_by_org_id as string | undefined;
-          const partner = row.partner_org_id   as string | undefined;
-          if (raised !== orgId && partner !== orgId) return;
-        }
 
         if (table === 'connection_requests') {
           void useGlobalSyncStore

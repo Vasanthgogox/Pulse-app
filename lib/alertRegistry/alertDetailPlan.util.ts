@@ -1,9 +1,7 @@
 import { opsRegistryActionLabel } from "@/lib/alertRegistry/registryOpsPresentation.util";
 import type { GlobalOperationAlert } from "@/lib/globalSync/priorityEngine.util";
 import type { RegistryFeedKind } from "@/lib/globalSync/registryFeed.util";
-import { sharedLedgerActionLabel } from "@/lib/sharedLedger/registryLabels";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
-import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
 
 import type { AlertDetailMode } from "./alertDetailRoute.util";
 
@@ -51,25 +49,6 @@ export function buildSalaryAlertFooterPlan(
   };
 }
 
-export function buildSharedAlertFooterPlan(
-  item: SharedLedgerNotificationRow,
-  mode: AlertDetailMode,
-): AlertDetailFooterPlan {
-  if (mode === "archive") {
-    return {
-      primaryLabel: "View ledger",
-      summary: `Status · ${String(item.status ?? "read").replace(/_/g, " ")}`,
-    };
-  }
-
-  return {
-    primaryLabel: sharedLedgerActionLabel(item.event_type),
-    secondaryLabel: "Dismiss",
-    summary: item.subtitle?.trim() || item.title,
-    hint: "Primary action opens the partner ledger flow.",
-  };
-}
-
 export function buildOpsAlertFooterPlan(ops: GlobalOperationAlert): AlertDetailFooterPlan {
   return {
     primaryLabel: opsRegistryActionLabel(ops),
@@ -86,14 +65,10 @@ export function buildAlertDetailFooterPlan(input: {
   kind: RegistryFeedKind;
   mode: AlertDetailMode;
   salary?: SalaryRequestWithDriverRow | null;
-  shared?: SharedLedgerNotificationRow | null;
   ops?: GlobalOperationAlert | null;
 }): AlertDetailFooterPlan | null {
   if (input.kind === "salary" && input.salary) {
     return buildSalaryAlertFooterPlan(input.salary, input.mode);
-  }
-  if (input.kind === "shared" && input.shared) {
-    return buildSharedAlertFooterPlan(input.shared, input.mode);
   }
   if (input.kind === "ops" && input.ops) {
     return buildOpsAlertFooterPlan(input.ops);

@@ -20,7 +20,7 @@ import {
     resolveLedgerRowPartyIdentity,
     resolvedIdentityToEntityAvatarProps,
 } from "@/lib/entityIdentity";
-import { useDisputeMapQuery, useDriverProfileImagesQuery } from "@/lib/queries";
+import { useDriverProfileImagesQuery } from "@/lib/queries";
 import { useTransactionsInfiniteQuery } from "@/lib/queries/useTransactionsQuery";
 import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
 import { ROUTES } from "@/lib/routes";
@@ -137,7 +137,6 @@ export function LedgerTab({
     return Array.from(set).sort().join("|");
   }, [clientRows, supplierRows]);
 
-  const { disputesByTripId: _disputesByTripId } = useDisputeMapQuery(organizationId);
   const [previewLedgerRow, setPreviewLedgerRow] =
     useState<financeService.LedgerRow | null>(null);
 

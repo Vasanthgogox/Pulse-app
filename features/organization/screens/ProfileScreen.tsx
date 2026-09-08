@@ -18,8 +18,11 @@ import {
   getMilestoneCount,
   isMilestoneCompleted,
   isMilestoneInProgress,
+  type ExperienceLevelConfig,
   type ExperienceProgress,
+  type MilestoneGuideActionKind,
 } from "@/features/experience/experienceProgress";
+import { MilestoneHowToModal } from "@/features/experience/components/MilestoneHowToModal";
 import {
   averageScore,
   getRatingsForClients,
@@ -181,6 +184,8 @@ type RoadmapPanelProps = {
   onBack: () => void;
   embedded?: boolean;
   topInset?: number;
+  onOpenVerification?: () => void;
+  onOpenTrips?: () => void;
 };
 
 function BusinessRoadmapPanel({
@@ -188,6 +193,8 @@ function BusinessRoadmapPanel({
   onBack,
   embedded = false,
   topInset = 0,
+  onOpenVerification,
+  onOpenTrips,
 }: RoadmapPanelProps) {
   const {
     currentLevelConfig,
@@ -195,6 +202,7 @@ function BusinessRoadmapPanel({
     experiencePct,
     currentCount,
   } = experience;
+  const [guideLevel, setGuideLevel] = useState<ExperienceLevelConfig | null>(null);
   const progressLabel = formatMilestoneProgressLabel(experience);
   const statusLine = formatMilestoneStatusLine(
     currentLevelConfig,
@@ -287,7 +295,14 @@ function BusinessRoadmapPanel({
             const count = getMilestoneCount(step, experience.metrics);
             const isLast = index === experience.levels.length - 1;
             return (
-              <View key={step.level} style={styles.roadmapStepRow}>
+              <Pressable
+                key={step.level}
+                style={styles.roadmapStepRow}
+                onPress={() => setGuideLevel(step)}
+                accessibilityRole="button"
+                accessibilityLabel={`L${step.level} ${step.name}. ${step.goalText}`}
+                accessibilityHint="Shows what to do to complete this level"
+              >
                 <View style={styles.roadmapDotColumn}>
                   <View
                     style={[
@@ -321,11 +336,23 @@ function BusinessRoadmapPanel({
                     {step.goalText}
                   </Text>
                 </View>
-              </View>
+              </Pressable>
             );
           })}
         </View>
       </LinearGradient>
+      <MilestoneHowToModal
+        visible={guideLevel != null}
+        level={guideLevel}
+        progress={experience}
+        audience="business"
+        onClose={() => setGuideLevel(null)}
+        onAction={(kind: MilestoneGuideActionKind) => {
+          setGuideLevel(null);
+          if (kind === "org_verification") onOpenVerification?.();
+          if (kind === "org_trips") onOpenTrips?.();
+        }}
+      />
     </View>
   );
 }
@@ -728,6 +755,11 @@ export default function ProfileScreen({
             embedded={embedded}
             topInset={insets.top}
             onBack={() => setViewMode("main")}
+            onOpenVerification={onOpenVerification}
+            onOpenTrips={() => {
+              if (onOpenRoute) onOpenRoute(ROUTES.TABS.TRIPS);
+              else router.push(ROUTES.TABS.TRIPS);
+            }}
           />
         ) : null}
 

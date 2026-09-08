@@ -121,7 +121,6 @@ const OTHER_SALES_SURFACES = [
   'sales.suppliers.detail',
   'sales.suppliers.analytics',
   'sales.load_board',
-  'sales.from_clients',
   'sales.chat',
 ] as const;
 

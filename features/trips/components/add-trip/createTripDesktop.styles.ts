@@ -150,6 +150,12 @@ export const createTripDesktopStyles = StyleSheet.create({
     minHeight: 0,
     paddingVertical: 12,
   },
+  stepSurfaceBodyKeypad: {
+    paddingHorizontal: 0,
+    paddingTop: 8,
+    paddingBottom: 0,
+    overflow: "hidden",
+  },
   stepSurfaceBodyScroll: {
     flex: 1,
     minHeight: 0,

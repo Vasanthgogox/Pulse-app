@@ -391,12 +391,6 @@ export const queryKeys = {
       ["q", "driver-chat", "conversations", driverIdsKey] as const,
   },
 
-  disputes: {
-    all: (orgId: string) => ["q", "disputes", orgId] as const,
-    received: (orgId: string) => ["q", "disputes", orgId, "received"] as const,
-    open: (orgId: string) => ["q", "disputes", orgId, "open"] as const,
-  },
-
   /**
    * Compliance & Document Intelligence — keys for the polymorphic
    * `entity_documents` table, audit log, and the per-org / per-entity

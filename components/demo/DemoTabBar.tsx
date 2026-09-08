@@ -34,7 +34,6 @@ import { useQueryClient } from "@tanstack/react-query";
 // (~256 KB) into the startup chunk. Chat providers (lazy) publish into this
 // signal as their counts change.
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
-import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
 import { navigateToOpsAlert } from "@/lib/alertRegistry/registryOpsNavigation.util";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
@@ -236,7 +235,6 @@ export function DemoTabBar({
     notificationCount: registryNotificationCount,
     refreshRegistry,
     rejectSalaryRequest,
-    markSharedLedgerRead,
   } = useAlertRegistryNotifications(orgId);
   const opsShelf = useOperationsShelfItems();
   const { width: windowWidth } = useWindowDimensions();
@@ -335,34 +333,6 @@ export function DemoTabBar({
     await rejectSalaryRequest(requestId);
     setNotifActionId(null);
   };
-  const handleSharedAction = useCallback(
-    async (item: SharedLedgerNotificationRow) => {
-      const payload = item.payload_json ?? {};
-      const tripId = typeof payload.trip_id === "string" ? payload.trip_id : null;
-      const entityType =
-        typeof payload.entity_type === "string"
-          ? payload.entity_type.toUpperCase()
-          : null;
-      const entityId = typeof payload.entity_id === "string" ? payload.entity_id : null;
-
-      setShowNotifications(false);
-
-      if (entityType === "CLIENT" && entityId) {
-        router.push(`/client/${entityId}?tab=trips` as const);
-      } else if (entityType === "SUPPLIER" && entityId) {
-        router.push(`/supplier/${entityId}?tab=trips` as const);
-      } else if (tripId) {
-        router.push(`/trip/${tripId}` as const);
-      } else {
-        router.push("/(tabs)/finance");
-      }
-
-      if (orgId && item.status === "open") {
-        void markSharedLedgerRead(item.id);
-      }
-    },
-    [orgId, markSharedLedgerRead, router],
-  );
   const handleInviteAction = async (
     item: InboundProtocolInviteItem,
     action: "approve" | "reject" | "cancel",
@@ -832,8 +802,6 @@ export function DemoTabBar({
             onRejectSalary: (id) => void handleSalaryReject(id),
             onPaySalary: openLedgerForSalaryPayment,
             onViewSalaryArchive: handleViewSalaryArchive,
-            onMarkSharedRead: (id) => void markSharedLedgerRead(id),
-            onSharedAction: (item) => void handleSharedAction(item),
             onDismissOps: (ops) => void handleDismissOps(ops),
             onOpenOps: handleOpenOps,
             busySalaryId: notifActionId,

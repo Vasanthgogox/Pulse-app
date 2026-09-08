@@ -1,12 +1,10 @@
 import type { AlertRegistrySignalCardProps } from "@/components/AlertRegistrySignalCard";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
-import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
 import {
   opsAlertTagVariant,
   formatRegistryLabel,
   salaryRequestStatusTone,
-  sharedNotificationStatusTone,
   type RegistryTag,
 } from "@/lib/alertRegistry/registryAlertPresentation.util";
 import type { AlertDetailMode } from "@/lib/alertRegistry/alertDetailRoute.util";
@@ -14,12 +12,8 @@ import {
   buildOpsRegistryCardPresentation,
   type RegistryPartyLookup,
 } from "@/lib/alertRegistry/registryOpsPresentation.util";
-import {
-  resolveSalaryRegistryAvatar,
-  resolveSharedRegistryAvatar,
-} from "@/lib/alertRegistry/registryNotificationAvatar.util";
+import { resolveSalaryRegistryAvatar } from "@/lib/alertRegistry/registryNotificationAvatar.util";
 import type { GlobalOperationAlert } from "@/lib/globalSync/priorityEngine.util";
-import { sharedLedgerActionLabel } from "@/lib/sharedLedger/registryLabels";
 
 export function formatRegistryRelativeTime(iso: string | null | undefined): string {
   if (!iso) return "Just now";
@@ -58,7 +52,6 @@ function opsContextLabel(item: GlobalOperationAlert): string {
   if (item.category === "unassigned_trip") return "Operations";
   if (item.category === "vehicle_idle") return "Fleet";
   if (item.category === "payment_received") return "Finance";
-  if (item.category === "dispute") return "Finance";
   return "Operations";
 }
 
@@ -67,7 +60,6 @@ function opsTag(item: GlobalOperationAlert): string {
   if (item.category === "unassigned_trip") return "unassigned";
   if (item.category === "vehicle_idle") return "idle";
   if (item.category === "payment_received") return "payment received";
-  if (item.category === "dispute") return "dispute";
   return item.category.replace(/_/g, " ");
 }
 
@@ -82,31 +74,6 @@ function splitOpsDetailLines(
     return { title: parts[0], subtitle: parts.slice(1).join(" · ") };
   }
   return { body: raw };
-}
-
-function paymentContextLabel(item: SharedLedgerNotificationRow): string {
-  if (item.event_type === "dispute_received" || item.event_type === "dispute_status_changed") {
-    return "Dispute";
-  }
-  if (item.event_type === "mismatch_detected" || item.event_type === "partner_only_ghost") {
-    return "Ledger mismatch";
-  }
-  return "Payment due";
-}
-
-function paymentTag(item: SharedLedgerNotificationRow): string {
-  if (item.event_type === "dispute_received" || item.event_type === "dispute_status_changed") {
-    return "dispute";
-  }
-  if (item.event_type === "pending_partner_followup") return "follow up";
-  if (item.event_type === "mismatch_detected") return "mismatch";
-  return "ledger";
-}
-
-function sharedTagVariant(label: string): RegistryTag["variant"] {
-  if (label === "dispute") return "danger";
-  if (label === "mismatch" || label === "follow up") return "warning";
-  return "neutral";
 }
 
 export type AlertDetailCardPresentation = Pick<
@@ -161,58 +128,6 @@ export function buildSalaryAlertCardPresentation(
     tags: isActive ? salaryTags : undefined,
     statusPill: !isActive
       ? { label: String(req.status ?? ""), tone: salaryRequestStatusTone(req.status) }
-      : undefined,
-  };
-}
-
-export function buildSharedAlertCardPresentation(
-  item: SharedLedgerNotificationRow,
-  partyCtx: Pick<RegistryPartyLookup, "org" | "partnerDisplay" | "partnerAvatarUri">,
-  mode: AlertDetailMode,
-): AlertDetailCardPresentation {
-  const isActive = mode === "active";
-  const amountMeta =
-    item.amount_meta != null && Number.isFinite(Number(item.amount_meta))
-      ? `Amount: ₹${Number(item.amount_meta).toLocaleString("en-IN", {
-          minimumFractionDigits: 2,
-          maximumFractionDigits: 2,
-        })}`
-      : null;
-  const tagLabel = paymentTag(item);
-  const sharedTags: RegistryTag[] = [{ label: tagLabel, variant: sharedTagVariant(tagLabel) }];
-  const sharedAvatar = resolveSharedRegistryAvatar(item, {
-    org: partyCtx.org,
-    partnerDisplay: partyCtx.partnerDisplay,
-    partnerAvatarUri: partyCtx.partnerAvatarUri,
-  });
-  const sharedActionText =
-    item.event_type === "dispute_received" || item.event_type === "dispute_status_changed"
-      ? "raised"
-      : "posted";
-  const sharedHighlight =
-    item.event_type === "dispute_received" || item.event_type === "dispute_status_changed"
-      ? item.title
-      : item.amount_meta != null && Number.isFinite(Number(item.amount_meta))
-        ? `₹${Number(item.amount_meta).toLocaleString("en-IN", {
-            minimumFractionDigits: 0,
-            maximumFractionDigits: 2,
-          })}`
-        : item.title;
-
-  return {
-    mode: isActive ? "active" : "completed",
-    isUnread: isActive && item.status !== "read",
-    avatar: sharedAvatar,
-    actorName: sharedAvatar.name,
-    actionText: sharedActionText,
-    highlightText: sharedHighlight,
-    detailTitle: amountMeta ? amountMeta.replace(/^Amount:\s*/, "") : item.title,
-    detailSubtitle: item.subtitle ?? sharedLedgerActionLabel(item.event_type),
-    timeLabel: formatRegistryRelativeTime(item.created_at),
-    contextLabel: paymentContextLabel(item),
-    tags: isActive ? sharedTags : undefined,
-    statusPill: !isActive
-      ? { label: String(item.status ?? "read"), tone: sharedNotificationStatusTone(item.status) }
       : undefined,
   };
 }

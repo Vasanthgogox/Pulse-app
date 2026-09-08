@@ -522,7 +522,7 @@ export function FinanceScreen() {
     data: FinancialRowData;
     entityType: "CLIENT" | "SUPPLIER" | "VEHICLE" | "DRIVER";
     subTab: FinanceSubTab;
-    initialDetailTab?: "main" | "ledger" | "shared_ledger";
+    initialDetailTab?: "main" | "ledger";
   } | null>(null);
   const [selectedDriverLedgerEntries, setSelectedDriverLedgerEntries] =
     useState<DriverLedgerRow[] | null>(null);

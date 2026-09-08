@@ -1,3 +1,4 @@
+import { memo } from "react";
 import { Pressable, View, Text, StyleSheet } from "react-native";
 import { ChevronRight } from "lucide-react-native";
 import Theme from "@/constants/Theme";
@@ -56,7 +57,7 @@ function resolveHeroDetail(party: NumericEntryPartyPreview): {
 /**
  * Centered recipient block (Google Pay payout) above the amount field.
  */
-export function NumericEntryRecipientHero({
+export const NumericEntryRecipientHero = memo(function NumericEntryRecipientHero({
   party,
   caption,
   nameInline = Boolean(caption),
@@ -88,7 +89,14 @@ export function NumericEntryRecipientHero({
         shape="circle"
       />
       {caption && !nameInline ? (
-        <Text style={[styles.caption, dense && styles.captionDense]} numberOfLines={1}>
+        <Text
+          style={[
+            styles.caption,
+            dense && styles.captionDense,
+            compact && styles.captionTrip,
+          ]}
+          numberOfLines={1}
+        >
           {caption}
         </Text>
       ) : null}
@@ -150,7 +158,7 @@ export function NumericEntryRecipientHero({
   }
 
   return content;
-}
+});
 
 const styles = StyleSheet.create({
   root: {
@@ -186,6 +194,15 @@ const styles = StyleSheet.create({
     marginTop: 4,
     fontSize: 11,
   },
+  captionTrip: {
+    marginTop: 0,
+    marginBottom: 2,
+    fontSize: 11,
+    fontWeight: "700",
+    letterSpacing: 0.55,
+    textTransform: "uppercase",
+    color: Theme.textMuted,
+  },
   titleRow: {
     flexDirection: "row",
     alignItems: "center",
@@ -203,7 +220,10 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   nameCompact: {
-    fontSize: 18,
+    fontSize: 16,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.3,
   },
   nameDense: {
     fontSize: 14,
@@ -227,9 +247,11 @@ const styles = StyleSheet.create({
     lineHeight: 28,
   },
   heroLineCompact: {
-    fontSize: 18,
-    lineHeight: 24,
-    letterSpacing: -0.4,
+    fontSize: 14,
+    fontWeight: "600",
+    lineHeight: 18,
+    letterSpacing: -0.15,
+    color: Theme.textSecondary,
   },
   heroLineDense: {
     fontSize: 15,

@@ -28,6 +28,7 @@ import { useOperationsSyncState } from "../state/useOperationsSyncState";
 import { DriverExpenseCategorySwitch } from "../shared/DriverExpenseCategorySwitch";
 import { DriverExpenseChipSelect } from "../shared/DriverExpenseChipSelect";
 import type { DriverExpenseCategoryNav } from "../shared/driverExpenseCategoryNav.util";
+import { buildExpenseEntryPartyPreview } from "../shared/expenseEntryPartyPreview.util";
 import type { TripOtherExpenseCategory } from "../types";
 import {
   DriverExpenseEntryLayout,
@@ -125,6 +126,10 @@ export function TollEntryScreen({
   const contextLine = useMemo(
     () => `${trip.pickup_area || "Pickup"} → ${trip.drop_location || "Drop"}`,
     [trip.drop_location, trip.pickup_area],
+  );
+  const expensePartyPreview = useMemo(
+    () => buildExpenseEntryPartyPreview(trip),
+    [trip],
   );
 
   const paymentOwnerOptions = useMemo(
@@ -248,13 +253,14 @@ export function TollEntryScreen({
           onAttach: handleCapture,
           onRemove: handleRemoveReceipt,
         }}
-      >
-        <DriverExpenseSection title="Amount">
+        amountSlot={
           <SmartInput
             type="currency"
             value={amountInr}
             onChange={(_, numeric) => setAmountInr(numeric)}
             label="Toll amount"
+            context={contextLine}
+            partyPreview={expensePartyPreview}
             submitLabel="Apply"
             variant="field"
             density="compact"
@@ -262,8 +268,8 @@ export function TollEntryScreen({
             required={false}
             validation={{ min: 0, max: 1000000 }}
           />
-        </DriverExpenseSection>
-
+        }
+      >
         <DriverExpenseSection title="Category & payment">
           <DriverExpenseCategorySwitch
             tripId={trip.id}
@@ -339,6 +345,8 @@ export function TollEntryScreen({
             value={amountInr}
             onChange={(_, numeric) => setAmountInr(numeric)}
             label="Toll amount"
+            context={contextLine}
+            partyPreview={expensePartyPreview}
             submitLabel="Apply"
             variant="field"
             density="compact"

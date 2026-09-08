@@ -74,7 +74,7 @@ export const IndentAllocationConfirmSummary = memo(
 const styles = StyleSheet.create({
   wrap: {
     width: "100%",
-    gap: 8,
+    gap: 10,
   },
   title: {
     fontSize: 15,
@@ -83,14 +83,14 @@ const styles = StyleSheet.create({
     letterSpacing: -0.2,
   },
   hint: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "500",
     color: Theme.textMuted,
-    lineHeight: 16,
+    lineHeight: 18,
   },
   card: {
     backgroundColor: Theme.cardWhite,
-    borderRadius: 12,
+    borderRadius: 14,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     overflow: "hidden",
@@ -98,10 +98,10 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 12,
     paddingHorizontal: 14,
-    paddingVertical: 12,
-    minHeight: 52,
+    paddingVertical: 14,
+    minHeight: 58,
   },
   rowBorder: {
     borderBottomWidth: StyleSheet.hairlineWidth,

@@ -68,9 +68,29 @@ export function DriverTabBar({ state, descriptors, navigation }: BottomTabBarPro
     return null;
   }
 
+  // Matches React Navigation's own default tab-bar-button semantics (see
+  // @react-navigation/bottom-tabs' BottomTabBar): always emit `tabPress` --
+  // a focused tab's own nested stack listens for this to pop itself back to
+  // its root screen on re-tap -- and only call `navigate` when the tab
+  // isn't already focused, so re-tapping an already-active tab resets its
+  // stack instead of being a no-op.
   const handlePress = (routeName: string) => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light);
-    navigation.navigate(routeName as never);
+    const routeIndex = state.routes.findIndex((r) => r.name === routeName);
+    const route = routeIndex >= 0 ? state.routes[routeIndex] : undefined;
+    if (!route) {
+      navigation.navigate(routeName as never);
+      return;
+    }
+    const isFocused = state.index === routeIndex;
+    const event = navigation.emit({
+      type: 'tabPress',
+      target: route.key,
+      canPreventDefault: true,
+    });
+    if (!isFocused && !event.defaultPrevented) {
+      navigation.navigate(route.name as never);
+    }
   };
 
   const footerPadTop = 6;

@@ -138,7 +138,10 @@ export const WizardEntityPartyCell = memo(function WizardEntityPartyCell({
     return (
       <Pressable
         onPress={onPress}
-        style={styles.partyCardPressableHit}
+        style={[
+          styles.partyCardPressableHit,
+          solo && styles.partyCardFlatSolo,
+        ]}
         accessibilityRole="button"
         accessibilityLabel={`Change ${label.toLowerCase()}`}
       >

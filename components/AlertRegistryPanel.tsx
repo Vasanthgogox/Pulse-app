@@ -36,14 +36,12 @@ import {
 import {
   resolveNetworkRegistryAvatar,
   resolveSalaryRegistryAvatar,
-  resolveSharedRegistryAvatar,
 } from "@/lib/alertRegistry/registryNotificationAvatar.util";
 import {
   networkNotificationActionLabel,
   networkNotificationActionText,
   networkNotificationTagLabel,
-  sharedLedgerActionLabel,
-} from "@/lib/sharedLedger/registryLabels";
+} from "@/features/network/utils/networkNotificationLabels.util";
 import { useMarkNetworkNotificationRead } from "@/lib/queries/useNetworkNotificationsQuery";
 import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
@@ -51,7 +49,6 @@ import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import { useDriversQuery } from "@/lib/queries/useDriversQuery";
 import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
-import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
 import type { AlertDetailMode } from "@/lib/alertRegistry/alertDetailRoute.util";
 import type { RegistryFeedKind } from "@/lib/globalSync/registryFeed.util";
 import { AlertDetailScreen } from "@/features/alertRegistry/components/AlertDetailScreen";
@@ -94,7 +91,7 @@ const EMPTY_COPY: Record<
   },
   payment: {
     title: "No payment alerts",
-    body: "Shared ledger updates, disputes, and payment receipts appear here.",
+    body: "Payment receipts appear here.",
   },
   archive: {
     title: "No archived items",
@@ -132,7 +129,6 @@ function opsContextLabel(item: GlobalOperationAlert): string {
   if (item.category === "unassigned_trip") return "Operations";
   if (item.category === "vehicle_idle") return "Fleet";
   if (item.category === "payment_received") return "Finance";
-  if (item.category === "dispute") return "Finance";
   return "Operations";
 }
 
@@ -141,7 +137,6 @@ function opsTag(item: GlobalOperationAlert): string {
   if (item.category === "unassigned_trip") return "unassigned";
   if (item.category === "vehicle_idle") return "idle";
   if (item.category === "payment_received") return "payment received";
-  if (item.category === "dispute") return "dispute";
   return item.category.replace(/_/g, " ");
 }
 
@@ -158,36 +153,15 @@ function splitOpsDetailLines(
   return { body: raw };
 }
 
-function paymentContextLabel(item: SharedLedgerNotificationRow): string {
-  if (item.event_type === "dispute_received" || item.event_type === "dispute_status_changed") {
-    return "Dispute";
-  }
-  if (item.event_type === "mismatch_detected" || item.event_type === "partner_only_ghost") {
-    return "Ledger mismatch";
-  }
-  return "Payment due";
-}
-
-function paymentTag(item: SharedLedgerNotificationRow): string {
-  if (item.event_type === "dispute_received" || item.event_type === "dispute_status_changed") {
-    return "dispute";
-  }
-  if (item.event_type === "pending_partner_followup") return "follow up";
-  if (item.event_type === "mismatch_detected") return "mismatch";
-  return "ledger";
-}
-
 export type AlertRegistryFinanceHandlers = {
   onOpenDetail: (
-    kind: "salary" | "shared" | "ops",
+    kind: "salary" | "ops",
     id: string,
     mode?: "active" | "archive",
   ) => void;
   onRejectSalary: (requestId: string) => void;
   onPaySalary: (req: SalaryRequestWithDriverRow) => void;
   onViewSalaryArchive: (req: SalaryRequestWithDriverRow) => void;
-  onMarkSharedRead: (notificationId: string) => void;
-  onSharedAction: (item: SharedLedgerNotificationRow) => void;
   onDismissOps: (ops: GlobalOperationAlert) => void;
   onOpenOps: (ops: GlobalOperationAlert) => void;
   busySalaryId: string | null;
@@ -216,12 +190,6 @@ type AlertDetailSelection = {
   id: string;
   mode: AlertDetailMode;
 };
-
-function sharedTagVariant(label: string): RegistryTag["variant"] {
-  if (label === "dispute") return "danger";
-  if (label === "mismatch" || label === "follow up") return "warning";
-  return "neutral";
-}
 
 function opsActionLabel(ops: GlobalOperationAlert): string {
   return opsRegistryActionLabel(ops);
@@ -428,105 +396,6 @@ function RegistryFeedList({
                     />
                   </RegistryCardActions>
                 ) : undefined
-              }
-            />
-          );
-        }
-
-        if (entry.kind === "shared" && entry.shared) {
-          const item = entry.shared;
-          const amountMeta =
-            item.amount_meta != null && Number.isFinite(Number(item.amount_meta))
-              ? `Amount: ₹${Number(item.amount_meta).toLocaleString("en-IN", {
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 2,
-                })}`
-              : null;
-          const tagLabel = paymentTag(item);
-          const sharedTags: RegistryTag[] = [
-            { label: tagLabel, variant: sharedTagVariant(tagLabel) },
-          ];
-          const statusTone = sharedNotificationStatusTone(item.status);
-          const sharedAvatar = resolveSharedRegistryAvatar(item, {
-            org: partyCtx.org,
-            partnerDisplay: partyCtx.partnerDisplay,
-            partnerAvatarUri: partyCtx.partnerAvatarUri,
-          });
-          const sharedActionText =
-            item.event_type === "dispute_received" ||
-            item.event_type === "dispute_status_changed"
-              ? "raised"
-              : "posted";
-          const sharedHighlight =
-            item.event_type === "dispute_received" ||
-            item.event_type === "dispute_status_changed"
-              ? item.title
-              : item.amount_meta != null && Number.isFinite(Number(item.amount_meta))
-                ? `₹${Number(item.amount_meta).toLocaleString("en-IN", {
-                    minimumFractionDigits: 0,
-                    maximumFractionDigits: 2,
-                  })}`
-                : item.title;
-          return (
-            <AlertRegistrySignalCard
-              key={entry.id}
-              mode={isActiveView ? "active" : "completed"}
-              onPress={() =>
-                finance.onOpenDetail(
-                  "shared",
-                  item.id,
-                  isActiveView ? "active" : "archive",
-                )
-              }
-              avatar={sharedAvatar}
-              actorName={sharedAvatar.name}
-              actionText={sharedActionText}
-              highlightText={sharedHighlight}
-              detailTitle={
-                amountMeta
-                  ? amountMeta.replace(/^Amount:\s*/, "")
-                  : item.title
-              }
-              detailSubtitle={
-                item.subtitle ?? sharedLedgerActionLabel(item.event_type)
-              }
-              timeLabel={formatRelativeTime(item.created_at)}
-              contextLabel={paymentContextLabel(item)}
-              tags={isActiveView ? sharedTags : undefined}
-              isUnread={isActiveView && item.status !== "read"}
-              statusPill={
-                !isActiveView
-                  ? { label: String(item.status ?? "read"), tone: statusTone }
-                  : undefined
-              }
-              footer={
-                isActiveView ? (
-                  <RegistryCardActions>
-                    <RegistryGhostButton
-                      label="Decline"
-                      onPress={() => finance.onMarkSharedRead(item.id)}
-                    />
-                    <RegistryPrimaryButton
-                      label={sharedLedgerActionLabel(item.event_type)}
-                      onPress={() =>
-                        finance.onOpenDetail(
-                          "shared",
-                          item.id,
-                          isActiveView ? "active" : "archive",
-                        )
-                      }
-                    />
-                  </RegistryCardActions>
-                ) : (
-                  <RegistryCardActions>
-                    <RegistryGhostButton
-                      label="View ledger"
-                      onPress={() =>
-                        finance.onOpenDetail("shared", item.id, "archive")
-                      }
-                    />
-                  </RegistryCardActions>
-                )
               }
             />
           );

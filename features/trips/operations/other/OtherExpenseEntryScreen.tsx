@@ -79,6 +79,7 @@ import {
 } from "../shared/DriverExpenseEntryLayout";
 import { previewOtherReceiptOcr } from "../shared/applyExpenseReceiptOcr.util";
 import type { ExpenseReceiptOcrResult } from "../shared/expenseReceiptOcr.service";
+import { buildExpenseEntryPartyPreview } from "../shared/expenseEntryPartyPreview.util";
 import {
   type ExpenseBillCaptureBag,
   useExpenseBillCapture,
@@ -275,6 +276,10 @@ export function OtherExpenseEntryScreen({
     () => `${trip.pickup_area || "Pickup"} → ${trip.drop_location || "Drop"}`,
     [trip.drop_location, trip.pickup_area],
   );
+  const expensePartyPreview = useMemo(
+    () => buildExpenseEntryPartyPreview(trip),
+    [trip],
+  );
 
   const paymentOwnerOptions = useMemo(
     () => paymentOwnerOptionsForActor(PAYMENT_OWNER_OPTIONS, profile?.role),
@@ -469,26 +474,29 @@ export function OtherExpenseEntryScreen({
             onAttach: handleCapture,
             onRemove: handleRemovePhoto,
           }}
+          amountSlot={
+            <>
+              <SmartInput
+                type="currency"
+                value={amountInr}
+                onChange={(_, numeric) => {
+                  setAmountInr(numeric);
+                  if (numeric > 0) setAmountError(null);
+                }}
+                label="Expense amount"
+                context={contextLine}
+                partyPreview={expensePartyPreview}
+                submitLabel="Apply"
+                variant="field"
+                density="compact"
+                placeholder="Enter amount"
+                required={false}
+                validation={{ min: 0, max: 1000000 }}
+              />
+              {amountError ? <Text style={styles.inlineError}>{amountError}</Text> : null}
+            </>
+          }
         >
-          <DriverExpenseSection title="Amount">
-            <SmartInput
-              type="currency"
-              value={amountInr}
-              onChange={(_, numeric) => {
-                setAmountInr(numeric);
-                if (numeric > 0) setAmountError(null);
-              }}
-              label="Expense amount"
-              submitLabel="Apply"
-              variant="field"
-              density="compact"
-              placeholder="Enter amount"
-              required={false}
-              validation={{ min: 0, max: 1000000 }}
-            />
-            {amountError ? <Text style={styles.inlineError}>{amountError}</Text> : null}
-          </DriverExpenseSection>
-
           <DriverExpenseSection title="Category & payment">
             <DriverExpenseCategorySwitch
               tripId={trip.id}
@@ -562,6 +570,8 @@ export function OtherExpenseEntryScreen({
           if (numeric > 0) setAmountError(null);
         }}
         label="Expense amount"
+        context={contextLine}
+        partyPreview={expensePartyPreview}
         submitLabel="Apply"
         variant={isDesktop ? "hero" : "field"}
         density="compact"

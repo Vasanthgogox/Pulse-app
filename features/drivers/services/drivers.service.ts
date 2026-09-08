@@ -480,177 +480,35 @@ function normalizePhone(phone: string | null | undefined): string {
   return (phone ?? "").replace(/\s/g, "").trim();
 }
 
-function last10PhoneDigits(phone: string | null | undefined): string {
-  return (phone ?? "").replace(/\D/g, "").slice(-10);
-}
-
-function asDriverRow(value: unknown): DriverRow | null {
-  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
-  const row = value as DriverRow;
-  return row.id ? row : null;
-}
-
-function isDriversPhoneUniqueViolation(error: {
-  code?: string;
-  message?: string;
-}): boolean {
-  const msg = error.message ?? "";
-  return (
-    error.code === "23505" ||
-    /idx_drivers_phone_normalised|idx_drivers_active_phone/i.test(msg)
-  );
-}
-
-const DUPLICATE_DRIVER_PHONE_MESSAGE =
-  "This phone number is already used by a driver. Choose them from your fleet instead of adding again.";
-
 /**
- * Active roster row for this org + last-10 phone, including tracking-only stubs.
- * getDriversByOrganization() hides tracking_only, so add-driver must query here
- * or INSERT hits idx_drivers_phone_normalised.
- */
-async function findActiveOrgDriverByLast10(
-  orgId: string,
-  phone: string,
-): Promise<{ error: Error | null; driver: DriverRow | null }> {
-  const last10 = last10PhoneDigits(phone);
-  if (last10.length < 10) return { error: null, driver: null };
-
-  const { data, error } = await supabase()
-    .from("drivers")
-    .select(DRIVER_COLUMNS)
-    .eq("organization_id", orgId)
-    .eq("phone_normalised", last10)
-    .is("left_at", null)
-    .limit(1)
-    .maybeSingle();
-  if (error) return { error: new Error(error.message), driver: null };
-  const row = asDriverRow(data);
-  if (row && !row.left_at) return { error: null, driver: row };
-
-  const { data: matched, error: rpcErr } = await supabase()
-    .rpc("match_driver_by_phone", {
-      p_org_id: orgId,
-      p_phone: phone,
-      p_require_unlinked: false,
-    })
-    .maybeSingle();
-  if (rpcErr) return { error: new Error(rpcErr.message), driver: null };
-  const rpcRow = asDriverRow(matched);
-  if (rpcRow && !rpcRow.left_at) return { error: null, driver: rpcRow };
-  return { error: null, driver: null };
-}
-
-async function applyRosterAddOntoExistingDriver(
-  orgId: string,
-  existing: DriverRow,
-  data: CreateDriverServiceData,
-): Promise<{ error: Error | null; driver: DriverRow | null }> {
-  const updates: Record<string, unknown> = {
-    name: (data.name || "").trim() || existing.name || "—",
-    phone: (data.phone ?? "").trim() || existing.phone,
-    email: (data.email || "").trim() || existing.email || null,
-    status: "offline",
-  };
-  if (data.payableAmount !== undefined) {
-    updates.payable_amount = data.payableAmount ?? null;
-  }
-  if (data.commissionPercent !== undefined) {
-    updates.commission_percent = data.commissionPercent ?? null;
-  }
-  if (data.commissionPerKm !== undefined) {
-    updates.commission_per_km = data.commissionPerKm ?? null;
-  }
-  if (existing.tracking_only === true) updates.tracking_only = false;
-  const license = (data.licenseNumber ?? "").trim();
-  if (license) updates.license_number = license.toUpperCase();
-
-  const { data: row, error } = await supabase()
-    .from("drivers")
-    .update(updates)
-    .eq("organization_id", orgId)
-    .eq("id", existing.id)
-    .select()
-    .single();
-  if (error) return { error: new Error(error.message), driver: null };
-  return { error: null, driver: row as DriverRow };
-}
-
-/**
- * Add driver directly (no invitation). Inserts into public.drivers.
- * Reuses an active row with the same last-10 phone (including tracking-only
- * stubs). If a driver with that phone has left (left_at set), reconnects that
- * stint instead of creating a duplicate.
+ * Add driver directly (no invitation). Atomically finds-or-creates the org's
+ * drivers row via the create_driver_direct RPC:
+ * - Reconnects a left driver in this org with the same phone (clears left_at,
+ *   updates name/email/pay terms) -- same intent as before.
+ * - Reuses an already-active same-org row for this phone (idempotent add).
+ * - Rejects with a clean error if the phone is already an unlinked roster
+ *   placeholder in a DIFFERENT organization, instead of a raw 23505.
+ * See create_driver_direct RPC for the full collision/concurrency handling.
  */
 export async function createDriver(
   orgId: string,
   data: CreateDriverServiceData,
 ): Promise<{ error: Error | null; driver: DriverRow | null }> {
-  const last10 = last10PhoneDigits(data.phone);
-  if (last10.length >= 10) {
-    const active = await findActiveOrgDriverByLast10(orgId, data.phone ?? "");
-    if (active.error) return { error: active.error, driver: null };
-    if (active.driver) {
-      return applyRosterAddOntoExistingDriver(orgId, active.driver, data);
-    }
-
-    const { data: leftRow, error: leftErr } = await supabase()
-      .from("drivers")
-      .select(DRIVER_COLUMNS)
-      .eq("organization_id", orgId)
-      .eq("phone_normalised", last10)
-      .not("left_at", "is", null)
-      .order("left_at", { ascending: false })
-      .limit(1)
-      .maybeSingle();
-    if (leftErr) return { error: new Error(leftErr.message), driver: null };
-    const existing = asDriverRow(leftRow);
-    if (existing?.left_at) {
-      const { error, driver } = await updateDriver(orgId, existing.id, {
-        name: (data.name || "").trim() || "—",
-        phone: (data.phone ?? "").trim() || null,
-        email: (data.email || "").trim() || null,
-        left_at: null,
-        payable_amount: data.payableAmount ?? null,
-        commission_percent: data.commissionPercent ?? null,
-        commission_per_km: data.commissionPerKm ?? null,
-      });
-      if (!error && driver) return { error: null, driver };
-      // If update failed (e.g. RLS), fall through to insert
-    }
+  const { data: result, error } = await supabase().rpc("create_driver_direct", {
+    p_org_id: orgId,
+    p_name: (data.name || "").trim() || "—",
+    p_phone: (data.phone ?? "").trim() || undefined,
+    p_email: (data.email || "").trim() || undefined,
+    p_payable_amount: data.payableAmount ?? undefined,
+    p_commission_percent: data.commissionPercent ?? undefined,
+    p_commission_per_km: data.commissionPerKm ?? undefined,
+  });
+  if (error) return { error: new Error(error.message), driver: null };
+  const row = result as { ok?: boolean; error?: string; driver?: DriverRow } | null;
+  if (!row?.ok) {
+    return { error: new Error(row?.error ?? "Could not add driver"), driver: null };
   }
-
-  const payload = {
-    organization_id: orgId,
-    name: (data.name || "").trim() || "—",
-    phone: (data.phone ?? "").trim() || null,
-    email: (data.email || "").trim() || null,
-    status: "offline",
-    payable_amount: data.payableAmount ?? null,
-    commission_percent: data.commissionPercent ?? null,
-    commission_per_km: data.commissionPerKm ?? null,
-    // Relationship provenance (see docs/DRIVER_TRIP_COMPENSATION_MODEL.md): this
-    // is a direct, no-invitation add — relationship_origin is write-once and must
-    // never be changed by any later event (e.g. invite acceptance).
-    relationship_origin: "manual_add",
-    relationship_status: "independent",
-  };
-  const { data: row, error } = await supabase()
-    .from("drivers")
-    .insert(payload)
-    .select()
-    .single();
-  if (error) {
-    if (isDriversPhoneUniqueViolation(error)) {
-      const retry = await findActiveOrgDriverByLast10(orgId, data.phone ?? "");
-      if (retry.driver) {
-        return applyRosterAddOntoExistingDriver(orgId, retry.driver, data);
-      }
-      return { error: new Error(DUPLICATE_DRIVER_PHONE_MESSAGE), driver: null };
-    }
-    return { error: new Error(error.message), driver: null };
-  }
-  return { error: null, driver: row as DriverRow };
+  return { error: null, driver: (row.driver as DriverRow) ?? null };
 }
 
 export interface UpdateDriverData {
@@ -1425,99 +1283,27 @@ export async function inviteDriver(
     };
   }
 
-  // No platform driver user found for this phone -> create/upsert a driver row for assignment.
-  // Only touch active rows (left_at IS NULL): terminated stints are historical and must not
-  // be reactivated — that would merge a new hire into an old passbook.
-  const existingDriver = await findActiveOrgDriverByLast10(orgId, phone);
-  if (existingDriver.error) {
-    return { error: existingDriver.error, driver: null, inviteSent: false };
-  }
-
-  if (existingDriver.driver) {
-    const applied = await applyRosterAddOntoExistingDriver(
-      orgId,
-      existingDriver.driver,
-      data,
-    );
-    if (applied.error || !applied.driver) {
-      return { error: applied.error ?? new Error("Could not update driver"), driver: null, inviteSent: false };
-    }
-    const rosterInvite = await inviteRosterDriver(
-      phoneNorm,
-      (data.name || "").trim() || "—",
-      orgId,
-    );
-    if (rosterInvite.error && __DEV__) {
-      console.warn("[inviteDriver] inviteRosterDriver:", rosterInvite.error.message);
-    }
-    return {
-      error: null,
-      driver: applied.driver,
-      inviteSent: Boolean(rosterInvite.inviteId),
-    };
-  }
-
-  const payload = {
-    organization_id: orgId,
-    name: (data.name || "").trim() || "—",
-    phone: phoneNorm,
-    email: (data.email || "").trim() || null,
-    status: "offline",
-    payable_amount: data.payableAmount ?? null,
-    commission_percent: data.commissionPercent ?? null,
-    commission_per_km: data.commissionPerKm ?? null,
-  };
-  const { data: row, error } = await supabase()
-    .from("drivers")
-    .insert(payload)
-    .select()
-    .single();
-  if (error) {
-    if (isDriversPhoneUniqueViolation(error)) {
-      const retry = await findActiveOrgDriverByLast10(orgId, phone);
-      if (retry.driver) {
-        const applied = await applyRosterAddOntoExistingDriver(
-          orgId,
-          retry.driver,
-          data,
-        );
-        if (applied.error || !applied.driver) {
-          return {
-            error: applied.error ?? new Error(DUPLICATE_DRIVER_PHONE_MESSAGE),
-            driver: null,
-            inviteSent: false,
-          };
-        }
-        const rosterInvite = await inviteRosterDriver(
-          phoneNorm,
-          (data.name || "").trim() || "—",
-          orgId,
-        );
-        return {
-          error: null,
-          driver: applied.driver,
-          inviteSent: Boolean(rosterInvite.inviteId),
-        };
-      }
-      return {
-        error: new Error(DUPLICATE_DRIVER_PHONE_MESSAGE),
-        driver: null,
-        inviteSent: false,
-      };
-    }
-    return { error: new Error(error.message), driver: null, inviteSent: false };
-  }
+  // No platform driver user found for this phone -> invite_driver RPC
+  // atomically finds-or-creates the org's driver row (reusing + refreshing
+  // an existing active row, or creating one under the shared cross-org
+  // phone lock) and creates the pending driver_invites row in one call.
   const rosterInvite = await inviteRosterDriver(
     phoneNorm,
     (data.name || "").trim() || "—",
     orgId,
+    {
+      email: (data.email || "").trim() || null,
+      payableAmount: data.payableAmount ?? null,
+      commissionPercent: data.commissionPercent ?? null,
+      commissionPerKm: data.commissionPerKm ?? null,
+    },
   );
-  if (rosterInvite.error && __DEV__) {
-    console.warn("[inviteDriver] inviteRosterDriver:", rosterInvite.error.message);
+  if (rosterInvite.error) {
+    return { error: rosterInvite.error, driver: null, inviteSent: false };
   }
   return {
     error: null,
-    driver: row as DriverRow,
+    driver: rosterInvite.driver,
     inviteSent: Boolean(rosterInvite.inviteId),
   };
 }
@@ -1648,68 +1434,54 @@ export async function ensureDriverRowByPhone(
       }
     }
   } else {
-    const byLast10 = await findActiveOrgDriverByLast10(orgId, normalized);
-    if (byLast10.error) return { error: byLast10.error, driver: null };
-    if (byLast10.driver) {
-      const stamped = await applyDriverNameToRow(byLast10.driver, name);
+    const q = supabase().from("drivers").select(DRIVER_COLUMNS).eq("organization_id", orgId);
+    const orClause = match
+      ? `phone.eq.${normalized},user_id.eq.${match.user_id}`
+      : `phone.eq.${normalized}`;
+    const { data: existing, error: findError } = await q
+      .or(orClause)
+      .limit(1)
+      .maybeSingle();
+    if (findError) return { error: new Error(findError.message), driver: null };
+    if (existing) {
+      const stamped = await applyDriverNameToRow(existing as unknown as DriverRow, name);
       return { error: null, driver: stamped };
-    }
-    if (match?.user_id) {
-      const { data: byUser, error: findError } = await supabase()
-        .from("drivers")
-        .select(DRIVER_COLUMNS)
-        .eq("organization_id", orgId)
-        .eq("user_id", match.user_id)
-        .is("left_at", null)
-        .limit(1)
-        .maybeSingle();
-      if (findError) return { error: new Error(findError.message), driver: null };
-      if (byUser) {
-        const stamped = await applyDriverNameToRow(byUser as unknown as DriverRow, name);
-        return { error: null, driver: stamped };
-      }
     }
   }
 
   const resolvedName =
     resolveDriverDisplayName(name, match?.full_name) ??
     ((name ?? "").trim() || "Driver");
-
-  const insertPayload: Record<string, unknown> = {
-    organization_id: orgId,
-    name: resolvedName,
-    phone: normalized,
-    user_id: options?.trackingOnly === true ? null : (match?.user_id ?? null),
-    status: "offline",
-    // Relationship provenance: this row is created by a phone-based trip
-    // assignment regardless of whether tracking_only ends up true (aggregate
-    // stub) or false (direct/asset trip) — the creation mechanism is the same.
-    // relationship_origin is write-once and must never be changed later.
-    relationship_origin: "phone_assignment",
-    relationship_status: "independent",
-  };
-  if (options?.trackingOnly === true) insertPayload.tracking_only = true;
+  const resolvedUserId =
+    options?.trackingOnly === true ? null : (match?.user_id ?? null);
   // Insert-only: never stamp terms onto a pre-existing row (see the option doc).
   const commissionPct = Number(options?.commissionPercent ?? 0) || 0;
-  if (commissionPct > 0) insertPayload.commission_percent = commissionPct;
 
-  const { data: row, error: insertError } = await supabase()
-    .from("drivers")
-    .insert(insertPayload)
-    .select()
-    .single();
-  if (insertError) {
-    if (isDriversPhoneUniqueViolation(insertError)) {
-      const retry = await findActiveOrgDriverByLast10(orgId, normalized);
-      if (retry.driver) {
-        const stamped = await applyDriverNameToRow(retry.driver, name);
-        return { error: null, driver: stamped };
-      }
-      return { error: new Error(DUPLICATE_DRIVER_PHONE_MESSAGE), driver: null };
-    }
-    return { error: new Error(insertError.message), driver: null };
+  // ensure_driver_row_by_phone_insert RPC: this is the one place this
+  // function creates a new row, so it's the only place that can collide
+  // with idx_drivers_phone_normalised (global, not org-scoped). Every
+  // resolution branch above this point is an unchanged, non-racy read.
+  const { data: result, error: insertError } = await supabase().rpc(
+    "ensure_driver_row_by_phone_insert",
+    {
+      p_org_id: orgId,
+      p_name: resolvedName,
+      p_phone: normalized,
+      // Generated type declares p_user_id as required `string` since the SQL
+      // param has no DEFAULT, but Postgres accepts NULL for any scalar arg
+      // regardless of default -- this is a real, common case (tracking-only
+      // or no platform-user match).
+      p_user_id: resolvedUserId as unknown as string,
+      p_tracking_only: options?.trackingOnly === true,
+      p_commission_percent: commissionPct > 0 ? commissionPct : undefined,
+    },
+  );
+  if (insertError) return { error: new Error(insertError.message), driver: null };
+  const row = result as { ok?: boolean; error?: string; driver?: DriverRow } | null;
+  if (!row?.ok) {
+    return { error: new Error(row?.error ?? "Could not create driver"), driver: null };
   }
-  return { error: null, driver: row as DriverRow };
+  return { error: null, driver: (row.driver as DriverRow) ?? null };
 }
 
 /**
@@ -2133,23 +1905,51 @@ export async function resetDriverSignupInvite(
 
 /**
  * Dispatcher-led roster invite for drivers without a platform account yet.
- * Creates/finds roster row + pending driver_invites row; returns invite UUID for deep link.
+ * Atomically finds-or-creates the org's roster row (reusing + refreshing an
+ * existing active row, or creating one under a global cross-org phone lock)
+ * and creates the pending driver_invites row. See invite_driver RPC.
  */
 export async function inviteRosterDriver(
   phone: string,
   name: string,
   orgId: string,
-): Promise<{ inviteId: string | null; error: Error | null }> {
+  extra?: {
+    email?: string | null;
+    payableAmount?: number | null;
+    commissionPercent?: number | null;
+    commissionPerKm?: number | null;
+  },
+): Promise<{ inviteId: string | null; driver: DriverRow | null; error: Error | null }> {
   const { data, error } = await supabase().rpc("invite_driver", {
     p_phone: phone,
     p_name: name,
     p_org_id: orgId,
+    p_email: extra?.email ?? undefined,
+    p_payable_amount: extra?.payableAmount ?? undefined,
+    p_commission_percent: extra?.commissionPercent ?? undefined,
+    p_commission_per_km: extra?.commissionPerKm ?? undefined,
   });
   if (error) {
-    return { inviteId: null, error: new Error(error.message) };
+    return { inviteId: null, driver: null, error: new Error(error.message) };
   }
-  const inviteId = typeof data === "string" ? data : null;
-  return { inviteId, error: null };
+  const result = data as {
+    ok?: boolean;
+    error?: string;
+    driver?: DriverRow;
+    invite_id?: string;
+  } | null;
+  if (!result?.ok) {
+    return {
+      inviteId: null,
+      driver: null,
+      error: new Error(result?.error ?? "Could not invite driver"),
+    };
+  }
+  return {
+    inviteId: result.invite_id ?? null,
+    driver: (result.driver as DriverRow) ?? null,
+    error: null,
+  };
 }
 
 /**

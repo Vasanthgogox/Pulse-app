@@ -208,3 +208,182 @@ export function formatMilestoneStatusLine(
       return level.goalText;
   }
 }
+
+export type MilestoneGuideAudience = "driver" | "business";
+export type MilestoneGuideStatus = "completed" | "in_progress" | "upcoming";
+export type MilestoneGuideActionKind =
+  | "documents"
+  | "find_work"
+  | "org_verification"
+  | "org_trips";
+
+export type MilestoneGuide = {
+  title: string;
+  goal: string;
+  unlocks: string;
+  status: MilestoneGuideStatus;
+  statusLabel: string;
+  intro: string;
+  steps: string[];
+  lockedHint: string | null;
+  action: { kind: MilestoneGuideActionKind; label: string } | null;
+};
+
+function guideStatus(
+  level: number,
+  progress: ExperienceProgress,
+): MilestoneGuideStatus {
+  if (isMilestoneCompleted(level, progress)) return "completed";
+  if (isMilestoneInProgress(level, progress)) return "in_progress";
+  return "upcoming";
+}
+
+function priorMilestoneHint(
+  level: ExperienceLevelConfig,
+  progress: ExperienceProgress,
+): string | null {
+  if (isMilestoneCompleted(level.level, progress)) return null;
+  if (isMilestoneInProgress(level.level, progress)) return null;
+  const prior = progress.levels.find((l) => l.level === progress.currentLevel);
+  if (!prior) return "Finish the earlier milestones on this roadmap first.";
+  return `Complete L${prior.level} ${prior.name} first. This level unlocks after that.`;
+}
+
+/**
+ * Copy for the “how to complete this level” sheet (driver + business roadmaps).
+ */
+export function getMilestoneGuide(
+  level: ExperienceLevelConfig,
+  progress: ExperienceProgress,
+  options?: { audience?: MilestoneGuideAudience },
+): MilestoneGuide {
+  const audience = options?.audience ?? "driver";
+  const isDriver = audience === "driver";
+  const status = guideStatus(level.level, progress);
+  const count = getMilestoneCount(level, progress.metrics);
+  const lockedHint = priorMilestoneHint(level, progress);
+
+  const statusLabel =
+    status === "completed"
+      ? "Completed"
+      : status === "in_progress"
+        ? "In progress"
+        : "Locked";
+
+  const remaining = Math.max(0, count.target - count.done);
+
+  let intro = "";
+  let steps: string[] = [];
+  let action: MilestoneGuide["action"] = null;
+
+  switch (level.type) {
+    case "signup":
+      intro =
+        status === "completed"
+          ? isDriver
+            ? "Your Pulse Driver account is active. This milestone is already done."
+            : "Your workspace is set up. This milestone is already done."
+          : isDriver
+            ? "Finish creating your Pulse Driver account to open the rest of the roadmap."
+            : "Finish creating your organization workspace to open the rest of the roadmap.";
+      steps = isDriver
+        ? [
+            "Complete signup with your phone or email.",
+            "Set your name and profile so customers can recognise you.",
+          ]
+        : [
+            "Create the organization and confirm you can sign in.",
+            "Add your business name and logo on the workspace profile.",
+          ];
+      break;
+    case "trips":
+      intro =
+        status === "completed"
+          ? `You have completed this trip goal (${count.done}/${count.target}).`
+          : remaining === 1
+            ? "Complete 1 more delivered trip to finish this level."
+            : `Complete ${remaining} more delivered trips to finish this level.`;
+      steps = isDriver
+        ? [
+            "Open Find Work (or take an assigned job) and accept a load you can run.",
+            "Finish pickup and delivery so the trip is marked completed.",
+            `This level needs ${count.target} completed trip${count.target === 1 ? "" : "s"} — currently ${count.done}/${count.target}.`,
+          ]
+        : [
+            "Create or assign trips in your workspace and run them to delivery.",
+            "Only completed / delivered trips count toward this level.",
+            `Need ${count.target} completed trips — currently ${count.done}/${count.target}.`,
+          ];
+      if (status !== "completed") {
+        action = isDriver
+          ? { kind: "find_work", label: "Find work" }
+          : { kind: "org_trips", label: "Open trips" };
+      }
+      break;
+    case "verification":
+      intro =
+        status === "completed"
+          ? isDriver
+            ? "Your identity is verified. Silver Status on this path is unlocked."
+            : "Business identity is verified. This milestone is complete."
+          : isDriver
+            ? "Upload your ID documents and submit them for review. Approval completes this level."
+            : "Complete business verification. Approval completes this level.";
+      steps = isDriver
+        ? [
+            "Open Documents from your profile.",
+            "Upload your driving licence, Aadhaar, and a clear selfie. PAN is optional.",
+            "Submit for verification and wait for Pulse to approve.",
+          ]
+        : [
+            "Open workspace verification / KYC.",
+            "Upload the required business identity documents.",
+            "Submit for review and wait for approval.",
+          ];
+      if (status !== "completed") {
+        action = isDriver
+          ? { kind: "documents", label: "Open documents" }
+          : { kind: "org_verification", label: "Open verification" };
+      }
+      break;
+    case "ratings":
+      intro =
+        status === "completed"
+          ? `You have ${count.done} five-star rating${count.done === 1 ? "" : "s"} — this level is done.`
+          : remaining === 1
+            ? "You need 1 more five-star rating to finish this level."
+            : `You need ${remaining} more five-star ratings to finish this level.`;
+      steps = isDriver
+        ? [
+            "Complete trips on time and keep the load in good condition.",
+            "After delivery, the shipper can leave a 5★ rating.",
+            `This level needs ${count.target} five-star rating${count.target === 1 ? "" : "s"} — currently ${count.done}/${count.target}.`,
+          ]
+        : [
+            "Deliver partner jobs well so customers leave five-star ratings.",
+            "Ratings on your linked customer relationships count here.",
+            `Need ${count.target} five-star partner ratings — currently ${count.done}/${count.target}.`,
+          ];
+      if (status !== "completed") {
+        action = isDriver
+          ? { kind: "find_work", label: "Find work" }
+          : { kind: "org_trips", label: "Open trips" };
+      }
+      break;
+    default:
+      intro = level.goalText;
+      steps = [level.goalText];
+  }
+
+  return {
+    title: formatExperienceMilestoneTitle(level),
+    goal: level.goalText,
+    unlocks: level.privilege,
+    status,
+    statusLabel,
+    intro,
+    steps,
+    lockedHint,
+    action,
+  };
+}

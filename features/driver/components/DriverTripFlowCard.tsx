@@ -8,8 +8,10 @@ import {
   TRIP_SHEET_BTN_HEIGHT,
   TRIP_SHEET_TOP_RADIUS,
 } from '@/components/driver/DriverTripSheetLayout';
+import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
+import { useInvalidateDriverHomeDashboard } from '@/lib/queries/useInvalidateDriverHomeDashboard';
 import { useDriverChat } from '@/features/chat/contexts/DriverChatContext';
 import {
   sendDocumentShareMessage,
@@ -35,6 +37,8 @@ import { useTripCheckpointDistanceQuery } from '@/lib/queries/useTripCheckpointD
 import { useTripDriverPresenceQuery } from '@/lib/queries/useTripDriverPresenceQuery';
 import { openExternalNavigation } from '@/lib/mapsNavigation.util';
 import { MissionCardLayout } from '@/features/driver/components/MissionCardLayout';
+import { DriverShipperFeedbackModal } from '@/features/chat/components/driver/DriverShipperFeedbackModal';
+import { findLatestMissionDebriefMessage } from '@/features/chat/utils/missionDebrief.util';
 import { DriverPodCompletionPage } from '@/features/driver/components/DriverPodCompletionPage';
 import { missionStagePeekCopy } from '@/features/driver/utils/missionStagePeekLabel.util';
 import {
@@ -374,6 +378,8 @@ export function DriverTripFlowCard({
 }: DriverTripFlowCardProps) {
   const colors = useDriverThemeColors();
   const { profile } = useAuth();
+  const queryClient = useQueryClient();
+  const invalidateDriverHomeDashboard = useInvalidateDriverHomeDashboard();
   const router = useRouter();
   const { conversations, ensureDriverTripConversation } = useDriverChat();
 
@@ -392,6 +398,7 @@ export function DriverTripFlowCard({
   const [vehiclePickerSelectedId, setVehiclePickerSelectedId] = useState<string | null>(null);
   const [vehiclePickerBusy, setVehiclePickerBusy] = useState(false);
   const [vehiclePickerError, setVehiclePickerError] = useState<string | null>(null);
+  const [shipperFeedbackOpen, setShipperFeedbackOpen] = useState(false);
 
   const openVehiclePicker = useCallback(() => {
     setVehiclePickerSelectedId(localTrip.owner_vehicle_id ?? null);
@@ -783,6 +790,17 @@ export function DriverTripFlowCard({
   const dropLabel =
     (localTrip.drop_location || (localTrip as { drop_area?: string }).drop_area)?.trim() ||
     '—';
+  const tripDateLabel = useMemo(() => {
+    const raw = String(localTrip.pickup_date ?? localTrip.created_at ?? "").trim();
+    if (!raw) return null;
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return null;
+    return d.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  }, [localTrip.pickup_date, localTrip.created_at]);
 
   // Same platform services the business Operations Control Panel consumes
   // (see docs/TRIP_OPERATIONS_PLATFORM.md) — reused here, not reimplemented.
@@ -1325,7 +1343,17 @@ export function DriverTripFlowCard({
     setLocalTrip(next);
     onTripUpdated?.(next);
     await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
+    // Neither cache was invalidated on completion before -- the Dashboard's
+    // availability gate and DriverTripOpsContext's own "current active job"
+    // query could both keep showing this trip as active until something
+    // unrelated happened to refresh them. is_driver_available() remains the
+    // sole backend authority; this only catches the client's cache up to it.
+    if (profile?.uid) {
+      void invalidateDriverHomeDashboard(profile.uid);
+      void queryClient.invalidateQueries({ queryKey: ['driver-ops-trips', profile.uid] });
+    }
     onTripCompleted?.();
+    setShipperFeedbackOpen(true);
   };
 
   const peekCopy = missionStagePeekCopy(step, pickupLabel, dropLabel);
@@ -1495,11 +1523,12 @@ export function DriverTripFlowCard({
           target={stageTarget}
           pickupLabel={pickupLabel}
           dropLabel={dropLabel}
+          tripIdLabel={tripsService.resolveDriverFacingTripLabel(localTrip)}
+          tripDateLabel={tripDateLabel}
           remainingKm={step === 'accepted' || step === 'pickup' || step === 'transit' ? distanceToTargetKm ?? null : null}
           routeTotalKm={routeTotalKm}
           distanceLabel={detailsStatLeft}
           etaLabel={tripEtaLabel}
-          customerName={localTrip.client_name?.trim() === '—' ? null : localTrip.client_name}
           vehicleNumber={localTrip.vehicle_display_number}
           dwellLabel={dwellLabel}
           guidanceMessage={guidanceMessage}
@@ -2034,6 +2063,24 @@ export function DriverTripFlowCard({
           </Pressable>
         </Pressable>
       </Modal>
+      <DriverShipperFeedbackModal
+        visible={shipperFeedbackOpen}
+        onClose={() => setShipperFeedbackOpen(false)}
+        tripId={localTrip.id}
+        message={
+          findLatestMissionDebriefMessage(
+            conversations.find((c) => c.trip_id === localTrip.id)?.messages,
+          ) ?? null
+        }
+        targetName={
+          (localTrip.client_name?.trim() && localTrip.client_name.trim() !== '—'
+            ? localTrip.client_name.trim()
+            : null) ||
+          localTrip.supplier_name?.trim() ||
+          assignedBy?.orgName?.trim() ||
+          'this shipper'
+        }
+      />
     </View>
   );
 }
@@ -2084,13 +2131,14 @@ const styles = StyleSheet.create({
   handleBar: { width: 36, height: 4, borderRadius: 999, opacity: 0.5 },
   flowBody: {
     paddingHorizontal: TRIP_SHEET_BODY_PAD.horizontal,
-    paddingTop: 14,
+    paddingTop: 10,
     paddingBottom: TRIP_SHEET_BODY_PAD.bottom,
-    gap: 10,
+    gap: 8,
     backgroundColor: Theme.surface,
   },
+  /** Keep CTA above the floating dock; 0 sat Arrived/Collect on the tab bar. */
   flowBodyFlushBottom: {
-    paddingBottom: 0,
+    paddingBottom: 16,
   },
   collapsedPeek: {
     overflow: 'hidden',
@@ -2186,7 +2234,7 @@ const styles = StyleSheet.create({
   actionBtnText: { fontSize: 14, fontWeight: '700', letterSpacing: -0.1 },
   actionBtnDisabled: { opacity: 0.45 },
   primaryBtnWrap: {
-    marginTop: 4,
+    marginTop: 2,
     borderRadius: 12,
     overflow: 'hidden',
   },
@@ -2214,7 +2262,7 @@ const styles = StyleSheet.create({
   reachedBlock: {
     paddingTop: 0,
     paddingHorizontal: TRIP_SHEET_BODY_PAD.horizontal,
-    paddingBottom: TRIP_SHEET_BODY_PAD.bottom,
+    paddingBottom: 16,
     gap: TRIP_SHEET_BODY_PAD.gap,
     backgroundColor: Theme.surface,
   },

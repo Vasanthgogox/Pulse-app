@@ -8,7 +8,6 @@ import { useAlertRegistryNotifications } from "@/lib/globalSync/useAlertRegistry
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
 import type { GlobalOperationAlert } from "@/lib/globalSync/priorityEngine.util";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
-import type { SharedLedgerNotificationRow } from "@/features/finance/services/sharedLedgerNotifications.service";
 import { useRouter } from "expo-router";
 
 export function useAlertRegistryFinanceHandlers(): {
@@ -23,12 +22,11 @@ export function useAlertRegistryFinanceHandlers(): {
   const {
     refreshRegistry,
     rejectSalaryRequest,
-    markSharedLedgerRead,
   } = useAlertRegistryNotifications(orgId);
 
   const openAlertDetail = useCallback(
     (
-      kind: "salary" | "shared" | "ops",
+      kind: "salary" | "ops",
       id: string,
       mode: "active" | "archive" = "active",
     ) => {
@@ -92,33 +90,6 @@ export function useAlertRegistryFinanceHandlers(): {
     [router],
   );
 
-  const handleSharedAction = useCallback(
-    async (item: SharedLedgerNotificationRow) => {
-      const payload = item.payload_json ?? {};
-      const tripId = typeof payload.trip_id === "string" ? payload.trip_id : null;
-      const entityType =
-        typeof payload.entity_type === "string"
-          ? payload.entity_type.toUpperCase()
-          : null;
-      const entityId = typeof payload.entity_id === "string" ? payload.entity_id : null;
-
-      if (entityType === "CLIENT" && entityId) {
-        router.push(`/client/${entityId}?tab=trips` as const);
-      } else if (entityType === "SUPPLIER" && entityId) {
-        router.push(`/supplier/${entityId}?tab=trips` as const);
-      } else if (tripId) {
-        router.push(`/trip/${tripId}` as const);
-      } else {
-        router.push("/(tabs)/finance");
-      }
-
-      if (orgId && item.status === "open") {
-        void markSharedLedgerRead(item.id);
-      }
-    },
-    [orgId, markSharedLedgerRead, router],
-  );
-
   const handleDismissOps = useCallback(
     async (ops: GlobalOperationAlert) => {
       if (!orgId) {
@@ -142,8 +113,6 @@ export function useAlertRegistryFinanceHandlers(): {
     onRejectSalary: (id) => void handleSalaryReject(id),
     onPaySalary: openLedgerForSalaryPayment,
     onViewSalaryArchive: viewSalaryArchive,
-    onMarkSharedRead: (id) => void markSharedLedgerRead(id),
-    onSharedAction: (item) => void handleSharedAction(item),
     onDismissOps: (ops) => void handleDismissOps(ops),
     onOpenOps: handleOpenOps,
     busySalaryId: notifActionId,

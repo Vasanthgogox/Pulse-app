@@ -14,7 +14,6 @@ import {
   BidConfirmModal,
   type BidConfirmPhase,
 } from "@/features/network/components/bidding/BidConfirmModal";
-import { formatINR } from "@/lib/format";
 
 export interface IndentBidAmountEntryProps {
   visible: boolean;
@@ -106,37 +105,30 @@ export function IndentBidAmountEntry({
     return "";
   }, [visible, initialAmount]);
 
-  const loadSpecs = useMemo(() => {
-    const parts = [cleanSpec(vehicleType), cleanSpec(weightLabel)].filter(
-      Boolean,
-    ) as string[];
-    return parts.length > 0 ? parts.join(" · ") : undefined;
-  }, [vehicleType, weightLabel]);
-
   const partyPreview = useMemo((): NumericEntryPartyPreview | undefined => {
     const route = routeSubtitle(origin, destination);
-    const subtitleParts = [
-      route,
-      loadSpecs,
-      targetRateInr != null && targetRateInr > 0
-        ? `Target ${formatINR(targetRateInr)}`
-        : null,
+    const specParts = [
+      cleanSpec(vehicleType),
+      cleanSpec(weightLabel),
+      cleanSpec(material),
     ].filter(Boolean) as string[];
+    const displayName =
+      (ownerName ?? "").trim() || `Indent ${indentDisplayNumber}`;
     return {
-      name: title,
-      subtitle:
-        subtitleParts.length > 0
-          ? subtitleParts.join(" · ")
-          : `Indent ${indentDisplayNumber}`,
-      entityType: "supplier",
+      name: displayName,
+      heroLine: route,
+      detailLine: specParts.length > 0 ? specParts.join(" · ") : undefined,
+      subtitle: route,
+      entityType: "client",
     };
   }, [
-    title,
     indentDisplayNumber,
     origin,
     destination,
-    loadSpecs,
-    targetRateInr,
+    vehicleType,
+    weightLabel,
+    material,
+    ownerName,
   ]);
 
   const originCity = cleanSpec(origin);

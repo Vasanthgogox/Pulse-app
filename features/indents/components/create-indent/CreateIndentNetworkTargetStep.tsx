@@ -1,25 +1,25 @@
 /**
- * Create Load — network / supplier target step (required quote estimate).
- * Mobile: full-page currency keypad + margin presets from client sale.
- * Desktop: field entry + same margin presets.
+ * Create Load — supplier target.
+ * Phone: full-page keypad (client-sale compact).
+ * Desktop: sale-value card + Edit modal keypad (client-sale desktop).
  */
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { Pressable, StyleSheet, Text, View } from "react-native";
 
 import { WizardNumericKeypadFlow } from "@/components/full-page-wizard/WizardNumericKeypadFlow";
-import { SmartInput } from "@/components/mobile-input";
 import type { NumericEntryPartyPreview } from "@/components/mobile-input/NumericEntryPartyBanner";
 import {
   parseRawToNumber,
   toRawString,
 } from "@/components/mobile-input/keypad";
 import Theme from "@/constants/Theme";
+import { DesktopSectionHeading } from "@/features/trips/components/add-trip/CreateTripDesktopUi";
 import { PartnerRateSaleMarginStrip } from "@/features/trips/components/add-trip/PartnerRateSaleMarginStrip";
 import { createTripDesktopStyles as s } from "@/features/trips/components/add-trip/createTripDesktop.styles";
 
-const MARGIN_PRESETS = [5, 10, 15, 20] as const;
+import { IndentTargetDesktopModal } from "./IndentTargetDesktopModal";
 
-export type SupplierRateBasis = "per_mt" | "per_trip";
+const MARGIN_PRESETS = [5, 10, 15, 20] as const;
 
 function fieldToRaw(value: string): string {
   const trimmed = value.trim();
@@ -35,41 +35,19 @@ function parseAmount(raw: string): number | null {
   return n;
 }
 
-/**
- * Client sale expressed in the SAME unit as the supplier target.
- *
- * `client_price` is always a trip total, but the supplier target may be a ₹/MT
- * rate. Comparing the two directly mixed units: a 5% margin preset on a
- * ₹1,27,680 sale wrote 1,21,296 into a ₹/MT field, which then multiplied out
- * to ₹46,09,248. On a per-MT basis the sale must be divided by tonnage first
- * so both sides are ₹/MT (₹3,360/MT sale -> ₹3,192/MT target at 5%).
- *
- * Returns null on a per-MT basis with no usable tonnage — margin cannot be
- * expressed per-MT until tonnage is known, so the presets disable instead of
- * producing a wrong number.
- */
-export function effectiveSaleForBasis(
-  clientPrice: string,
-  basis: SupplierRateBasis,
-  weightTons?: string,
-): number | null {
-  const sale = parseAmount(clientPrice);
-  if (sale == null || sale <= 0) return null;
-  if (basis !== "per_mt") return sale;
-  const tons = parseAmount(weightTons ?? "");
-  if (tons == null || tons <= 0) return null;
-  return sale / tons;
+function formatInr(raw: string): string | null {
+  const n = Number(String(raw).replace(/[^\d.]/g, ""));
+  if (!Number.isFinite(n) || n <= 0) return null;
+  return `₹${n.toLocaleString("en-IN")}`;
 }
 
-/** Supplier target for a margin % of client sale, in the target's own unit. */
+/** Supplier target for a margin % of client sale (rounded to nearest rupee). */
 export function supplierTargetForMarginPct(
   clientPrice: string,
   marginPct: number,
-  basis: SupplierRateBasis = "per_trip",
-  weightTons?: string,
 ): string | null {
-  const sale = effectiveSaleForBasis(clientPrice, basis, weightTons);
-  if (sale == null) return null;
+  const sale = parseAmount(clientPrice);
+  if (sale == null || sale <= 0) return null;
   const target = Math.round(sale * (1 - marginPct / 100));
   if (target < 0) return null;
   return toRawString(target);
@@ -78,19 +56,12 @@ export function supplierTargetForMarginPct(
 function activeMarginPct(
   clientPrice: string,
   supplierTarget: string,
-  basis: SupplierRateBasis = "per_trip",
-  weightTons?: string,
 ): number | null {
-  const sale = effectiveSaleForBasis(clientPrice, basis, weightTons);
+  const sale = parseAmount(clientPrice);
   const target = parseAmount(supplierTarget);
-  if (sale == null || target == null) return null;
+  if (sale == null || sale <= 0 || target == null) return null;
   for (const pct of MARGIN_PRESETS) {
-    const expected = supplierTargetForMarginPct(
-      clientPrice,
-      pct,
-      basis,
-      weightTons,
-    );
+    const expected = supplierTargetForMarginPct(clientPrice, pct);
     if (expected != null && Math.abs(Number(expected) - target) < 0.5) {
       return pct;
     }
@@ -98,125 +69,27 @@ function activeMarginPct(
   return null;
 }
 
-export type IndentDistributionChoice = "integrated_supplier" | "marketplace" | "both";
-
 export type CreateIndentNetworkTargetStepProps = {
   supplierTarget: string;
   onSupplierTargetChange: (value: string) => void;
-  /**
-   * Unit already chosen on the Quote step. Used only so margin chips stay in
-   * the same unit if the user goes back after picking per-MT.
-   */
-  supplierRateBasis?: SupplierRateBasis;
-  /** Tonnes from the load step — needed for per-MT margin presets. */
-  weightTons?: string;
-  /** Client sale — shown under target with live margin + presets. */
   clientPrice?: string;
   errorMessage?: string;
   compact?: boolean;
-  /** Billing client chip above the keypad on mobile. */
   partyPreview?: NumericEntryPartyPreview;
   onPartyPress?: () => void;
-  /** Who receives this load. Defaults to integrated_supplier if omitted. */
-  circulationTarget?: IndentDistributionChoice;
-  onCirculationTargetChange?: (value: IndentDistributionChoice) => void;
 };
-
-const DISTRIBUTION_OPTIONS: Array<{
-  value: IndentDistributionChoice;
-  label: string;
-  hint: string;
-}> = [
-  {
-    value: "integrated_supplier",
-    label: "Integrated suppliers",
-    hint: "Send to my connected supplier network",
-  },
-  {
-    value: "marketplace",
-    label: "Marketplace",
-    // A9.4: the old copy said only "verified DCO / fleet owners", but
-    // organization-type bidders (other businesses) can also respond via
-    // Marketplace (see market_bids.bidder_type) -- confirmed real
-    // organization-type bids exist in production. Businesses choosing this
-    // option should know both audiences can respond.
-    hint: "Share with verified fleet owners and businesses on Marketplace",
-  },
-  {
-    value: "both",
-    label: "Both",
-    hint: "Send to suppliers + Marketplace",
-  },
-];
-
-function DistributionTargetSelector({
-  value,
-  onChange,
-}: {
-  value: IndentDistributionChoice;
-  onChange: (value: IndentDistributionChoice) => void;
-}) {
-  return (
-    <View style={styles.distributionWrap}>
-      <Text style={styles.distributionLabel}>Who should receive this load?</Text>
-      <View style={styles.distributionOptions}>
-        {DISTRIBUTION_OPTIONS.map((opt) => {
-          const selected = value === opt.value;
-          return (
-            <Pressable
-              key={opt.value}
-              onPress={() => onChange(opt.value)}
-              style={[
-                styles.distributionOption,
-                selected && styles.distributionOptionSelected,
-              ]}
-              accessibilityRole="radio"
-              accessibilityState={{ checked: selected }}
-              accessibilityLabel={opt.label}
-            >
-              <View
-                style={[
-                  styles.distributionRadio,
-                  selected && styles.distributionRadioSelected,
-                ]}
-              >
-                {selected ? <View style={styles.distributionRadioDot} /> : null}
-              </View>
-              <View style={styles.distributionCopy}>
-                <Text
-                  style={[
-                    styles.distributionOptionLabel,
-                    selected && styles.distributionOptionLabelSelected,
-                  ]}
-                >
-                  {opt.label}
-                </Text>
-                <Text style={styles.distributionOptionHint}>{opt.hint}</Text>
-              </View>
-            </Pressable>
-          );
-        })}
-      </View>
-    </View>
-  );
-}
 
 function MarginPresetChips({
   clientPrice,
   supplierTarget,
   onPick,
-  basis = "per_trip",
-  weightTons,
 }: {
   clientPrice: string;
   supplierTarget: string;
   onPick: (raw: string) => void;
-  basis?: SupplierRateBasis;
-  weightTons?: string;
 }) {
-  // Per-MT margin needs tonnage; effectiveSaleForBasis returns null without it.
-  const sale = effectiveSaleForBasis(clientPrice, basis, weightTons);
-  const active = activeMarginPct(clientPrice, supplierTarget, basis, weightTons);
+  const sale = parseAmount(clientPrice);
+  const active = activeMarginPct(clientPrice, supplierTarget);
   const disabled = sale == null || sale <= 0;
 
   return (
@@ -230,12 +103,7 @@ function MarginPresetChips({
               key={pct}
               disabled={disabled}
               onPress={() => {
-                const next = supplierTargetForMarginPct(
-                  clientPrice,
-                  pct,
-                  basis,
-                  weightTons,
-                );
+                const next = supplierTargetForMarginPct(clientPrice, pct);
                 if (next != null) onPick(next);
               }}
               style={[
@@ -268,20 +136,20 @@ export const CreateIndentNetworkTargetStep = memo(
   function CreateIndentNetworkTargetStep({
     supplierTarget,
     onSupplierTargetChange,
-    supplierRateBasis = "per_trip",
-    weightTons,
     clientPrice = "",
     errorMessage,
     compact = false,
     partyPreview,
     onPartyPress,
-    circulationTarget = "integrated_supplier",
-    onCirculationTargetChange,
   }: CreateIndentNetworkTargetStepProps) {
+    const [targetModalOpen, setTargetModalOpen] = useState(false);
+    const [doneAttempted, setDoneAttempted] = useState(false);
+    const targetDisplay = formatInr(supplierTarget);
     const raw = fieldToRaw(supplierTarget);
 
     const handleRawChange = useCallback(
       (nextRaw: string) => {
+        setDoneAttempted(false);
         onSupplierTargetChange(nextRaw);
       },
       [onSupplierTargetChange],
@@ -294,14 +162,15 @@ export const CreateIndentNetworkTargetStep = memo(
           label: "Supplier target",
           rawValue: raw,
           onRawValueChange: handleRawChange,
-          errorMessage,
+          errorMessage:
+            errorMessage ||
+            (doneAttempted && !targetDisplay
+              ? "Enter a target greater than 0"
+              : undefined),
         },
       ],
-      [raw, handleRawChange, errorMessage],
+      [raw, handleRawChange, errorMessage, doneAttempted, targetDisplay],
     );
-
-    const perMtTons =
-      supplierRateBasis === "per_mt" ? parseAmount(weightTons ?? "") : null;
 
     const marginStrip = (
       <PartnerRateSaleMarginStrip
@@ -309,8 +178,6 @@ export const CreateIndentNetworkTargetStep = memo(
         partnerRate={supplierTarget}
         saleLabel="Client"
         rateEmptyHint="Type target"
-        saleDivisorTons={perMtTons}
-        unitSuffix={supplierRateBasis === "per_mt" && perMtTons ? "/MT" : ""}
       />
     );
 
@@ -319,37 +186,46 @@ export const CreateIndentNetworkTargetStep = memo(
         clientPrice={clientPrice}
         supplierTarget={supplierTarget}
         onPick={onSupplierTargetChange}
-        basis={supplierRateBasis}
-        weightTons={weightTons}
       />
     );
 
-    const distributionSelector = onCirculationTargetChange ? (
-      <DistributionTargetSelector
-        value={circulationTarget}
-        onChange={onCirculationTargetChange}
+    const keypad = (
+      <WizardNumericKeypadFlow
+        fields={fields}
+        partyPreview={partyPreview}
+        onPartyPress={onPartyPress}
+        compact
+        forceMobileLayout={!compact}
+        hint={
+          compact
+            ? "Required network estimate. Tap a margin % above the keypad to auto-fill."
+            : undefined
+        }
+        accessory={
+          compact ? (
+            marginStrip
+          ) : (
+            <View style={styles.modalAccessory}>
+              {marginStrip}
+              {marginChips}
+            </View>
+          )
+        }
+        dockAccessory={compact ? marginChips : undefined}
       />
-    ) : null;
+    );
+
+    const handleDone = useCallback(() => {
+      if (!targetDisplay) {
+        setDoneAttempted(true);
+        return;
+      }
+      setDoneAttempted(false);
+      setTargetModalOpen(false);
+    }, [targetDisplay]);
 
     if (compact) {
-      return (
-        <View style={s.saleMobileKeypadRoot}>
-          <WizardNumericKeypadFlow
-            fields={fields}
-            partyPreview={partyPreview}
-            onPartyPress={onPartyPress}
-            compact
-            hint="Required network estimate. Tap a margin % above the keypad to auto-fill."
-            accessory={marginStrip}
-            dockAccessory={
-              <View style={styles.dockStack}>
-                {marginChips}
-                {distributionSelector}
-              </View>
-            }
-          />
-        </View>
-      );
+      return <View style={s.saleMobileKeypadRoot}>{keypad}</View>;
     }
 
     return (
@@ -360,24 +236,56 @@ export const CreateIndentNetworkTargetStep = memo(
             Required estimate for partners to quote against. Use a margin % to
             fill from client sale, or enter a value.
           </Text>
-          <View style={s.fieldSection}>
-            <SmartInput
-              type="currency"
-              label="Supplier target *"
-              value={supplierTarget}
-              onChange={onSupplierTargetChange}
-              variant="field"
-              density="default"
-              placeholder="Enter target"
-              errorMessage={errorMessage}
-            />
+          <View style={s.sourceRatesBlock}>
+            <DesktopSectionHeading>Supplier target</DesktopSectionHeading>
+            <Pressable
+              style={[
+                s.sourceRateSummaryCard,
+                Boolean(errorMessage) && s.sourceRateSummaryCardError,
+              ]}
+              onPress={() => {
+                setDoneAttempted(false);
+                setTargetModalOpen(true);
+              }}
+              accessibilityRole="button"
+              accessibilityLabel="Edit supplier target"
+            >
+              <View style={s.sourceRateSummaryCopy}>
+                <Text style={s.sourceRateSummaryLabel}>Supplier target</Text>
+                {targetDisplay ? (
+                  <Text style={s.sourceRateSummaryValue}>{targetDisplay}</Text>
+                ) : (
+                  <Text style={s.sourceRateSummaryValueMuted}>
+                    Tap to enter target
+                  </Text>
+                )}
+                {errorMessage ? (
+                  <Text style={s.salePriceError}>{errorMessage}</Text>
+                ) : null}
+              </View>
+              <View style={s.sourceRateSummaryAction}>
+                <Text style={s.sourceRateSummaryActionText}>
+                  {targetDisplay ? "Edit" : "Add target"}
+                </Text>
+              </View>
+            </Pressable>
           </View>
           <View style={styles.accessoryStack}>
             {marginStrip}
             {marginChips}
           </View>
-          {distributionSelector}
         </View>
+
+        <IndentTargetDesktopModal
+          visible={targetModalOpen}
+          onClose={() => {
+            setDoneAttempted(false);
+            setTargetModalOpen(false);
+          }}
+          onDone={handleDone}
+        >
+          {keypad}
+        </IndentTargetDesktopModal>
       </View>
     );
   },
@@ -393,6 +301,13 @@ const styles = StyleSheet.create({
   accessoryStack: {
     width: "100%",
     alignItems: "center",
+    gap: 8,
+  },
+  modalAccessory: {
+    width: "100%",
+    maxWidth: 320,
+    alignSelf: "center",
+    alignItems: "stretch",
     gap: 8,
   },
   presetsWrap: {
@@ -445,78 +360,5 @@ const styles = StyleSheet.create({
   },
   presetChipTextDisabled: {
     color: Theme.textMuted,
-  },
-  dockStack: {
-    width: "100%",
-    gap: 10,
-  },
-  distributionWrap: {
-    width: "100%",
-    maxWidth: 320,
-    alignSelf: "center",
-    gap: 8,
-  },
-  distributionLabel: {
-    fontSize: 9,
-    fontWeight: "700",
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
-    color: Theme.textMuted,
-  },
-  distributionOptions: {
-    gap: 8,
-  },
-  distributionOption: {
-    flexDirection: "row",
-    alignItems: "flex-start",
-    gap: 10,
-    padding: 10,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
-  },
-  distributionOptionSelected: {
-    borderColor: Theme.accentBrownBorder,
-    backgroundColor: Theme.accentBrownMuted,
-  },
-  distributionRadio: {
-    width: 16,
-    height: 16,
-    borderRadius: 8,
-    borderWidth: 1.5,
-    borderColor: Theme.borderMedium,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 1,
-    flexShrink: 0,
-  },
-  distributionRadioSelected: {
-    borderColor: Theme.accentBrownDeep,
-  },
-  distributionRadioDot: {
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: Theme.accentBrownDeep,
-  },
-  distributionCopy: {
-    flex: 1,
-    minWidth: 0,
-    gap: 2,
-  },
-  distributionOptionLabel: {
-    fontSize: 12,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-  },
-  distributionOptionLabelSelected: {
-    color: Theme.accentBrownDeep,
-  },
-  distributionOptionHint: {
-    fontSize: 10,
-    fontWeight: "500",
-    color: Theme.textSecondary,
-    lineHeight: 14,
   },
 });

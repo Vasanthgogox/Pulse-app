@@ -53,7 +53,6 @@ import {
     Platform,
     Pressable,
     ScrollView,
-    Share,
     StyleSheet,
     Text,
     TouchableOpacity,
@@ -78,7 +77,6 @@ import {
     type TripForStatement,
 } from "../aggregation";
 import type { LedgerRow } from "../services/finance.service";
-import { EntityCompareVerifyView } from "./EntityCompareVerifyView";
 import {
     FinancialRow,
     type FinancialRowData,
@@ -312,7 +310,7 @@ export interface EntityDetailOverlayProps {
   onAddTransaction?: (context?: TripEntryContext) => void;
   /** Required for ledger report (client-level fetch). */
   organizationId?: string | null;
-  /** When provided, Compare & Verify can call after Update My Book / Accept / Decline / Submit Dispute to refetch ledger. */
+  /** Currently unused within this component (its only caller was the removed Compare & Verify tab). Kept for caller compatibility. */
   onRefresh?: () => void;
   /** When entityType is VEHICLE, optional full vehicle row for type label and age (from created_at). */
   vehicle?: VehicleRow | null;
@@ -333,7 +331,7 @@ export interface EntityDetailOverlayProps {
   /** Org drivers — driver column on trips. */
   financePartyDrivers?: DriverRow[];
   /** When set, CLIENT/SUPPLIER overlay opens on this tab (e.g. ledger from Finance list). */
-  initialDetailTab?: "main" | "ledger" | "shared_ledger";
+  initialDetailTab?: "main" | "ledger";
 }
 
 /** Latest payment captured date for a trip from ledger (transaction_date or created_at). Used when trip has no pickup_date. */
@@ -398,7 +396,6 @@ export function EntityDetailOverlay({
   onBack,
   onAddTransaction,
   organizationId,
-  onRefresh,
   vehicle,
   driverProfile,
   vehicles = [],
@@ -415,9 +412,9 @@ export function EntityDetailOverlay({
   const { t } = useLanguage();
   const [searchQuery, setSearchQuery] = useState("");
   const [showReportModal, setShowReportModal] = useState(false);
-  const [detailTab, setDetailTab] = useState<
-    "main" | "ledger" | "shared_ledger"
-  >(initialDetailTab);
+  const [detailTab, setDetailTab] = useState<"main" | "ledger">(
+    initialDetailTab,
+  );
   /** Driver-only: PROFILE | LEDGER | STATEMENT. */
   const [driverDetailTab, setDriverDetailTab] = useState<
     "profile" | "ledger" | "statement"
@@ -439,16 +436,8 @@ export function EntityDetailOverlay({
     useState(0);
   const [showVehiclePicker, setShowVehiclePicker] = useState(false);
   const [showDriverPicker, setShowDriverPicker] = useState(false);
-  const [showSuccess, setShowSuccess] = useState(false);
-  const [successTitle, setSuccessTitle] = useState("NODE_SYNCED");
   const [fabHovered, setFabHovered] = useState(false);
   const [isActionHubOpen, setIsActionHubOpen] = useState(false);
-
-  const triggerSuccess = useCallback((title = "NODE_SYNCED") => {
-    setSuccessTitle(title);
-    setShowSuccess(true);
-    setTimeout(() => setShowSuccess(false), 1500);
-  }, []);
 
   const isDriver = entityType === "DRIVER";
   const assignedVehicle =
@@ -1215,38 +1204,6 @@ export function EntityDetailOverlay({
         </Text>
         {detailTab === "ledger" && <View style={styles.entityTabUnderline} />}
       </TouchableOpacity>
-      <TouchableOpacity
-        style={[
-          styles.entityTab,
-          detailTab === "shared_ledger" && styles.entityTabActive,
-        ]}
-        onPress={() => setDetailTab("shared_ledger")}
-        activeOpacity={0.8}
-      >
-        <FontAwesome
-          name="link"
-          size={10}
-          color={
-            detailTab === "shared_ledger"
-              ? Theme.textOnDark
-              : Theme.textSecondary
-          }
-          style={styles.detailTabIcon}
-        />
-        <Text
-          style={[
-            styles.entityTabText,
-            detailTab === "shared_ledger" && styles.entityTabTextActive,
-          ]}
-          numberOfLines={1}
-          ellipsizeMode="tail"
-        >
-          SHARED CASH
-        </Text>
-        {detailTab === "shared_ledger" && (
-          <View style={styles.entityTabUnderline} />
-        )}
-      </TouchableOpacity>
     </View>
   ) : isVehicle ? (
     <View style={styles.entityTabRow}>
@@ -1684,48 +1641,6 @@ export function EntityDetailOverlay({
             </View>
           </View>
           )}
-        </ScrollView>
-      ) : isCustomerOrSupplier && detailTab === "shared_ledger" ? (
-        <ScrollView
-          style={styles.scroll}
-          contentContainerStyle={[
-            styles.scrollContent,
-            {
-              paddingBottom: 24 + 40 + (insets?.bottom ?? 0),
-            },
-          ]}
-          showsVerticalScrollIndicator={false}
-        >
-          <EntityCompareVerifyView
-            entity={{
-              id: entity.id,
-              name: entity.name ?? "—",
-              linked_organization_id:
-                entity.linked_organization_id ?? undefined,
-              avatar_url: entity.profileImageUrl ?? undefined,
-            }}
-            entityType={entityType}
-            trips={trips}
-            transactions={transactions}
-            organizationId={organizationId ?? null}
-            integrated={entity.is_integrated ?? false}
-            onRefresh={onRefresh}
-            onRequestConnection={() => {
-              triggerSuccess("CONNECTION_REQUESTED");
-            }}
-            onInviteToApp={() => {
-              const message = `Join me on Pulse to sync our ledger and compare books with ${
-                entity.name ?? "—"
-              }. Download Pulse to get started.`;
-              Share.share({ message, title: "Invite to Pulse" })
-                .then(() => {
-                  triggerSuccess("INVITE_SENT");
-                })
-                .catch(() => {});
-            }}
-            viewAsPartner={false}
-            embeddedInOverlay
-          />
         </ScrollView>
       ) : isDriver && driverDetailTab === "profile" ? (
         <ScrollView
@@ -4053,8 +3968,7 @@ export function EntityDetailOverlay({
         </ScrollView>
       )}
 
-      {onAddTransaction != null &&
-        !(isCustomerOrSupplier && detailTab === "shared_ledger") && (
+      {onAddTransaction != null && (
           <View
             style={[
               styles.entityFabWrap,
@@ -4331,16 +4245,6 @@ export function EntityDetailOverlay({
         </Modal>
       )}
 
-      {showSuccess && (
-        <View style={styles.successOverlay}>
-          <View style={styles.successCard}>
-            <View style={styles.successIconWrap}>
-              <FontAwesome name="check" size={24} color={Theme.textOnPrimary} />
-            </View>
-            <Text style={styles.successTitle}>{successTitle}</Text>
-          </View>
-        </View>
-      )}
     </View>
   );
 }
@@ -4463,9 +4367,6 @@ const styles = StyleSheet.create({
     zIndex: 10,
   },
   entityTabActive: {},
-  detailTabIcon: {
-    marginRight: 6,
-  },
   entityTabText: {
     fontSize: 8,
     fontWeight: "800",
@@ -6031,42 +5932,5 @@ const styles = StyleSheet.create({
     lineHeight: 14,
     letterSpacing: -0.2,
     minHeight: 28,
-  },
-  successOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    backgroundColor: "rgba(255,255,255,0.6)",
-    alignItems: "center",
-    justifyContent: "center",
-    zIndex: 10000,
-    paddingHorizontal: 40,
-  },
-  successCard: {
-    backgroundColor: Theme.financeHeroBg,
-    paddingVertical: 24,
-    paddingHorizontal: 32,
-    alignItems: "center",
-    minWidth: 160,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.3,
-    shadowRadius: 12,
-    elevation: 12,
-  },
-  successIconWrap: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: Theme.darkGreen,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 12,
-  },
-  successTitle: {
-    fontSize: 14,
-    fontWeight: "900",
-    fontStyle: "italic",
-    color: Theme.textOnPrimary,
-    letterSpacing: 0.5,
-    textTransform: "uppercase",
   },
 });

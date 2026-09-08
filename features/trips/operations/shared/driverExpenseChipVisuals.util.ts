@@ -1,31 +1,36 @@
 import type { LucideIcon } from "lucide-react-native";
 import {
-  AlertTriangle,
-  ArrowDownToLine,
-  ArrowUpFromLine,
   Banknote,
   Building2,
   CircleDot,
+  CircleParking,
   Clock,
   CreditCard,
   Droplets,
   Fuel,
+  HandCoins,
   HelpCircle,
   Hourglass,
+  Landmark,
   Layers,
   Leaf,
   MapPin,
   MoreHorizontal,
+  Nfc,
+  PackageMinus,
+  PackagePlus,
   Radio,
   Receipt,
   Scale,
-  SquareParking,
+  Sparkles,
+  Ticket,
   Truck,
   UserRound,
   UtensilsCrossed,
-  Wallet,
   Wrench,
 } from "lucide-react-native";
+
+import Theme from "@/constants/Theme";
 
 import type {
   FuelType,
@@ -44,229 +49,73 @@ export type DriverChipVisual = {
   activeTintBg: string;
 };
 
+/** Shared idle palette — light gray icons, no per-chip color coding. */
+const IDLE_TINT = Theme.textMuted;
+const IDLE_TINT_BG = "rgba(148,163,184,0.12)";
+const ACTIVE_TINT_BG = Theme.driverEmeraldMuted;
+
+function chip(Icon: LucideIcon): DriverChipVisual {
+  return {
+    Icon,
+    tint: IDLE_TINT,
+    tintBg: IDLE_TINT_BG,
+    activeTintBg: ACTIVE_TINT_BG,
+  };
+}
+
 const OTHER_CATEGORY_VISUALS: Record<TripOtherExpenseCategory, DriverChipVisual> = {
-  parking: {
-    Icon: SquareParking,
-    tint: "#0369a1",
-    tintBg: "rgba(14,165,233,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  challan: {
-    Icon: AlertTriangle,
-    tint: "#b45309",
-    tintBg: "rgba(245,158,11,0.14)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  loading: {
-    Icon: ArrowUpFromLine,
-    tint: "#c2410c",
-    tintBg: "rgba(249,115,22,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  unloading: {
-    Icon: ArrowDownToLine,
-    tint: "#7c2d12",
-    tintBg: "rgba(234,88,12,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  detention: {
-    Icon: Hourglass,
-    tint: "#6d28d9",
-    tintBg: "rgba(139,92,246,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  maintenance: {
-    Icon: Wrench,
-    tint: "#475569",
-    tintBg: "rgba(100,116,139,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  fastag: {
-    Icon: Radio,
-    tint: "#4D3636",
-    tintBg: "rgba(99,102,241,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  advance: {
-    Icon: Wallet,
-    tint: "#0f766e",
-    tintBg: "rgba(20,184,166,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  food: {
-    Icon: UtensilsCrossed,
-    tint: "#be123c",
-    tintBg: "rgba(244,63,94,0.11)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  weighbridge: {
-    Icon: Scale,
-    tint: "#334155",
-    tintBg: "rgba(51,65,85,0.1)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  misc: {
-    Icon: Layers,
-    tint: "#64748b",
-    tintBg: "rgba(100,116,139,0.1)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
+  parking: chip(CircleParking),
+  challan: chip(Ticket),
+  loading: chip(PackagePlus),
+  unloading: chip(PackageMinus),
+  detention: chip(Hourglass),
+  maintenance: chip(Wrench),
+  fastag: chip(Nfc),
+  advance: chip(HandCoins),
+  food: chip(UtensilsCrossed),
+  weighbridge: chip(Scale),
+  misc: chip(Sparkles),
 };
 
 const DRIVER_EXPENSE_CATEGORY_VISUALS: Record<string, DriverChipVisual> = {
-  fuel: {
-    Icon: Fuel,
-    tint: "#047857",
-    tintBg: "rgba(16,185,129,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  toll: {
-    Icon: MapPin,
-    tint: "#4D3636",
-    tintBg: "rgba(99,102,241,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
+  fuel: chip(Fuel),
+  toll: chip(Landmark),
   ...OTHER_CATEGORY_VISUALS,
 };
 
 const PAYMENT_MODE_VISUALS: Record<OperationalPaymentMode, DriverChipVisual> = {
-  cash: {
-    Icon: Banknote,
-    tint: "#15803d",
-    tintBg: "rgba(34,197,94,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  fastag: {
-    Icon: Radio,
-    tint: "#4D3636",
-    tintBg: "rgba(99,102,241,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  card: {
-    Icon: CreditCard,
-    tint: "#0369a1",
-    tintBg: "rgba(14,165,233,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  credit: {
-    Icon: Receipt,
-    tint: "#7c3aed",
-    tintBg: "rgba(139,92,246,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  pending: {
-    Icon: Clock,
-    tint: "#b45309",
-    tintBg: "rgba(245,158,11,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  unknown: {
-    Icon: HelpCircle,
-    tint: "#64748b",
-    tintBg: "rgba(100,116,139,0.1)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
+  cash: chip(Banknote),
+  fastag: chip(Radio),
+  card: chip(CreditCard),
+  credit: chip(Receipt),
+  pending: chip(Clock),
+  unknown: chip(HelpCircle),
 };
 
 const FUEL_TYPE_VISUALS: Record<FuelType, DriverChipVisual> = {
-  diesel: {
-    Icon: Fuel,
-    tint: "#475569",
-    tintBg: "rgba(71,85,105,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  petrol: {
-    Icon: Droplets,
-    tint: "#dc2626",
-    tintBg: "rgba(239,68,68,0.11)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  cng: {
-    Icon: Leaf,
-    tint: "#059669",
-    tintBg: "rgba(16,185,129,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  other: {
-    Icon: CircleDot,
-    tint: "#64748b",
-    tintBg: "rgba(100,116,139,0.1)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
+  diesel: chip(Fuel),
+  petrol: chip(Droplets),
+  cng: chip(Leaf),
+  other: chip(CircleDot),
 };
 
 const TOLL_ENTRY_VISUALS: Record<"actual" | "estimated", DriverChipVisual> = {
-  actual: {
-    Icon: MapPin,
-    tint: "#047857",
-    tintBg: "rgba(16,185,129,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  estimated: {
-    Icon: MoreHorizontal,
-    tint: "#4D3636",
-    tintBg: "rgba(99,102,241,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
+  actual: chip(MapPin),
+  estimated: chip(MoreHorizontal),
 };
 
 const PAYMENT_OWNER_VISUALS: Record<OperationalPaymentOwner, DriverChipVisual> = {
-  organization: {
-    Icon: Building2,
-    tint: "#0369a1",
-    tintBg: "rgba(14,165,233,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  driver: {
-    Icon: UserRound,
-    tint: "#047857",
-    tintBg: "rgba(16,185,129,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  supplier: {
-    Icon: Truck,
-    tint: "#7c3aed",
-    tintBg: "rgba(139,92,246,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  fleet_card: {
-    Icon: CreditCard,
-    tint: "#0f766e",
-    tintBg: "rgba(20,184,166,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  fastag: {
-    Icon: Radio,
-    tint: "#4D3636",
-    tintBg: "rgba(99,102,241,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  cash_advance: {
-    Icon: Banknote,
-    tint: "#15803d",
-    tintBg: "rgba(34,197,94,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  credit_vendor: {
-    Icon: Receipt,
-    tint: "#7c3aed",
-    tintBg: "rgba(139,92,246,0.12)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
-  unknown: {
-    Icon: HelpCircle,
-    tint: "#64748b",
-    tintBg: "rgba(100,116,139,0.1)",
-    activeTintBg: "rgba(4,120,87,0.18)",
-  },
+  organization: chip(Building2),
+  driver: chip(UserRound),
+  supplier: chip(Truck),
+  fleet_card: chip(CreditCard),
+  fastag: chip(Radio),
+  cash_advance: chip(Banknote),
+  credit_vendor: chip(Receipt),
+  unknown: chip(HelpCircle),
 };
 
-const DEFAULT_VISUAL: DriverChipVisual = {
-  Icon: Layers,
-  tint: "#64748b",
-  tintBg: "rgba(100,116,139,0.1)",
-  activeTintBg: "rgba(4,120,87,0.18)",
-};
+const DEFAULT_VISUAL: DriverChipVisual = chip(Layers);
 
 export function visualForDriverExpenseCategory(value: string): DriverChipVisual {
   return DRIVER_EXPENSE_CATEGORY_VISUALS[value] ?? DEFAULT_VISUAL;

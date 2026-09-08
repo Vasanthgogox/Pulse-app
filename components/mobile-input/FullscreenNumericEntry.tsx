@@ -7,7 +7,7 @@
  *
  * Uses a custom DecimalKeypad — no native keyboard for financial inputs.
  */
-import React, { useState, useCallback, useEffect, useMemo } from 'react';
+import React, { useState, useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import {
   Modal,
   View,
@@ -17,10 +17,11 @@ import {
   Platform,
   TouchableWithoutFeedback,
 } from 'react-native';
-import { ArrowRight } from 'lucide-react-native';
+import { ArrowRight, X } from 'lucide-react-native';
 import { MotiView } from 'moti';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Theme from '@/constants/Theme';
+import { PulsePillButton } from '@/components/PulsePillButton';
 import { formatINR } from '@/lib/format';
 import { DecimalKeypad, PAY_KEYPAD_CELL_PAD, PAY_KEYPAD_INSET } from './DecimalKeypad';
 import { BidVsTargetHint } from './BidVsTargetHint';
@@ -76,6 +77,8 @@ export interface FullscreenNumericEntryProps {
    * Sets the keypad value to `amount` without submitting.
    */
   quickFill?: { label: string; amount: number } | null;
+  /** Drawn above the keypad inside this modal (e.g. confirm sheet). Avoids a second RN Modal. */
+  overlay?: ReactNode;
 }
 
 export function FullscreenNumericEntry({
@@ -96,6 +99,7 @@ export function FullscreenNumericEntry({
   validationError,
   targetRate = null,
   quickFill = null,
+  overlay = null,
 }: FullscreenNumericEntryProps) {
   const [raw, setRaw] = useState(initialValue);
   /** Value before quick-fill; second tap restores it. */
@@ -278,31 +282,37 @@ export function FullscreenNumericEntry({
       </View>
 
       <View style={styles.payBody}>
-        {partyPreview ? (
-          <NumericEntryRecipientHero
-            party={partyPreview}
-            // Avoid "Update your bid Update your bid" when party.name already is the action title.
-            caption={
-              partyPreview.name.trim().toLowerCase() === label.trim().toLowerCase()
-                ? undefined
-                : label
-            }
-            nameInline={
-              partyPreview.name.trim().toLowerCase() !== label.trim().toLowerCase()
-            }
-          />
-        ) : (
-          <View style={styles.payLabelOnly}>
-            <Text style={styles.payLabelOnlyText}>{label}</Text>
-            {contextLine ? (
-              <Text style={styles.payContextLine} numberOfLines={2}>
-                {contextLine}
-              </Text>
-            ) : null}
-          </View>
-        )}
-        {amountDisplay}
-        {validationBlock}
+        <View style={styles.payMeta}>
+          {partyPreview ? (
+            <NumericEntryRecipientHero
+              party={partyPreview}
+              caption={
+                partyPreview.name.trim().toLowerCase() === label.trim().toLowerCase()
+                  ? undefined
+                  : label
+              }
+              // Stack “Spend” above shipper when we have route/date hero lines.
+              nameInline={
+                !partyPreview.heroLine &&
+                partyPreview.name.trim().toLowerCase() !== label.trim().toLowerCase()
+              }
+              compact
+            />
+          ) : (
+            <View style={styles.payLabelOnly}>
+              <Text style={styles.payLabelOnlyText}>{label}</Text>
+              {contextLine ? (
+                <Text style={styles.payContextLine} numberOfLines={2}>
+                  {contextLine}
+                </Text>
+              ) : null}
+            </View>
+          )}
+        </View>
+        <View style={styles.payAmountStage}>
+          {amountDisplay}
+          {validationBlock}
+        </View>
       </View>
 
       <View style={styles.payBottom}>
@@ -314,6 +324,7 @@ export function FullscreenNumericEntry({
               style={[styles.payFab, !hasValue && styles.payFabDisabled]}
               onPress={handleSubmit}
               disabled={!hasValue}
+              delayPressIn={0}
               accessibilityRole="button"
               accessibilityLabel={submitLabel}
               accessibilityState={{ disabled: !hasValue }}
@@ -328,6 +339,7 @@ export function FullscreenNumericEntry({
         </View>
         <DecimalKeypad onKey={handleKey} showDecimal={allowDecimal} variant="pay" />
       </View>
+      {overlay ? <View style={styles.entryOverlay}>{overlay}</View> : null}
     </View>
   ) : (
     <View
@@ -335,16 +347,9 @@ export function FullscreenNumericEntry({
         styles.inner,
         isDesktop && styles.innerDesktop,
         isTablet && styles.innerTablet,
-        { paddingBottom: isDesktop || isTablet ? 24 : Math.max(insets.bottom, 16) },
       ]}
     >
-      <View
-        style={[
-          styles.header,
-          (isDesktop || isTablet) && styles.headerElevated,
-          { paddingTop: isDesktop || isTablet ? 20 : Math.max(insets.top - 8, 0) },
-        ]}
-      >
+      <View style={[styles.header, styles.headerElevated]}>
         <TouchableOpacity
           style={styles.closeBtn}
           onPress={onClose}
@@ -352,53 +357,58 @@ export function FullscreenNumericEntry({
           accessibilityRole="button"
           accessibilityLabel="Cancel"
         >
-          <Text style={styles.closeBtnText}>✕</Text>
+          <X size={18} color={Theme.textPrimaryDark} strokeWidth={2.2} />
         </TouchableOpacity>
 
         <View style={styles.headerMid}>
           <Text style={styles.headerLabel} numberOfLines={1}>
             {label}
           </Text>
-          {contextLine ? (
-            <Text style={styles.headerContext} numberOfLines={2}>
-              {contextLine}
-            </Text>
-          ) : null}
         </View>
 
-        <TouchableOpacity
-          style={[styles.applyBtn, !hasValue && styles.applyBtnMuted]}
+        <PulsePillButton
+          label={submitLabel}
+          size="compact"
           onPress={handleSubmit}
           disabled={!hasValue}
-          accessibilityRole="button"
           accessibilityLabel={submitLabel}
-        >
-          <Text style={[styles.applyText, !hasValue && styles.applyTextMuted]}>
-            {submitLabel}
-          </Text>
-        </TouchableOpacity>
+        />
       </View>
 
       {partyPreview ? (
-        partyPreview.name.trim().toLowerCase() === label.trim().toLowerCase() ? (
-          partyPreview.subtitle ? (
-            <Text style={styles.elevatedPartySubtitle} numberOfLines={3}>
-              {partyPreview.subtitle}
-            </Text>
-          ) : null
-        ) : (
+        <View style={styles.summaryCard}>
           <NumericEntryRecipientHero
             party={partyPreview}
-            caption={label}
-            nameInline
+            dense
+            compact
           />
-        )
+          {targetRate != null && targetRate > 0 ? (
+            <View style={styles.targetChip}>
+              <Text style={styles.targetChipLabel}>Target</Text>
+              <Text style={styles.targetChipValue}>{formatINR(targetRate)}</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : contextLine ? (
+        <Text style={styles.elevatedPartySubtitle} numberOfLines={3}>
+          {contextLine}
+        </Text>
       ) : null}
 
-      {amountDisplay}
-      {validationBlock}
+      <View style={styles.amountStage}>
+        {amountDisplay}
+        {validationBlock}
+      </View>
 
-      <DecimalKeypad onKey={handleKey} showDecimal={allowDecimal} />
+      <View
+        style={[
+          styles.keypadDock,
+          { paddingBottom: isDesktop || isTablet ? 20 : Math.max(insets.bottom, 16) },
+        ]}
+      >
+        <DecimalKeypad onKey={handleKey} showDecimal={allowDecimal} />
+      </View>
+      {overlay ? <View style={styles.entryOverlay}>{overlay}</View> : null}
     </View>
   );
 
@@ -458,12 +468,12 @@ export function FullscreenNumericEntry({
     );
   }
 
-  // ── Mobile: full-screen slide-up (native OS sheet transition) ─────────
+  // ── Mobile: full-screen (overFullScreen so a confirm overlay can receive taps) ──
   return (
     <Modal
       visible={visible}
       animationType="slide"
-      presentationStyle="fullScreen"
+      presentationStyle="overFullScreen"
       onRequestClose={onClose}
       statusBarTranslucent={Platform.OS === 'android'}
       accessibilityViewIsModal
@@ -495,12 +505,19 @@ const styles = StyleSheet.create({
   },
   innerDesktop: {
     flex: 1,
+    minHeight: 0,
   },
   innerTablet: {
     overflow: 'hidden',
+    minHeight: 520,
   },
   innerPay: {
     justifyContent: 'space-between',
+  },
+  entryOverlay: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 40,
+    elevation: 40,
   },
   payTopBar: {
     flexDirection: 'row',
@@ -523,29 +540,40 @@ const styles = StyleSheet.create({
   },
   payBody: {
     flex: 1,
-    justifyContent: 'center',
     minHeight: 0,
+    justifyContent: 'flex-start',
+  },
+  payMeta: {
+    flexShrink: 0,
+    paddingTop: 4,
+  },
+  payAmountStage: {
+    flex: 1,
+    minHeight: 0,
+    justifyContent: 'center',
+    paddingBottom: 8,
   },
   payLabelOnly: {
     alignItems: 'center',
     paddingHorizontal: 24,
-    paddingTop: 18,
-    gap: 4,
+    paddingTop: 8,
+    gap: 6,
   },
   payLabelOnlyText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '700',
     color: Theme.textPrimaryDark,
     textAlign: 'center',
-    lineHeight: 19,
+    lineHeight: 20,
+    letterSpacing: -0.2,
   },
   payContextLine: {
-    fontSize: 11,
-    fontWeight: '500',
-    lineHeight: 15,
+    fontSize: 12,
+    fontWeight: '600',
+    lineHeight: 16,
     color: Theme.textSecondary,
     textAlign: 'center',
-    paddingHorizontal: 8,
+    paddingHorizontal: 12,
   },
   amountStack: {
     width: '100%',
@@ -632,20 +660,24 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: 20,
+    paddingVertical: 16,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.border,
-    minHeight: 56,
-    gap: 8,
+    minHeight: 64,
+    gap: 12,
   },
   headerElevated: {
-    borderBottomColor: Theme.borderMedium,
+    borderBottomColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
   },
   closeBtn: {
-    width: 36,
-    height: 36,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderInput,
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
@@ -662,15 +694,64 @@ const styles = StyleSheet.create({
   },
   headerLabel: {
     fontSize: 16,
-    fontWeight: '600',
-    color: Theme.textPrimary,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
     textAlign: 'center',
+    letterSpacing: -0.3,
   },
   headerContext: {
     fontSize: 12,
     color: Theme.textSecondary,
     marginTop: 2,
     textAlign: 'center',
+  },
+  summaryCard: {
+    marginHorizontal: 20,
+    marginTop: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 8,
+    borderRadius: 16,
+    backgroundColor: Theme.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.surfaceBorder,
+    alignItems: 'center',
+    gap: 8,
+  },
+  targetChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: Theme.brandBlueSoft,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.brandBlue,
+  },
+  targetChipLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+    color: Theme.textMuted,
+  },
+  targetChipValue: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Theme.primary,
+  },
+  amountStage: {
+    flex: 1,
+    minHeight: 0,
+    justifyContent: 'center',
+    paddingVertical: 12,
+  },
+  keypadDock: {
+    flexShrink: 0,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.surfaceBorder,
+    backgroundColor: Theme.cardWhite,
+    paddingTop: 8,
   },
   elevatedPartySubtitle: {
     fontSize: 12,
@@ -679,7 +760,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     lineHeight: 17,
     paddingHorizontal: 20,
-    marginBottom: 8,
+    marginTop: 12,
   },
   applyBtn: {
     paddingHorizontal: 14,
@@ -687,6 +768,7 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.buttonPrimary,
     borderWidth: Theme.buttonPrimaryBorderWidth,
     borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: Theme.buttonPrimaryRadius,
     minWidth: 68,
     alignItems: 'center',
     flexShrink: 0,
@@ -720,10 +802,12 @@ const styles = StyleSheet.create({
   },
   desktopDrawer: {
     width: 480,
+    height: '100%',
+    maxHeight: '100%',
     backgroundColor: Theme.screenBackground,
-    shadowColor: '#000',
+    shadowColor: Theme.primaryText,
     shadowOffset: { width: -2, height: 0 },
-    shadowOpacity: 0.18,
+    shadowOpacity: 0.12,
     shadowRadius: 20,
     elevation: 24,
   },

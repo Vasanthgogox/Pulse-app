@@ -11902,6 +11902,18 @@ export type Database = {
         Returns: Json
       }
       consume_driver_invite: { Args: { p_invite_id: string }; Returns: boolean }
+      create_driver_direct: {
+        Args: {
+          p_commission_per_km?: number
+          p_commission_percent?: number
+          p_email?: string
+          p_name: string
+          p_org_id: string
+          p_payable_amount?: number
+          p_phone: string
+        }
+        Returns: Json
+      }
       create_team_invite_pending: {
         Args: {
           p_email?: string
@@ -12329,6 +12341,17 @@ export type Database = {
           isOneToOne: true
           isSetofReturn: false
         }
+      }
+      ensure_driver_row_by_phone_insert: {
+        Args: {
+          p_commission_percent?: number
+          p_name: string
+          p_org_id: string
+          p_phone: string
+          p_tracking_only: boolean
+          p_user_id: string
+        }
+        Returns: Json
       }
       ensure_driver_signup_matches_for_driver: {
         Args: { p_driver_id: string }
@@ -13879,8 +13902,16 @@ export type Database = {
         }[]
       }
       invite_driver: {
-        Args: { p_name: string; p_org_id: string; p_phone: string }
-        Returns: string
+        Args: {
+          p_commission_per_km?: number
+          p_commission_percent?: number
+          p_email?: string
+          p_name: string
+          p_org_id: string
+          p_payable_amount?: number
+          p_phone: string
+        }
+        Returns: Json
       }
       is_app_migration_applied: {
         Args: { p_version: string }
@@ -13921,6 +13952,7 @@ export type Database = {
         Args: { p_driver_id: string; p_phone: string }
         Returns: Json
       }
+      lock_driver_phone: { Args: { p_last10: string }; Returns: undefined }
       log_client_audit: {
         Args: {
           p_action: string

@@ -23,11 +23,6 @@ export {
   type TripEntryContext,
   type TripEntryIntent,
 } from './components/EntityDetailOverlay';
-export {
-  EntityCompareVerifyView,
-  type EntityCompareVerifyViewProps,
-  type SharedTripData,
-} from './components/EntityCompareVerifyView';
 export { LedgerBlock, type LedgerEntry } from './components/LedgerBlock';
 export { useRealtimeTransactions } from './hooks/useRealtimeTransactions';
 export {
@@ -50,12 +45,6 @@ export {
   type TreasuryDetailLayoutProps,
 } from './components/TreasuryDetailLayout';
 export { LedgerReportModal, type LedgerReportModalProps } from './components/LedgerReportModal';
-export {
-  DisputeAuditSheet,
-  type DisputeAuditSheetProps,
-  type DisputedItem,
-  type DisputedItemKind,
-} from './components/DisputeAuditSheet';
 export {
   TripPnLDetailSheet,
   type TripPnLDetailSheetProps,

@@ -1,12 +1,12 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   LayoutChangeEvent,
-  Platform,
   Pressable,
   StyleSheet,
   Text,
   View,
 } from "react-native";
+import { ChevronDown } from "lucide-react-native";
 
 import Theme from "@/constants/Theme";
 import Typography from "@/constants/Typography";
@@ -50,7 +50,7 @@ type Props<T extends string> = {
   disabled?: boolean;
 };
 
-const GRID_GAP = 8;
+const GRID_GAP = 6;
 
 /**
  * Equal-width icon tiles + minimize-after-select summary.
@@ -67,12 +67,23 @@ export function DriverExpenseChipSelect<T extends string>({
   collapseAfterSelect = true,
   disabled = false,
 }: Props<T>) {
-  const [expanded, setExpanded] = useState(true);
+  // When collapse is on, start minimized so a pre-selected value (and remounts
+  // after category nav) don't leave the full grid open.
+  const [expanded, setExpanded] = useState(!collapseAfterSelect);
   const [gridWidth, setGridWidth] = useState(0);
 
   useEffect(() => {
     if (!collapseAfterSelect) setExpanded(true);
   }, [collapseAfterSelect]);
+
+  const prevValueRef = useRef(value);
+  useEffect(() => {
+    if (!collapseAfterSelect) return;
+    if (prevValueRef.current !== value) {
+      prevValueRef.current = value;
+      setExpanded(false);
+    }
+  }, [value, collapseAfterSelect]);
 
   const selected = useMemo(
     () => options.find((option) => option.value === value) ?? options[0] ?? null,
@@ -92,10 +103,12 @@ export function DriverExpenseChipSelect<T extends string>({
   const handleSelect = useCallback(
     (next: T) => {
       if (disabled) return;
-      onChange(next);
+      // Collapse immediately so selection always minimizes in one tap,
+      // even when parent navigation remounts shortly after.
       if (collapseAfterSelect) setExpanded(false);
+      if (next !== value) onChange(next);
     },
-    [collapseAfterSelect, disabled, onChange],
+    [collapseAfterSelect, disabled, onChange, value],
   );
 
   const onGridLayout = useCallback((event: LayoutChangeEvent) => {
@@ -115,10 +128,7 @@ export function DriverExpenseChipSelect<T extends string>({
 
   return (
     <View style={styles.wrap}>
-      <View style={styles.labelRow}>
-        <Text style={styles.label}>{label}</Text>
-        <View style={styles.labelRule} />
-      </View>
+      <Text style={styles.label}>{label}</Text>
       {hint ? <Text style={styles.hint}>{hint}</Text> : null}
 
       {showCollapsed ? (
@@ -136,31 +146,13 @@ export function DriverExpenseChipSelect<T extends string>({
           disabled={disabled}
         >
           {SelectedIcon ? (
-            <View
-              style={[
-                styles.summaryIconBadge,
-                {
-                  backgroundColor:
-                    selectedVisual?.tintBg ?? "rgba(148,163,184,0.14)",
-                },
-              ]}
-            >
-              <SelectedIcon
-                size={16}
-                color={selectedVisual?.tint ?? Theme.textSecondary}
-                strokeWidth={2.1}
-              />
-            </View>
+            <SelectedIcon size={15} color={Theme.textMuted} strokeWidth={2} />
           ) : null}
-          <View style={styles.summaryCopy}>
-            <Text style={styles.summaryTitle} numberOfLines={1}>
-              {selected?.label ?? "—"}
-            </Text>
-          </View>
+          <Text style={styles.summaryTitle} numberOfLines={1}>
+            {selected?.label ?? "—"}
+          </Text>
           {!disabled ? (
-            <View style={styles.changePill}>
-              <Text style={styles.changePillText}>Change</Text>
-            </View>
+            <ChevronDown size={14} color={Theme.textMuted} strokeWidth={2.2} />
           ) : null}
         </Pressable>
       ) : (
@@ -169,12 +161,6 @@ export function DriverExpenseChipSelect<T extends string>({
             const active = option.value === value;
             const visual = resolveVisual(option);
             const Icon = visual?.Icon;
-            const iconColor = active
-              ? Theme.driverEmeraldDark
-              : visual?.tint ?? Theme.textSecondary;
-            const iconBg = active
-              ? Theme.driverEmeraldMuted
-              : visual?.tintBg ?? "rgba(148,163,184,0.12)";
 
             return (
               <Pressable
@@ -197,9 +183,11 @@ export function DriverExpenseChipSelect<T extends string>({
                 disabled={disabled}
               >
                 {Icon ? (
-                  <View style={[styles.iconBadge, { backgroundColor: iconBg }]}>
-                    <Icon size={15} color={iconColor} strokeWidth={2.1} />
-                  </View>
+                  <Icon
+                    size={14}
+                    color={active ? Theme.driverEmeraldDark : Theme.textMuted}
+                    strokeWidth={2.1}
+                  />
                 ) : null}
                 <Text
                   style={[styles.tileText, active && styles.tileTextActive]}
@@ -218,96 +206,45 @@ export function DriverExpenseChipSelect<T extends string>({
 
 const styles = StyleSheet.create({
   wrap: {
-    gap: 8,
-  },
-  labelRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
+    gap: 5,
   },
   label: {
     ...Typography.headerTitle,
-    fontSize: 11,
+    fontSize: 9,
     letterSpacing: 0.55,
     color: Theme.textMuted,
     textTransform: "uppercase",
     fontWeight: "700",
   },
-  labelRule: {
-    flex: 1,
-    height: StyleSheet.hairlineWidth,
-    backgroundColor: Theme.borderLight,
-  },
   hint: {
-    fontSize: 12,
+    fontSize: 11,
     fontWeight: "500",
     color: Theme.textSecondary,
-    lineHeight: 16,
+    lineHeight: 15,
     marginTop: -2,
   },
   summaryRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 12,
-    minHeight: 52,
-    paddingHorizontal: 14,
-    paddingVertical: 12,
-    borderRadius: 14,
-    borderWidth: 1,
-    borderColor: "rgba(148,163,184,0.28)",
-    backgroundColor: Theme.cardWhite,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#0f172a",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.04,
-        shadowRadius: 6,
-      },
-      android: { elevation: 1 },
-      default: {},
-    }),
-  },
-  summaryPressed: {
-    backgroundColor: "rgba(248,250,252,1)",
-  },
-  summaryIconBadge: {
-    width: 36,
-    height: 36,
-    borderRadius: 11,
-    alignItems: "center",
-    justifyContent: "center",
-    flexShrink: 0,
-  },
-  summaryCopy: {
-    flex: 1,
-    minWidth: 0,
-    justifyContent: "center",
-  },
-  summaryKicker: {
-    display: "none",
-  },
-  summaryTitle: {
-    fontSize: 15,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-    letterSpacing: 0.1,
-  },
-  changePill: {
-    flexShrink: 0,
-    minHeight: 34,
-    paddingHorizontal: 14,
-    borderRadius: 999,
-    alignItems: "center",
-    justifyContent: "center",
-    backgroundColor: "rgba(148,163,184,0.12)",
+    gap: 8,
+    minHeight: 40,
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderRadius: 10,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(148,163,184,0.28)",
+    backgroundColor: Theme.surfaceGray,
   },
-  changePillText: {
-    fontSize: 12,
+  summaryPressed: {
+    backgroundColor: "rgba(241,245,249,1)",
+  },
+  summaryTitle: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
     fontWeight: "700",
-    color: Theme.textSecondary,
-    letterSpacing: 0.15,
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.1,
   },
   grid: {
     flexDirection: "row",
@@ -315,26 +252,17 @@ const styles = StyleSheet.create({
     gap: GRID_GAP,
   },
   tile: {
-    minHeight: 68,
-    paddingHorizontal: 8,
-    paddingVertical: 12,
-    borderRadius: 14,
-    borderWidth: 1,
+    minHeight: 52,
+    paddingHorizontal: 4,
+    paddingTop: 7,
+    paddingBottom: 7,
+    borderRadius: 10,
+    borderWidth: StyleSheet.hairlineWidth,
     borderColor: "rgba(148,163,184,0.26)",
     backgroundColor: Theme.cardWhite,
     alignItems: "center",
     justifyContent: "center",
-    gap: 8,
-    ...Platform.select({
-      ios: {
-        shadowColor: "#0f172a",
-        shadowOffset: { width: 0, height: 1 },
-        shadowOpacity: 0.03,
-        shadowRadius: 4,
-      },
-      android: { elevation: 1 },
-      default: {},
-    }),
+    gap: 4,
   },
   /** Before first layout measure — keep roughly equal widths. */
   tileFallback: {
@@ -348,7 +276,7 @@ const styles = StyleSheet.create({
     maxWidth: "48.5%",
   },
   tileTall: {
-    minHeight: 72,
+    minHeight: 56,
   },
   tileActive: {
     backgroundColor: Theme.driverEmeraldMuted,
@@ -359,20 +287,13 @@ const styles = StyleSheet.create({
     opacity: 0.92,
     transform: [{ scale: 0.985 }],
   },
-  iconBadge: {
-    width: 32,
-    height: 32,
-    borderRadius: 10,
-    alignItems: "center",
-    justifyContent: "center",
-  },
   tileText: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
     textAlign: "center",
-    lineHeight: 15,
-    letterSpacing: 0.1,
+    lineHeight: 12,
+    letterSpacing: -0.1,
     width: "100%",
   },
   tileTextActive: {

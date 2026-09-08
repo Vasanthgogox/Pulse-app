@@ -6,6 +6,7 @@ import { ROUTES } from '@/lib/routes';
  */
 export const ROOT_TOP_NAV_PATHS = [
   ROUTES.PULSE_LOADS,
+  ROUTES.FIND_LOADS,
   '/pod-reconciliation',
   '/invoicing-execute',
   '/log-incoming-pods',
