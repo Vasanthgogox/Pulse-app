@@ -82,6 +82,16 @@ export function isPublicAuthRoute(pathname: string): boolean {
   return pathname.startsWith('/onboarding/');
 }
 
+/**
+ * Overlay tab bar (and useMemberCapabilities) belongs only after the
+ * Supabase JS session is attached — the same boundary as the data plane.
+ * Pathname is not enough: PublicAuthTree also covers signed-out `/` and
+ * expired sessions on non-public routes.
+ */
+export function shouldMountRootOverlayTabBar(sessionAttached: boolean): boolean {
+  return sessionAttached;
+}
+
 /** Authenticated org/GlobalSync/nav data plane — only after JS client session attach. */
 export function shouldMountAuthenticatedDataPlane(sessionAttached: boolean): boolean {
   return sessionAttached;

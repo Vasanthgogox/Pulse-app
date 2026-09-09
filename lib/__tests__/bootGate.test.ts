@@ -3,6 +3,7 @@ import {
   nextBootSettled,
   shouldShowBootOverlay,
   shouldMountAuthenticatedDataPlane,
+  shouldMountRootOverlayTabBar,
   shouldRenderPublicAuthTree,
   type BootGateInput,
 } from '@/lib/bootGate';
@@ -157,5 +158,15 @@ describe('authenticated data-plane mount', () => {
         status: 'authenticated',
       }),
     ).toBe(false);
+  });
+});
+
+describe('root overlay tab bar mount', () => {
+  it('does not mount until sessionAttached', () => {
+    expect(shouldMountRootOverlayTabBar(false)).toBe(false);
+  });
+
+  it('mounts on the authenticated data plane', () => {
+    expect(shouldMountRootOverlayTabBar(true)).toBe(true);
   });
 });

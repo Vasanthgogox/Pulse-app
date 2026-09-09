@@ -23,6 +23,7 @@ import {
 } from '@/lib/preloadRoutes';
 import { preloadChatRoute } from '@/lib/preloadChatWarmup';
 import { DEFAULT_DRIVER_ROUTE, ROUTES } from '@/lib/routes';
+import { shouldMountAuthenticatedDataPlane } from '@/lib/bootGate';
 import { hydrateSignupFlowFlags } from '@/lib/onboarding/businessSignupBranding.util';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
@@ -168,6 +169,14 @@ function DemoCustomTabBar(
 export const unstable_settings = { initialRouteName: 'trips' };
 
 export default function TabLayout() {
+  const { sessionAttached } = useAuth();
+  if (!shouldMountAuthenticatedDataPlane(sessionAttached)) {
+    return <Redirect href={ROUTES.SIGN_IN_DIRECT} />;
+  }
+  return <AuthenticatedTabLayout />;
+}
+
+function AuthenticatedTabLayout() {
   const { user, profile, loading } = useAuth();
   const org = useOptionalOrganization();
   const queryClient = useQueryClient();

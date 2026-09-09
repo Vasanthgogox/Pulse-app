@@ -9,6 +9,7 @@ import { markStartupPhase } from '@/lib/startupMetrics';
 import {
   isPublicAuthRoute,
   shouldMountAuthenticatedDataPlane,
+  shouldMountRootOverlayTabBar,
   shouldRenderPublicAuthTree,
 } from '@/lib/bootGate';
 import { AppAlertHost } from '@/components/AppAlertHost';
@@ -596,7 +597,9 @@ function RootLayoutNav() {
               <Stack.Screen name="+not-found" options={{ headerShown: false }} />
             </Stack>
             <NavigationLoadingOverlay />
-            <RootOverlayTabBar />
+            {shouldMountRootOverlayTabBar(Boolean(auth?.sessionAttached)) ? (
+              <RootOverlayTabBar />
+            ) : null}
           </View>
         </LazyChatProviders>
       </DemoTabBarScrollProvider>

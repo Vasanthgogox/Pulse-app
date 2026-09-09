@@ -726,10 +726,10 @@ export function WorkspaceHubMenu({
                   setSigningOut(true);
                   try {
                     setShowSignOutConfirm(false);
-                    await signOut();
                     router.replace(
                       ROUTES.SIGN_IN_DIRECT as Parameters<typeof router.replace>[0],
                     );
+                    await signOut();
                   } catch {
                     Alert.alert("Sign out failed", "Please try again.");
                   } finally {

@@ -21,13 +21,23 @@ import {
   type WorkspacePanelId,
 } from "@/features/organization/components/workspace/workspacePanelTypes";
 import { ROUTES } from "@/lib/routes";
+import { shouldMountAuthenticatedDataPlane } from "@/lib/bootGate";
 import { useMemberAccess } from "@/lib/useMemberAccess";
-import { useLocalSearchParams, useRouter } from "expo-router";
+import { useAuth } from "@/contexts/AuthContext";
+import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { StyleSheet, View } from "react-native";
 import type { MemberSurfaceId } from "@/lib/memberSurfaces";
 
 export default function WorkspaceScreen() {
+  const { sessionAttached } = useAuth();
+  if (!shouldMountAuthenticatedDataPlane(sessionAttached)) {
+    return <Redirect href={ROUTES.SIGN_IN_DIRECT} />;
+  }
+  return <AuthenticatedWorkspaceScreen />;
+}
+
+function AuthenticatedWorkspaceScreen() {
   const router = useRouter();
   const params = useLocalSearchParams<{
     panel?: string | string[];
