@@ -39,7 +39,7 @@ function useConnectionRequestsQuery(
     options?.enabled !== false &&
     !bootstrapReady &&
     bootstrapStatus !== 'loading' &&
-    authStatus !== 'restoring';
+    authStatus === 'authenticated';
 
   const queryKey =
     kind === 'received'

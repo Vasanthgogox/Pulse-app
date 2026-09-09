@@ -351,6 +351,8 @@ export const useGlobalSyncStore = create<GlobalSyncStore>()(
 
     refreshInboundProtocol: async (orgId) => {
       try {
+        const { data: { session } } = await supabase().auth.getSession();
+        if (!session) return;
         const { getConnectionRequestsReceived, getConnectionRequestsSent } =
           await loadConnectionRequestsService();
         const [receivedRes, sentRes] = await withTimeout(
