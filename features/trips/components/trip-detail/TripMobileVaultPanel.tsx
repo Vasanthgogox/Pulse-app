@@ -4,7 +4,12 @@
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
-import { canAddMoreTripDocs, canMutateTripVaultDoc, isDriverPodVaultDoc, type TripDocItem, VAULT_DOC_LIMIT_HINT } from "@/features/trips/components/trip-detail/tripDocTypes";
+import { canAddMoreTripDocs, canMutateTripVaultDoc, formatVaultDocDate, isDriverPodVaultDoc, isEwayBillVaultDoc, isLrVaultDoc, type TripDocItem, VAULT_DOC_LIMIT_HINT, vaultDocHasPreviewableFile } from "@/features/trips/components/trip-detail/tripDocTypes";
+import {
+  EwayBillLrStrip,
+  type EwayBillStripRow,
+  type EwayFieldValues,
+} from "@/features/trips/components/trip-detail/EwayBillVaultTab";
 import { getDocumentViewUrls } from "@/features/trips/services/tripDocuments.service";
 import { getVehicleDocumentViewUrls } from "@/features/vehicles/services/vehicleDocuments.service";
 import { VEHICLE_COMPLIANCE_TYPE_HINT } from "@/features/vehicles/utils/vehicleDocuments.util";
@@ -36,6 +41,10 @@ type Props = {
   vehicleId: string | null;
   onCardPress: (doc: TripDocItem) => void;
   onAddMore?: (doc: TripDocItem) => void;
+  ewayStripRows?: EwayBillStripRow[];
+  onViewEwayBill?: (rowId: string) => void;
+  canEditEwayBill?: boolean;
+  onSaveEwayBill?: (values: EwayFieldValues) => Promise<boolean>;
   tripIdLabel: string;
   createdAtLabel: string;
 };
@@ -188,21 +197,29 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
   vehicleId,
   onCardPress,
   onAddMore,
+  ewayStripRows = [],
+  onViewEwayBill,
+  canEditEwayBill,
+  onSaveEwayBill,
   tripIdLabel,
   createdAtLabel,
 }: Props) {
-  const verifiedCount = docs.filter((d) => d.status !== "Pending").length;
+  const cardDocs = useMemo(
+    () => docs.filter((doc) => !isEwayBillVaultDoc(doc)),
+    [docs],
+  );
+  const verifiedCount = cardDocs.filter((d) => d.status !== "Pending").length;
   const headline =
-    docs.length === 0
+    cardDocs.length === 0
       ? "No documents yet"
-      : verifiedCount === docs.length
+      : verifiedCount === cardDocs.length
         ? "All documents ready"
-        : `${verifiedCount} of ${docs.length} documents ready`;
+        : `${verifiedCount} of ${cardDocs.length} documents ready`;
 
   const thumbPaths = useMemo(() => {
     const vehicle: string[] = [];
     const trip: string[] = [];
-    for (const doc of docs) {
+    for (const doc of cardDocs) {
       if (doc.status === "Pending") continue;
       const path = doc.storagePath?.trim();
       if (!path) continue;
@@ -210,7 +227,7 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
       else trip.push(path);
     }
     return { vehicle, trip };
-  }, [docs]);
+  }, [cardDocs]);
 
   const [thumbUrls, setThumbUrls] = useState<Record<string, string | null>>({});
   const [thumbSigning, setThumbSigning] = useState(false);
@@ -254,7 +271,7 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
       <View style={[styles.block, styles.blockFirst]}>
         <Text style={styles.heroTitle}>{headline}</Text>
         <Text style={styles.heroSub}>
-          Vault · {verifiedCount}/{docs.length || 0} on file
+          Vault · {verifiedCount}/{cardDocs.length || 0} on file
         </Text>
         {canUploadTripDocs ? (
           <Text style={styles.limitsHint}>{VAULT_DOC_LIMIT_HINT}</Text>
@@ -262,7 +279,7 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
       </View>
 
       <View style={styles.listPad}>
-        {docs.length === 0 ? (
+        {cardDocs.length === 0 ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>No vault items</Text>
             <Text style={styles.emptyBody}>
@@ -270,10 +287,11 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
             </Text>
           </View>
         ) : (
-          docs.map((doc) => {
+          cardDocs.map((doc) => {
             const copy = statusCopy(doc.status);
             const isUploading = uploadingDocId === doc.id;
             const isPending = doc.status === "Pending";
+            const isVehicleDoc = doc.id === "vehicle-documents";
             const canUploadThis = canMutateTripVaultDoc({
               doc,
               canUploadTripDocs,
@@ -281,13 +299,16 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
             });
             const podUploadLocked =
               isDriverPodVaultDoc(doc) && canUploadTripDocs && !tripCompleted;
+            const previewDisabled =
+              isVehicleDoc && !vaultDocHasPreviewableFile(doc);
+            const actionLocked = previewDisabled || (isPending && podUploadLocked);
             const actionLabel = isPending
-              ? canUploadThis
-                ? "Upload"
-                : podUploadLocked
-                  ? "Unavailable"
-                  : doc.id === "vehicle-documents" && vehicleId
-                    ? "Open"
+              ? isVehicleDoc
+                ? "Preview"
+                : canUploadThis
+                  ? "Upload"
+                  : podUploadLocked
+                    ? "Unavailable"
                     : "Pending"
               : "View";
 
@@ -302,15 +323,15 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
                 <TouchableOpacity
                   onPress={() => onCardPress(doc)}
                   activeOpacity={0.88}
-                  disabled={isUploading || (isPending && podUploadLocked)}
+                  disabled={isUploading || actionLocked}
                   accessibilityRole="button"
-                  accessibilityState={{
-                    disabled: isPending && podUploadLocked,
-                  }}
+                  accessibilityState={{ disabled: actionLocked }}
                   accessibilityLabel={
-                    podUploadLocked && isPending
-                      ? `${doc.label}, available after trip is completed`
-                      : `${actionLabel} ${doc.label}`
+                    previewDisabled
+                      ? `${doc.label} preview unavailable — no document on file`
+                      : podUploadLocked && isPending
+                        ? `${doc.label}, available after trip is completed`
+                        : `${actionLabel} ${doc.label}`
                   }
                 >
                   <View style={styles.cardMain}>
@@ -345,17 +366,35 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
                       <Text style={styles.cardDetail} numberOfLines={2}>
                         {doc.id === "vehicle-documents"
                           ? isPending
-                            ? `Upload ${VEHICLE_COMPLIANCE_TYPE_HINT}`
+                            ? VEHICLE_COMPLIANCE_TYPE_HINT
                             : doc.files?.length
                               ? doc.files.map((file) => file.label).join(" · ")
                               : doc.type
-                          : podUploadLocked && isPending
-                            ? "Available after the trip is completed"
-                          : (doc.files?.length ?? 0) > 1
-                            ? `${doc.files?.length} files on file — tap to view`
-                            : copy.detail}
+                          : isLrVaultDoc(doc) && !isPending
+                            ? [
+                                doc.documentNumber?.trim()
+                                  ? `No. ${doc.documentNumber.trim()}`
+                                  : null,
+                                formatVaultDocDate(doc.documentDate),
+                              ]
+                                .filter(Boolean)
+                                .join(" · ") || "Uploaded"
+                            : podUploadLocked && isPending
+                              ? "Available after the trip is completed"
+                              : doc.documentNumber?.trim()
+                                ? `No. ${doc.documentNumber.trim()}`
+                                : (doc.files?.length ?? 0) > 1
+                                  ? `${doc.files?.length} files on file — tap to view`
+                                  : copy.detail}
                       </Text>
-                      <Text style={styles.cardAction} numberOfLines={1}>
+                      <Text
+                        style={[
+                          styles.cardAction,
+                          previewDisabled && styles.cardActionDisabled,
+                          isPending && podUploadLocked && styles.cardActionDisabled,
+                        ]}
+                        numberOfLines={1}
+                      >
                         {isUploading ? "Uploading…" : actionLabel}
                         {canUploadThis && isPending ? " · required" : ""}
                       </Text>
@@ -381,6 +420,14 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
                     <FontAwesome name="plus" size={12} color={LINK} />
                     <Text style={styles.addMoreText}>Add another</Text>
                   </TouchableOpacity>
+                ) : null}
+                {isLrVaultDoc(doc) ? (
+                  <EwayBillLrStrip
+                    rows={ewayStripRows}
+                    onView={onViewEwayBill ?? (() => undefined)}
+                    canEdit={canEditEwayBill}
+                    onSave={onSaveEwayBill}
+                  />
                 ) : null}
               </View>
             );
@@ -576,6 +623,9 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "500",
     color: LINK,
+  },
+  cardActionDisabled: {
+    color: MUTED,
   },
   chevronWrap: {
     width: 28,

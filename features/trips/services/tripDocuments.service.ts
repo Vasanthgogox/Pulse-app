@@ -10,6 +10,15 @@ import { supabase } from "@/lib/supabase";
 import { getPlatformEventBus } from "@/lib/platform/events/InProcessEventBus";
 import { recordTripWorkflowEvent } from "@/features/trips/services/tripWorkflow.service";
 import { createStorageSignedUrlCache } from "@/lib/storageSignedUrlCache";
+import { listOcrJobsForTripDocuments } from "@/features/ocr/services/ocrJob.service";
+import { parseLrFieldsFromOcrJob } from "@/features/trips/services/lrDocumentOcr.util";
+import {
+  EWAY_BILL_FIELDS_FILE_NAME,
+  ewayBillFieldsStoragePath,
+  isEwayBillMetaPath,
+  serializeEwayFieldValues,
+  type EwayFieldValues,
+} from "@/features/trips/services/ewayBillFields.util";
 
 const BUCKET = "trip-documents";
 const MAX_TRIP_DOC_BYTES = 10 * 1024 * 1024;
@@ -81,8 +90,10 @@ export interface TripDocumentRow {
   uploaded_by: string | null;
   document_type: TripDocumentType;
   ocr_job_id?: string | null;
-  /** Optional user-entered document number (e.g. printed LR number). Only populated for document_type='lr' today. */
+  /** Optional user-entered document number (printed LR or e-way bill number). */
   document_number?: string | null;
+  /** Printed LR date from OCR (client-enriched; not a dedicated column). */
+  document_date?: string | null;
 }
 
 export interface UploadTripDocumentResult {
@@ -98,6 +109,33 @@ export interface UploadTripChatImageResult {
 
 function formatMb(bytes: number): string {
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+async function attachLrOcrFields(rows: TripDocumentRow[]): Promise<TripDocumentRow[]> {
+  const lrIds = rows
+    .filter((row) => row.document_type === "lr" && row.id && !row.id.startsWith("storage-"))
+    .map((row) => row.id);
+  if (lrIds.length === 0) return rows;
+  try {
+    const jobs = await listOcrJobsForTripDocuments(lrIds);
+    const latestByDoc = new Map<string, (typeof jobs)[number]>();
+    for (const job of jobs) {
+      const docId = job.trip_document_id;
+      if (!docId || latestByDoc.has(docId)) continue;
+      latestByDoc.set(docId, job);
+    }
+    return rows.map((row) => {
+      if (row.document_type !== "lr") return row;
+      const fields = parseLrFieldsFromOcrJob(latestByDoc.get(row.id) ?? null);
+      return {
+        ...row,
+        document_number: row.document_number?.trim() || fields.lrNumber,
+        document_date: fields.lrDate ?? row.document_date ?? null,
+      };
+    });
+  } catch {
+    return rows;
+  }
 }
 
 const tripDocSignedUrls = createStorageSignedUrlCache({
@@ -181,7 +219,7 @@ export async function getDocumentsByTripId(
 ): Promise<{ documents: TripDocumentRow[]; error: Error | null }> {
   const { data, error } = await supabase()
     .from("trip_documents")
-    .select("id, trip_id, file_name, storage_path, mime_type, size_bytes, uploaded_at, uploaded_by, document_type")
+    .select("id, trip_id, file_name, storage_path, mime_type, size_bytes, uploaded_at, uploaded_by, document_type, document_number, ocr_job_id")
     .eq("trip_id", tripId)
     .order("uploaded_at", { ascending: false });
   let tableError: Error | null = null;
@@ -196,7 +234,9 @@ export async function getDocumentsByTripId(
         document_type: row.document_type ?? 'pod',
       };
     }) as TripDocumentRow[];
-    if (rows.length > 0) return { documents: rows, error: null };
+    if (rows.length > 0) {
+      return { documents: await attachLrOcrFields(rows), error: null };
+    }
   }
 
   // Fallback: list storage folder for this trip so dispatcher/supplier can still preview POD
@@ -381,7 +421,7 @@ export async function uploadTripDocument(
       document_type: documentType,
       document_number: trimmedDocumentNumber,
     })
-    .select("id, trip_id, file_name, storage_path, mime_type, size_bytes, uploaded_at, uploaded_by, document_type, document_number")
+    .select("id, trip_id, file_name, storage_path, mime_type, size_bytes, uploaded_at, uploaded_by, document_type, document_number, ocr_job_id")
     .single();
 
   if (insertError) {
@@ -516,4 +556,87 @@ export async function hasLrDocument(tripId: string): Promise<boolean> {
     .limit(1);
   if (error) return false;
   return (data ?? []).length > 0;
+}
+
+export async function updateTripDocumentNumber(
+  documentId: string,
+  documentNumber: string,
+): Promise<Error | null> {
+  const trimmed = documentNumber.trim();
+  if (!trimmed || documentId.startsWith("storage-")) return null;
+  const { error } = await supabase()
+    .from("trip_documents")
+    .update({ document_number: trimmed })
+    .eq("id", documentId);
+  return error ? new Error(error.message) : null;
+}
+
+/**
+ * Persist e-way bill fields typed in the LR strip (number, valid-till, doc no).
+ * Reuses an existing e-way file row when present; otherwise stores a metadata-only row.
+ */
+export async function upsertEwayBillFields(input: {
+  tripId: string;
+  uploadedBy: string;
+  values: EwayFieldValues;
+}): Promise<{ error: Error | null }> {
+  const serialized = serializeEwayFieldValues(input.values);
+  const { data, error: listError } = await supabase()
+    .from("trip_documents")
+    .select("id, storage_path, file_name")
+    .eq("trip_id", input.tripId)
+    .eq("document_type", "eway_bill");
+
+  if (listError) {
+    if (isTripDocumentsRestEndpointMissing(listError)) {
+      return {
+        error: new Error(
+          "E-way bill details cannot be saved until trip documents are available.",
+        ),
+      };
+    }
+    return { error: new Error(listError.message) };
+  }
+
+  const rows = (data ?? []) as {
+    id: string;
+    storage_path: string;
+    file_name: string;
+  }[];
+  const persisted = rows.filter((row) => !row.id.startsWith("storage-"));
+  const target =
+    persisted.find(
+      (row) => !isEwayBillMetaPath(row.storage_path, row.file_name),
+    ) ??
+    persisted.find((row) =>
+      isEwayBillMetaPath(row.storage_path, row.file_name),
+    );
+
+  if (target) {
+    return { error: await updateTripDocumentNumber(target.id, serialized) };
+  }
+
+  const path = ewayBillFieldsStoragePath(input.tripId);
+  const { error: insertError } = await supabase()
+    .from("trip_documents")
+    .insert({
+      trip_id: input.tripId,
+      file_name: EWAY_BILL_FIELDS_FILE_NAME,
+      storage_path: path,
+      mime_type: "application/json",
+      size_bytes: 0,
+      uploaded_by: input.uploadedBy,
+      document_type: "eway_bill",
+      document_number: serialized,
+    });
+
+  if (!insertError) return { error: null };
+  if (insertError.code === "23505") {
+    const { error: updateError } = await supabase()
+      .from("trip_documents")
+      .update({ document_number: serialized })
+      .eq("storage_path", path);
+    return { error: updateError ? new Error(updateError.message) : null };
+  }
+  return { error: new Error(insertError.message) };
 }

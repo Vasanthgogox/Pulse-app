@@ -37,10 +37,86 @@ export function displayStoryContent(content: string | null | undefined): string 
   return stripVehicleMarker(content ?? null);
 }
 
+/** Matches a date-only value (`YYYY-MM-DD`) with no time of day. */
+const DATE_ONLY_RE = /^\d{4}-\d{2}-\d{2}$/;
+
+/** Load Center / stories are India operations — clock times are always IST. */
+const STORY_TZ = 'Asia/Kolkata';
+
+function parseStoryInstant(raw: string): Date | null {
+  const t = raw.trim();
+  if (!t) return null;
+  if (DATE_ONLY_RE.test(t)) {
+    const [y, m, d] = t.split('-').map(Number);
+    if (!y || !m || !d) return null;
+    const local = new Date(y, m - 1, d);
+    if (Number.isNaN(local.getTime())) return null;
+    return local;
+  }
+  const dt = new Date(t);
+  if (Number.isNaN(dt.getTime())) return null;
+  return dt;
+}
+
+function formatStoryCalendarDate(d: Date, timeZone?: string): string {
+  return d.toLocaleDateString('en-IN', {
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+    ...(timeZone ? { timeZone } : {}),
+  });
+}
+
+function formatStoryClockIst(d: Date): string {
+  return d.toLocaleTimeString('en-IN', {
+    timeZone: STORY_TZ,
+    hour: 'numeric',
+    minute: '2-digit',
+    hour12: true,
+  });
+}
+
 export function formatStoryDate(d: string): string {
-  const dt = new Date(d);
-  if (Number.isNaN(dt.getTime())) return '';
-  return dt.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' });
+  const dt = parseStoryInstant(d);
+  if (!dt) return '';
+  return formatStoryCalendarDate(dt);
+}
+
+/**
+ * Date plus clock time, e.g. `07 Sept 2026 · 2:32 pm`.
+ * Date-only strings stay date-only so UTC midnight is not shown as 5:30 AM.
+ */
+export function formatStoryDateTime(d: string): string {
+  const raw = (d ?? '').trim();
+  if (!raw) return '';
+  if (DATE_ONLY_RE.test(raw)) return formatStoryDate(raw);
+  const dt = parseStoryInstant(raw);
+  if (!dt) return '';
+  const date = formatStoryCalendarDate(dt, STORY_TZ);
+  if (!date) return '';
+  return `${date} · ${formatStoryClockIst(dt)}`;
+}
+
+/**
+ * Pickup/load date with a real clock time when one exists.
+ * If `dateIso` is date-only, appends the clock from `timeIso` (`shared_at` /
+ * `created_at`) so cards never invent midnight UTC as 5:30 AM.
+ */
+export function formatStoryDateTimeWithFallback(
+  dateIso: string | null | undefined,
+  timeIso?: string | null,
+): string {
+  const primary = (dateIso ?? '').trim();
+  if (!primary) return '';
+  if (!DATE_ONLY_RE.test(primary)) return formatStoryDateTime(primary);
+
+  const dateLabel = formatStoryDate(primary);
+  const fallback = (timeIso ?? '').trim();
+  if (!fallback || DATE_ONLY_RE.test(fallback) || !dateLabel) return dateLabel;
+
+  const timeD = parseStoryInstant(fallback);
+  if (!timeD) return dateLabel;
+  return `${dateLabel} · ${formatStoryClockIst(timeD)}`;
 }
 
 /** True for Fleet Owner organic capacity posts (null org, VEHICLE_AVAILABILITY). */

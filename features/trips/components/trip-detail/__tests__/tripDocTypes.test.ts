@@ -1,8 +1,11 @@
 import {
   canAddMoreTripDocs,
   canMutateTripVaultDoc,
+  formatVaultDocDate,
   isDriverPodVaultDoc,
   isPdfTripDoc,
+  vaultDocDateToIso,
+  vaultDocHasPreviewableFile,
   vaultPickerRejectionMessage,
 } from "../tripDocTypes";
 
@@ -81,6 +84,8 @@ describe("canMutateTripVaultDoc", () => {
 describe("canAddMoreTripDocs", () => {
   it("allows extra files for trip-scoped vault slots", () => {
     expect(canAddMoreTripDocs({ category: "lr" })).toBe(true);
+    expect(canAddMoreTripDocs({ category: "eway" })).toBe(false);
+    expect(canAddMoreTripDocs({ id: "eway_bill" })).toBe(false);
     expect(canAddMoreTripDocs({ category: "trip" })).toBe(true);
     expect(canAddMoreTripDocs({ category: "driver" })).toBe(true);
   });
@@ -90,6 +95,32 @@ describe("canAddMoreTripDocs", () => {
     expect(canAddMoreTripDocs({ id: "vehicle-documents" })).toBe(true);
     expect(
       canAddMoreTripDocs({ docSource: "vehicle", category: "vehicle" }),
+    ).toBe(true);
+  });
+});
+
+describe("vaultDocHasPreviewableFile", () => {
+  it("disables preview when the vehicle slot has no files", () => {
+    expect(
+      vaultDocHasPreviewableFile({ status: "Pending" }),
+    ).toBe(false);
+  });
+
+  it("enables preview when a file is on file", () => {
+    expect(
+      vaultDocHasPreviewableFile({
+        status: "Pending",
+        storagePath: "vehicles/1/rc.pdf",
+      }),
+    ).toBe(true);
+    expect(
+      vaultDocHasPreviewableFile({
+        status: "Pending",
+        files: [{ id: "rc", label: "RC", type: "PDF", storagePath: "a.pdf" }],
+      }),
+    ).toBe(true);
+    expect(
+      vaultDocHasPreviewableFile({ status: "Uploaded" }),
     ).toBe(true);
   });
 });
@@ -118,5 +149,24 @@ describe("vaultPickerRejectionMessage", () => {
         { name: "pod.jpg", mimeType: "image/jpeg", size: 500_000 },
       ]),
     ).toBeNull();
+  });
+});
+
+describe("formatVaultDocDate", () => {
+  it("formats ISO dates", () => {
+    expect(formatVaultDocDate("2026-09-04T10:00:00.000Z")).toBe("04-Sep-26");
+  });
+
+  it("formats DD-MM-YYYY from OCR", () => {
+    expect(formatVaultDocDate("28-08-2026")).toBe("28-Aug-26");
+    expect(formatVaultDocDate("04-09-2026 18:00")).toBe("04-Sep-26");
+  });
+});
+
+describe("vaultDocDateToIso", () => {
+  it("converts display and typed dates to YYYY-MM-DD", () => {
+    expect(vaultDocDateToIso("04-Sep-26")).toBe("2026-09-04");
+    expect(vaultDocDateToIso("28-08-2026")).toBe("2026-08-28");
+    expect(vaultDocDateToIso("2026-09-03")).toBe("2026-09-03");
   });
 });

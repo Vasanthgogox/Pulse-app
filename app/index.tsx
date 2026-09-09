@@ -6,11 +6,13 @@ import { tGlobal } from '@/contexts/LanguageContext';
 import { useIsOnline } from '@/contexts/NetworkContext';
 import {
   claimIndexBootRedirect,
+  getBrowserLocation,
   hasIndexBootRedirected,
   isPastIndexBootPath,
   resetIndexBootRedirect,
+  resolveWebRefreshHref,
 } from '@/lib/indexBootRedirect.util';
-import { getLastTabRoute } from '@/lib/lastRoute';
+import { getLastRestorableRoute } from '@/lib/lastRoute';
 import { preloadTabForRoute } from '@/lib/preloadRoutes';
 import {
   hydrateSignupFlowFlags,
@@ -70,7 +72,29 @@ export default function Index() {
   useEffect(() => {
     if (!isFocused || loading || !brandingGateHydrated) return;
 
-    if (Platform.OS === 'web' && pathname !== '/' && pathname !== '') {
+    // Hard refresh of /trip/:id (etc.) often remounts Index at `/` while the
+    // browser URL is still the deep path. Honor that URL instead of last-tab home.
+    if (Platform.OS === 'web') {
+      const browser = getBrowserLocation();
+      const webHref = resolveWebRefreshHref(
+        pathname,
+        browser?.pathname ?? '',
+        browser?.search ?? '',
+      );
+      if (webHref) {
+        if (uid) claimIndexBootRedirect(uid);
+        logRouteDecision('redirect_web_refresh_url', { uid, pathname, webHref });
+        router.replace(webHref as Href);
+        return;
+      }
+    }
+
+    const effectivePath =
+      Platform.OS === 'web'
+        ? (getBrowserLocation()?.pathname || pathname)
+        : pathname;
+    if (isPastIndexBootPath(effectivePath)) {
+      if (uid) claimIndexBootRedirect(uid);
       return;
     }
 
@@ -115,11 +139,6 @@ export default function Index() {
       return;
     }
 
-    if (isPastIndexBootPath(pathname)) {
-      claimIndexBootRedirect(uid);
-      return;
-    }
-
     if (!profile) return;
 
     if (profile.role === 'driver') {
@@ -158,9 +177,9 @@ export default function Index() {
       } catch {
         // Fall through to normal tab redirect
       }
-      void getLastTabRoute().then((route) => {
+      void getLastRestorableRoute().then((route) => {
         preloadTabForRoute(route);
-        logRouteDecision('redirect_dispatcher_last_tab', { uid, pathname, route });
+        logRouteDecision('redirect_dispatcher_last_route', { uid, pathname, route });
         router.replace(route as '/');
       });
     })();

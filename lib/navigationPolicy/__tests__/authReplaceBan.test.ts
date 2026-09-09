@@ -35,7 +35,7 @@ describe('CI: ban auth router.replace in layout/boot gates', () => {
         // index boot destinations (driver home / last tab) are allowed
         if (
           rel === 'app/index.tsx' &&
-          (/DEFAULT_DRIVER_ROUTE|getLastTabRoute|navigateAfterSuiteAuth/.test(
+          (/DEFAULT_DRIVER_ROUTE|getLastTabRoute|getLastRestorableRoute|navigateAfterSuiteAuth/.test(
             line,
           ) ||
             /route as/.test(line))
