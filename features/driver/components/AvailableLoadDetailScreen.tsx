@@ -38,6 +38,10 @@ import {
   RazorpayCheckoutSheet,
   type RazorpayCheckoutResult,
 } from '@/features/marketplace/components/RazorpayCheckoutSheet';
+import {
+  PilotPaymentMethodSheet,
+  PilotTestCheckoutSheet,
+} from '@/features/marketplace/components/PilotPaymentMethodSheet';
 import { showAppAlert } from '@/lib/appAlert';
 import { useFleetOwnerOpenLoadsQuery } from '@/lib/queries/useFleetOwnerOpenLoadsQuery';
 import { useMyMarketAwardsQuery } from '@/lib/queries/useMyMarketAwardsQuery';
@@ -51,7 +55,6 @@ import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -739,111 +742,6 @@ function AwardedMarketJobCard({
     />
   );
 }
-
-/**
- * A10.2 — PILOT/TEST ONLY. Lets the bidder pick real Razorpay or one of the
- * two pilot test methods for the Marketplace fee. The methods are clearly
- * labeled; the real protection is the server-side
- * MARKETPLACE_TEST_PAYMENTS_ENABLED gate in the marketplace-test-payment
- * edge function, not this UI. Remove once the pilot's temporary payment
- * methods are retired.
- */
-function PilotPaymentMethodSheet({
-  visible,
-  busy,
-  onClose,
-  onRazorpay,
-  onTestProvider,
-}: {
-  visible: boolean;
-  busy: boolean;
-  onClose: () => void;
-  onRazorpay: () => void;
-  onTestProvider: (provider: TestMarketplaceFeeProvider) => void;
-}) {
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={pilotStyles.overlay}>
-        <View style={pilotStyles.sheet}>
-          <Text style={pilotStyles.title}>Pay Marketplace fee</Text>
-          <Pressable disabled={busy} onPress={onRazorpay} style={pilotStyles.option}>
-            <Text style={pilotStyles.optionText}>Pay Online</Text>
-          </Pressable>
-          <Pressable disabled={busy} onPress={() => onTestProvider('test_online')} style={pilotStyles.option}>
-            <Text style={pilotStyles.optionText}>Razorpay Test Preview</Text>
-          </Pressable>
-          <Pressable disabled={busy} onPress={() => onTestProvider('cash')} style={pilotStyles.option}>
-            <Text style={pilotStyles.optionText}>Cash — Pilot/Test only</Text>
-          </Pressable>
-          <Pressable disabled={busy} onPress={onClose} style={pilotStyles.cancel}>
-            <Text style={pilotStyles.cancelText}>Cancel</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-/**
- * A10.2 — PILOT/TEST ONLY fake checkout. For "cash", the bidder self-attests
- * payment (Confirm cash paid); for "test_online", the bidder simulates the
- * outcome a real gateway would return. Either way this only ever calls
- * simulateTestMarketplaceFeePayment(bidId, outcome) -- it never supplies an
- * amount, and the actual state transition still happens inside the
- * unmodified confirm_marketplace_fee_payment() RPC.
- */
-function PilotTestCheckoutSheet({
-  order,
-  busy,
-  onCancel,
-  onOutcome,
-}: {
-  order: { provider: TestMarketplaceFeeProvider; amount: number } | null;
-  busy: boolean;
-  onCancel: () => void;
-  onOutcome: (outcome: 'paid' | 'failed') => void;
-}) {
-  if (!order) return null;
-  const isCash = order.provider === 'cash';
-  return (
-    <Modal visible transparent animationType="fade" onRequestClose={onCancel}>
-      <View style={pilotStyles.overlay}>
-        <View style={pilotStyles.sheet}>
-          <Text style={pilotStyles.title}>{isCash ? 'Cash — Pilot/Test only' : 'Pay Online — Test'}</Text>
-          <Text style={pilotStyles.amount}>{formatINR(order.amount)}</Text>
-          {isCash ? (
-            <Pressable disabled={busy} onPress={() => onOutcome('paid')} style={pilotStyles.option}>
-              <Text style={pilotStyles.optionText}>Confirm cash paid</Text>
-            </Pressable>
-          ) : (
-            <>
-              <Pressable disabled={busy} onPress={() => onOutcome('paid')} style={pilotStyles.option}>
-                <Text style={pilotStyles.optionText}>Simulate success</Text>
-              </Pressable>
-              <Pressable disabled={busy} onPress={() => onOutcome('failed')} style={pilotStyles.option}>
-                <Text style={pilotStyles.optionText}>Simulate failure</Text>
-              </Pressable>
-            </>
-          )}
-          <Pressable disabled={busy} onPress={onCancel} style={pilotStyles.cancel}>
-            <Text style={pilotStyles.cancelText}>Cancel</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-const pilotStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, gap: 10 },
-  title: { fontSize: 15, fontWeight: '700', color: '#0f172a', marginBottom: 4 },
-  amount: { fontSize: 22, fontWeight: '800', color: '#0f172a', marginBottom: 8 },
-  option: { paddingVertical: 14, borderRadius: 10, backgroundColor: '#f1f5f9', alignItems: 'center' },
-  optionText: { fontSize: 14, fontWeight: '600', color: '#0f172a' },
-  cancel: { paddingVertical: 12, alignItems: 'center', marginTop: 4 },
-  cancelText: { fontSize: 13, fontWeight: '600', color: '#64748b' },
-});
 
 const styles = StyleSheet.create({
   root: { flex: 1 },

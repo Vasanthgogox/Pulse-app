@@ -22,11 +22,21 @@ import {
   type MyOrgMarketBidStatus,
 } from "@/features/network/services/findLoadsForOrg.service";
 import { formatStoryDate } from "@/features/network/utils/storyDisplay";
-import { createMarketplaceFeeOrder } from "@/features/network/services/marketBids.service";
+import {
+  createMarketplaceFeeOrder,
+  createTestMarketplaceFeeOrder,
+  simulateTestMarketplaceFeePayment,
+  type TestMarketplaceFeeProvider,
+} from "@/features/network/services/marketBids.service";
 import {
   RazorpayCheckoutSheet,
   type RazorpayCheckoutResult,
 } from "@/features/marketplace/components/RazorpayCheckoutSheet";
+import {
+  PilotPaymentMethodSheet,
+  PilotTestCheckoutSheet,
+} from "@/features/marketplace/components/PilotPaymentMethodSheet";
+import { RazorpayTestPreviewSheet } from "@/features/driver/components/RazorpayTestPreviewSheet";
 import { getTripByIndentId } from "@/features/trips/services/trips.service";
 import { showAppAlert } from "@/lib/appAlert";
 import { ROUTES } from "@/lib/routes";
@@ -220,6 +230,19 @@ function BidCard({
     keyId: string;
   } | null>(null);
 
+  // A11.4 — organization side of the same pilot payment-method picker the
+  // DCO path already uses. Reuses the exact same backend mechanism
+  // (marketplace-test-payment edge function -> confirm_marketplace_fee_payment());
+  // no new payment state, no DCO-specific behavior is introduced here -- a
+  // successful payment only unblocks the organization's own existing
+  // award -> allocation/trip path via onPaymentUpdated, same as before.
+  const [methodSheetOpen, setMethodSheetOpen] = useState(false);
+  const [testOrder, setTestOrder] = useState<{ provider: TestMarketplaceFeeProvider; amount: number } | null>(
+    null,
+  );
+  const [isStartingTestPayment, setIsStartingTestPayment] = useState(false);
+  const [isSimulating, setIsSimulating] = useState(false);
+
   const canPay = isAccepted && (bid.fee_payment_status === "required" || bid.fee_payment_status === "failed");
   const shipper = titleCaseWord(
     (bid.owner_organization_name ?? "").trim() || "Unknown shipper",
@@ -252,6 +275,50 @@ function BidCard({
   const handleCheckoutClose = (_result: RazorpayCheckoutResult) => {
     setCheckoutOrder(null);
     onPaymentUpdated?.();
+  };
+
+  const handleStartTestPayment = async (provider: TestMarketplaceFeeProvider) => {
+    if (isStartingTestPayment) return;
+    setIsStartingTestPayment(true);
+    try {
+      const { error, order } = await createTestMarketplaceFeeOrder(bid.id, provider);
+      if (error || !order) {
+        showAppAlert("Could not start payment", error?.message ?? "Please try again.");
+        return;
+      }
+      setMethodSheetOpen(false);
+      setTestOrder({ provider, amount: order.amount });
+    } finally {
+      setIsStartingTestPayment(false);
+    }
+  };
+
+  // Used by the plain Cash confirm sheet -- clears testOrder itself once done.
+  const handleSimulateOutcome = async (outcome: "paid" | "failed") => {
+    if (isSimulating) return;
+    setIsSimulating(true);
+    try {
+      const { error } = await simulateTestMarketplaceFeePayment(bid.id, outcome);
+      if (error) {
+        showAppAlert("Simulation failed", error.message);
+        return;
+      }
+    } finally {
+      setIsSimulating(false);
+      setTestOrder(null);
+      onPaymentUpdated?.();
+    }
+  };
+
+  // Used by RazorpayTestPreviewSheet -- does NOT clear testOrder itself, so
+  // the preview sheet can show its own success/failure screen and close
+  // only when the user dismisses it.
+  const handlePreviewOutcome = async (outcome: "paid" | "failed"): Promise<{ error: Error | null }> => {
+    const { error } = await simulateTestMarketplaceFeePayment(bid.id, outcome);
+    if (!error) {
+      onPaymentUpdated?.();
+    }
+    return { error };
   };
 
   // Reuses the existing Indent allocation flow end to end (same as Load Center's
@@ -347,7 +414,7 @@ function BidCard({
         ) : null}
         {isAccepted && !feeGateSatisfied && canPay ? (
           <Pressable
-            onPress={handlePay}
+            onPress={() => setMethodSheetOpen(true)}
             disabled={isStartingPayment}
             style={({ pressed }) => [styles.payButton, pressed && styles.assignRowPressed]}
           >
@@ -387,6 +454,27 @@ function BidCard({
           onClose={handleCheckoutClose}
         />
       ) : null}
+      <PilotPaymentMethodSheet
+        visible={methodSheetOpen}
+        busy={isStartingPayment || isStartingTestPayment}
+        onClose={() => setMethodSheetOpen(false)}
+        onRazorpay={() => {
+          setMethodSheetOpen(false);
+          void handlePay();
+        }}
+        onTestProvider={(provider) => void handleStartTestPayment(provider)}
+      />
+      <RazorpayTestPreviewSheet
+        order={testOrder?.provider === "test_online" ? { amount: testOrder.amount } : null}
+        onOutcome={handlePreviewOutcome}
+        onDismiss={() => setTestOrder(null)}
+      />
+      <PilotTestCheckoutSheet
+        order={testOrder?.provider === "cash" ? testOrder : null}
+        busy={isSimulating}
+        onCancel={() => setTestOrder(null)}
+        onOutcome={(outcome) => void handleSimulateOutcome(outcome)}
+      />
 
       <Text style={styles.submitted}>Submitted {formatSubmittedAt(bid.created_at)}</Text>
     </View>
