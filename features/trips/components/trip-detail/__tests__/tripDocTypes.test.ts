@@ -52,14 +52,14 @@ describe("isPdfTripDoc", () => {
 });
 
 describe("canMutateTripVaultDoc", () => {
-  it("blocks Driver POD until the trip is completed", () => {
+  it("allows Driver POD before and after trip completion when upload is authorized", () => {
     expect(
       canMutateTripVaultDoc({
         doc: { id: "pod", category: "driver" },
         canUploadTripDocs: true,
         tripCompleted: false,
       }),
-    ).toBe(false);
+    ).toBe(true);
     expect(
       canMutateTripVaultDoc({
         doc: { id: "pod", category: "driver" },
@@ -67,6 +67,16 @@ describe("canMutateTripVaultDoc", () => {
         tripCompleted: true,
       }),
     ).toBe(true);
+  });
+
+  it("still denies Driver POD when the caller cannot upload trip docs", () => {
+    expect(
+      canMutateTripVaultDoc({
+        doc: { id: "pod", category: "driver" },
+        canUploadTripDocs: false,
+        tripCompleted: false,
+      }),
+    ).toBe(false);
   });
 
   it("does not gate LR or manifest on trip completion", () => {

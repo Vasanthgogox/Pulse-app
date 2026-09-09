@@ -135,14 +135,17 @@ export function isDriverPodVaultDoc(
   return id === "pod" || id.startsWith("pod-") || doc.category === "driver";
 }
 
-/** Driver POD uploads are allowed only after the trip is completed. */
+/**
+ * Vault mutate gate. Authorization only — Driver POD may be added or
+ * supplemented before or after trip completion (R2). `tripCompleted` is
+ * accepted so existing call sites keep compiling; it is not a lock.
+ */
 export function canMutateTripVaultDoc(options: {
   doc: Pick<TripDocItem, "id" | "category"> | null | undefined;
   canUploadTripDocs: boolean;
   tripCompleted: boolean;
 }): boolean {
   if (!options.canUploadTripDocs || !options.doc) return false;
-  if (isDriverPodVaultDoc(options.doc)) return options.tripCompleted;
   return true;
 }
 

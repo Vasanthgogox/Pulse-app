@@ -225,8 +225,10 @@ function getDriverGuidanceConfig(step: DriverGuidanceStep, trip: tripsService.Tr
   if (step === 'reached') {
     return {
       title: 'Upload POD',
-      subtitle: 'At drop-off. Upload POD and complete the trip.',
-      toastMessage: 'You reached drop-off. Upload POD to complete the trip.',
+      subtitle:
+        'At drop-off. Upload POD before completing (preferred), or skip for now.',
+      toastMessage:
+        'You reached drop-off. Upload POD before completing the trip (preferred), or skip for now.',
       target: 'drop',
       icon: 'check-circle',
     };

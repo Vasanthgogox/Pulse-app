@@ -4,7 +4,7 @@
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
-import { canAddMoreTripDocs, canMutateTripVaultDoc, formatLrVaultDateLabel, formatLrVaultNumberLabel, isDriverPodVaultDoc, isEwayBillVaultDoc, isLrVaultDoc, type TripDocItem, VAULT_DOC_LIMIT_HINT, vaultDocHasPreviewableFile } from "@/features/trips/components/trip-detail/tripDocTypes";
+import { canAddMoreTripDocs, canMutateTripVaultDoc, formatLrVaultDateLabel, formatLrVaultNumberLabel, isEwayBillVaultDoc, isLrVaultDoc, type TripDocItem, VAULT_DOC_LIMIT_HINT, vaultDocHasPreviewableFile } from "@/features/trips/components/trip-detail/tripDocTypes";
 import {
   EwayBillLrStrip,
   type EwayBillStripRow,
@@ -297,19 +297,15 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
               canUploadTripDocs,
               tripCompleted,
             });
-            const podUploadLocked =
-              isDriverPodVaultDoc(doc) && canUploadTripDocs && !tripCompleted;
             const previewDisabled =
               isVehicleDoc && !vaultDocHasPreviewableFile(doc);
-            const actionLocked = previewDisabled || (isPending && podUploadLocked);
+            const actionLocked = previewDisabled;
             const actionLabel = isPending
               ? isVehicleDoc
                 ? "Preview"
                 : canUploadThis
                   ? "Upload"
-                  : podUploadLocked
-                    ? "Unavailable"
-                    : "Pending"
+                  : "Pending"
               : "View";
 
             const showAddMore =
@@ -335,9 +331,7 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
                   accessibilityLabel={
                     previewDisabled
                       ? `${doc.label} preview unavailable — no document on file`
-                      : podUploadLocked && isPending
-                        ? `${doc.label}, available after trip is completed`
-                        : `${actionLabel} ${doc.label}`
+                      : `${actionLabel} ${doc.label}`
                   }
                 >
                   <View style={styles.cardMain}>
@@ -390,9 +384,7 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
                               : doc.files?.length
                                 ? doc.files.map((file) => file.label).join(" · ")
                                 : doc.type
-                            : podUploadLocked && isPending
-                              ? "Available after the trip is completed"
-                              : doc.documentNumber?.trim()
+                            : doc.documentNumber?.trim()
                                 ? `No. ${doc.documentNumber.trim()}`
                                 : (doc.files?.length ?? 0) > 1
                                   ? `${doc.files?.length} files on file — tap to view`
@@ -403,7 +395,6 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
                         style={[
                           styles.cardAction,
                           previewDisabled && styles.cardActionDisabled,
-                          isPending && podUploadLocked && styles.cardActionDisabled,
                         ]}
                         numberOfLines={1}
                       >

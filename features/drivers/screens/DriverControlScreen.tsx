@@ -1473,8 +1473,8 @@ export default function DriverControlScreen() {
                   </Text>
                 </TouchableOpacity>
                 <Text style={[styles.podHint, { color: colors.textMuted }]}>
-                  Upload proof of delivery. You can complete the trip after at
-                  least one file is uploaded.
+                  Preferred: upload proof of delivery now. You can skip for now
+                  and complete without it.
                 </Text>
                 <TouchableOpacity
                   onPress={() => setPodSkipped(true)}
@@ -1487,7 +1487,7 @@ export default function DriverControlScreen() {
                   <Text
                     style={[styles.podSkipPillText, { color: colors.emerald }]}
                   >
-                    Skip
+                    Skip for now
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -1600,7 +1600,7 @@ export default function DriverControlScreen() {
                 </View>
               ) : (
                 <Text style={[styles.podRequired, { color: colors.textMuted }]}>
-                  Upload at least one POD to complete the trip.
+                  Upload POD (preferred), or skip for now to complete.
                 </Text>
               )}
             </View>

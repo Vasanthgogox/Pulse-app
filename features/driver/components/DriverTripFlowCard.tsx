@@ -1850,7 +1850,7 @@ export function DriverTripFlowCard({
                 <Text style={styles.primaryBtnText}>
                   {podDocuments.length >= 1 || podSkipped
                     ? 'Continue to complete delivery'
-                    : 'Upload POD & complete'}
+                    : 'Upload POD (preferred) & complete'}
                 </Text>
               </LinearGradient>
             </TouchableOpacity>

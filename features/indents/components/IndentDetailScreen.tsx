@@ -51,6 +51,7 @@ import {
     supplierNameByLinkedOrgId,
 } from "@/features/network/utils/awardedVendorName.util";
 import { shareIndentOnWhatsApp } from "@/features/indents/utils/indentShare.util";
+import { resolveIndentClientEntityDisplayName } from "@/features/indents/utils/indentPartyDisplay.util";
 import { ShareLoadSheet } from "@/features/network/components/ShareLoadSheet";
 import type { LoadCenterIntegratedParty } from "@/features/network/utils/loadCenterIntegratedParties.util";
 import { selectIntegratedSuppliersForLoadCenter } from "@/features/network/utils/loadCenterIntegratedParties.util";

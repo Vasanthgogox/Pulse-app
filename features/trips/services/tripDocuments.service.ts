@@ -540,7 +540,7 @@ export async function deleteTripDocument(doc: TripDocumentRow): Promise<{ error:
 
 /**
  * Check if a trip has at least one POD document uploaded.
- * Used as a soft gate before marking a trip as Completed.
+ * Informational only — trip completion does not require a POD (R2).
  */
 export async function hasPodDocument(tripId: string): Promise<boolean> {
   const { data, error } = await supabase()

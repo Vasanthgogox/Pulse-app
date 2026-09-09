@@ -176,9 +176,6 @@ export function TripStatusTimeline({
   if (!tsMap.intransit && trip.started_at) {
     tsMap.intransit = { stageKey: "intransit", timestamp: trip.started_at };
   }
-  if (!tsMap.pod_received && trip.completed_at) {
-    tsMap.pod_received = { stageKey: "pod_received", timestamp: trip.completed_at };
-  }
 
   const lastUpdatedStr = lastUpdatedAt
     ? formatLastUpdated(lastUpdatedAt)
