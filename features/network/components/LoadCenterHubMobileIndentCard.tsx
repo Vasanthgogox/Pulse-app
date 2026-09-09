@@ -304,9 +304,6 @@ export function LoadCenterHubMobileIndentCard({
     ? indent.created_at ?? pickupIso ?? indent.pickup_date
     : pickupIso ?? indent.pickup_date ?? indent.created_at;
   const metaDateLabel = metaDateIso ? formatStoryDate(metaDateIso) : "";
-  const metaLine = metaDateLabel
-    ? `${channelLabel} · ${metaDateLabel}`
-    : channelLabel;
   const loadDateIso = pickupIso ?? indent.pickup_date;
   const loadDateLabel = loadDateIso ? formatStoryDate(loadDateIso) : "";
 
@@ -324,6 +321,14 @@ export function LoadCenterHubMobileIndentCard({
   ].filter(Boolean) as string[];
 
   const commerce = ticketCommerce;
+  const awardedVendorName = commerce?.awardedByName?.trim() || "";
+  const awardedChannelLabel =
+    !isGetLoadCard && awardedVendorName
+      ? `Awarded to ${awardedVendorName}`
+      : channelLabel;
+  const metaLine = metaDateLabel
+    ? `${awardedChannelLabel} · ${metaDateLabel}`
+    : awardedChannelLabel;
   const heroAmount =
     commerce?.amountInr != null && commerce.amountInr > 0
       ? formatINR(commerce.amountInr)
@@ -592,6 +597,11 @@ export function LoadCenterHubMobileIndentCard({
                 ) : dense || fillGrid ? (
                   <Text style={styles.priceRefSpacer} accessible={false}>
                     {"\u00a0"}
+                  </Text>
+                ) : null}
+                {awardedVendorName && !isGetLoadCard ? (
+                  <Text style={styles.priceRef} numberOfLines={1}>
+                    {`Vendor · ${awardedVendorName}`}
                   </Text>
                 ) : null}
               </>

@@ -16,6 +16,7 @@ export function usePushTokenRegistration(enabled: boolean = true) {
 
   useEffect(() => {
     if (!enabled || !user?.uid) return;
+    if (Platform.OS === "web") return; // Push tokens not supported on web
     if (Platform.OS === "android" && Constants.executionEnvironment === "storeClient") {
       return;
     }

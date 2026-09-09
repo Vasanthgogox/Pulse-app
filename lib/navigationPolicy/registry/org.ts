@@ -127,15 +127,6 @@ export const ORG_POLICIES: readonly PolicyRecord[] = [
     softDeny: true,
   },
   {
-    id: 'org.from-clients',
-    pattern: '/from-clients',
-    experience: 'org',
-    priority: 100,
-    grants: { anyOf: ['dispatch', 'dispatch_for_own_fleet'] },
-    onDeny: { type: 'sign_in' },
-    softDeny: true,
-  },
-  {
     id: 'org.add-trip',
     pattern: '/add-trip',
     experience: 'org',

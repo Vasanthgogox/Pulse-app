@@ -48,6 +48,11 @@ export interface CreateIndentInput {
   /** Optional: status is managed by DB default / backend logic. */
   status?: string | null;
   client_id?: string | null;
+  lane_id?: string | null;
+  sale_rate_basis?: "per_mt" | "per_trip" | null;
+  /** Unit of supplier_target — independent of the client sale basis. */
+  supplier_rate_basis?: "per_mt" | "per_trip" | null;
+  sale_unit_rate?: number | null;
   /** Required: vehicle type (e.g. Truck). */
   vehicle_type: string;
   /** Required: load type (e.g. FMCG). */
@@ -96,6 +101,11 @@ export interface IndentRow {
   supplier_target: number;
   status: string;
   client_id?: string | null;
+  lane_id?: string | null;
+  sale_rate_basis?: "per_mt" | "per_trip" | null;
+  /** Unit of supplier_target — independent of the client sale basis. */
+  supplier_rate_basis?: "per_mt" | "per_trip" | null;
+  sale_unit_rate?: number | null;
   vehicle_type: string | null;
   load_type: string | null;
   pickup_date: string | null;
@@ -683,15 +693,29 @@ export function getIndentDisplayNumber(row: IndentRow): string {
  */
 export async function getBroadcastIndentTarget(
   indentId: string | null | undefined,
-): Promise<{ supplier_target: number | null } | null> {
+): Promise<{
+  supplier_target: number | null;
+  supplier_rate_basis: "per_mt" | "per_trip" | null;
+  weight: number | null;
+} | null> {
   const id = (indentId ?? "").trim();
   if (!id) return null;
   const { data, error } = await supabase().rpc("indent_target_for_broadcast", {
     indent_id: id,
   });
   if (error || !Array.isArray(data) || data.length === 0) return null;
-  const row = data[0] as { supplier_target: number | null };
-  return { supplier_target: row.supplier_target ?? null };
+  const row = data[0] as {
+    supplier_target: number | null;
+    supplier_rate_basis?: "per_mt" | "per_trip" | null;
+    weight?: number | null;
+  };
+  return {
+    supplier_target: row.supplier_target ?? null,
+    // Older deploys of indent_target_for_broadcast return neither column;
+    // null degrades to per_trip, which is the pre-fix behaviour.
+    supplier_rate_basis: row.supplier_rate_basis ?? null,
+    weight: row.weight ?? null,
+  };
 }
 
 /** Supplier-facing target rate (not load-giver client sales price). */
@@ -701,11 +725,18 @@ export function resolveSupplierTargetDisplayRate(
   supplierTarget: number | null | undefined,
   clientPrice?: number | null | undefined,
   fallback?: number | null | undefined,
+  options?: {
+    saleRateBasis?: "per_mt" | "per_trip" | string | null;
+    /** indents.weight, in KG. Required to expand a per-MT target. */
+    weightKg?: number | null;
+  },
 ): number | null {
   // Supplier-facing rate only — never client_price (load owner's client sales price).
   void clientPrice;
   return resolveCommercialPricing({
     supplierTarget,
+    saleRateBasis: options?.saleRateBasis,
+    weightKg: options?.weightKg,
     rateOffer: fallback,
     bidCount: 0,
   }).displayPrice;
@@ -745,9 +776,15 @@ export async function createIndent(
     ]);
     if (dropErr)
       return { error: new Error(`Drop location: ${dropErr}`), indent: null };
-    const priceErr = positiveAmount()(data.client_price);
-    if (priceErr)
-      return { error: new Error(`Client price: ${priceErr}`), indent: null };
+    const perMt =
+      data.sale_rate_basis === "per_mt" &&
+      data.sale_unit_rate != null &&
+      data.sale_unit_rate > 0;
+    if (!perMt) {
+      const priceErr = positiveAmount()(data.client_price);
+      if (priceErr)
+        return { error: new Error(`Client price: ${priceErr}`), indent: null };
+    }
     const targetErr = nonNegativeAmount()(data.supplier_target);
     if (targetErr)
       return {
@@ -766,15 +803,32 @@ export async function createIndent(
     ]);
     if (loadTypeErr)
       return { error: new Error(`Load type: ${loadTypeErr}`), indent: null };
+    const perMtWeightOptional =
+      data.sale_rate_basis === "per_mt" &&
+      data.sale_unit_rate != null &&
+      data.sale_unit_rate > 0;
     if (
-      data.weight == null ||
-      typeof data.weight !== "number" ||
-      data.weight <= 0 ||
-      data.weight > 999999
+      !perMtWeightOptional &&
+      (data.weight == null ||
+        typeof data.weight !== "number" ||
+        data.weight <= 0 ||
+        data.weight > 999999)
     ) {
       return {
         error: new Error(
           "Weight is required and must be between 0.01 and 1,000 tons.",
+        ),
+        indent: null,
+      };
+    }
+    if (
+      perMtWeightOptional &&
+      data.weight != null &&
+      (typeof data.weight !== "number" || data.weight < 0 || data.weight > 999999)
+    ) {
+      return {
+        error: new Error(
+          "Weight must be between 0 and 1,000 tons.",
         ),
         indent: null,
       };
@@ -804,6 +858,21 @@ export async function createIndent(
     pickup_area: data.pickup_area?.trim() ?? "",
     drop_location: data.drop_location?.trim() ?? "",
     client_name: client_name?.trim() ?? "",
+    client_id: data.client_id ?? null,
+    lane_id: data.lane_id ?? null,
+    sale_rate_basis:
+      data.sale_rate_basis === "per_mt" || data.sale_rate_basis === "per_trip"
+        ? data.sale_rate_basis
+        : null,
+    supplier_rate_basis:
+      data.supplier_rate_basis === "per_mt" ||
+      data.supplier_rate_basis === "per_trip"
+        ? data.supplier_rate_basis
+        : null,
+    sale_unit_rate:
+      data.sale_unit_rate != null && Number(data.sale_unit_rate) > 0
+        ? data.sale_unit_rate
+        : null,
     client_price: Number.isFinite(data.client_price) ? data.client_price : 0,
     supplier_target: Number.isFinite(data.supplier_target)
       ? data.supplier_target
@@ -848,13 +917,14 @@ export async function createIndent(
   }
   const indent = row as IndentRow;
   if (action === "share") {
-    const { error: storyErr } = await ensureIndentStory(orgId, indent);
-    if (storyErr && __DEV__) {
-      console.warn(
-        "[indents] createIndent: default 24h story failed:",
-        storyErr.message,
-      );
-    }
+    void ensureIndentStory(orgId, indent).then(({ error: storyErr }) => {
+      if (storyErr && __DEV__) {
+        console.warn(
+          "[indents] createIndent: default 24h story failed:",
+          storyErr.message,
+        );
+      }
+    });
   }
   return { error: null, indent };
 }
@@ -901,6 +971,7 @@ export async function updateIndent(
       | "circulation_target"
       | "weight"
       | "status"
+      | "supplier_rate_basis"
     >
   >,
 ): Promise<{ error: Error | null; indent: IndentRow | null }> {
@@ -915,6 +986,8 @@ export async function updateIndent(
     payload.client_price = updates.client_price;
   if (updates.supplier_target !== undefined)
     payload.supplier_target = updates.supplier_target;
+  if (updates.supplier_rate_basis !== undefined)
+    payload.supplier_rate_basis = updates.supplier_rate_basis;
   if (updates.vehicle_type !== undefined)
     payload.vehicle_type = updates.vehicle_type;
   if (updates.load_type !== undefined) payload.load_type = updates.load_type;
@@ -971,8 +1044,13 @@ type DraftEditableFields = Partial<
     | "pickup_area"
     | "drop_location"
     | "client_name"
+    | "client_id"
     | "client_price"
+    | "lane_id"
+    | "sale_rate_basis"
+    | "sale_unit_rate"
     | "supplier_target"
+    | "supplier_rate_basis"
     | "vehicle_type"
     | "load_type"
     | "pickup_date"
@@ -1003,8 +1081,14 @@ export async function updateIndentDraft(
     payload.drop_location = updates.drop_location;
   if (updates.client_name !== undefined)
     payload.client_name = updates.client_name;
+  if (updates.client_id !== undefined) payload.client_id = updates.client_id;
   if (updates.client_price !== undefined)
     payload.client_price = updates.client_price;
+  if (updates.lane_id !== undefined) payload.lane_id = updates.lane_id;
+  if (updates.sale_rate_basis !== undefined)
+    payload.sale_rate_basis = updates.sale_rate_basis;
+  if (updates.sale_unit_rate !== undefined)
+    payload.sale_unit_rate = updates.sale_unit_rate;
   if (updates.supplier_target !== undefined)
     payload.supplier_target = updates.supplier_target;
   if (updates.vehicle_type !== undefined)
@@ -1057,16 +1141,16 @@ export async function shareDraftIndent(
       indent: null,
     };
   const indent = data as IndentRow;
-  const { error: storyErr } = await ensureIndentStory(
-    indent.organization_id,
-    indent,
+  void ensureIndentStory(indent.organization_id, indent).then(
+    ({ error: storyErr }) => {
+      if (storyErr && __DEV__) {
+        console.warn(
+          "[indents] shareDraftIndent: default 24h story failed:",
+          storyErr.message,
+        );
+      }
+    },
   );
-  if (storyErr && __DEV__) {
-    console.warn(
-      "[indents] shareDraftIndent: default 24h story failed:",
-      storyErr.message,
-    );
-  }
   return { error: null, indent };
 }
 

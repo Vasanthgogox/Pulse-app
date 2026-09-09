@@ -11,7 +11,7 @@ import {
   hubMobileChromeStyles as chrome,
 } from "@/components/hub";
 import { useMemberAccess } from "@/lib/useMemberAccess";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ScrollView,
   StyleSheet,
@@ -56,6 +56,7 @@ export function LoadCenterHubMobileShell({
   onDoneSubTabChange,
   showDoneSubTabs = false,
   onCreateIndentPress,
+  findLoadsAction,
 }: {
   searchQuery: string;
   onSearchChange: (q: string) => void;
@@ -71,6 +72,7 @@ export function LoadCenterHubMobileShell({
   onDoneSubTabChange?: (id: string) => void;
   showDoneSubTabs?: boolean;
   onCreateIndentPress: () => void;
+  findLoadsAction?: ReactNode;
 }) {
   const searchInputRef = useRef<TextInput>(null);
   const [searchOpen, setSearchOpen] = useState(() => searchQuery.trim().length > 0);
@@ -108,14 +110,19 @@ export function LoadCenterHubMobileShell({
       <HubMobileScreenHeader
         title="My Loads"
         action={
-          canCreateIndent ? (
-            <PulsePillButton
-              label="Add Load"
-              showPlusIcon
-              size="compact"
-              onPress={onCreateIndentPress}
-              accessibilityLabel="Add load"
-            />
+          canCreateIndent || findLoadsAction ? (
+            <View style={styles.headerActions}>
+              {canCreateIndent ? (
+                <PulsePillButton
+                  label="Add Load"
+                  showPlusIcon
+                  size="compact"
+                  onPress={onCreateIndentPress}
+                  accessibilityLabel="Add load"
+                />
+              ) : null}
+              {findLoadsAction}
+            </View>
           ) : undefined
         }
       />
@@ -213,6 +220,12 @@ export function LoadCenterHubMobileShell({
 }
 
 const styles = StyleSheet.create({
+  headerActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    flexShrink: 0,
+  },
   doneSubTabGroup: {
     marginLeft: "auto",
   },

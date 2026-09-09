@@ -6,8 +6,12 @@
  * @see supabase/migrations/20270301060000_accept_reject_market_bid.sql
  */
 import { supabase } from '@/lib/supabase';
+import { formatMarketplaceTransactionError } from '@/features/marketplace/utils/marketplaceErrorFormat.util';
 
 export type MarketBidStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'superseded';
+
+/** A8.6.2 — independent of MarketBidStatus; see network/services/marketBids.service.ts for full doc. */
+export type FeePaymentStatus = 'not_required' | 'required' | 'pending' | 'paid' | 'failed' | 'expired';
 
 export type MarketBidRow = {
   id: string;
@@ -19,13 +23,15 @@ export type MarketBidRow = {
   amount: number;
   note: string | null;
   status: MarketBidStatus;
+  fee_payment_status: FeePaymentStatus;
+  platform_fee_amount: number | null;
   created_at: string;
   updated_at: string;
   accepted_at: string | null;
 };
 
 const MARKET_BID_COLUMNS =
-  'id,indent_id,bidder_type,bidder_user_id,bidder_organization_id,owner_vehicle_id,amount,note,status,created_at,updated_at,accepted_at';
+  'id,indent_id,bidder_type,bidder_user_id,bidder_organization_id,owner_vehicle_id,amount,note,status,fee_payment_status,platform_fee_amount,created_at,updated_at,accepted_at';
 
 /** DCO bid — p_bidder_organization_id stays NULL; the Business-bidder path is not yet implemented backend-side. */
 export async function submitMarketBid(input: {
@@ -99,14 +105,11 @@ export function marketBidStatusLabel(status: MarketBidStatus): string {
   }
 }
 
-/** A6.4: translate a raw RPC error into a driver-facing line. Only handles
- * codes this Market bid-submission path can actually raise -- unmatched
- * messages pass through unchanged (same posture as Reach's
- * formatDirectBidError). */
+/**
+ * A9.2: delegates to the shared Marketplace error formatter (do not
+ * duplicate the mapping here) -- kept as a thin, named wrapper since
+ * AvailableLoadDetailScreen.tsx already imports it from this module.
+ */
 export function formatMarketBidSubmitError(message: string): string {
-  const m = (message ?? '').toLowerCase();
-  if (m.includes('driver_unavailable')) {
-    return "You're currently on an active trip. Complete it before bidding on another load.";
-  }
-  return message.trim() || 'Could not submit bid.';
+  return formatMarketplaceTransactionError(message);
 }

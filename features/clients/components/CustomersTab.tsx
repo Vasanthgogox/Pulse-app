@@ -9,7 +9,7 @@ import { LiquidFillPill } from "@/components/LiquidFillPill";
 import Theme from "@/constants/Theme";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import {
-    aggregateCustomers,
+    aggregateCustomersFromRpc,
     type TripPartyMap,
 } from "@/features/finance/aggregation";
 import {
@@ -24,6 +24,7 @@ import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/vis
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { formatLedgerDate } from "@/lib/format";
 import { useClientsQuery, useTripsQuery } from "@/lib/queries";
+import { useCustomerLedgerInputsQuery } from "@/lib/queries/useLedgerAggregationQuery";
 import { usePaginatedScroll } from "@/lib/usePaginatedScroll";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import type { ReactNode } from "react";
@@ -1585,7 +1586,7 @@ export interface LedgerTransactionRow {
   amount_in?: number;
   amount_out?: number;
   contact_id?: string | null;
-  contact_type?: "client" | "supplier" | "driver" | null;
+  contact_type?: "client" | "supplier" | "driver" | "dco" | null;
 }
 
 /** Minimal shape for a pending client invitation (invite-by-phone sent, awaiting approval). */
@@ -1689,9 +1690,13 @@ export function CustomersTab({
 
   const clients = isControlled ? (clientsProp ?? []) : clientsFromQuery;
   const ownTrips = isControlled ? (tripsProp ?? []) : tripsFromQuery;
-  const transactions = transactionsProp ?? [];
+  const applyAdjustments = tripFinanceAdjustmentsByTripId !== undefined;
+  const {
+    data: customerLedgerInputs,
+    isPending: customerLedgerLoading,
+  } = useCustomerLedgerInputsQuery(organizationId, applyAdjustments);
   const loading = clientsLoading || tripsLoading;
-  const showLoading = parentLoading || (!isControlled && loading);
+  const showLoading = parentLoading || (!isControlled && loading) || customerLedgerLoading;
 
   // Merge own trips with cross-org supplier-view trips so the shipper appears as a customer.
   // Deduplicate by trip id: trips we own (as supplier) appear in both ownTrips and tripsWhereOrgIsSupplier.
@@ -1714,20 +1719,16 @@ export function CustomersTab({
   );
 
   const { rows, totals } = useMemo(() => {
-    return aggregateCustomers(
+    return aggregateCustomersFromRpc(
       clients,
-      allTrips,
-      transactions,
-      tripPartyMap,
-      tripFinanceAdjustmentsByTripId,
+      customerLedgerInputs ?? {
+        trip_inputs: [],
+        unlinked_payments: [],
+        ledger_only_parties: [],
+        client_ledger_totals: [],
+      },
     );
-  }, [
-    clients,
-    allTrips,
-    transactions,
-    tripPartyMap,
-    tripFinanceAdjustmentsByTripId,
-  ]);
+  }, [clients, customerLedgerInputs]);
 
   const q = searchQuery.trim().toLowerCase();
   const filteredRows = useMemo(() => {

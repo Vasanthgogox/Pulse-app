@@ -10,12 +10,12 @@ import Theme from '@/constants/Theme';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import {
-  fleetOwnerLoadRouteLabel,
   formatFleetOwnerRateOffer,
   isLoadCompatibleWithFleet,
   type FleetOwnerOpenLoad,
 } from '@/features/driver/services/fleetOwnerLoads.service';
 import { marketBidStatusLabel, type MarketBidStatus } from '@/features/driver/services/marketBids.service';
+import { DriverWorkOpportunityCard } from '@/features/driver/components/DriverWorkOpportunityCard';
 import { MyBidsContent } from '@/features/driver/components/MyBidsScreen';
 import { cityOf, StoriesContent, type SharedFeedFilters } from '@/features/reach/screens/DriverStoriesScreen';
 import { useDriverFleetOwnerQuery } from '@/lib/queries/useDriverFleetOwnerQuery';
@@ -23,23 +23,11 @@ import { useFleetOwnerOpenLoadsQuery } from '@/lib/queries/useFleetOwnerOpenLoad
 import { useMyMarketBidsQuery } from '@/lib/queries/useMyMarketBidsQuery';
 import { useOwnerVehiclesQuery } from '@/lib/queries/useOwnerVehiclesQuery';
 import { ROUTES } from '@/lib/routes';
-import { useRouter } from 'expo-router';
-import { ChevronRight, MapPin, Truck } from 'lucide-react-native';
-import { useMemo, useState } from 'react';
+import { useFocusEffect } from '@react-navigation/native';
+import { useLocalSearchParams, useRouter } from 'expo-router';
+import { MapPin } from 'lucide-react-native';
+import { useCallback, useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Text, View } from 'react-native';
-
-function formatPickupDate(iso: string | null): string {
-  if (!iso) return 'Date TBA';
-  try {
-    return new Date(iso).toLocaleDateString('en-IN', {
-      weekday: 'short',
-      day: 'numeric',
-      month: 'short',
-    });
-  } catch {
-    return iso;
-  }
-}
 
 export default function AvailableLoadsScreen() {
   const router = useRouter();
@@ -48,11 +36,17 @@ export default function AvailableLoadsScreen() {
   const { isDark } = useDriverTheme();
   const colors = useDriverThemeColors();
   const pageBg = driverDetailPageBackground(isDark, colors.background);
-  const [segment, setSegment] = useState<'find' | 'mybids'>('find');
+  // A7.3: the DCO Available surface's "My Bids" entry deep-links here with
+  // ?segment=mybids so it lands directly on this segment instead of Find Work.
+  const { segment: initialSegment } = useLocalSearchParams<{ segment?: string }>();
+  const [segment, setSegment] = useState<'find' | 'mybids'>(
+    initialSegment === 'mybids' ? 'mybids' : 'find',
+  );
   const cardBorder = isDark ? colors.borderSubtle : 'rgba(226,232,240,0.95)';
 
-  return (
-    <View style={[styles.root, { backgroundColor: pageBg }]}>
+  // Earnings-page pattern: Market chrome scrolls with the feed (not pinned).
+  const marketListHeader = (
+    <>
       <DriverSubScreenHeader
         title="Market"
         subtitle="Find work"
@@ -60,11 +54,13 @@ export default function AvailableLoadsScreen() {
           router.canGoBack() ? router.back() : router.replace(ROUTES.DRIVER_ROOT)
         }
       />
-
       <View
         style={[
           styles.segmentRow,
-          { borderColor: cardBorder, backgroundColor: isDark ? colors.surfaceElevated : Theme.surfaceGray },
+          {
+            borderColor: cardBorder,
+            backgroundColor: isDark ? colors.surfaceElevated : Theme.surfaceGray,
+          },
         ]}
       >
         {(
@@ -80,7 +76,10 @@ export default function AvailableLoadsScreen() {
               onPress={() => setSegment(seg.id)}
               style={[
                 styles.segmentBtn,
-                on && { backgroundColor: colors.surface, borderColor: cardBorder },
+                on && {
+                  backgroundColor: isDark ? colors.surface : Theme.cardWhite,
+                  borderColor: cardBorder,
+                },
               ]}
             >
               <Text style={[styles.segmentText, { color: on ? colors.text : colors.textMuted }]}>
@@ -90,11 +89,15 @@ export default function AvailableLoadsScreen() {
           );
         })}
       </View>
+    </>
+  );
 
+  return (
+    <View style={[styles.root, { backgroundColor: pageBg }]}>
       {segment === 'mybids' ? (
-        uid ? <MyBidsContent uid={uid} /> : null
+        uid ? <MyBidsContent uid={uid} listHeader={marketListHeader} /> : null
       ) : uid ? (
-        <MarketFindWorkScreen uid={uid} />
+        <MarketFindWorkScreen uid={uid} listHeader={marketListHeader} />
       ) : null}
     </View>
   );
@@ -107,7 +110,13 @@ export default function AvailableLoadsScreen() {
  * screens. No new sorting/business logic — same components, same queries,
  * new composition only.
  */
-function MarketFindWorkScreen({ uid }: { uid: string }) {
+function MarketFindWorkScreen({
+  uid,
+  listHeader,
+}: {
+  uid: string;
+  listHeader?: ReactNode;
+}) {
   const { loads, refetch: refetchLoads } = useFleetOwnerOpenLoadsQuery(uid);
   const { refetch: refetchBids } = useMyMarketBidsQuery(uid);
 
@@ -134,6 +143,7 @@ function MarketFindWorkScreen({ uid }: { uid: string }) {
 
   return (
     <StoriesContent
+      listHeader={listHeader}
       footer={(filters) => <FindLoadsContent uid={uid} filters={filters} />}
       onRefreshExtra={() => {
         void refetchLoads();
@@ -156,10 +166,23 @@ function FindLoadsContent({ uid, filters }: { uid: string; filters: SharedFeedFi
   const { isDark } = useDriverTheme();
   const colors = useDriverThemeColors();
   const { isFleetOwner, isLoading: ownerLoading } = useDriverFleetOwnerQuery(uid);
-  const { loads, isLoading, error } = useFleetOwnerOpenLoadsQuery(uid);
+  const { loads, isLoading, error, refetch: refetchLoads } = useFleetOwnerOpenLoadsQuery(uid);
   const { vehicles } = useOwnerVehiclesQuery(uid);
   const { bids } = useMyMarketBidsQuery(uid);
   const cardBorder = isDark ? colors.borderSubtle : 'rgba(226,232,240,0.95)';
+
+  // refetchOnWindowFocus is inert on React Native without an app-wide
+  // TanStack Query focus manager registered (none exists in this app), so
+  // returning to Find Work -- including right after completing a trip --
+  // otherwise shows stale indents until a manual pull-to-refresh. Mirrors
+  // the same useFocusEffect pattern DriverTripHistoryScreen.tsx already
+  // uses for itself.
+  useFocusEffect(
+    useCallback(() => {
+      if (!uid) return;
+      void refetchLoads();
+    }, [uid, refetchLoads]),
+  );
 
   const fleetTypes = useMemo(
     () => vehicles.map((v) => v.vehicle_type),
@@ -228,7 +251,10 @@ function FindLoadsContent({ uid, filters }: { uid: string; filters: SharedFeedFi
           <View
             style={[
               styles.empty,
-              { backgroundColor: colors.surface, borderColor: cardBorder },
+              {
+                backgroundColor: isDark ? colors.surface : Theme.cardWhite,
+                borderColor: cardBorder,
+              },
             ]}
           >
             <MapPin size={22} color={colors.emerald} />
@@ -246,12 +272,14 @@ function FindLoadsContent({ uid, filters }: { uid: string; filters: SharedFeedFi
               load={load}
               compatible={isLoadCompatibleWithFleet(load, fleetTypes)}
               bidStatus={bidStatusByIndentId.get(load.id)}
-              cardBorder={cardBorder}
-              colors={colors}
-              isDark={isDark}
-              onPress={() =>
+              onOpenDetail={() =>
                 router.push(
-                  ROUTES.driverAvailableLoad(load.id) as Parameters<
+                  ROUTES.driverAvailableLoad(load.id) as Parameters<typeof router.push>[0],
+                )
+              }
+              onBid={() =>
+                router.push(
+                  ROUTES.driverAvailableLoad(load.id, { bid: true }) as Parameters<
                     typeof router.push
                   >[0],
                 )
@@ -264,132 +292,110 @@ function FindLoadsContent({ uid, filters }: { uid: string; filters: SharedFeedFi
   );
 }
 
-function bidStatusBadgeColor(
-  status: MarketBidStatus,
-  colors: ReturnType<typeof useDriverThemeColors>,
-): string {
-  switch (status) {
-    case 'accepted':
-      return colors.emerald;
-    case 'rejected':
-      return Theme.negative;
-    // A6.4: superseded is not "still pending" — must not share pending's
-    // warning/amber color, which reads as "awaiting decision".
-    case 'superseded':
-      return colors.textMuted;
-    default:
-      return Theme.warning;
-  }
-}
-
 function LoadCard({
   load,
   compatible,
   bidStatus,
-  cardBorder,
-  colors,
-  isDark,
-  onPress,
+  onOpenDetail,
+  onBid,
 }: {
   load: FleetOwnerOpenLoad;
   compatible: boolean;
   bidStatus?: MarketBidStatus;
-  cardBorder: string;
-  colors: ReturnType<typeof useDriverThemeColors>;
-  isDark: boolean;
-  onPress: () => void;
+  onOpenDetail: () => void;
+  onBid: () => void;
 }) {
   const rate = formatFleetOwnerRateOffer(load.rate_offer);
+  const shipper = (load.creator_organization_name ?? '').trim() || 'Shipper';
+  const isAwarded = bidStatus === 'accepted';
+  const isQuoted = bidStatus === 'pending';
+  const isClosed =
+    bidStatus === 'rejected' || bidStatus === 'superseded' || bidStatus === 'withdrawn';
+
+  let primary: Parameters<typeof DriverWorkOpportunityCard>[0]['primaryCta'] = {
+    title: 'Bid Now',
+    hint: rate ? `Shipper target ${rate}` : 'Offer your rate to the shipper',
+    onPress: onBid,
+  };
+  if (isAwarded) {
+    primary = { title: 'Open job', hint: 'Awarded — continue on Dashboard', onPress: onOpenDetail };
+  } else if (isQuoted) {
+    primary = {
+      title: 'Revise bid',
+      hint: rate ? `Target ${rate}` : 'Update your quoted bid',
+      onPress: onBid,
+      variant: 'quoted',
+    };
+  } else if (isClosed) {
+    primary = {
+      title: marketBidStatusLabel(bidStatus!),
+      variant: 'info',
+      onPress: onOpenDetail,
+    };
+  }
+
   return (
-    <Pressable
-      onPress={onPress}
-      style={({ pressed }) => [
-        styles.row,
-        {
-          backgroundColor: colors.surface,
-          borderColor: cardBorder,
-          opacity: pressed ? 0.92 : 1,
-        },
-      ]}
-    >
-      <View style={styles.rowMain}>
-        <Text style={[styles.route, { color: colors.text }]} numberOfLines={1}>
-          {fleetOwnerLoadRouteLabel(load)}
-        </Text>
-        <View style={styles.metaRow}>
-          <Truck size={11} color={colors.textMuted} />
-          <Text style={[styles.meta, { color: colors.textMuted }]} numberOfLines={1}>
-            {load.vehicle_type?.trim() || 'Vehicle TBA'}
-            {load.load_type ? ` · ${load.load_type}` : ''} · {formatPickupDate(load.pickup_date)}
-          </Text>
-        </View>
-        <View style={styles.badgeRow}>
-          {compatible ? (
-            <View
-              style={[
-                styles.fitPill,
-                { backgroundColor: isDark ? colors.emeraldMuted : 'rgba(167,243,208,0.45)' },
-              ]}
-            >
-              <Text style={[styles.fitText, { color: colors.emerald }]}>Fits my fleet</Text>
-            </View>
-          ) : null}
-          {bidStatus ? (
-            <View
-              style={[
-                styles.statusPill,
-                { backgroundColor: isDark ? colors.surfaceElevated : Theme.surfaceGray },
-              ]}
-            >
-              <Text style={[styles.statusPillText, { color: bidStatusBadgeColor(bidStatus, colors) }]}>
-                {bidStatus === 'pending' ? 'Bid submitted' : marketBidStatusLabel(bidStatus)}
-              </Text>
-            </View>
-          ) : null}
-        </View>
-      </View>
-      <View style={styles.rowSide}>
-        {rate ? (
-          <Text style={[styles.rate, { color: Theme.warning }]} numberOfLines={1}>
-            {rate}
-          </Text>
-        ) : (
-          <Text style={[styles.meta, { color: colors.textMuted }]}>On request</Text>
-        )}
-        <ChevronRight size={16} color={colors.textMuted} />
-      </View>
-    </Pressable>
+    <DriverWorkOpportunityCard
+      orgName={shipper}
+      orgLogoUrl={load.creator_organization_logo_url}
+      orgAvatarSeed={load.creator_organization_avatar_seed}
+      orgSeed={load.creator_organization_id ?? load.id}
+      kicker={
+        isAwarded
+          ? 'Job · Awarded'
+          : isQuoted
+            ? 'Quoted bid'
+            : isClosed
+              ? marketBidStatusLabel(bidStatus!)
+              : 'Market'
+      }
+      badge={isAwarded ? 'awarded' : isQuoted ? 'quoted' : isClosed ? null : 'open'}
+      origin={load.pickup_area}
+      destination={load.drop_location}
+      vehicleType={load.vehicle_type}
+      material={load.load_type}
+      pickupDate={load.pickup_date}
+      fleetMatch={compatible && !isAwarded}
+      targetLabel={isAwarded ? 'Awarded rate' : isQuoted ? 'Shipper target' : 'Shipper target'}
+      targetValue={rate}
+      primaryCta={primary}
+      secondaryCta={{
+        title: isAwarded ? 'Open job' : 'Full view',
+        onPress: onOpenDetail,
+      }}
+    />
   );
 }
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  gateBody: { fontSize: 13, lineHeight: 19 },
-  marketSection: { paddingTop: 16, gap: 10, paddingBottom: 4 },
+  gateBody: { fontSize: 12, lineHeight: 17 },
+  marketSection: { paddingTop: 16, gap: 10, paddingBottom: 8 },
   marketGate: {
     paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
-    paddingTop: 16,
+    paddingTop: 14,
     paddingBottom: 8,
     gap: 8,
   },
-  marketListPad: { paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD, gap: 8 },
+  marketListPad: { paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD, gap: 12 },
   marketplaceDivider: {
     height: StyleSheet.hairlineWidth,
-    backgroundColor: 'rgba(148,163,184,0.4)',
+    backgroundColor: 'rgba(148,163,184,0.35)',
     marginHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
-    marginBottom: 8,
+    marginBottom: 2,
   },
   marketplaceLabel: {
     fontSize: 10,
-    fontWeight: '800',
-    letterSpacing: 0.8,
+    fontWeight: '700',
+    letterSpacing: 0.7,
     paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
-    marginBottom: 6,
+    marginBottom: 2,
   },
   segmentRow: {
     flexDirection: 'row',
     marginHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD,
     marginTop: 10,
+    marginBottom: 2,
     borderRadius: 12,
     borderWidth: StyleSheet.hairlineWidth,
     padding: 3,
@@ -401,55 +407,27 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: 'transparent',
     paddingVertical: 8,
-    alignItems: 'center',
-  },
-  segmentText: { fontSize: 13, fontWeight: '700' },
-  row: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: 10,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  rowMain: { flex: 1, gap: 3 },
-  rowSide: { alignItems: 'flex-end', gap: 4 },
-  route: { fontSize: 13, fontWeight: '700', letterSpacing: -0.1 },
-  rate: { fontSize: 14, fontWeight: '800', letterSpacing: -0.2 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 5 },
-  meta: { fontSize: 11, fontWeight: '600' },
-  badgeRow: { flexDirection: 'row', gap: 6, marginTop: 1 },
-  fitPill: {
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  fitText: { fontSize: 10, fontWeight: '700' },
-  statusPill: {
-    alignSelf: 'flex-start',
-    borderRadius: 999,
-    paddingHorizontal: 8,
-    paddingVertical: 2,
-  },
-  statusPillText: { fontSize: 10, fontWeight: '700' },
-  empty: {
-    borderRadius: 16,
-    borderWidth: StyleSheet.hairlineWidth,
-    padding: 18,
-    gap: 8,
-  },
-  emptyTitle: { fontSize: 15, fontWeight: '800' },
-  emptyBody: { fontSize: 13, lineHeight: 19 },
-  cta: {
-    minHeight: 48,
-    borderRadius: 14,
+    minHeight: 38,
     alignItems: 'center',
     justifyContent: 'center',
-    marginTop: 6,
   },
-  ctaText: { color: Theme.textOnPrimary, fontSize: 14, fontWeight: '700' },
-  errorText: { color: Theme.negative, fontSize: 13, fontWeight: '600' },
+  segmentText: { fontSize: 12, fontWeight: '700', letterSpacing: -0.1, lineHeight: 15 },
+  empty: {
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    gap: 6,
+  },
+  emptyTitle: { fontSize: 13, fontWeight: '700', letterSpacing: -0.15 },
+  emptyBody: { fontSize: 12, lineHeight: 17 },
+  cta: {
+    minHeight: 44,
+    borderRadius: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 4,
+  },
+  ctaText: { color: Theme.textOnPrimary, fontSize: 13, fontWeight: '700' },
+  errorText: { color: Theme.negative, fontSize: 12, fontWeight: '600' },
 });

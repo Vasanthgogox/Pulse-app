@@ -35,8 +35,11 @@ const loadBidsService = () => import("@/features/network/services/bids.service")
 function driverDirectBidToHubQuote(
   bid: DriverDirectBidRow,
   indentId: string,
+  available: boolean | undefined,
 ): DirectQuoteRow {
   const name = bid.driver_display_name.trim() || "Driver";
+  const onOtherTrip = bid.status === "pending" && available === false;
+  const unavailable = bid.status === "superseded" || onOtherTrip;
   return {
     id: bid.id,
     indent_id: indentId,
@@ -46,13 +49,15 @@ function driverDirectBidToHubQuote(
       : `Driver (${name})`,
     amount: bid.amount,
     notes: bid.note,
-    status: bid.status,
+    status: unavailable ? "superseded" : bid.status,
     created_at: bid.created_at,
     updated_at: bid.updated_at,
     counter_amount: bid.counter_amount,
     offer_source: "driver_direct_bid",
     bidder_avatar_url: bid.driver_avatar_url,
     bidder_avatar_seed: bid.driver_avatar_seed,
+    bidder_user_id: bid.driver_user_id,
+    bidderUnavailable: unavailable,
   };
 }
 
@@ -103,11 +108,8 @@ export interface AwardQuoteResult {
   award: (quoteIdOverride?: string) => Promise<void>;
   /**
    * indentId -> winning bidder's org name, captured in memory the instant an
-   * award succeeds (the winning DirectQuoteRow is already loaded at that
-   * point -- no new query). Session-scoped only: it does NOT persist across
-   * a reload, since there is no persisted lookup from an indent to its
-   * accepted quote's bidder name today. Closing that gap for good needs a
-   * real query addition, deliberately deferred.
+   * award succeeds. Used as an optimistic fallback until assigned_supplier_id
+   * can be resolved from the supplier list / org display batch.
    */
   lastAwardedByIndentId: Record<string, string>;
 }
@@ -162,6 +164,37 @@ export function useAwardQuote({
     linkedPostQ.data ?? null,
   );
 
+  const pendingDriverUserIds = useMemo(
+    () =>
+      [
+        ...new Set(
+          (driverDirectBidsQ.data ?? [])
+            .filter((b) => (b.status || "").toLowerCase() === "pending")
+            .map((b) => b.driver_user_id)
+            .filter(Boolean),
+        ),
+      ],
+    [driverDirectBidsQ.data],
+  );
+
+  const driverAvailabilityQ = useQuery({
+    queryKey: [
+      "q",
+      "review-hub",
+      "driver-available",
+      pendingDriverUserIds.join(","),
+    ],
+    queryFn: async () => {
+      const { checkDriversAvailable } = await loadBidsService();
+      const { availableByUserId } = await checkDriversAvailable(
+        pendingDriverUserIds,
+      );
+      return Object.fromEntries(availableByUserId);
+    },
+    enabled: pendingDriverUserIds.length > 0 && currentLoad != null,
+    staleTime: 15_000,
+  });
+
   // Refetch quotes when a new load is opened
   useEffect(() => {
     if (currentLoad?.id) {
@@ -176,10 +209,19 @@ export function useAwardQuote({
       offer_source: q.offer_source ?? ("direct_quote" as const),
     }));
     const fromDrivers = (driverDirectBidsQ.data ?? []).map((b) =>
-      driverDirectBidToHubQuote(b, indentId),
+      driverDirectBidToHubQuote(
+        b,
+        indentId,
+        driverAvailabilityQ.data?.[b.driver_user_id],
+      ),
     );
     return [...fromQuotes, ...fromDrivers];
-  }, [awardModalQuotes, driverDirectBidsQ.data, currentLoad?.id]);
+  }, [
+    awardModalQuotes,
+    driverDirectBidsQ.data,
+    driverAvailabilityQ.data,
+    currentLoad?.id,
+  ]);
 
   /** Sorted: pending by amount (lowest first), then rejected, then accepted. */
   const sortedQuotes = useMemo(() => sortHubOffers(hubQuotes), [hubQuotes]);
@@ -218,6 +260,14 @@ export function useAwardQuote({
   useEffect(() => {
     if (soloPendingQuoteId) setSelectedQuoteId(soloPendingQuoteId);
   }, [currentLoad?.id, soloPendingQuoteId]);
+
+  useEffect(() => {
+    if (!selectedQuoteId) return;
+    const selected = hubQuotes.find((q) => q.id === selectedQuoteId);
+    if (!selected || (selected.status || "").toLowerCase() !== "pending") {
+      setSelectedQuoteId(soloPendingQuoteId);
+    }
+  }, [hubQuotes, selectedQuoteId, soloPendingQuoteId]);
 
   /**
    * Reach-only bidders: a paid campaign lets any targeted org bid, but a load

@@ -231,7 +231,7 @@ const indentReviewHubStylesDef = {
     backgroundColor: Theme.textPrimaryDark,
     paddingHorizontal: 14,
     paddingVertical: 14,
-    marginBottom: 12,
+    marginBottom: 8,
     overflow: "hidden",
     minWidth: 0,
     alignSelf: "stretch",

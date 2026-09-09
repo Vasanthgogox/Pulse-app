@@ -16,6 +16,9 @@ export type FleetOwnerOpenLoad = {
   circulation_target: string | null;
   rate_offer: number | null;
   creator_organization_name: string | null;
+  creator_organization_id?: string | null;
+  creator_organization_logo_url?: string | null;
+  creator_organization_avatar_seed?: string | null;
   created_at: string | null;
 };
 

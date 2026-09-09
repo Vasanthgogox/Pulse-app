@@ -129,6 +129,15 @@ export const queryKeys = {
       ["q", "drivers", orgId, driverId] as const,
   },
 
+  financeAggregation: {
+    driver: (orgId: string) => ["q", "finance-aggregation", "driver", orgId] as const,
+    supplier: (orgId: string, applyAdjustments: boolean) =>
+      ["q", "finance-aggregation", "supplier", orgId, applyAdjustments] as const,
+    customer: (orgId: string, applyAdjustments: boolean) =>
+      ["q", "finance-aggregation", "customer", orgId, applyAdjustments] as const,
+    dco: (orgId: string) => ["q", "finance-aggregation", "dco", orgId] as const,
+  },
+
   vehicles: {
     all: (orgId: string) => ["q", "vehicles", orgId] as const,
     finite: (orgId: string) => ["q", "vehicles", orgId, "finite"] as const,
@@ -185,6 +194,11 @@ export const queryKeys = {
   /** Driver app home dashboard (linked drivers + pending OTP trips). */
   driverApp: {
     root: (userId: string) => ["q", "driver-app", userId] as const,
+    /** A7.3 — DCO availability truth (is_driver_available RPC), the sole
+     * gate for whether the DCO Available surface renders instead of the
+     * legacy dispatcher Home. */
+    availability: (userId: string) =>
+      ["q", "driver-app", userId, "availability"] as const,
     linkedDrivers: (userId: string) =>
       ["q", "driver-app", userId, "linked-drivers"] as const,
     pendingOtpTrips: (userId: string) =>
@@ -198,6 +212,11 @@ export const queryKeys = {
     /** Explicit Fleet Owner capability (not employment). */
     fleetOwner: (userId: string) =>
       ["q", "driver-app", userId, "fleet-owner"] as const,
+    /** DCO (driver-cum-owner / independent owner-operator) admin-approval
+     * status — unrelated to the "DCO Available" A7.3 surface above; named
+     * dcoOwnerOperator here specifically to avoid confusion with that. */
+    dcoOwnerOperator: (userId: string) =>
+      ["q", "driver-app", userId, "dco-owner-operator"] as const,
     /** Personal owner vehicles (Phase 1b). */
     ownerVehicles: (userId: string) =>
       ["q", "driver-app", userId, "owner-vehicles"] as const,
@@ -384,12 +403,6 @@ export const queryKeys = {
   driverChat: {
     conversations: (driverIdsKey: string) =>
       ["q", "driver-chat", "conversations", driverIdsKey] as const,
-  },
-
-  disputes: {
-    all: (orgId: string) => ["q", "disputes", orgId] as const,
-    received: (orgId: string) => ["q", "disputes", orgId, "received"] as const,
-    open: (orgId: string) => ["q", "disputes", orgId, "open"] as const,
   },
 
   /**

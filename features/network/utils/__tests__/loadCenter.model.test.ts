@@ -2,6 +2,7 @@ import {
   STATUS_TABS,
   resolveGetLoadDoneOutcome,
   resolveGetLoadMobileCardLabels,
+  resolveGetLoadTicketCommerce,
   resolveGiveLoadTicketCommerce,
   statusMatchesFilter,
 } from "@/features/network/utils/loadCenter.model";
@@ -77,10 +78,12 @@ describe("give load ticket commerce", () => {
       ...opts,
       isAwarded: true,
       awardedAmountInr: 30000,
+      awardedByName: "Acme Logistics",
     });
     expect(c.kicker).toBe("AWARDED");
     expect(c.amountInr).toBe(30000);
     expect(c.targetRateInr).toBe(50000);
+    expect(c.awardedByName).toBe("Acme Logistics");
   });
 
   it("keeps the bid count as a caption instead of replacing the rate", () => {
@@ -223,5 +226,146 @@ describe("resolveGetLoadMobileCardLabels Done tab", () => {
     );
     expect(labels.statusLabel).toBe("converted");
     expect(labels.rightFooter).toBe("On books");
+  });
+});
+
+/**
+ * Get Load cards read supplier_target, which may be a ₹/MT unit rate rather
+ * than a trip total. IND197 (Bhandara → Hosur) printed "TARGET RATE ₹3,200"
+ * on a trip actually worth ₹1,24,256, so suppliers were bidding against a
+ * number ~39x too small. The card must show the tonnage-expanded total.
+ */
+describe("get load ticket commerce — per-MT targets", () => {
+  const noTrips = new Set<string>();
+
+  it("expands a per-MT target to the trip total (IND197)", () => {
+    const c = resolveGetLoadTicketCommerce(
+      "OPEN",
+      "ALL",
+      {
+        id: "i1",
+        status: "broadcast",
+        supplier_target: 3200,
+        supplier_rate_basis: "per_mt",
+        weight: 38830,
+      },
+      undefined,
+      noTrips,
+    );
+    expect(c.kicker).toBe("TARGET RATE");
+    expect(c.amountInr).toBe(124_256);
+  });
+
+  it("leaves a per_trip target alone", () => {
+    const c = resolveGetLoadTicketCommerce(
+      "OPEN",
+      "ALL",
+      {
+        id: "i2",
+        status: "broadcast",
+        supplier_target: 89_578,
+        supplier_rate_basis: "per_trip",
+        weight: 30_000,
+      },
+      undefined,
+      noTrips,
+    );
+    expect(c.amountInr).toBe(89_578);
+  });
+
+  it("treats an untagged target as a trip total (existing rows)", () => {
+    const c = resolveGetLoadTicketCommerce(
+      "OPEN",
+      "ALL",
+      { id: "i3", status: "broadcast", supplier_target: 77_500, weight: 25_000 },
+      undefined,
+      noTrips,
+    );
+    expect(c.amountInr).toBe(77_500);
+  });
+
+  it("shows the unit rate when a per-MT row has no usable weight", () => {
+    const c = resolveGetLoadTicketCommerce(
+      "OPEN",
+      "ALL",
+      {
+        id: "i4",
+        status: "broadcast",
+        supplier_target: 3200,
+        supplier_rate_basis: "per_mt",
+        weight: null,
+      },
+      undefined,
+      noTrips,
+    );
+    expect(c.amountInr).toBe(3200);
+  });
+
+  it("still reports open freight when there is no target at all", () => {
+    const c = resolveGetLoadTicketCommerce(
+      "OPEN",
+      "ALL",
+      { id: "i5", status: "broadcast", supplier_target: null, weight: 30_000 },
+      undefined,
+      noTrips,
+    );
+    expect(c.amountInr).toBeNull();
+    expect(c.rightCaption).toBe("Open freight");
+  });
+
+  it("compares your pending bid against the expanded target", () => {
+    const c = resolveGetLoadTicketCommerce(
+      "OPEN",
+      "ALL",
+      {
+        id: "i6",
+        status: "quoted",
+        supplier_target: 3100,
+        supplier_rate_basis: "per_mt",
+        weight: 41_000,
+      },
+      { status: "pending", amount: 127_100 },
+      noTrips,
+    );
+    expect(c.kicker).toBe("YOUR BID");
+    expect(c.amountInr).toBe(127_100);
+    expect(c.targetRateInr).toBe(127_100);
+  });
+});
+
+describe("give load ticket commerce — per-MT targets", () => {
+  const opts = {
+    isDone: false,
+    isDraft: false,
+    awardedAmountInr: null,
+    isAwarded: false,
+    bidCount: 0,
+    loadTypeDetail: "Steel",
+  };
+
+  it("expands a per-MT target on your own indent card", () => {
+    const c = resolveGiveLoadTicketCommerce(
+      "OPEN",
+      {
+        client_price: 130_469,
+        supplier_target: 3200,
+        supplier_rate_basis: "per_mt",
+        weight: 38830,
+      },
+      opts,
+    );
+    expect(c.kicker).toBe("TARGET RATE");
+    expect(c.amountInr).toBe(124_256);
+    expect(c.targetRateInr).toBe(130_469);
+    expect(c.referenceLabel).toBe("Client rate");
+  });
+
+  it("leaves an untagged target as the total it already is", () => {
+    const c = resolveGiveLoadTicketCommerce(
+      "OPEN",
+      { client_price: 99_000, supplier_target: 89_578, weight: 30_000 },
+      opts,
+    );
+    expect(c.amountInr).toBe(89_578);
   });
 });

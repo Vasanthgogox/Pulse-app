@@ -19,9 +19,12 @@ import { type AwardQuoteResult } from "@/features/network/hooks/useAwardQuote";
 import { submitDriverDirectBidCounterOffer } from "@/features/network/services/bids.service";
 import { MarketBidCard } from "@/features/network/components/MarketBidCard";
 import {
-  acceptMarketBid,
+  awardMarketBid,
+  calculateMarketplacePlatformFee,
+  createMarketTripAfterFeePayment,
   rejectMarketBid,
 } from "@/features/network/services/marketBids.service";
+import { formatMarketplaceTransactionError } from "@/features/marketplace/utils/marketplaceErrorFormat.util";
 import { useMarketBidsForIndentQuery } from "@/lib/queries/useBidsQuery";
 import { useInvalidateIndents } from "@/lib/queries";
 import { queryKeys } from "@/lib/queryKeys";
@@ -84,21 +87,70 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
   } = useMarketBidsForIndentQuery(currentLoad?.id ?? null);
 
   const handleAcceptMarketBid = useCallback(
-    async (bidId: string, amount: number, bidderLabel: string) => {
+    async (bidId: string, amount: number, bidderLabel: string, bidderType: "dco" | "organization") => {
+      const bidAmountLabel = `₹${Number(amount ?? 0).toLocaleString("en-IN")}`;
+
+      // A9.2: the organization branch deliberately awards the indent
+      // WITHOUT creating a trip -- the winning org still has to self-assign
+      // a vehicle/driver via their own "My Bids" screen (OrgMyBidsList's
+      // Assign Vehicle action) before a trip exists. A8.6.2: the DCO branch
+      // no longer creates a trip immediately either -- award and trip
+      // creation are now always separate steps, gated on the Marketplace
+      // platform fee (paid, or not required while the fee stays off). The
+      // confirm/success copy must not claim a trip is created up front.
+      let message =
+        bidderType === "organization"
+          ? `Award this bid from ${bidderLabel} for ${bidAmountLabel}? The load will be assigned to their organization -- they'll need to assign a vehicle and driver before a trip is created. Any other pending offers on this load will be rejected.`
+          : `Accept this bid from ${bidderLabel} for ${bidAmountLabel}? This rejects any other pending offers on this load.`;
+
+      // A8.6.2: the platform fee is charged to the WINNING BIDDER, not the
+      // awarding business -- the client/load value is unaffected. The
+      // preview now renders for both bidder types (previously DCO-only,
+      // when the fee was still added on top of the client price).
+      const { calc } = await calculateMarketplacePlatformFee(amount);
+      if (calc && calc.is_active_config_found && calc.resolved_fee > 0) {
+        const feeLabel = `₹${Number(calc.resolved_fee).toLocaleString("en-IN")}`;
+        message =
+          `Bid amount ${bidAmountLabel}\n` +
+          `Marketplace fee ${feeLabel} (paid by the winning bidder to Pulse)\n` +
+          `Client/load value ${bidAmountLabel} (unchanged)\n\n` +
+          (bidderType === "organization"
+            ? `${bidderLabel} will need to pay this fee before they can assign a vehicle and driver. Any other pending offers on this load will be rejected.`
+            : `${bidderLabel} will need to pay this fee before the trip is created. Any other pending offers on this load will be rejected.`);
+      }
+
       const confirmed = await confirmDialog({
-        title: "Accept Market bid",
-        message: `Accept this bid from ${bidderLabel} for ₹${Number(amount ?? 0).toLocaleString("en-IN")}? This creates a trip and rejects any other pending offers on this load.`,
-        confirmLabel: "Accept",
+        title: bidderType === "organization" ? "Award Market bid" : "Accept Market bid",
+        message,
+        confirmLabel: bidderType === "organization" ? "Award" : "Accept",
         destructive: false,
       });
       if (!confirmed) return;
       try {
         setMarketBidActionId(bidId);
-        const { error } = await acceptMarketBid(bidId);
+        const { error, feePaymentStatus } = await awardMarketBid(bidId);
         if (error) {
-          showAppAlert("Could not accept bid", error.message);
+          showAppAlert("Could not accept bid", formatMarketplaceTransactionError(error.message));
           return;
         }
+
+        // A8.6.2: when the fee isn't required (its current, default,
+        // production state), chain trip creation immediately for a DCO
+        // award so the business still experiences one "Accept" action --
+        // create_market_trip_after_fee_payment() explicitly allows an
+        // authorized member of the load-owning org to call it for exactly
+        // this case. Once the fee is active, this chain is skipped and the
+        // bidder unlocks their own trip after paying.
+        let tripCreated = false;
+        if (bidderType === "dco" && feePaymentStatus === "not_required") {
+          const { error: tripError } = await createMarketTripAfterFeePayment(bidId);
+          if (tripError) {
+            showAppAlert("Could not accept bid", formatMarketplaceTransactionError(tripError.message));
+            return;
+          }
+          tripCreated = true;
+        }
+
         if (currentLoad?.id) {
           queryClient.invalidateQueries({
             queryKey: queryKeys.bids.marketForIndent(currentLoad.id),
@@ -108,9 +160,26 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
           invalidateIndents(currentLoad.organization_id);
         }
         queryClient.invalidateQueries({ queryKey: ["indents", "offer-counts"] });
-        showAppAlert("Bid accepted", "Trip created from this Market bid.");
+
+        if (feePaymentStatus === "required" || feePaymentStatus === "pending") {
+          showAppAlert(
+            "Bid awarded",
+            bidderType === "organization"
+              ? "The winning organization has been selected. Once they pay the Marketplace fee, they'll be able to assign a vehicle and driver."
+              : "The bidder has been awarded this load. Once they pay the Marketplace fee, the trip will be created.",
+          );
+        } else if (bidderType === "organization") {
+          showAppAlert(
+            "Bid awarded",
+            "The winning organization has been selected. They'll assign a vehicle and driver to create the trip.",
+          );
+        } else if (tripCreated) {
+          showAppAlert("Bid accepted", "Trip created from this Market bid.");
+        } else {
+          showAppAlert("Bid accepted", "This bid has been awarded.");
+        }
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Unknown error.";
+        const msg = e instanceof Error ? formatMarketplaceTransactionError(e.message) : "Something went wrong. Please try again.";
         showAppAlert("Could not accept bid", msg);
       } finally {
         setMarketBidActionId(null);
@@ -132,7 +201,7 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
         setMarketBidActionId(bidId);
         const { error } = await rejectMarketBid(bidId);
         if (error) {
-          showAppAlert("Could not reject bid", error.message);
+          showAppAlert("Could not reject bid", formatMarketplaceTransactionError(error.message));
           return;
         }
         if (currentLoad?.id) {
@@ -141,7 +210,7 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
           });
         }
       } catch (e) {
-        const msg = e instanceof Error ? e.message : "Unknown error.";
+        const msg = e instanceof Error ? formatMarketplaceTransactionError(e.message) : "Something went wrong. Please try again.";
         showAppAlert("Could not reject bid", msg);
       } finally {
         setMarketBidActionId(null);
@@ -427,6 +496,7 @@ export function AwardModal({ visible, award, onViewIndent, insets }: AwardModalP
                                   bid.id,
                                   bid.amount,
                                   bid.bidder_display_name,
+                                  bid.bidder_type,
                                 )
                             : undefined
                         }
@@ -566,7 +636,7 @@ const styles = StyleSheet.create({
   reviewHubModalHeader: {
     flexDirection: "row",
     alignItems: "center",
-    marginBottom: 12,
+    marginBottom: 8,
     gap: 10,
     flexShrink: 0,
   },

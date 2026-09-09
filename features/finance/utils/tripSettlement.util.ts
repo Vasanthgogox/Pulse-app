@@ -28,6 +28,9 @@ export type TripSettlementLedgerRollup = {
   clientReceived: number;
   supplierPaid: number;
   driverPaid: number;
+  /** DCO-tagged outflows on this trip (DCO-6). Kept separate from
+   * supplierPaid/driverPaid — a DCO is neither. */
+  dcoPaid: number;
   receivedTotal: number;
   paidTotal: number;
   /**
@@ -47,6 +50,7 @@ export function rollupTripSettlementLedger(
   let clientReceived = 0;
   let supplierPaid = 0;
   let driverPaid = 0;
+  let dcoPaid = 0;
   let receivedTotal = 0;
   let paidTotal = 0;
   let untaggedIn = 0;
@@ -64,6 +68,7 @@ export function rollupTripSettlementLedger(
     if (out > 0) {
       if (ct === "supplier") supplierPaid += out;
       else if (ct === "driver") driverPaid += out;
+      else if (ct === "dco") dcoPaid += out;
     }
   }
 
@@ -76,6 +81,7 @@ export function rollupTripSettlementLedger(
     clientReceived: roundCurrency(clientReceived),
     supplierPaid: roundCurrency(supplierPaid),
     driverPaid: roundCurrency(driverPaid),
+    dcoPaid: roundCurrency(dcoPaid),
     receivedTotal: roundCurrency(receivedTotal),
     paidTotal: roundCurrency(paidTotal),
     supplierOutflowTotal: roundCurrency(supplierPaid),
@@ -248,7 +254,9 @@ export function computeTripSettlementDues(input: {
       ? rollup.driverPaid
       : rollup.supplierPaid > 0
         ? rollup.supplierPaid
-        : rollup.paidTotal;
+        : rollup.dcoPaid > 0
+          ? rollup.dcoPaid
+          : rollup.paidTotal;
 
   return {
     tripType,

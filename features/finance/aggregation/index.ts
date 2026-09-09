@@ -18,6 +18,10 @@ export type { TripPartyMap } from './types';
 export { aggregateCustomers } from './aggregateCustomers';
 export { aggregateSuppliers } from './aggregateSuppliers';
 export { aggregateDrivers, computeDriverCommissionForTrip } from './aggregateDrivers';
+export { aggregateDriversFromRpc } from './aggregateDriversFromRpc';
+export { aggregateSuppliersFromRpc } from './aggregateSuppliersFromRpc';
+export { aggregateCustomersFromRpc } from './aggregateCustomersFromRpc';
+export { aggregateDcoPayeesFromRpc, type DcoPayeeName } from './aggregateDcoPayeesFromRpc';
 export {
   buildMonthlyDriverStatement,
   type MonthlyStatementRow,

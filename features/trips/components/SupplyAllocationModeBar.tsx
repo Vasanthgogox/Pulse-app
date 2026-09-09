@@ -95,7 +95,7 @@ export function SupplyAllocationModeBar({
     ? singleModeBanner
     : isWizard ? (
     <View style={[styles.choiceStack, isInline && styles.modeRowInline]}>
-      <Text style={styles.choiceHeading}>How will this move?</Text>
+      <Text style={styles.choiceHeading}>How will this move</Text>
       {showAsset ? (
         <Pressable
           style={[styles.choiceCard, isAsset && styles.choiceCardSelected]}
@@ -188,36 +188,34 @@ export function SupplyAllocationModeBar({
   );
 
   const assignLaterRow = isWizard ? (
-    <View
+    <Pressable
       style={[
-        fullPageWizardStyles.shipperMarkCardFlat,
+        styles.choiceCard,
+        assignLater && styles.choiceCardSelected,
         isInline && styles.assignLaterInlineCard,
         assignLaterDisabled && styles.assignLaterDisabled,
       ]}
+      onPress={() => {
+        if (assignLaterDisabled) return;
+        onAssignLaterChange(!assignLater);
+      }}
+      disabled={assignLaterDisabled}
+      accessibilityRole="button"
+      accessibilityState={{ selected: assignLater, disabled: assignLaterDisabled }}
     >
-      <View style={styles.wizardAssignLaterRow}>
-        <View style={styles.wizardAssignLaterIcon}>
-          <ListChecks size={16} color={Theme.textPrimaryDark} />
-        </View>
-        <View style={fullPageWizardStyles.partyTextWrap}>
-          <Text style={fullPageWizardStyles.partyName} numberOfLines={1}>
-            Assign later
-          </Text>
-          <Text style={fullPageWizardStyles.blockMeta} numberOfLines={1}>
-            {isAsset
-              ? "Pick vehicle & driver on trip detail"
-              : "Add vehicle & driver phone on trip detail"}
-          </Text>
-        </View>
-        <Switch
-          value={assignLater}
-          onValueChange={onAssignLaterChange}
-          disabled={assignLaterDisabled}
-          trackColor={{ false: Theme.borderLight, true: Theme.textPrimaryDark }}
-          thumbColor="#ffffff"
-        />
+      <View style={styles.choiceIcon}>
+        <ListChecks size={14} color={Theme.textPrimaryDark} strokeWidth={2.2} />
       </View>
-    </View>
+      <View style={styles.choiceCopy}>
+        <Text style={styles.choiceTitle}>Assign later</Text>
+        <Text style={styles.choiceSub}>
+          {isAsset
+            ? "Pick vehicle & driver on trip detail"
+            : "Add vehicle & driver phone on trip detail"}
+        </Text>
+      </View>
+      <View style={[styles.radio, assignLater && styles.radioOn]} />
+    </Pressable>
   ) : (
     <View
       style={[
@@ -274,7 +272,7 @@ export function SupplyAllocationModeBar({
 
 const styles = StyleSheet.create({
   wizardStack: {
-    gap: 12,
+    gap: 10,
     width: "100%",
   },
   wizardChipInner: {
@@ -287,31 +285,34 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   choiceHeading: {
-    fontSize: 12,
+    fontSize: 10,
     fontWeight: "700",
-    color: Theme.textPrimaryDark,
+    letterSpacing: 0.45,
+    textTransform: "uppercase",
+    color: Theme.textMuted,
     marginBottom: 2,
   },
   choiceCard: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
-    borderWidth: 1.5,
+    gap: 12,
+    borderWidth: 1,
     borderColor: Theme.borderLight,
     borderRadius: 14,
     paddingVertical: 12,
-    paddingHorizontal: 12,
-    minHeight: 52,
+    paddingHorizontal: 14,
+    minHeight: 58,
     backgroundColor: Theme.cardWhite,
     width: "100%",
   },
   choiceCardSelected: {
     borderColor: Theme.textPrimaryDark,
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1.5,
   },
   choiceIcon: {
-    width: 32,
-    height: 32,
+    width: 36,
+    height: 36,
     borderRadius: 10,
     backgroundColor: Theme.surfaceGray,
     alignItems: "center",
@@ -348,22 +349,6 @@ const styles = StyleSheet.create({
     borderColor: Theme.textPrimaryDark,
     backgroundColor: Theme.textPrimaryDark,
     borderWidth: 5,
-  },
-  wizardAssignLaterRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 10,
-    width: "100%",
-  },
-  wizardAssignLaterIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 9,
-    backgroundColor: Theme.screenBackground,
-    borderWidth: 1,
-    borderColor: Theme.borderLight,
-    alignItems: "center",
-    justifyContent: "center",
   },
   assignLaterDisabled: {
     opacity: 0.65,

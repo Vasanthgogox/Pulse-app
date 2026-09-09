@@ -124,6 +124,25 @@ export function isLrVaultDoc(
   return doc?.id === "lr" || doc?.category === "lr";
 }
 
+export function isDriverPodVaultDoc(
+  doc: Pick<TripDocItem, "id" | "category"> | null | undefined,
+): boolean {
+  if (!doc) return false;
+  const id = (doc.id ?? "").toLowerCase();
+  return id === "pod" || id.startsWith("pod-") || doc.category === "driver";
+}
+
+/** Driver POD uploads are allowed only after the trip is completed. */
+export function canMutateTripVaultDoc(options: {
+  doc: Pick<TripDocItem, "id" | "category"> | null | undefined;
+  canUploadTripDocs: boolean;
+  tripCompleted: boolean;
+}): boolean {
+  if (!options.canUploadTripDocs || !options.doc) return false;
+  if (isDriverPodVaultDoc(options.doc)) return options.tripCompleted;
+  return true;
+}
+
 export function canAddMoreTripDocs(
   doc: Pick<TripDocItem, "category" | "docSource" | "id"> | null | undefined,
 ): boolean {

@@ -49,7 +49,6 @@ const TRIP_KINDS: LedgerAuditEventKind[] = [
   "trip_created",
   "balance",
   "reconciliation",
-  "dispute",
 ];
 const ASSIGNMENT_KINDS: LedgerAuditEventKind[] = ["assignment", "reassignment"];
 
@@ -103,7 +102,6 @@ function eventAvatarEntity(
 
 function primaryActionLabel(event: LedgerAuditFeedEvent): string {
   if (PAYMENT_KINDS.includes(event.kind)) return "View payment";
-  if (event.kind === "dispute") return "View dispute";
   if (event.kind === "reconciliation") return "Compare";
   return "View trip";
 }

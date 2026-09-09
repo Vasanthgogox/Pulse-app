@@ -82,6 +82,7 @@ import {
 } from "@/lib/dateRangePresets";
 import { shouldShowAggregateTripKindPill } from "@/features/drivers/utils/driverUtils.util";
 import { formatLedgerDate } from "@/lib/format";
+import { toReportIsoDate } from "@/features/finance/lib/ledgerReportTable.util";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import { useDriversQuery } from "@/lib/queries/useDriversQuery";
 import { useTripSubcontractsQuery } from "@/lib/queries/useFinanceEntityQueries";
@@ -1038,15 +1039,14 @@ export default function TripsScreen() {
       ).trim();
       const route = `${(trip.pickup_area ?? "—").trim()} → ${(trip.drop_location ?? "—").trim()}`;
       const stage = getStageLabelForTrip(trip);
-      const tripDate = (() => {
-        const raw =
-          trip.pickup_date ??
-          trip.started_at ??
-          trip.completed_at ??
-          trip.created_at ??
-          "";
-        return raw ? formatLedgerDate(raw) : "—";
-      })();
+      const tripDateRaw =
+        trip.pickup_date ??
+        trip.started_at ??
+        trip.completed_at ??
+        trip.created_at ??
+        "";
+      const tripDate = tripDateRaw ? formatLedgerDate(String(tripDateRaw)) : "—";
+      const tripDateIso = toReportIsoDate(tripDateRaw);
       const clientName =
         (shipperNameByTripId[trip.id] ?? (trip.organization_id !== orgId ? "—" : trip.client_name ?? "—")).trim() || "—";
       const supplierName =
@@ -1080,6 +1080,7 @@ export default function TripsScreen() {
         rowType: "TRIP",
         trip: tripRef,
         date: tripDate,
+        dateIso: tripDateIso,
         status: stage,
         route,
         party: clientName,
@@ -1096,10 +1097,12 @@ export default function TripsScreen() {
         txnOut: "",
       });
       for (const txn of txns) {
+        const txnRaw = txn.transaction_date || txn.created_at || "";
         rows.push({
           rowType: "TXN",
           trip: tripRef,
-          date: formatLedgerDate(txn.transaction_date || txn.created_at || ""),
+          date: formatLedgerDate(String(txnRaw)),
+          dateIso: toReportIsoDate(txnRaw),
           status: (txn.reconciliation_status ?? "").toString().toUpperCase(),
           route: "",
           party:
@@ -1124,7 +1127,8 @@ export default function TripsScreen() {
       rows.push({
         rowType: "BAL",
         trip: tripRef,
-        date: "",
+        date: tripDate,
+        dateIso: tripDateIso,
         status: "STATEMENT",
         route: "",
         party: "Trip Balance",

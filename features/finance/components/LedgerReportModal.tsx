@@ -20,11 +20,13 @@ import {
   Linking,
   Platform,
   Pressable,
+  TextInput,
   useWindowDimensions,
 } from 'react-native';
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import { DateRangePickerModal } from '@/components/DateRangePickerModal';
 import { PulseBrandMark } from '@/components/brand/PulseBrandMark';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
@@ -35,6 +37,14 @@ import { printHtmlOnWeb, runAfterOverlayCloses } from '@/lib/webPrint.util';
 import { useLanguage } from '@/contexts/LanguageContext';
 import { getTripOperationalDisplay } from "@/features/operations/display";
 import type { LedgerRow } from '../services/finance.service';
+import {
+  applyLedgerReportView,
+  EMPTY_LEDGER_REPORT_VIEW,
+  ledgerReportViewIsActive,
+  uniqueColumnValues,
+  type LedgerReportViewState,
+  type ReportRow,
+} from '../lib/ledgerReportTable.util';
 
 function formatAmount(n: number): string {
   return `₹${n.toLocaleString('en-IN', { maximumFractionDigits: 0, minimumFractionDigits: 0 })}`;
@@ -205,8 +215,19 @@ function parseReportTitle(title: string): { primary: string; secondary?: string 
 function getCustomColumnWidth(key: string): number {
   switch (key) {
     case 'entity': return 176;
+    case 'rowType': return 64;
     case 'trips': return 56;
     case 'trip': return 118;
+    case 'party': return 156;
+    case 'salesValue':
+    case 'supplierCost':
+    case 'pendingRecv':
+    case 'pendingPay':
+    case 'txnIn':
+    case 'txnOut':
+      return 100;
+    case 'txnMode': return 92;
+    case 'reference': return 148;
     case 'route': return 232;
     case 'model': return 96;
     case 'supplier': return 176;
@@ -263,6 +284,12 @@ function getCustomCellMaxLines(key: string): number {
 function isMoneyColumn(key: string): boolean {
   return (
     key === 'sales' ||
+    key === 'salesValue' ||
+    key === 'supplierCost' ||
+    key === 'pendingRecv' ||
+    key === 'pendingPay' ||
+    key === 'txnIn' ||
+    key === 'txnOut' ||
     key === 'cost' ||
     key === 'paid' ||
     key === 'received' ||
@@ -316,7 +343,20 @@ export function LedgerReportModal({
   const [downloadInProgress, setDownloadInProgress] = useState(false);
   const [formatPickerVisible, setFormatPickerVisible] = useState(false);
   const [formatPickerMode, setFormatPickerMode] = useState<'download' | 'share'>('download');
+  const [viewState, setViewState] = useState<LedgerReportViewState>(EMPTY_LEDGER_REPORT_VIEW);
+  const [datePickerVisible, setDatePickerVisible] = useState(false);
+  const [filterColumnKey, setFilterColumnKey] = useState<string | null>(null);
+  const [filterDraftEquals, setFilterDraftEquals] = useState<string[]>([]);
+  const [filterDraftContains, setFilterDraftContains] = useState('');
+  const [filterValueQuery, setFilterValueQuery] = useState('');
   const displayTitle = title ?? t("ledgerReport");
+
+  useEffect(() => {
+    if (!visible) return;
+    setViewState(EMPTY_LEDGER_REPORT_VIEW);
+    setFilterColumnKey(null);
+    setDatePickerVisible(false);
+  }, [visible]);
   const sortedTransactions = useMemo(
     () => sortLedgerRowsByDate(transactions),
     [transactions],
@@ -328,19 +368,49 @@ export function LedgerReportModal({
   const csv = ledgerToCsv(sortedTransactions);
   const html = ledgerToHtml(sortedTransactions, totalIn, totalOut, displayTitle, periodLabel);
   const isCustomReport = !!customReport;
+  const customColumns = customReport?.columns ?? [];
+  const customSourceRows = customReport?.rows ?? [];
+  const customColumnKeys = useMemo(
+    () => customColumns.map((c) => c.key),
+    [customColumns],
+  );
+  const viewRows = useMemo(() => {
+    if (!isCustomReport) return [] as ReportRow[];
+    return applyLedgerReportView(customSourceRows, viewState, customColumnKeys);
+  }, [isCustomReport, customSourceRows, viewState, customColumnKeys]);
+  const typeOptions = useMemo(
+    () => uniqueColumnValues(customSourceRows, 'rowType'),
+    [customSourceRows],
+  );
+  const statusOptions = useMemo(
+    () => uniqueColumnValues(customSourceRows, 'status'),
+    [customSourceRows],
+  );
+  const hasTypeColumn = customColumnKeys.includes('rowType');
+  const hasStatusColumn = customColumnKeys.includes('status');
+  const hasDateColumn = customColumnKeys.includes('date');
+  const filtersActive = ledgerReportViewIsActive(viewState);
+  const dateRangeLabel =
+    viewState.dateFrom && viewState.dateTo
+      ? `${viewState.dateFrom} → ${viewState.dateTo}`
+      : viewState.dateFrom
+        ? `From ${viewState.dateFrom}`
+        : viewState.dateTo
+          ? `Until ${viewState.dateTo}`
+          : null;
   const activePlainText = useMemo(() => {
     const periodLine = periodLabel?.trim() || null;
     if (!customReport) {
       return periodLine ? `${displayTitle}\n${periodLine}\n\n${plainText}` : plainText;
     }
     const header = customReport.columns.map((c) => c.label).join(' | ');
-    const lines = customReport.rows.map((row) =>
+    const lines = viewRows.map((row) =>
       customReport.columns.map((c) => String(row[c.key] ?? '—').replace(/\|/g, ' ')).join(' | ')
     );
     return [displayTitle.toUpperCase(), periodLine, '—', header, ...lines]
       .filter((line) => line != null && line !== '')
       .join('\n');
-  }, [customReport, plainText, displayTitle, periodLabel]);
+  }, [customReport, viewRows, plainText, displayTitle, periodLabel]);
   const activeCsv = useMemo(() => {
     if (!customReport) return csv;
     const escape = (v: unknown) => {
@@ -348,24 +418,25 @@ export function LedgerReportModal({
       return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const header = customReport.columns.map((c) => escape(c.label)).join(',');
-    const rows = customReport.rows.map((row) =>
+    const rows = viewRows.map((row) =>
       customReport.columns.map((c) => escape(row[c.key] ?? '')).join(',')
     );
     return [header, ...rows].join('\n');
-  }, [customReport, csv]);
+  }, [customReport, viewRows, csv]);
   const activeHtml = useMemo(() => {
     if (!customReport) return html;
     const colWidth = `${Math.max(8, Math.floor(100 / customReport.columns.length))}%`;
+    const rangeLine = [periodLabel, dateRangeLabel].filter(Boolean).join(' · ') || undefined;
     return buildPulseIntelligenceReportHtml({
       title: displayTitle,
-      dateRangeLabel: periodLabel,
+      dateRangeLabel: rangeLine,
       columns: customReport.columns.map((col) => ({
         key: col.key,
         label: col.label,
         align: col.align === 'right' ? 'right' : col.align === 'center' ? 'center' : 'left',
         width: colWidth,
       })),
-      rows: customReport.rows.map((row) => {
+      rows: viewRows.map((row) => {
         const out: Record<string, string> = {};
         for (const col of customReport.columns) {
           const value = row[col.key];
@@ -378,7 +449,7 @@ export function LedgerReportModal({
       }),
       landscape: customReport.columns.length > 7,
     });
-  }, [customReport, html, displayTitle, periodLabel]);
+  }, [customReport, viewRows, html, displayTitle, periodLabel, dateRangeLabel]);
 
   const reportTitleParts = useMemo(
     () => parseReportTitle(displayTitle),
@@ -401,7 +472,9 @@ export function LedgerReportModal({
     customReport &&
     (customReport.columns.length > 4 || customTableMinWidth > windowWidth);
   const recordCountLabel = isCustomReport
-    ? `${customReport!.rows.length} ${customReport!.rows.length === 1 ? 'record' : 'records'}`
+    ? filtersActive
+      ? `${viewRows.length} of ${customSourceRows.length} ${customSourceRows.length === 1 ? 'record' : 'records'}`
+      : `${viewRows.length} ${viewRows.length === 1 ? 'record' : 'records'}`
     : `${sortedTransactions.length} ${sortedTransactions.length === 1 ? 'entry' : 'entries'}`;
 
   const getCustomValueColor = (key: string, value: string): string | undefined => {
@@ -423,12 +496,90 @@ export function LedgerReportModal({
       key === 'margin' ||
       key === 'received' ||
       key === 'paid' ||
+      key === 'pendingRecv' ||
+      key === 'pendingPay' ||
+      key === 'txnIn' ||
+      key === 'txnOut' ||
       key === 'settlement'
     ) {
       return v.startsWith('-') ? Theme.teslaRed : Theme.darkGreen;
     }
     return undefined;
   };
+
+  const toggleSort = (key: string) => {
+    setViewState((prev) => {
+      if (prev.sortKey !== key) return { ...prev, sortKey: key, sortDir: 'asc' };
+      if (prev.sortDir === 'asc') return { ...prev, sortDir: 'desc' };
+      return { ...prev, sortKey: null, sortDir: 'asc' };
+    });
+  };
+
+  const toggleChip = (field: 'typeValues' | 'statusValues', value: string) => {
+    setViewState((prev) => {
+      const current = prev[field];
+      const next = current.includes(value)
+        ? current.filter((v) => v !== value)
+        : [...current, value];
+      return { ...prev, [field]: next };
+    });
+  };
+
+  const columnHasFilter = (key: string) => {
+    if (key === 'date' && (viewState.dateFrom || viewState.dateTo)) return true;
+    if (key === 'rowType' && viewState.typeValues.length) return true;
+    if (key === 'status' && viewState.statusValues.length) return true;
+    if ((viewState.columnContains[key] ?? '').trim()) return true;
+    return (viewState.columnEquals[key] ?? []).length > 0;
+  };
+
+  const openColumnFilter = (key: string) => {
+    if (key === 'date') {
+      setDatePickerVisible(true);
+      return;
+    }
+    const all = uniqueColumnValues(customSourceRows, key);
+    const currentEquals =
+      key === 'rowType'
+        ? viewState.typeValues
+        : key === 'status'
+          ? viewState.statusValues
+          : (viewState.columnEquals[key] ?? []);
+    setFilterDraftEquals(currentEquals.length ? currentEquals : all);
+    setFilterDraftContains(viewState.columnContains[key] ?? '');
+    setFilterValueQuery('');
+    setFilterColumnKey(key);
+  };
+
+  const applyColumnFilter = () => {
+    if (!filterColumnKey) return;
+    const key = filterColumnKey;
+    const all = uniqueColumnValues(customSourceRows, key);
+    const equals =
+      filterDraftEquals.length === all.length ? [] : filterDraftEquals;
+    setViewState((prev) => {
+      const columnContains = { ...prev.columnContains };
+      if (filterDraftContains.trim()) columnContains[key] = filterDraftContains;
+      else delete columnContains[key];
+      if (key === 'rowType') {
+        return { ...prev, typeValues: equals, columnContains };
+      }
+      if (key === 'status') {
+        return { ...prev, statusValues: equals, columnContains };
+      }
+      const columnEquals = { ...prev.columnEquals };
+      if (equals.length) columnEquals[key] = equals;
+      else delete columnEquals[key];
+      return { ...prev, columnEquals, columnContains };
+    });
+    setFilterColumnKey(null);
+  };
+
+  const filterColumnValues = filterColumnKey
+    ? uniqueColumnValues(customSourceRows, filterColumnKey).filter((value) =>
+        value.toLowerCase().includes(filterValueQuery.trim().toLowerCase()),
+      )
+    : [];
 
   const handlePrint = async () => {
     try {
@@ -533,7 +684,7 @@ export function LedgerReportModal({
                 prependPulseExcelBanner(
                   [
                     customReport!.columns.map((c) => c.label),
-                    ...customReport!.rows.map((row) =>
+                    ...viewRows.map((row) =>
                       customReport!.columns.map((c) => row[c.key] ?? ''),
                     ),
                   ],
@@ -564,7 +715,7 @@ export function LedgerReportModal({
               prependPulseExcelBanner(
                 [
                   customReport!.columns.map((c) => c.label),
-                  ...customReport!.rows.map((row) =>
+                  ...viewRows.map((row) =>
                     customReport!.columns.map((c) => row[c.key] ?? ''),
                   ),
                 ],
@@ -642,11 +793,16 @@ export function LedgerReportModal({
     >
       <View style={[styles.overlay, styles.overlayFull]}>
         <View style={[styles.sheet, styles.sheetLight, styles.sheetFull]}>
-          <View style={[styles.header, { paddingTop: Layout.headerPaddingBelowInset + insets.top }]}>
+          <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
             <View style={styles.headerTitleRow}>
-              <Text style={styles.headerTitle} numberOfLines={2}>
-                {reportTitleParts.primary}
-              </Text>
+              <View style={styles.previewMetaRow}>
+                <Text style={styles.headerTitle} numberOfLines={1}>
+                  {reportTitleParts.primary}
+                </Text>
+                <View style={styles.recordCountPill}>
+                  <Text style={styles.recordCountPillText}>{recordCountLabel}</Text>
+                </View>
+              </View>
               {periodLabel ? (
                 <Text style={styles.headerPeriod} numberOfLines={1}>
                   {periodLabel}
@@ -657,15 +813,9 @@ export function LedgerReportModal({
                   {reportTitleParts.secondary}
                 </Text>
               ) : null}
-              <View style={styles.previewMetaRow}>
-                <Text style={styles.previewSubtitle}>Report preview</Text>
-                <View style={styles.recordCountPill}>
-                  <Text style={styles.recordCountPillText}>{recordCountLabel}</Text>
-                </View>
-              </View>
             </View>
             <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={12}>
-              <FontAwesome name="times" size={16} color={PULSE_METRONIC.text} />
+              <FontAwesome name="times" size={14} color={PULSE_METRONIC.text} />
             </TouchableOpacity>
           </View>
           {!hideCashSummary ? (
@@ -687,6 +837,104 @@ export function LedgerReportModal({
             </View>
           ) : null}
 
+          {isCustomReport ? (
+            <View style={styles.filterDock}>
+              <View style={styles.filterBar}>
+                <View style={styles.filterSearchWrap}>
+                  <FontAwesome name="search" size={11} color={PULSE_METRONIC.muted} />
+                  <TextInput
+                    value={viewState.search}
+                    onChangeText={(search) => setViewState((prev) => ({ ...prev, search }))}
+                    placeholder="Search table"
+                    placeholderTextColor={PULSE_METRONIC.muted}
+                    style={[
+                      styles.filterSearchInput,
+                      Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : null,
+                    ]}
+                  />
+                </View>
+                {hasDateColumn ? (
+                  <TouchableOpacity
+                    style={[styles.filterChip, (viewState.dateFrom || viewState.dateTo) && styles.filterChipOn]}
+                    onPress={() => setDatePickerVisible(true)}
+                  >
+                    <FontAwesome name="calendar" size={11} color={PULSE_METRONIC.text} />
+                    <Text style={styles.filterChipText} numberOfLines={1}>
+                      {dateRangeLabel ?? 'Dates'}
+                    </Text>
+                  </TouchableOpacity>
+                ) : null}
+                {filtersActive ? (
+                  <TouchableOpacity
+                    style={styles.filterClearBtn}
+                    onPress={() => setViewState(EMPTY_LEDGER_REPORT_VIEW)}
+                  >
+                    <Text style={styles.filterClearText}>Clear</Text>
+                  </TouchableOpacity>
+                ) : null}
+                {showScrollHint ? (
+                  <Text style={styles.scrollHintInline}>Scroll →</Text>
+                ) : null}
+              </View>
+              {hasTypeColumn || hasStatusColumn ? (
+                <ScrollView
+                  horizontal
+                  showsHorizontalScrollIndicator={false}
+                  style={styles.filterStrip}
+                  contentContainerStyle={styles.filterStripContent}
+                >
+                  {hasTypeColumn && typeOptions.length > 0 ? (
+                    <View style={styles.filterGroup}>
+                      <Text style={styles.filterChipRowLabel}>Type</Text>
+                      <TouchableOpacity
+                        style={[styles.filterChip, viewState.typeValues.length === 0 && styles.filterChipOn]}
+                        onPress={() => setViewState((prev) => ({ ...prev, typeValues: [] }))}
+                      >
+                        <Text style={styles.filterChipText}>All</Text>
+                      </TouchableOpacity>
+                      {typeOptions.map((value) => {
+                        const on = viewState.typeValues.includes(value);
+                        return (
+                          <TouchableOpacity
+                            key={`type-${value}`}
+                            style={[styles.filterChip, on && styles.filterChipOn]}
+                            onPress={() => toggleChip('typeValues', value)}
+                          >
+                            <Text style={[styles.filterChipText, on && styles.filterChipTextOn]}>{value}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+                  {hasTypeColumn && hasStatusColumn ? <View style={styles.filterGroupRule} /> : null}
+                  {hasStatusColumn && statusOptions.length > 0 ? (
+                    <View style={styles.filterGroup}>
+                      <Text style={styles.filterChipRowLabel}>Status</Text>
+                      <TouchableOpacity
+                        style={[styles.filterChip, viewState.statusValues.length === 0 && styles.filterChipOn]}
+                        onPress={() => setViewState((prev) => ({ ...prev, statusValues: [] }))}
+                      >
+                        <Text style={styles.filterChipText}>All</Text>
+                      </TouchableOpacity>
+                      {statusOptions.map((value) => {
+                        const on = viewState.statusValues.includes(value);
+                        return (
+                          <TouchableOpacity
+                            key={`status-${value}`}
+                            style={[styles.filterChip, on && styles.filterChipOn]}
+                            onPress={() => toggleChip('statusValues', value)}
+                          >
+                            <Text style={[styles.filterChipText, on && styles.filterChipTextOn]}>{value}</Text>
+                          </TouchableOpacity>
+                        );
+                      })}
+                    </View>
+                  ) : null}
+                </ScrollView>
+              ) : null}
+            </View>
+          ) : null}
+
           <View style={styles.previewCanvas}>
           {!isCustomReport ? (
             <View style={[styles.tableHeader, styles.ledgerTableHeader]}>
@@ -699,14 +947,6 @@ export function LedgerReportModal({
 
           {isCustomReport ? (
             <View style={styles.customTableShell}>
-              {showScrollHint ? (
-                <View style={styles.scrollHintRow}>
-                  <Text style={styles.scrollHintText}>
-                    Scroll horizontally to view all columns
-                  </Text>
-                  <FontAwesome name="long-arrow-right" size={11} color={PULSE_METRONIC.muted} />
-                </View>
-              ) : null}
               <ScrollView
                 horizontal
                 style={styles.customTableScroll}
@@ -715,28 +955,73 @@ export function LedgerReportModal({
               >
                 <View style={[styles.customTablePane, { width: customTableWidth }]}>
                   <View style={[styles.tableHeader, styles.customTableHeader]}>
-                    {customReport!.columns.map((col) => (
-                      <Text
-                        key={`hdr-${col.key}`}
-                        style={[
-                          styles.th,
-                          styles.thFixed,
-                          col.align === 'right' ? styles.thNum : undefined,
-                          {
-                            width: getCustomColumnWidth(col.key),
-                            textAlign:
-                              col.align === 'right'
-                                ? 'right'
-                                : col.align === 'center'
-                                  ? 'center'
-                                  : 'left',
-                          },
-                        ]}
-                        numberOfLines={1}
-                      >
-                        {col.label}
-                      </Text>
-                    ))}
+                    {customReport!.columns.map((col) => {
+                      const sorted = viewState.sortKey === col.key;
+                      const filtered = columnHasFilter(col.key);
+                      return (
+                        <View
+                          key={`hdr-${col.key}`}
+                          style={[
+                            styles.thFixed,
+                            {
+                              width: getCustomColumnWidth(col.key),
+                              flexDirection: 'row',
+                              alignItems: 'center',
+                              justifyContent:
+                                col.align === 'right'
+                                  ? 'flex-end'
+                                  : col.align === 'center'
+                                    ? 'center'
+                                    : 'flex-start',
+                              gap: 4,
+                            },
+                          ]}
+                        >
+                          <TouchableOpacity
+                            onPress={() => toggleSort(col.key)}
+                            hitSlop={8}
+                            style={styles.thSortHit}
+                          >
+                            <Text
+                              style={[
+                                styles.th,
+                                col.align === 'right' ? styles.thNum : undefined,
+                                sorted && styles.thSorted,
+                                {
+                                  textAlign:
+                                    col.align === 'right'
+                                      ? 'right'
+                                      : col.align === 'center'
+                                        ? 'center'
+                                        : 'left',
+                                },
+                              ]}
+                              numberOfLines={1}
+                            >
+                              {col.label}
+                            </Text>
+                            <FontAwesome
+                              name={
+                                sorted
+                                  ? viewState.sortDir === 'asc'
+                                    ? 'caret-up'
+                                    : 'caret-down'
+                                  : 'sort'
+                              }
+                              size={sorted ? 11 : 9}
+                              color={sorted ? PULSE_METRONIC.text : PULSE_METRONIC.muted}
+                            />
+                          </TouchableOpacity>
+                          <TouchableOpacity onPress={() => openColumnFilter(col.key)} hitSlop={8}>
+                            <FontAwesome
+                              name="filter"
+                              size={10}
+                              color={filtered ? Theme.primary : PULSE_METRONIC.muted}
+                            />
+                          </TouchableOpacity>
+                        </View>
+                      );
+                    })}
                   </View>
 
                   <ScrollView
@@ -744,14 +1029,14 @@ export function LedgerReportModal({
                     nestedScrollEnabled
                     contentContainerStyle={[
                       styles.listContent,
-                      customReport!.rows.length === 0 && styles.listContentEmpty,
+                      viewRows.length === 0 && styles.listContentEmpty,
                     ]}
                     showsVerticalScrollIndicator
                   >
-                    {customReport!.rows.length === 0 ? (
+                    {viewRows.length === 0 ? (
                       <Text style={styles.empty}>{t("noLedgerEntries")}</Text>
                     ) : (
-                      customReport!.rows.map((row, idx) => (
+                      viewRows.map((row, idx) => (
                         <View
                           key={`custom-row-${idx}`}
                           style={[styles.row, styles.customDataRow, idx % 2 === 1 && styles.altRow]}
@@ -863,23 +1148,17 @@ export function LedgerReportModal({
             </View>
           </View>
 
-          <View style={[styles.actionBar, { paddingBottom: 12 + insets.bottom }]}>
+          <View style={[styles.actionBar, { paddingBottom: Math.max(8, insets.bottom) }]}>
             <TouchableOpacity style={styles.actionBtn} onPress={handlePrint} activeOpacity={0.85}>
-              <View style={styles.actionIconWrap}>
-                <FontAwesome name="print" size={15} color={PULSE_METRONIC.text} />
-              </View>
+              <FontAwesome name="print" size={13} color={PULSE_METRONIC.text} />
               <Text style={styles.actionBtnText}>Print</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionBtn} onPress={handleWhatsApp} activeOpacity={0.85}>
-              <View style={styles.actionIconWrap}>
-                <FontAwesome name="whatsapp" size={16} color={PULSE_METRONIC.text} />
-              </View>
+              <FontAwesome name="whatsapp" size={14} color={PULSE_METRONIC.text} />
               <Text style={styles.actionBtnText}>WhatsApp</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.actionBtn} onPress={handleShare} activeOpacity={0.85}>
-              <View style={styles.actionIconWrap}>
-                <FontAwesome name="share-alt" size={15} color={PULSE_METRONIC.text} />
-              </View>
+              <FontAwesome name="share-alt" size={13} color={PULSE_METRONIC.text} />
               <Text style={styles.actionBtnText}>Share</Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -888,13 +1167,11 @@ export function LedgerReportModal({
               disabled={downloadInProgress}
               activeOpacity={0.85}
             >
-              <View style={styles.actionIconWrap}>
-                {downloadInProgress ? (
-                  <LoadingIndicator size="small" color={PULSE_METRONIC.text} />
-                ) : (
-                  <FontAwesome name="download" size={15} color={PULSE_METRONIC.text} />
-                )}
-              </View>
+              {downloadInProgress ? (
+                <LoadingIndicator size="small" color={PULSE_METRONIC.text} />
+              ) : (
+                <FontAwesome name="download" size={13} color={PULSE_METRONIC.text} />
+              )}
               <Text style={styles.actionBtnText}>
                 {downloadInProgress ? 'Generating…' : 'Download'}
               </Text>
@@ -902,6 +1179,96 @@ export function LedgerReportModal({
           </View>
         </View>
       </View>
+      <DateRangePickerModal
+        visible={datePickerVisible}
+        initialFrom={viewState.dateFrom}
+        initialTo={viewState.dateTo}
+        onDismiss={() => setDatePickerVisible(false)}
+        onApply={(from, to) => {
+          setViewState((prev) => ({ ...prev, dateFrom: from, dateTo: to }));
+          setDatePickerVisible(false);
+        }}
+        onClear={() => {
+          setViewState((prev) => ({ ...prev, dateFrom: null, dateTo: null }));
+          setDatePickerVisible(false);
+        }}
+      />
+      <Modal
+        visible={filterColumnKey != null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setFilterColumnKey(null)}
+      >
+        <Pressable
+          style={[styles.modalOverlay, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
+          onPress={() => setFilterColumnKey(null)}
+        >
+          <Pressable
+            style={styles.columnFilterCard}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <Text style={styles.downloadModalTitle}>
+              Filter {customColumns.find((c) => c.key === filterColumnKey)?.label ?? ''}
+            </Text>
+            <TextInput
+              value={filterDraftContains}
+              onChangeText={setFilterDraftContains}
+              placeholder="Contains text"
+              placeholderTextColor={PULSE_METRONIC.muted}
+              style={styles.columnFilterInput}
+            />
+            <TextInput
+              value={filterValueQuery}
+              onChangeText={setFilterValueQuery}
+              placeholder="Find value"
+              placeholderTextColor={PULSE_METRONIC.muted}
+              style={styles.columnFilterInput}
+            />
+            <View style={styles.columnFilterSelectRow}>
+              <TouchableOpacity
+                onPress={() =>
+                  setFilterDraftEquals(uniqueColumnValues(customSourceRows, filterColumnKey ?? ''))
+                }
+              >
+                <Text style={styles.columnFilterLink}>Select all</Text>
+              </TouchableOpacity>
+              <TouchableOpacity onPress={() => setFilterDraftEquals([])}>
+                <Text style={styles.columnFilterLink}>Clear</Text>
+              </TouchableOpacity>
+            </View>
+            <ScrollView style={styles.columnFilterList} nestedScrollEnabled>
+              {filterColumnValues.map((value) => {
+                const checked = filterDraftEquals.includes(value);
+                return (
+                  <TouchableOpacity
+                    key={value}
+                    style={styles.columnFilterOption}
+                    onPress={() =>
+                      setFilterDraftEquals((prev) =>
+                        prev.includes(value)
+                          ? prev.filter((v) => v !== value)
+                          : [...prev, value],
+                      )
+                    }
+                  >
+                    <FontAwesome
+                      name={checked ? 'check-square-o' : 'square-o'}
+                      size={16}
+                      color={checked ? Theme.primary : PULSE_METRONIC.muted}
+                    />
+                    <Text style={styles.columnFilterOptionText} numberOfLines={2}>
+                      {value}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
+            <TouchableOpacity style={styles.columnFilterApply} onPress={applyColumnFilter}>
+              <Text style={styles.columnFilterApplyText}>Apply</Text>
+            </TouchableOpacity>
+          </Pressable>
+        </Pressable>
+      </Modal>
       <Modal
         visible={formatPickerVisible}
         transparent
@@ -982,13 +1349,15 @@ const styles = StyleSheet.create({
   },
   header: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
+    alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: TABLE_HPAD,
-    paddingBottom: 14,
+    paddingBottom: 8,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: PULSE_METRONIC.border,
     backgroundColor: Theme.cardWhite,
+    flexGrow: 0,
+    flexShrink: 0,
   },
   headerTitleRow: {
     flex: 1,
@@ -996,21 +1365,21 @@ const styles = StyleSheet.create({
     paddingRight: 12,
   },
   headerTitle: {
-    fontSize: 17,
+    fontSize: 16,
     fontWeight: '700',
     color: PULSE_METRONIC.text,
     letterSpacing: -0.2,
-    lineHeight: 22,
+    lineHeight: 20,
   },
   headerPeriod: {
-    marginTop: 3,
+    marginTop: 2,
     fontSize: 10,
     fontWeight: '500',
     color: PULSE_METRONIC.muted,
     letterSpacing: 0.1,
   },
   headerReportKind: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '600',
     color: PULSE_METRONIC.text,
     marginTop: 2,
@@ -1022,15 +1391,14 @@ const styles = StyleSheet.create({
     color: PULSE_METRONIC.muted,
   },
   previewMetaRow: {
-    marginTop: 8,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
     flexWrap: 'wrap',
   },
   recordCountPill: {
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderRadius: 999,
     backgroundColor: '#EEF3FA',
     borderWidth: StyleSheet.hairlineWidth,
@@ -1043,62 +1411,51 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   closeBtn: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: PULSE_METRONIC.border,
-    borderRadius: 18,
-    marginTop: 2,
+    borderRadius: 16,
   },
   actionBar: {
     flexDirection: 'row',
     paddingHorizontal: TABLE_HPAD,
-    paddingTop: 12,
-    gap: 8,
+    paddingTop: 8,
+    gap: 6,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: PULSE_METRONIC.border,
     backgroundColor: Theme.cardWhite,
-    ...Platform.select({
-      ios: {
-        shadowColor: '#000',
-        shadowOffset: { width: 0, height: -2 },
-        shadowOpacity: 0.04,
-        shadowRadius: 6,
-      },
-      android: {
-        elevation: 4,
-      },
-      default: {},
-    }),
+    flexGrow: 0,
+    flexShrink: 0,
   },
   actionBtn: {
     flex: 1,
-    flexDirection: 'column',
+    flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
     gap: 6,
-    paddingVertical: 10,
-    paddingHorizontal: 4,
+    paddingVertical: 8,
+    paddingHorizontal: 6,
     backgroundColor: Theme.cardWhite,
-    borderRadius: 10,
+    borderRadius: 8,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: PULSE_METRONIC.border,
-    minHeight: Layout.minTouchTargetSize + 12,
+    minHeight: 40,
   },
   actionBtnDisabled: {
     opacity: 0.55,
   },
   actionIconWrap: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
+    width: 22,
+    height: 22,
+    borderRadius: 11,
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: '#F5F8FA',
   },
   actionBtnText: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: '600',
     color: PULSE_METRONIC.text,
     letterSpacing: -0.1,
@@ -1140,14 +1497,197 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: TABLE_HPAD,
-    paddingVertical: 10,
+    paddingVertical: 6,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: PULSE_METRONIC.border,
     backgroundColor: '#F8FAFC',
     gap: COLUMN_GAP,
   },
   customTableHeader: {
-    minHeight: 40,
+    minHeight: 36,
+    alignItems: 'center',
+  },
+  thSortHit: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    minWidth: 0,
+    flexShrink: 1,
+  },
+  thSorted: {
+    color: PULSE_METRONIC.text,
+  },
+  filterDock: {
+    flexGrow: 0,
+    flexShrink: 0,
+    backgroundColor: Theme.cardWhite,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: PULSE_METRONIC.border,
+  },
+  filterBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: TABLE_HPAD,
+    paddingTop: 8,
+    paddingBottom: 6,
+  },
+  filterSearchWrap: {
+    flex: 1,
+    minWidth: 140,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    height: 32,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: '#F5F8FA',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: PULSE_METRONIC.border,
+  },
+  filterSearchInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    color: PULSE_METRONIC.text,
+    paddingVertical: 0,
+  },
+  filterStrip: {
+    flexGrow: 0,
+    flexShrink: 0,
+    height: 36,
+    maxHeight: 36,
+  },
+  filterStripContent: {
+    flexGrow: 0,
+    alignItems: 'center',
+    paddingHorizontal: TABLE_HPAD,
+    paddingBottom: 6,
+    gap: 10,
+  },
+  filterGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  filterGroupRule: {
+    width: 1,
+    height: 16,
+    backgroundColor: PULSE_METRONIC.border,
+  },
+  filterChipRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  filterChipRowLabel: {
+    fontSize: 10,
+    fontWeight: '700',
+    color: PULSE_METRONIC.muted,
+    letterSpacing: 0.4,
+    textTransform: 'uppercase',
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    minHeight: 26,
+    borderRadius: 999,
+    backgroundColor: '#F5F8FA',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: PULSE_METRONIC.border,
+    maxWidth: 180,
+  },
+  filterChipOn: {
+    backgroundColor: '#EEF3FA',
+    borderColor: PULSE_METRONIC.text,
+  },
+  filterChipText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: PULSE_METRONIC.text,
+  },
+  filterChipTextOn: {
+    fontWeight: '700',
+  },
+  filterClearBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    minHeight: 32,
+    justifyContent: 'center',
+  },
+  filterClearText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Theme.teslaRed,
+  },
+  scrollHintInline: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: PULSE_METRONIC.muted,
+    flexShrink: 0,
+  },
+  columnFilterCard: {
+    width: '100%',
+    maxWidth: 360,
+    maxHeight: '80%',
+    backgroundColor: Theme.surface,
+    borderRadius: 16,
+    padding: 16,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+  },
+  columnFilterInput: {
+    marginTop: 10,
+    height: 40,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    backgroundColor: '#F5F8FA',
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: PULSE_METRONIC.border,
+    color: PULSE_METRONIC.text,
+    fontSize: 13,
+  },
+  columnFilterSelectRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+    marginBottom: 6,
+  },
+  columnFilterLink: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: Theme.primary,
+  },
+  columnFilterList: {
+    maxHeight: 240,
+  },
+  columnFilterOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    minHeight: 44,
+  },
+  columnFilterOptionText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    color: PULSE_METRONIC.text,
+  },
+  columnFilterApply: {
+    marginTop: 12,
+    backgroundColor: PULSE_METRONIC.text,
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+  },
+  columnFilterApplyText: {
+    color: Theme.cardWhite,
+    fontSize: 14,
+    fontWeight: '700',
   },
   th: {
     fontSize: 10,
@@ -1166,12 +1706,12 @@ const styles = StyleSheet.create({
   },
   customTableShell: {
     flex: 1,
-    minHeight: 120,
+    minHeight: 0,
     backgroundColor: Theme.cardWhite,
   },
   previewCanvas: {
     flex: 1,
-    minHeight: 120,
+    minHeight: 0,
     position: 'relative',
     overflow: 'hidden',
     backgroundColor: Theme.cardWhite,
@@ -1183,12 +1723,12 @@ const styles = StyleSheet.create({
     zIndex: 4,
   },
   previewWatermarkMark: {
-    opacity: 0.2,
+    opacity: 0.08,
     transform: [{ rotate: '-22deg' }],
   },
   previewWatermarkText: {
-    fontSize: 80,
-    lineHeight: 88,
+    fontSize: 64,
+    lineHeight: 72,
     fontWeight: '700',
     letterSpacing: -1.6,
   },
@@ -1210,7 +1750,7 @@ const styles = StyleSheet.create({
   },
   customTableScroll: {
     flex: 1,
-    minHeight: 120,
+    minHeight: 0,
     backgroundColor: Theme.cardWhite,
   },
   customTableScrollContent: {
@@ -1218,15 +1758,15 @@ const styles = StyleSheet.create({
   },
   customTablePane: {
     flex: 1,
-    minHeight: 120,
+    minHeight: 0,
   },
   list: {
     flex: 1,
-    minHeight: 120,
+    minHeight: 0,
     backgroundColor: Theme.cardWhite,
   },
   listContent: {
-    paddingBottom: 20,
+    paddingBottom: 8,
     flexGrow: 1,
   },
   listContentEmpty: {
@@ -1237,7 +1777,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: TABLE_HPAD,
-    paddingVertical: 11,
+    paddingVertical: 7,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: PULSE_METRONIC.border,
     gap: COLUMN_GAP,
@@ -1247,12 +1787,12 @@ const styles = StyleSheet.create({
   },
   customDataRow: {
     alignItems: 'flex-start',
-    minHeight: 48,
-    paddingVertical: 11,
+    minHeight: 36,
+    paddingVertical: 7,
   },
   ledgerDataRow: {
     alignItems: 'flex-start',
-    minHeight: 48,
+    minHeight: 40,
   },
   cellEntity: { flex: 1, minWidth: 0 },
   entityName: {

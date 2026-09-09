@@ -113,6 +113,94 @@ export interface MissionLogEntry {
   loc: string;
   details: string;
   atIso: string | null;
+  /** App GPS place captured nearest this step. Null when no ping was stored. */
+  driverLoc: string | null;
+  /** `business` when the ping was simulated from the business app. */
+  driverLocKind: "driver" | "business" | null;
+}
+
+export interface DriverAppLocationPoint {
+  latitude: number;
+  longitude: number;
+  recorded_at: string;
+  address_label?: string | null;
+  source?: string | null;
+}
+
+const APP_LOCATION_MATCH_MS = 45 * 60 * 1000;
+
+export function formatAppCoordinateLabel(latitude: number, longitude: number): string {
+  return `${latitude.toFixed(5)}, ${longitude.toFixed(5)}`;
+}
+
+export function appLocationLabel(point: DriverAppLocationPoint): string {
+  const label = point.address_label?.trim();
+  if (label) return label;
+  return formatAppCoordinateLabel(point.latitude, point.longitude);
+}
+
+function nearestAppLocation(
+  atIso: string | null,
+  points: DriverAppLocationPoint[],
+  preferLatestInRangeEndIso?: string | null,
+): DriverAppLocationPoint | null {
+  if (!atIso || points.length === 0) return null;
+  const start = new Date(atIso).getTime();
+  if (!Number.isFinite(start)) return null;
+
+  if (preferLatestInRangeEndIso) {
+    const end = new Date(preferLatestInRangeEndIso).getTime();
+    if (Number.isFinite(end) && end >= start) {
+      const inRange = points.filter((point) => {
+        const t = new Date(point.recorded_at).getTime();
+        return Number.isFinite(t) && t >= start && t <= end;
+      });
+      if (inRange.length > 0) return inRange[inRange.length - 1] ?? null;
+    }
+  }
+
+  let best: DriverAppLocationPoint | null = null;
+  let bestScore = Infinity;
+  for (const point of points) {
+    const t = new Date(point.recorded_at).getTime();
+    if (!Number.isFinite(t)) continue;
+    const delta = Math.abs(t - start);
+    if (delta > APP_LOCATION_MATCH_MS) continue;
+    const score = t <= start ? delta : delta + 1;
+    if (score < bestScore) {
+      best = point;
+      bestScore = score;
+    }
+  }
+  return best;
+}
+
+/** Attach the app GPS place recorded nearest each timeline step. */
+export function attachDriverAppLocations(
+  entries: MissionLogEntry[],
+  points: DriverAppLocationPoint[],
+): MissionLogEntry[] {
+  const sorted = [...points].sort(
+    (a, b) => new Date(a.recorded_at).getTime() - new Date(b.recorded_at).getTime(),
+  );
+  return entries.map((entry, index) => {
+    const nextAt = entries[index + 1]?.atIso ?? null;
+    const isTransit = isInTransitStatus(entry.status);
+    const point = nearestAppLocation(
+      entry.atIso,
+      sorted,
+      isTransit ? nextAt : null,
+    );
+    return {
+      ...entry,
+      driverLoc: point ? appLocationLabel(point) : null,
+      driverLocKind: point
+        ? point.source === "simulated"
+          ? "business"
+          : "driver"
+        : null,
+    };
+  });
 }
 
 export function isInTransitStatus(status: string): boolean {
@@ -129,6 +217,8 @@ export function buildMissionLog(trip: TripRow): MissionLogEntry[] {
       details:
         "Trip ID assigned to pilot. Vehicle ready for pickup at the scheduled origin.",
       atIso: trip.created_at,
+      driverLoc: null,
+      driverLocKind: null,
     });
   }
   if (trip.started_at) {
@@ -139,6 +229,8 @@ export function buildMissionLog(trip: TripRow): MissionLogEntry[] {
       details:
         "Cargo verified at origin. Load confirmed and departure logged for this trip.",
       atIso: trip.started_at,
+      driverLoc: null,
+      driverLocKind: null,
     });
     entries.push({
       time: formatTime(trip.started_at),
@@ -146,6 +238,8 @@ export function buildMissionLog(trip: TripRow): MissionLogEntry[] {
       loc: trip.pickup_area || "—",
       details: "Route progress updated. Movement tracked toward the destination.",
       atIso: trip.started_at,
+      driverLoc: null,
+      driverLocKind: null,
     });
   }
   if (trip.completed_at) {
@@ -156,6 +250,8 @@ export function buildMissionLog(trip: TripRow): MissionLogEntry[] {
       details:
         "Handed over at destination. Trip marked complete and eligible for settlement.",
       atIso: trip.completed_at,
+      driverLoc: null,
+      driverLocKind: null,
     });
   }
   if (entries.length === 0 && trip.created_at) {
@@ -166,6 +262,8 @@ export function buildMissionLog(trip: TripRow): MissionLogEntry[] {
       details:
         "Trip ID assigned to pilot. Vehicle ready for pickup at the scheduled origin.",
       atIso: trip.created_at,
+      driverLoc: null,
+      driverLocKind: null,
     });
   }
   return entries;

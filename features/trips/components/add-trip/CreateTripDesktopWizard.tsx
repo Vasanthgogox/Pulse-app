@@ -41,6 +41,13 @@ import {
   buildClientLanePrefill,
   repriceLaneForTons,
 } from "@/features/clients/utils/clientLanePrefill.util";
+import {
+  computeClientPrice,
+  formatSaleAmount,
+  parsePositiveAmount,
+  parsePositiveTons,
+  type SaleRateBasis,
+} from "@/features/clients/utils/saleRateSnapshot.util";
 import { AggregateTrackingMobileStep } from "./AggregateTrackingMobileStep";
 import { CreateTripDesktopAllocationStep } from "./CreateTripDesktopAllocationStep";
 import { CreateTripDesktopAsideArt } from "./CreateTripDesktopAsideArt";
@@ -229,12 +236,18 @@ export function CreateTripDesktopWizard({
     (lane: ClientLaneRate) => {
       const prefill = buildClientLanePrefill(lane);
       setSelectedLaneId(lane.id);
+      setters.setLaneId(lane.id);
+      setters.setSaleRateBasis(prefill.saleRateBasis);
+      setters.setSaleUnitRate(
+        prefill.saleUnitRate != null ? String(prefill.saleUnitRate) : "",
+      );
       if (prefill.pickup) setters.setPickupArea(prefill.pickup);
       if (prefill.drop) setters.setDropLocation(prefill.drop);
       if (prefill.vehicleType) setters.setVehicleType(prefill.vehicleType);
       if (prefill.loadType) setters.setLoadType(prefill.loadType);
       if (prefill.tons) setters.setTons(prefill.tons);
       if (prefill.clientPrice) setters.setClientPrice(prefill.clientPrice);
+      else if (prefill.saleRateBasis === "per_mt") setters.setClientPrice("");
       const wh = clientWarehouses.find((w) => w.id === prefill.originWarehouseId);
       if (wh?.latitude != null && wh?.longitude != null) {
         setters.setPickupCoords(wh.latitude, wh.longitude);
@@ -245,15 +258,62 @@ export function CreateTripDesktopWizard({
 
   const handleClearLane = useCallback(() => {
     setSelectedLaneId(null);
-  }, []);
+    setters.setLaneId(null);
+    setters.setSaleRateBasis("per_trip");
+    setters.setSaleUnitRate("");
+  }, [setters]);
+
+  const syncPerMtTotal = useCallback(
+    (unitRaw: string, tonsRaw: string) => {
+      const total = computeClientPrice({
+        basis: "per_mt",
+        unitRate: parsePositiveAmount(unitRaw),
+        tons: parsePositiveTons(tonsRaw),
+      });
+      setters.setClientPrice(formatSaleAmount(total));
+    },
+    [setters],
+  );
+
+  const handleSaleRateBasisChange = useCallback(
+    (basis: SaleRateBasis) => {
+      setters.setSaleRateBasis(basis);
+      if (basis === "per_mt") {
+        const tons = parsePositiveTons(state.tons);
+        const total = parsePositiveAmount(state.clientPrice);
+        if (tons && total && !parsePositiveAmount(state.saleUnitRate)) {
+          const unit = Math.round((total / tons) * 100) / 100;
+          setters.setSaleUnitRate(String(unit));
+        }
+        syncPerMtTotal(state.saleUnitRate, state.tons);
+        return;
+      }
+      if (parsePositiveAmount(state.saleUnitRate) && parsePositiveTons(state.tons)) {
+        syncPerMtTotal(state.saleUnitRate, state.tons);
+      }
+    },
+    [setters, state.clientPrice, state.saleUnitRate, state.tons, syncPerMtTotal],
+  );
+
+  const handleSaleUnitRateChange = useCallback(
+    (value: string) => {
+      setters.setSaleUnitRate(value);
+      syncPerMtTotal(value, state.tons);
+    },
+    [setters, state.tons, syncPerMtTotal],
+  );
 
   /**
-   * Weight drives the price on per-ton / per-kg contract lanes, so editing tons
-   * after picking a lane must re-derive the client price.
+   * Weight drives the price on per-MT lanes, so editing tons must re-derive
+   * the client price from the stored unit rate.
    */
   const handleTonsChange = useCallback(
     (value: string) => {
       setters.setTons(value);
+      if (state.saleRateBasis === "per_mt") {
+        syncPerMtTotal(state.saleUnitRate, value);
+        return;
+      }
       const lane = selectedLaneId
         ? contractLanes.find((l) => l.id === selectedLaneId)
         : undefined;
@@ -261,7 +321,7 @@ export function CreateTripDesktopWizard({
       const repriced = repriceLaneForTons(lane, value);
       if (repriced) setters.setClientPrice(repriced);
     },
-    [contractLanes, selectedLaneId, setters],
+    [contractLanes, selectedLaneId, setters, state.saleRateBasis, state.saleUnitRate, syncPerMtTotal],
   );
 
   const handleChangeLaneFromRoute = useCallback(() => {
@@ -272,6 +332,12 @@ export function CreateTripDesktopWizard({
   useEffect(() => {
     onContractLaneLockedChange?.(Boolean(selectedLaneId));
   }, [selectedLaneId, onContractLaneLockedChange]);
+
+  useEffect(() => {
+    if (state.laneId && state.laneId !== selectedLaneId) {
+      setSelectedLaneId(state.laneId);
+    }
+  }, [state.laneId, selectedLaneId]);
 
   const handleAddClient = useCallback(() => {
     router.push({
@@ -522,6 +588,10 @@ export function CreateTripDesktopWizard({
           laneSearch={laneSearch}
           onLaneSearchChange={setLaneSearch}
           onLaneGateActiveChange={onLaneGateActiveChange}
+          saleRateBasis={state.saleRateBasis}
+          saleUnitRate={state.saleUnitRate}
+          onSaleRateBasisChange={handleSaleRateBasisChange}
+          onSaleUnitRateChange={handleSaleUnitRateChange}
         />
       );
       break;

@@ -45,7 +45,11 @@ import {
     bidMarginFromClient,
     buildSupplierQuoteFooterInsight,
 } from "@/features/indents/utils/bidding/indentLiveBids.util";
-import { resolveIndentClientEntityDisplayName } from "@/features/indents/utils/indentPartyDisplay.util";
+import {
+    resolveAwardedVendorName,
+    resolveGiveLoadAwardedAmountInr,
+    supplierNameByLinkedOrgId,
+} from "@/features/network/utils/awardedVendorName.util";
 import { shareIndentOnWhatsApp } from "@/features/indents/utils/indentShare.util";
 import { ShareLoadSheet } from "@/features/network/components/ShareLoadSheet";
 import type { LoadCenterIntegratedParty } from "@/features/network/utils/loadCenterIntegratedParties.util";
@@ -801,16 +805,39 @@ export function IndentDetailScreen({
   const clientEntityRawName = resolveIndentClientEntityDisplayName(indent, orgId);
   const awardedQuote =
     quotes.find((q) => normalizeStatus(q.status) === "accepted") ?? null;
-  const awardedSupplierAmount =
-    awardedQuote != null ? Number(awardedQuote.amount ?? 0) : null;
+  const tripSupplier = linkedTrip?.supplier_id
+    ? suppliers.find((s) => s.id === linkedTrip.supplier_id)
+    : undefined;
+  const awardedVendorName = resolveAwardedVendorName({
+    assignedSupplierOrgId: indent.assigned_supplier_id ?? null,
+    sessionName: awardedQuote?.bidder_organization_name ?? null,
+    supplierNameByOrgId: supplierNameByLinkedOrgId(suppliers),
+    fallbackName:
+      (tripSupplier?.name ||
+        tripSupplier?.company_name ||
+        linkedTrip?.supplier_name ||
+        (linkedTrip?.driver_id
+          ? driverProfileById.get(linkedTrip.driver_id)?.name
+          : "") ||
+        linkedTrip?.driver_display_name ||
+        "") || null,
+  });
+  const awardedSupplierAmount = resolveGiveLoadAwardedAmountInr({
+    assignedSupplierRate: indent.assigned_supplier_rate,
+    awardedAmount: indent.awarded_amount,
+    indentSupplierRate: indent.supplier_rate,
+    acceptedQuoteAmount: awardedQuote?.amount,
+    tripSupplierRate: linkedTrip?.supplier_rate,
+    tripDriverCommission: linkedTrip?.driver_commission,
+    tripClientPrice: linkedTrip?.client_price,
+    supplierTarget: indent.supplier_target,
+  });
   const showAwardedSupplierRate =
     statusLower === "awarded" ||
     statusLower === "completed" ||
     statusLower === "deployed";
   const effectiveSupplierAmount =
-    showAwardedSupplierRate &&
-    awardedSupplierAmount != null &&
-    awardedSupplierAmount > 0
+    showAwardedSupplierRate && awardedSupplierAmount != null
       ? awardedSupplierAmount
       : Number(indent.supplier_target ?? 0);
   const freight = formatINR(Number(indent.client_price ?? 0));
@@ -1181,6 +1208,15 @@ export function IndentDetailScreen({
               liveBidsCount={liveBidsCount}
               clientPriceInr={clientPriceNum}
               supplierTargetInr={supplierTargetNum}
+              vendorName={isOwner ? awardedVendorName : null}
+              vendorRate={
+                isOwner &&
+                awardedVendorName &&
+                awardedSupplierAmount != null &&
+                awardedSupplierAmount > 0
+                  ? formatINR(awardedSupplierAmount)
+                  : null
+              }
               primaryActionLabel={mobilePrimaryAction?.label}
               onPrimaryAction={mobilePrimaryAction?.onPress}
               secondaryActionLabel={

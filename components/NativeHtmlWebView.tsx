@@ -23,6 +23,8 @@ type NativeHtmlWebViewProps = {
    * (payment request / PDF-style HTML viewers).
    */
   docPreview?: boolean;
+  /** A8.7: bridge for a page that calls window.ReactNativeWebView.postMessage(...). */
+  onMessage?: WebViewProps["onMessage"];
 };
 
 let WebViewComponent: React.ComponentType<WebViewProps> | null = null;
@@ -71,6 +73,7 @@ export function NativeHtmlWebView({
   style,
   startInLoadingState,
   docPreview = false,
+  onMessage,
 }: NativeHtmlWebViewProps) {
   const [ready, setReady] = useState(() => WebViewComponent != null);
 
@@ -122,6 +125,7 @@ export function NativeHtmlWebView({
       setBuiltInZoomControls={docPreview || undefined}
       setDisplayZoomControls={false}
       javaScriptEnabled
+      onMessage={onMessage}
       bounces={docPreview}
       {...(docPreview
         ? {

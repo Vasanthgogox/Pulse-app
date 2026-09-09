@@ -21,6 +21,7 @@ import { CreateTripLaneGatePanel } from "./CreateTripLaneGatePanel";
 import { DesktopSectionHeading } from "./CreateTripDesktopUi";
 import { createTripDesktopStyles as s } from "./createTripDesktop.styles";
 import type { ClientLaneRate } from "@/features/clients/types/clientManagement.types";
+import type { SaleRateBasis } from "@/features/clients/utils/saleRateSnapshot.util";
 
 function formatInr(raw: string): string | null {
   const n = Number(String(raw).replace(/[^\d.]/g, ""));
@@ -52,6 +53,10 @@ export type CreateTripDesktopClientStepProps = {
   onLaneSearchChange?: (value: string) => void;
   /** Parent can block wizard Continue while the lane gate is showing. */
   onLaneGateActiveChange?: (active: boolean) => void;
+  saleRateBasis?: SaleRateBasis;
+  saleUnitRate?: string;
+  onSaleRateBasisChange?: (basis: SaleRateBasis) => void;
+  onSaleUnitRateChange?: (value: string) => void;
 };
 
 export const CreateTripDesktopClientStep = memo(
@@ -78,6 +83,10 @@ export const CreateTripDesktopClientStep = memo(
     laneSearch,
     onLaneSearchChange,
     onLaneGateActiveChange,
+    saleRateBasis = "per_trip",
+    saleUnitRate = "",
+    onSaleRateBasisChange,
+    onSaleUnitRateChange,
   }: CreateTripDesktopClientStepProps) {
     const showClientChange = Boolean(clientId);
     const [saleModalOpen, setSaleModalOpen] = useState(false);
@@ -121,7 +130,21 @@ export const CreateTripDesktopClientStep = memo(
       [clientId, clients],
     );
 
-    const saleDisplay = formatInr(clientPrice);
+    const perMt = saleRateBasis === "per_mt";
+    const saleEntryValue = perMt ? saleUnitRate : clientPrice;
+    const onSaleEntryChange = perMt
+      ? (onSaleUnitRateChange ?? onClientPriceChange)
+      : onClientPriceChange;
+    const saleDisplay = perMt
+      ? formatInr(saleUnitRate)
+        ? `${formatInr(saleUnitRate)} / MT`
+        : null
+      : formatInr(clientPrice);
+    const saleMissing =
+      perMt ? !formatInr(saleUnitRate) : !formatInr(clientPrice);
+    const saleErrorLabel = perMt
+      ? "Enter a per-MT rate greater than 0"
+      : "Enter a sale price greater than 0";
 
     const partyPreview = useMemo(
       () =>
@@ -191,13 +214,13 @@ export const CreateTripDesktopClientStep = memo(
     }, [onClearLane]);
 
     const handleSaleDone = useCallback(() => {
-      if (!formatInr(clientPrice)) {
+      if (saleMissing) {
         setSaleDoneAttempted(true);
         return;
       }
       setSaleDoneAttempted(false);
       setSaleModalOpen(false);
-    }, [clientPrice]);
+    }, [saleMissing]);
 
     // ── Phase: contract lane gate (full page) ─────────────────────────────
     if (showLaneGate && onSelectLane) {
@@ -238,15 +261,14 @@ export const CreateTripDesktopClientStep = memo(
           ) : null}
           <ClientSaleKeypadFlow
             compact
-            clientPrice={clientPrice}
-            onClientPriceChange={onClientPriceChange}
+            clientPrice={saleEntryValue}
+            onClientPriceChange={onSaleEntryChange}
             partyPreview={partyPreview}
             onPartyPress={handleChangeClient}
-            errorMessage={
-              clientPriceError
-                ? "Enter a sale price greater than 0"
-                : undefined
-            }
+            errorMessage={clientPriceError ? saleErrorLabel : undefined}
+            saleRateBasis={saleRateBasis}
+            onSaleRateBasisChange={onSaleRateBasisChange}
+            saleBasisLocked={Boolean(selectedLaneId) && perMt}
           />
         </View>
       );
@@ -370,13 +392,11 @@ export const CreateTripDesktopClientStep = memo(
                     <Text style={s.sourceRateSummaryValue}>{saleDisplay}</Text>
                   ) : (
                     <Text style={s.sourceRateSummaryValueMuted}>
-                      Tap to enter sale value
+                      {perMt ? "Tap to enter ₹ / MT" : "Tap to enter sale value"}
                     </Text>
                   )}
                   {clientPriceError ? (
-                    <Text style={s.salePriceError}>
-                      Enter a sale price greater than 0
-                    </Text>
+                    <Text style={s.salePriceError}>{saleErrorLabel}</Text>
                   ) : null}
                 </View>
                 <View style={s.sourceRateSummaryAction}>
@@ -397,14 +417,17 @@ export const CreateTripDesktopClientStep = memo(
               setSaleModalOpen(false);
             }}
             onDone={handleSaleDone}
-            clientPrice={clientPrice}
+            clientPrice={saleEntryValue}
             onClientPriceChange={(v) => {
               setSaleDoneAttempted(false);
-              onClientPriceChange(v);
+              onSaleEntryChange(v);
             }}
             partyPreview={partyPreview}
             onChangeClient={handleChangeClient}
-            priceError={saleDoneAttempted && !formatInr(clientPrice)}
+            priceError={saleDoneAttempted && saleMissing}
+            saleRateBasis={saleRateBasis}
+            onSaleRateBasisChange={onSaleRateBasisChange}
+            saleBasisLocked={Boolean(selectedLaneId) && perMt}
           />
         ) : null}
       </View>

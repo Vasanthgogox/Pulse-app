@@ -21,7 +21,6 @@ export default defineConfig(({ mode, command }) => {
     env.SUPABASE_SERVICE_ROLE_KEY ||
     env.service_role_key ||
     "";
-  const adminToken = env.VITE_ADMIN_TOKEN || "";
   const anonKey =
     env.VITE_SUPABASE_ANON_KEY || env.EXPO_PUBLIC_SUPABASE_ANON_KEY || "";
 
@@ -57,7 +56,6 @@ export default defineConfig(({ mode, command }) => {
       "import.meta.env.VITE_SUPABASE_SERVICE_ROLE_KEY":
         JSON.stringify(serviceRoleKey),
       "import.meta.env.VITE_SUPABASE_ANON_KEY": JSON.stringify(anonKey),
-      "import.meta.env.VITE_ADMIN_TOKEN": JSON.stringify(adminToken),
     },
   };
 });

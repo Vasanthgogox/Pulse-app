@@ -5,7 +5,8 @@ export type IndentBidBadgeKind =
   | "recommended"
   | "lowest"
   | "at_target"
-  | "awarded";
+  | "awarded"
+  | "deal_lost";
 
 export type IndentBidBadge = {
   kind: IndentBidBadgeKind;
@@ -76,6 +77,10 @@ export function buildIndentLiveBidsViewModel(
 
     if (status === "accepted") {
       badges.push({ kind: "awarded", label: "Awarded" });
+    }
+
+    if (status === "superseded" || q.bidderUnavailable) {
+      badges.push({ kind: "deal_lost", label: "On trip" });
     }
 
     if (status === "pending") {

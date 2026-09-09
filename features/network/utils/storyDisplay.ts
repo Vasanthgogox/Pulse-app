@@ -96,6 +96,13 @@ export function splitLocationParts(value: string | null | undefined): {
   };
 }
 
+/** City for a story ring. First place name only — "Bengaluru, Bangalore" is one city. */
+export function storyCityLabel(value: string | null | undefined): string {
+  const city = splitLocationParts(value).city;
+  if (!city || city === '—') return '';
+  return city;
+}
+
 export function loadMaterialLabel(fields: Pick<StoryContentFields, 'material'>, fallbackHeadline: string): string {
   const material = fields.material?.trim();
   if (material) return material;

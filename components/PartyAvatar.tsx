@@ -116,6 +116,21 @@ export function PartyAvatar({
     };
   }, [organizationImageUrl, avatarUrl, hasRawPhotoField]);
 
+  const awaitingSignedPhoto =
+    hasRawPhotoField && resolvedPhotoUri == null;
+  const syncUri = awaitingSignedPhoto
+    ? null
+    : resolvePartyDisplayUri({
+        organizationImageUrl,
+        organizationAvatarSeed,
+        avatarUrl,
+        avatarSeed,
+        entityType,
+      });
+  const candidateUri = resolvedPhotoUri ?? syncUri;
+  const { failed: imageFailed, onError: onImageError } =
+    useFailedImageUriGuard(candidateUri);
+
   if (shouldUseOfflinePartyRoleAvatar(isIntegrated, entityType)) {
     const roleType = entityType as "client" | "supplier" | "driver" | "vehicle";
     const { accent, iconColor, accessibilityLabel } = offlinePartyRolePresentation(roleType);
@@ -167,17 +182,6 @@ export function PartyAvatar({
     );
   }
 
-  const awaitingSignedPhoto =
-    hasRawPhotoField && resolvedPhotoUri == null;
-  const syncUri = awaitingSignedPhoto
-    ? null
-    : resolvePartyDisplayUri({
-        organizationImageUrl,
-        organizationAvatarSeed,
-        avatarUrl,
-        avatarSeed,
-        entityType,
-      });
   const seedUri = resolvePartyDisplayUri({
     // If a photo fails to load, prefer a deterministic seed-based avatar instead
     // of dropping straight to initials.
@@ -187,11 +191,6 @@ export function PartyAvatar({
     avatarSeed,
     entityType,
   });
-  // Guard the candidate before render: a URI that has already failed twice
-  // (in this or any prior mount) never reaches <Image>.
-  const candidateUri = resolvedPhotoUri ?? syncUri;
-  const { failed: imageFailed, onError: onImageError } =
-    useFailedImageUriGuard(candidateUri);
   const uri = !imageFailed ? candidateUri : seedUri;
   const displayName = (name ?? "").trim() || "Party";
   const colorSeed = (initialsColorSeed ?? avatarSeed ?? "").trim() || displayName;

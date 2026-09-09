@@ -1,9 +1,8 @@
 import type { GlobalOperationAlert } from '@/lib/globalSync/priorityEngine.util';
 import type { SalaryRequestWithDriverRow } from '@/features/drivers/services/salaryRequests.service';
-import type { SharedLedgerNotificationRow } from '@/features/finance/services/sharedLedgerNotifications.service';
 import type { NetworkNotificationRow } from '@/features/network/services/networkNotifications.service';
 
-export type RegistryFeedKind = 'ops' | 'salary' | 'shared' | 'network';
+export type RegistryFeedKind = 'ops' | 'salary' | 'network';
 
 /** Metronic-style notification filter tabs. */
 export type RegistryFilterTab = 'all' | 'driver' | 'trip' | 'payment' | 'archive';
@@ -15,7 +14,6 @@ export type RegistryFeedEntry = {
   createdAt: string;
   ops?: GlobalOperationAlert;
   salary?: SalaryRequestWithDriverRow;
-  shared?: SharedLedgerNotificationRow;
   network?: NetworkNotificationRow;
 };
 
@@ -30,8 +28,6 @@ export function buildRegistryFeed(input: {
   opsAlerts: GlobalOperationAlert[];
   activeSalary: SalaryRequestWithDriverRow[];
   historySalary: SalaryRequestWithDriverRow[];
-  activeShared: SharedLedgerNotificationRow[];
-  historyShared: SharedLedgerNotificationRow[];
   /** Cross-org indent/bid/award inbox. Optional: absent until the table ships. */
   activeNetwork?: NetworkNotificationRow[];
   historyNetwork?: NetworkNotificationRow[];
@@ -68,15 +64,6 @@ export function buildRegistryFeed(input: {
         salary,
       });
     }
-    for (const shared of input.activeShared) {
-      entries.push({
-        id: `shared:${shared.id}`,
-        kind: 'shared',
-        sortKey: parseSortMs(shared.created_at, 40_000),
-        createdAt: shared.created_at,
-        shared,
-      });
-    }
     pushNetwork(input.activeNetwork, 30_000);
   } else {
     for (const salary of input.historySalary) {
@@ -86,15 +73,6 @@ export function buildRegistryFeed(input: {
         sortKey: parseSortMs(salary.created_at),
         createdAt: salary.created_at,
         salary,
-      });
-    }
-    for (const shared of input.historyShared) {
-      entries.push({
-        id: `shared:${shared.id}`,
-        kind: 'shared',
-        sortKey: parseSortMs(shared.created_at),
-        createdAt: shared.created_at,
-        shared,
       });
     }
     pushNetwork(input.historyNetwork, 0);
@@ -124,13 +102,11 @@ export function entryMatchesRegistryFilter(
     if (entry.kind !== 'ops' || !entry.ops) return false;
     const cat = entry.ops.category;
     if (cat === 'unassigned_trip') return false;
-    return cat !== 'payment_received' && cat !== 'dispute';
+    return cat !== 'payment_received';
   }
   if (filter === 'payment') {
-    if (entry.kind === 'shared') return true;
     if (entry.kind === 'ops' && entry.ops) {
-      const cat = entry.ops.category;
-      return cat === 'payment_received' || cat === 'dispute';
+      return entry.ops.category === 'payment_received';
     }
     return false;
   }

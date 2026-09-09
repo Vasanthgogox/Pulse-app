@@ -3,9 +3,12 @@
  * (platform_users/platform_role_members/platform_roles), never organization_members.
  * Role-only assignment (no per-admin permission overrides, per the locked S3b decision) --
  * "Effective permissions" below is read-only, derived from the assigned role.
+ * Now gated behind 'platform_admin.manage' permission.
  */
 import { useCallback, useEffect, useState } from 'react';
-import { Loader2, Mail, RefreshCw, ShieldCheck, Trash2, UserPlus } from 'lucide-react';
+import { Loader2, Mail, RefreshCw, ShieldCheck, Trash2, UserPlus, Lock } from 'lucide-react';
+import { usePermission } from '@/hooks/usePermission';
+import { AccessDenied } from '@/components/auth/PermissionGate';
 import {
   changePlatformAdminRole,
   fetchPlatformAdmins,
@@ -58,6 +61,9 @@ const STATUS_BADGE: Record<string, 'info' | 'success' | 'secondary'> = {
 };
 
 export function AdminUsersPanel() {
+  const { can, isLoading: permLoading } = usePermission();
+  const hasAccess = !permLoading && can('platform_admin.manage');
+
   const [rows, setRows] = useState<PlatformAdminRow[]>([]);
   const [roles, setRoles] = useState<PlatformRoleRow[]>([]);
   const [loading, setLoading] = useState(true);
@@ -85,8 +91,22 @@ export function AdminUsersPanel() {
   }, []);
 
   useEffect(() => {
+    if (!hasAccess) return;
     void load();
-  }, [load]);
+  }, [load, hasAccess]);
+
+  // Deny access if no permission
+  if (permLoading) {
+    return (
+      <div className="flex items-center justify-center h-full bg-background">
+        <Loader2 className="size-5 animate-spin text-muted-foreground" />
+      </div>
+    );
+  }
+
+  if (!hasAccess) {
+    return <AccessDenied message="You do not have permission to manage admin users. Required: platform_admin.manage" />;
+  }
 
   // Staged email/role previously only got cleared after a successful invite -- closing via
   // Cancel/X/Escape left them in place, so reopening the dialog for a genuinely new invite could

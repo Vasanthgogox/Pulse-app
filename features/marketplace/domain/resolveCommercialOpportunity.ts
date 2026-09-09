@@ -55,6 +55,8 @@ export function resolveCommercialOpportunity(
 
   const pricing = resolveCommercialPricing({
     supplierTarget: input.supplierTarget,
+    saleRateBasis: input.saleRateBasis,
+    weightKg: input.weightKg,
     snapshotTargetPrice: input.snapshotTargetPrice,
     rateOffer: input.rateOffer,
     currentBestBid: input.currentBestBid,

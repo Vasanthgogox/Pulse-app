@@ -37,7 +37,7 @@ export interface VehicleScoreTripInput {
 export interface VehicleScoreTxnInput {
   trip_id: string | null;
   amount_out: number | null;
-  contact_type?: "client" | "supplier" | "driver" | null;
+  contact_type?: "client" | "supplier" | "driver" | "dco" | null;
   transaction_date: string | null;
   created_at: string | null;
 }
@@ -122,11 +122,13 @@ export function computeVehiclePerformanceScore(
   }
 
   // 3. Expense from transactions attached to these trips, excluding driver
-  //    compensation (matches SQL convention).
+  //    compensation (matches SQL convention) and DCO settlement (DCO-6:
+  //    same reasoning — a DCO's payment is labor+ownership compensation,
+  //    not a vehicle running cost like fuel/toll/maintenance).
   let expense = 0;
   for (const tx of transactions) {
     if (!tx.trip_id || !tripIdSet.has(tx.trip_id)) continue;
-    if (tx.contact_type === "driver") continue;
+    if (tx.contact_type === "driver" || tx.contact_type === "dco") continue;
     const out = Number(tx.amount_out ?? 0);
     if (out <= 0) continue;
     expense += out;

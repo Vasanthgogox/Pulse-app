@@ -328,9 +328,8 @@ export default function DriverDashboard() {
   const footerPadBottom = Math.max(Math.round(insets.bottom * 0.35), 10);
   const driverTabBarClearance =
     Layout.tabBarDockHeight + footerPadTop + footerPadBottom;
-  /** Flush job card onto the glass dock (exclude padTop or map shows between). */
-  const driverSheetBottomInset =
-    Layout.tabBarDockHeight + footerPadBottom;
+  /** Same clearance as the dock wrap — CTA must not sit under the glass pill. */
+  const driverSheetBottomInset = driverTabBarClearance;
   // Driver home previously used a hardcoded dark map for contrast.
   // Now it respects the "Map Style" user setting (light, dark, or auto-sync with theme).
   const mapIsDark = mapTheme === 'auto' ? isDark : mapTheme === 'dark';
@@ -2154,7 +2153,7 @@ export default function DriverDashboard() {
               <BottomSheetScrollViewComponent
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={[styles.olaSheetContent, { paddingBottom: 0 }]}
+                contentContainerStyle={[styles.olaSheetContent, { paddingBottom: 8 }]}
               >
                 {!hasNativeBottomSheetSupport ? (
                   <View
@@ -2652,14 +2651,14 @@ export default function DriverDashboard() {
                     ]}
                   >
                     <Text style={[styles.offlineCardTitle, { color: colors.text }]}>
-                      {tripsService.resolveDriverFacingTripLabel(trip)}
+                      {trip.pickup_area?.trim() || 'Pickup'} → {trip.drop_location?.trim() || 'Drop-off'}
                     </Text>
                     {otpClaimTripId === trip.id ? (
                       renderOtpClaimCard(trip, { showCancel: true })
                     ) : (
                       <>
                         <Text style={[styles.offlineCardSubtitle, { color: colors.textMuted, marginTop: 2 }]}>
-                          {trip.pickup_area?.trim() || 'Pickup'} → {trip.drop_location?.trim() || 'Drop-off'}
+                          {tripsService.resolveDriverFacingTripLabel(trip)}
                         </Text>
                         <Text style={[styles.offlineCardSubtitle, { color: colors.textMuted, marginTop: 4 }]}>
                           Aggregate trip reassigned by phone — accept and enter OTP to claim.

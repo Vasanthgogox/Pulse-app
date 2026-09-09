@@ -27,16 +27,23 @@ import {
   formatSupportUnreadBadge,
   supportTicketHasUserUpdate,
 } from '@/features/support/utils/supportTicketUnread.util';
-import { pickSupportTicketAttachments } from '@/features/support/utils/supportAttachmentPick.util';
+import {
+  filesFromClipboardData,
+  pickSupportTicketAttachments,
+  resolveSupportAttachmentMime,
+  supportAttachmentsFromFiles,
+  type PickedSupportAttachment,
+} from '@/features/support/utils/supportAttachmentPick.util';
 import { showAppAlert } from '@/lib/appAlert';
 import { useMySupportTicketsQuery } from '@/lib/queries/useMySupportTicketsQuery';
 import { ROUTES } from '@/lib/routes';
 import { uuidv7 } from '@/lib/uuidv7';
 import { Paperclip, X } from 'lucide-react-native';
 import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
-import { useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Platform,
   Pressable,
   StyleSheet,
   Text,
@@ -93,6 +100,8 @@ export function CreateSupportTicketScreen() {
   const [subject, setSubject] = useState('');
   const [description, setDescription] = useState('');
   const [attachments, setAttachments] = useState<StagedAttachment[]>([]);
+  const attachmentsRef = useRef(attachments);
+  attachmentsRef.current = attachments;
   const [submitting, setSubmitting] = useState(false);
   const [picking, setPicking] = useState(false);
 
@@ -112,6 +121,37 @@ export function CreateSupportTicketScreen() {
     else router.replace('/' as Href);
   };
 
+  const ingestPicked = useCallback((picked: PickedSupportAttachment[]) => {
+    if (!picked.length) return;
+    const prev = attachmentsRef.current;
+    const room = MAX_ATTACHMENTS - prev.length;
+    if (room <= 0) {
+      showAppAlert('Attachment limit reached', `You can attach up to ${MAX_ATTACHMENTS} files.`);
+      return;
+    }
+    const toAdd = picked.slice(0, room);
+    const errors: string[] = [];
+    const valid: StagedAttachment[] = [];
+    for (const file of toAdd) {
+      const normalized = {
+        ...file,
+        mimeType: resolveSupportAttachmentMime(file.mimeType, file.fileName),
+      };
+      const err = validateSupportAttachment(normalized);
+      if (err) errors.push(err);
+      else valid.push({ ...normalized, localId: uuidv7() });
+    }
+    if (picked.length > toAdd.length) {
+      errors.push(`Only ${MAX_ATTACHMENTS} attachments are allowed per ticket.`);
+    }
+    if (valid.length) {
+      const next = [...prev, ...valid];
+      attachmentsRef.current = next;
+      setAttachments(next);
+    }
+    if (errors.length) showAppAlert("Some files weren't attached", errors.join('\n'));
+  }, []);
+
   const handleAttach = async () => {
     if (attachments.length >= MAX_ATTACHMENTS) {
       showAppAlert('Attachment limit reached', `You can attach up to ${MAX_ATTACHMENTS} files.`);
@@ -120,23 +160,24 @@ export function CreateSupportTicketScreen() {
     setPicking(true);
     const picked = await pickSupportTicketAttachments().catch(() => []);
     setPicking(false);
-    if (!picked.length) return;
-
-    const room = MAX_ATTACHMENTS - attachments.length;
-    const toAdd = picked.slice(0, room);
-    const errors: string[] = [];
-    const valid: StagedAttachment[] = [];
-    for (const file of toAdd) {
-      const err = validateSupportAttachment(file);
-      if (err) errors.push(err);
-      else valid.push({ ...file, localId: uuidv7() });
-    }
-    if (valid.length) setAttachments((prev) => [...prev, ...valid]);
-    if (picked.length > toAdd.length) {
-      errors.push(`Only ${MAX_ATTACHMENTS} attachments are allowed per ticket.`);
-    }
-    if (errors.length) showAppAlert("Some files weren't attached", errors.join('\n'));
+    ingestPicked(picked);
   };
+
+  useEffect(() => {
+    if (Platform.OS !== 'web') return;
+    const onPaste = (event: Event) => {
+      const clipboard = (event as ClipboardEvent).clipboardData;
+      const files = filesFromClipboardData(clipboard).filter((file) => {
+        const mime = resolveSupportAttachmentMime(file.type, file.name);
+        return mime.startsWith('image/') || mime === 'application/pdf';
+      });
+      if (!files.length) return;
+      event.preventDefault();
+      void supportAttachmentsFromFiles(files).then(ingestPicked);
+    };
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [ingestPicked]);
 
   const handleRemoveAttachment = (localId: string) => {
     setAttachments((prev) => prev.filter((a) => a.localId !== localId));
@@ -248,12 +289,26 @@ export function CreateSupportTicketScreen() {
         maxLength={2000}
       />
 
-      <TouchableOpacity
-        style={styles.attachBtn}
-        onPress={() => void handleAttach()}
-        disabled={picking || submitting}
-        activeOpacity={0.7}
+      <View
+        {...(Platform.OS === 'web'
+          ? {
+              onDragOver: (e: { preventDefault?: () => void }) => {
+                e.preventDefault?.();
+              },
+              onDrop: (e: { preventDefault?: () => void; nativeEvent?: { dataTransfer?: DataTransfer } }) => {
+                e.preventDefault?.();
+                const dropped = Array.from(e.nativeEvent?.dataTransfer?.files ?? []);
+                if (dropped.length) void supportAttachmentsFromFiles(dropped).then(ingestPicked);
+              },
+            }
+          : {})}
       >
+        <TouchableOpacity
+          style={styles.attachBtn}
+          onPress={() => void handleAttach()}
+          disabled={picking || submitting}
+          activeOpacity={0.7}
+        >
         {picking ? (
           <ActivityIndicator color={Theme.primary} size="small" />
         ) : (
@@ -261,9 +316,13 @@ export function CreateSupportTicketScreen() {
         )}
         <View>
           <Text style={styles.attachBtnText}>Attach files</Text>
-          <Text style={styles.attachBtnSubtext}>Screenshots, documents or other evidence</Text>
+          <Text style={styles.attachBtnSubtext}>
+            Screenshots, documents or other evidence
+            {Platform.OS === 'web' ? ' — paste or drop images' : ''}
+          </Text>
         </View>
       </TouchableOpacity>
+      </View>
 
       {attachments.length > 0 && (
         <View style={styles.attachmentList}>

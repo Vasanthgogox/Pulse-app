@@ -67,9 +67,9 @@ export const MarketBidCard = memo(function MarketBidCard({
       ? "Rejected"
       : status === "withdrawn"
         ? "Withdrawn"
-        : isSuperseded
-          ? "Superseded"
-          : isPending
+          : isSuperseded
+            ? "Deal lost"
+            : isPending
             ? "Pending"
             : status;
 
@@ -166,8 +166,7 @@ export const MarketBidCard = memo(function MarketBidCard({
       {isSuperseded ? (
         <View style={styles.noteWrap}>
           <Text style={styles.noteText} numberOfLines={2}>
-            Driver&rsquo;s bid was superseded because another opportunity was awarded to the
-            driver.
+            Not available — awarded another load.
           </Text>
         </View>
       ) : null}
@@ -293,9 +292,14 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderMedium,
   },
+  // A9.4: pending must read as "awaiting your decision", not "already won"
+  // -- was identical to statusPillAccepted (same positiveMuted/positive
+  // pair), which looked like success on a bid nobody has decided on yet.
+  // Theme.warning/warningMuted is the same pairing InvitationsView.tsx
+  // already uses for its own "pending" pill -- reused, not invented.
   statusPillPending: {
-    backgroundColor: Theme.positiveMuted,
-    borderColor: Theme.positiveMutedDarkBorder,
+    backgroundColor: Theme.warningMuted,
+    borderColor: Theme.borderMedium,
   },
   statusPillAccepted: {
     backgroundColor: Theme.positiveMuted,
@@ -311,7 +315,7 @@ const styles = StyleSheet.create({
     letterSpacing: 0.35,
     color: Theme.textMuted,
   },
-  statusTextPending: { color: Theme.positive },
+  statusTextPending: { color: Theme.warning },
   statusTextAccepted: { color: Theme.positive },
   statusTextRejected: { color: Theme.teslaRed },
   noteWrap: {

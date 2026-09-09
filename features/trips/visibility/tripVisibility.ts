@@ -101,17 +101,6 @@ export function isTripVisibleToOrgViaIntegration(
   );
 }
 
-export function isTripEligibleForSharedLedger(
-  trip: Pick<TripRow, 'indent_id' | 'client_id' | 'supplier_id'> | null | undefined,
-  viewerOrgId: string | null | undefined,
-  opts: {
-    clientById?: TripPartyLookup<TripVisibilityClientLike> | null;
-    supplierById?: TripPartyLookup<TripVisibilitySupplierLike> | null;
-  },
-): boolean {
-  return isTripVisibleToOrgViaIntegration(trip, viewerOrgId, opts);
-}
-
 export function buildUniqueLinkedOrgIdMap<
   T extends { id: string; linked_organization_id?: string | null }
 >(rows: readonly T[]): Map<string, string> {

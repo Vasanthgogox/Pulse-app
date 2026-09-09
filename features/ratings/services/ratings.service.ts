@@ -118,6 +118,71 @@ export async function createRating(
   return { error: null, rating: row as RatingRow };
 }
 
+/**
+ * Assigned driver rates the shipper they operated for (client, else supplier).
+ */
+export async function submitDriverShipperFeedback(input: {
+  tripId: string;
+  messageId?: string | null;
+  score: number;
+  comment?: string | null;
+}): Promise<{ error: Error | null; submittedAt: string | null; score: number | null }> {
+  const messageId = (input.messageId ?? "").trim() || null;
+  const { data, error } = await supabase().rpc("submit_driver_shipper_feedback", {
+    p_trip_id: input.tripId,
+    p_message_id: messageId,
+    p_score: input.score,
+    p_comment: (input.comment ?? "").trim() || null,
+  });
+  if (error) {
+    const msg = error.message || "";
+    if (/does not exist|could not find the function|42883/i.test(msg)) {
+      return {
+        error: new Error("Rating isn’t available on this environment yet."),
+        submittedAt: null,
+        score: null,
+      };
+    }
+    return { error: new Error(msg), submittedAt: null, score: null };
+  }
+  const row = (data ?? {}) as {
+    error?: string;
+    ok?: boolean;
+    submitted_at?: string;
+    submitted_score?: number;
+  };
+  if (row.error) {
+    const code = String(row.error);
+    if (code === "already_submitted") {
+      return {
+        error: null,
+        submittedAt: row.submitted_at ?? new Date().toISOString(),
+        score: row.submitted_score ?? input.score,
+      };
+    }
+    if (code === "shipper_not_linked") {
+      return {
+        error: new Error("This trip has no shipper linked yet, so it can't be rated."),
+        submittedAt: null,
+        score: null,
+      };
+    }
+    if (code === "forbidden") {
+      return {
+        error: new Error("Only the driver who ran this trip can submit this rating."),
+        submittedAt: null,
+        score: null,
+      };
+    }
+    return { error: new Error("Could not save your rating. Try again."), submittedAt: null, score: null };
+  }
+  return {
+    error: null,
+    submittedAt: row.submitted_at ?? new Date().toISOString(),
+    score: row.submitted_score ?? input.score,
+  };
+}
+
 export async function getRatingsForTrip(tripId: string): Promise<{
   error: Error | null;
   ratings: RatingRow[];
@@ -162,7 +227,30 @@ export async function getRatingsForClient(clientId: string): Promise<{
   return { error: null, ratings: (data ?? []) as RatingRow[] };
 }
 
-/** Bulk fetch client ratings for many clients (one query). */
+/** Keep PostgREST `IN` lists off the statement-timeout cliff (525 on /ratings). */
+const RATINGS_IN_CHUNK = 40;
+
+async function fetchRatingsByRatedIds(
+  ratedType: RatingRow['rated_type'],
+  ratedIds: string[],
+): Promise<{ error: Error | null; rows: RatingRow[] }> {
+  const unique = [...new Set(ratedIds.filter(Boolean))];
+  const rows: RatingRow[] = [];
+  for (let i = 0; i < unique.length; i += RATINGS_IN_CHUNK) {
+    const chunk = unique.slice(i, i + RATINGS_IN_CHUNK);
+    const { data, error } = await supabase()
+      .from('ratings')
+      .select('*')
+      .eq('rated_type', ratedType)
+      .in('rated_id', chunk)
+      .order('created_at', { ascending: false });
+    if (error) return { error: new Error(error.message), rows: [] };
+    rows.push(...((data ?? []) as RatingRow[]));
+  }
+  return { error: null, rows };
+}
+
+/** Bulk fetch client ratings for many clients (chunked queries). */
 export async function getRatingsForClients(clientIds: string[]): Promise<{
   error: Error | null;
   byClientId: Record<string, RatingRow[]>;
@@ -170,15 +258,8 @@ export async function getRatingsForClients(clientIds: string[]): Promise<{
   if (clientIds.length === 0) {
     return { error: null, byClientId: {} };
   }
-  const { data, error } = await supabase()
-    .from('ratings')
-    .select('*')
-    .eq('rated_type', 'client')
-    .in('rated_id', clientIds)
-    .order('created_at', { ascending: false });
-
-  if (error) return { error: new Error(error.message), byClientId: {} };
-  const rows = (data ?? []) as RatingRow[];
+  const { error, rows } = await fetchRatingsByRatedIds('client', clientIds);
+  if (error) return { error, byClientId: {} };
   const byClientId: Record<string, RatingRow[]> = {};
   for (const id of clientIds) {
     byClientId[id] = [];
@@ -190,7 +271,7 @@ export async function getRatingsForClients(clientIds: string[]): Promise<{
   return { error: null, byClientId };
 }
 
-/** Bulk fetch supplier ratings for many suppliers (one query). */
+/** Bulk fetch supplier ratings for many suppliers (chunked queries). */
 export async function getRatingsForSuppliers(supplierIds: string[]): Promise<{
   error: Error | null;
   bySupplierId: Record<string, RatingRow[]>;
@@ -198,15 +279,8 @@ export async function getRatingsForSuppliers(supplierIds: string[]): Promise<{
   if (supplierIds.length === 0) {
     return { error: null, bySupplierId: {} };
   }
-  const { data, error } = await supabase()
-    .from('ratings')
-    .select('*')
-    .eq('rated_type', 'supplier')
-    .in('rated_id', supplierIds)
-    .order('created_at', { ascending: false });
-
-  if (error) return { error: new Error(error.message), bySupplierId: {} };
-  const rows = (data ?? []) as RatingRow[];
+  const { error, rows } = await fetchRatingsByRatedIds('supplier', supplierIds);
+  if (error) return { error, bySupplierId: {} };
   const bySupplierId: Record<string, RatingRow[]> = {};
   for (const id of supplierIds) {
     bySupplierId[id] = [];
@@ -233,7 +307,7 @@ export async function getRatingsForDriver(driverId: string): Promise<{
   return { error: null, ratings: (data ?? []) as RatingRow[] };
 }
 
-/** Bulk fetch driver ratings for many drivers (one query). Used by Drivers tab so ratings show in the table. */
+/** Bulk fetch driver ratings for many drivers (chunked). Used by Drivers tab so ratings show in the table. */
 export async function getRatingsForDrivers(driverIds: string[]): Promise<{
   error: Error | null;
   byDriverId: Record<string, RatingRow[]>;
@@ -241,15 +315,8 @@ export async function getRatingsForDrivers(driverIds: string[]): Promise<{
   if (driverIds.length === 0) {
     return { error: null, byDriverId: {} };
   }
-  const { data, error } = await supabase()
-    .from('ratings')
-    .select('*')
-    .eq('rated_type', 'driver')
-    .in('rated_id', driverIds)
-    .order('created_at', { ascending: false });
-
-  if (error) return { error: new Error(error.message), byDriverId: {} };
-  const rows = (data ?? []) as RatingRow[];
+  const { error, rows } = await fetchRatingsByRatedIds('driver', driverIds);
+  if (error) return { error, byDriverId: {} };
   const byDriverId: Record<string, RatingRow[]> = {};
   for (const id of driverIds) {
     byDriverId[id] = [];

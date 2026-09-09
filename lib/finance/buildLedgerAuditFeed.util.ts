@@ -9,7 +9,6 @@ export type LedgerAuditEventKind =
   | "assignment"
   | "reassignment"
   | "reconciliation"
-  | "dispute"
   | "balance";
 
 export type LedgerAuditFeedEvent = {
@@ -218,21 +217,6 @@ export function buildLedgerAuditFeed(params: {
       contextLabel: "Reconcile",
       statusLabel: data.reconciliationStatus === "match_found" ? "Matched" : "Review",
       statusTone: data.reconciliationStatus === "mismatch" ? "danger" : "neutral",
-    });
-  }
-
-  if (data.disputeStatus) {
-    events.push({
-      id: `dispute-${data.id}`,
-      at: data.transaction_date ?? new Date().toISOString(),
-      kind: "dispute",
-      actorName: data.disputeDirection === "RAISED_BY_US" ? "You" : data.name ?? "Partner",
-      actionText: data.disputeStatus === "OPEN" ? "raised dispute on" : "resolved dispute for",
-      highlightText: tripRef,
-      timeLabel: formatRelativeTime(data.transaction_date),
-      contextLabel: "Dispute",
-      statusLabel: data.disputeStatus === "OPEN" ? "Open" : "Resolved",
-      statusTone: data.disputeStatus === "OPEN" ? "danger" : "success",
     });
   }
 

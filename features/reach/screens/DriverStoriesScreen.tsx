@@ -69,16 +69,16 @@ import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ArrowRight,
   BadgeCheck,
+  ChevronDown,
   Clock3,
   MapPin,
-  Megaphone,
   Package,
   Truck,
   Wallet,
   X,
   XCircle,
 } from 'lucide-react-native';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ComponentType } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -132,6 +132,60 @@ function referralStatusChip(story: DriverReachStoryRow): {
   }
 }
 
+/** Compact filter dropdown cell — label + tiny value preview + chevron. */
+function FilterDropdownCell({
+  icon: Icon,
+  label,
+  value,
+  active,
+  filled,
+  onPress,
+}: {
+  icon: ComponentType<{ size?: number; color?: string; strokeWidth?: number }>;
+  label: string;
+  value: string;
+  active?: boolean;
+  /** True when a non-default filter value is selected. */
+  filled?: boolean;
+  onPress: () => void;
+}) {
+  return (
+    <Pressable
+      onPress={onPress}
+      style={({ pressed }) => [
+        styles.filterCell,
+        filled && styles.filterCellFilled,
+        active && styles.filterCellOpen,
+        pressed && styles.filterCellPressed,
+      ]}
+      accessibilityRole="button"
+      accessibilityLabel={`${label}: ${value}. Change filter`}
+    >
+      <View style={styles.filterCellTop}>
+        <Icon size={11} color={Theme.textMuted} strokeWidth={2.2} />
+        <Text style={styles.filterCellLabel} numberOfLines={1}>
+          {label}
+        </Text>
+        <ChevronDown
+          size={12}
+          color={active || filled ? Theme.textPrimaryDark : Theme.textMuted}
+          strokeWidth={2.4}
+        />
+      </View>
+      <Text
+        style={[
+          styles.filterCellValue,
+          filled && styles.filterCellValueFilled,
+          active && styles.filterCellValueOpen,
+        ]}
+        numberOfLines={1}
+      >
+        {value}
+      </Text>
+    </Pressable>
+  );
+}
+
 function FilterChip({
   label,
   selected,
@@ -152,6 +206,49 @@ function FilterChip({
         {label}
       </Text>
     </Pressable>
+  );
+}
+
+type FilterMenuKey = 'pickup' | 'drop' | 'status';
+
+type FilterOption = { value: string; label: string };
+
+function FilterOptionsPanel({
+  title,
+  options,
+  selectedValue,
+  onSelect,
+}: {
+  title: string;
+  options: ReadonlyArray<FilterOption>;
+  selectedValue: string;
+  onSelect: (value: string) => void;
+}) {
+  return (
+    <View style={styles.filterPanel}>
+      <Text style={styles.filterPanelTitle}>{title}</Text>
+      <View style={styles.filterPanelGrid}>
+        {options.map((opt) => {
+          const on = opt.value === selectedValue;
+          return (
+            <Pressable
+              key={opt.value || '__any__'}
+              onPress={() => onSelect(opt.value)}
+              style={[styles.filterPanelChip, on && styles.filterPanelChipOn]}
+              accessibilityRole="button"
+              accessibilityState={{ selected: on }}
+            >
+              <Text
+                style={[styles.filterPanelChipText, on && styles.filterPanelChipTextOn]}
+                numberOfLines={1}
+              >
+                {opt.label}
+              </Text>
+            </Pressable>
+          );
+        })}
+      </View>
+    </View>
   );
 }
 
@@ -179,6 +276,7 @@ export function StoriesContent({
   onRefreshExtra,
   extraPickupCities,
   extraDropCities,
+  listHeader,
 }: {
   footer?: (filters: SharedFeedFilters) => React.ReactNode;
   onRefreshExtra?: () => void;
@@ -191,6 +289,11 @@ export function StoriesContent({
    */
   extraPickupCities?: string[];
   extraDropCities?: string[];
+  /**
+   * Optional chrome (e.g. Market Find Work / My Bids segment) rendered at the
+   * top of this feed so it scrolls away with content — Earnings-page pattern.
+   */
+  listHeader?: React.ReactNode;
 } = {}) {
   const router = useRouter();
   const insets = useSafeAreaInsets();
@@ -219,6 +322,7 @@ export function StoriesContent({
   const [bidTarget, setBidTarget] = useState<DriverReachStoryRow | null>(null);
   const [viewerStartPostId, setViewerStartPostId] = useState<string | null>(null);
   const [capacityViewer, setCapacityViewer] = useState<FleetOwnerCapacityStory | null>(null);
+  const [openFilterMenu, setOpenFilterMenu] = useState<FilterMenuKey | null>(null);
   // Feed filters live in this screen's own URL params, not local useState. On web, Expo Router's
   // back-navigation can remount this component fresh (confirmed via visual QA: local useState here
   // was silently reset after Find Work -> Load Detail -> Back) -- params round-trip through browser
@@ -226,16 +330,11 @@ export function StoriesContent({
   // updates the current screen's params in place (no new history entry), which is the existing
   // navigation mechanism already used elsewhere in this app for this exact purpose.
   const filterParams = useLocalSearchParams<{
-    source?: string;
     pickup?: string;
     drop?: string;
     status?: string;
     fitsFleet?: string;
   }>();
-  const source: 'all' | 'reach' | 'market' =
-    filterParams.source === 'reach' || filterParams.source === 'market'
-      ? filterParams.source
-      : 'all';
   const pickupFilter = filterParams.pickup || null;
   const dropFilter = filterParams.drop || null;
   const bidStatusFilter: BidStatusFilter =
@@ -244,7 +343,6 @@ export function StoriesContent({
       : 'all';
   const fitsFleetFilter = filterParams.fitsFleet === '1';
 
-  const setSource = (v: 'all' | 'reach' | 'market') => router.setParams({ source: v });
   const setPickupFilter = (v: string | null) => router.setParams({ pickup: v ?? '' });
   const setDropFilter = (v: string | null) => router.setParams({ drop: v ?? '' });
   const setBidStatusFilter = (v: BidStatusFilter) => router.setParams({ status: v });
@@ -546,7 +644,9 @@ export function StoriesContent({
         contentContainerStyle={[
           styles.listContent,
           {
-            paddingBottom: Layout.tabBarHeight + insets.bottom + 32,
+            // Floating glass dock sits above the home indicator — clear its full
+            // height (not just tabBarHeight) so the last marketplace card isn't clipped.
+            paddingBottom: Layout.tabBarDockHeight + insets.bottom + 48,
           },
         ]}
         refreshControl={
@@ -566,40 +666,104 @@ export function StoriesContent({
         }
         showsVerticalScrollIndicator={false}
       >
+        {listHeader}
         {actionNeededItems.length > 0 ? (
           <View style={styles.actionNeededWrap}>
-            <Text style={[styles.actionNeededHeader, { color: colors.textMuted }]}>
-              ACTION NEEDED · {actionNeededItems.length}
-            </Text>
+            <View style={styles.actionNeededHeaderRow}>
+              <View style={styles.actionNeededMark}>
+                <Clock3 size={13} color={Theme.warning} strokeWidth={2.4} />
+              </View>
+              <Text style={[styles.actionNeededHeader, { color: colors.text }]}>Action needed</Text>
+              <View style={styles.actionNeededCount}>
+                <Text style={styles.actionNeededCountText}>{actionNeededItems.length}</Text>
+              </View>
+            </View>
             {actionNeededItems.map(({ story, bucket }) => {
               const counterRate = positiveMoneyOrNull(story.direct_bid_counter_amount);
               const quotedAmount = positiveMoneyOrNull(story.direct_bid_amount);
+              const origin = cityOf(story.snapshot_origin) || 'Pickup';
+              const destination = cityOf(story.snapshot_destination) || 'Drop';
+              const isCounter = bucket === 'counter';
               return (
                 <Pressable
                   key={story.post_id}
                   onPress={() => openBid(story)}
-                  style={[styles.actionCard, { backgroundColor: cardBg }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    isCounter
+                      ? `Review counter from ${story.org_name}`
+                      : `View your pending bid for ${story.org_name}`
+                  }
+                  style={[
+                    styles.actionCard,
+                    { backgroundColor: cardBg },
+                    isCounter && styles.actionCardCounter,
+                  ]}
                 >
-                  <Text style={styles.actionCardKicker}>
-                    {bucket === 'counter' ? 'Counter offer received' : 'Your bid is pending'}
-                  </Text>
-                  <Text style={[styles.actionCardOrg, { color: colors.text }]} numberOfLines={1}>
-                    {story.org_name}
-                  </Text>
-                  {bucket === 'counter' && counterRate != null ? (
+                  <View style={styles.recOrgRow}>
+                    <PartyAvatar
+                      name={story.org_name || 'Shipper'}
+                      initialsColorSeed={story.campaign_org_id}
+                      organizationImageUrl={story.org_logo_url}
+                      entityType="client"
+                      size={36}
+                      shape="rounded"
+                    />
+                    <View style={styles.recOrgText}>
+                      <Text style={styles.actionCardOrg} numberOfLines={1}>
+                        {story.org_name}
+                      </Text>
+                      <Text style={[styles.actionCardKicker, isCounter && styles.counterKicker]}>
+                        {isCounter ? 'Counter — your move' : 'Awaiting shipper'}
+                      </Text>
+                    </View>
+                    <View style={[styles.statusChip, styles.statusChipPending]}>
+                      <Clock3 size={12} color={Theme.accentGoldPressed} strokeWidth={2.2} />
+                      <Text style={[styles.statusChipText, styles.statusChipTextPending]}>
+                        {isCounter ? 'Respond' : 'Pending'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.routeBlock}>
+                    <View style={styles.routeCityCol}>
+                      <Text style={styles.routeCity} numberOfLines={1}>
+                        {origin}
+                      </Text>
+                      <Text style={styles.routeMeta}>Pickup</Text>
+                    </View>
+                    <View style={styles.routeArrowWrap}>
+                      <ArrowRight size={13} color={Theme.textMuted} strokeWidth={2.2} />
+                    </View>
+                    <View style={[styles.routeCityCol, styles.routeCityColEnd]}>
+                      <Text style={[styles.routeCity, styles.routeCityEnd]} numberOfLines={1}>
+                        {destination}
+                      </Text>
+                      <Text style={[styles.routeMeta, styles.routeMetaEnd]}>Drop</Text>
+                    </View>
+                  </View>
+
+                  {isCounter && counterRate != null ? (
                     <ShipperCounterHighlight
                       counterAmountInr={counterRate}
                       yourQuoteInr={quotedAmount}
                     />
                   ) : quotedAmount != null ? (
-                    <Text style={[styles.actionCardAmount, { color: colors.text }]}>
-                      {formatINR(quotedAmount)}
-                    </Text>
+                    <View style={styles.targetRow}>
+                      <Text style={styles.targetLabel}>Your quote</Text>
+                      <Text style={styles.targetValue}>{formatINR(quotedAmount)}</Text>
+                    </View>
                   ) : null}
-                  <View style={styles.actionCardCta}>
-                    <Text style={styles.actionCardCtaText}>
-                      {bucket === 'counter' ? 'Review counter' : 'View your bid'}
+
+                  <View style={[styles.actionCardCta, isCounter && styles.actionCardCtaCounter]}>
+                    <Text style={[styles.actionCardCtaText, isCounter && styles.actionCardCtaTextCounter]}>
+                      {isCounter ? 'Review counter' : 'View your bid'}
                     </Text>
+                    <ArrowRight
+                      size={14}
+                      color={isCounter ? Theme.textPrimaryDark : Theme.textPrimaryDark}
+                      strokeWidth={2.4}
+                    />
                   </View>
                 </Pressable>
               );
@@ -607,119 +771,114 @@ export function StoriesContent({
           </View>
         ) : null}
 
-        <View style={[styles.sourceRow, { borderColor: colors.border }]}>
-          {(
-            [
-              { id: 'all' as const, label: 'All Work' },
-              { id: 'reach' as const, label: 'Reach' },
-              { id: 'market' as const, label: 'Market' },
-            ] as const
-          ).map((opt) => {
-            const on = source === opt.id;
-            return (
-              <Pressable
-                key={opt.id}
-                onPress={() => setSource(opt.id)}
-                style={[
-                  styles.sourceChip,
-                  on && { backgroundColor: isDark ? colors.surfaceElevated : Theme.cardWhite, borderColor: colors.border },
-                ]}
-              >
-                <Text style={[styles.sourceChipText, { color: on ? colors.text : colors.textMuted }]}>
-                  {opt.label}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-
-        {/* Shared feed controls -- one row, above both Reach and Marketplace, so pickup/drop/
-            fits-my-fleet filter the combined work surface rather than reading as belonging to
-            just one source. Status is Reach-specific vocabulary (Market has no quoted/counter
-            equivalent), so it's hidden when only Marketplace is showing. */}
         <View style={styles.filtersBlock}>
-          <View style={styles.filterRow}>
-            <MapPin size={11} color={Theme.textMuted} strokeWidth={2.2} />
-            <Text style={styles.filterLabel}>Pickup</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterChips}
-            >
-              <FilterChip
-                label="Any"
-                selected={pickupFilter == null}
-                onPress={() => setPickupFilter(null)}
-              />
-              {pickupOptions.map((city) => (
-                <FilterChip
-                  key={`p-${city}`}
-                  label={city}
-                  selected={pickupFilter === city}
-                  onPress={() => setPickupFilter(city)}
-                />
-              ))}
-            </ScrollView>
+          <View style={styles.filterDropdownRow}>
+            <FilterDropdownCell
+              icon={MapPin}
+              label="Pickup"
+              value={pickupFilter ?? 'Any'}
+              filled={pickupFilter != null}
+              active={openFilterMenu === 'pickup'}
+              onPress={() =>
+                setOpenFilterMenu((v) => (v === 'pickup' ? null : 'pickup'))
+              }
+            />
+            <FilterDropdownCell
+              icon={MapPin}
+              label="Drop"
+              value={dropFilter ?? 'Any'}
+              filled={dropFilter != null}
+              active={openFilterMenu === 'drop'}
+              onPress={() =>
+                setOpenFilterMenu((v) => (v === 'drop' ? null : 'drop'))
+              }
+            />
+            <FilterDropdownCell
+              icon={BadgeCheck}
+              label="Status"
+              value={bidStatusFilterLabel(bidStatusFilter)}
+              filled={bidStatusFilter !== 'all'}
+              active={openFilterMenu === 'status'}
+              onPress={() =>
+                setOpenFilterMenu((v) => (v === 'status' ? null : 'status'))
+              }
+            />
           </View>
-          <View style={styles.filterRow}>
-            <MapPin size={11} color={Theme.textMuted} strokeWidth={2.2} />
-            <Text style={styles.filterLabel}>Drop</Text>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              contentContainerStyle={styles.filterChips}
-            >
-              <FilterChip
-                label="Any"
-                selected={dropFilter == null}
-                onPress={() => setDropFilter(null)}
-              />
-              {dropOptions.map((city) => (
-                <FilterChip
-                  key={`d-${city}`}
-                  label={city}
-                  selected={dropFilter === city}
-                  onPress={() => setDropFilter(city)}
-                />
-              ))}
-            </ScrollView>
-          </View>
-          {source !== 'market' ? (
-            <View style={styles.filterRow}>
-              <BadgeCheck size={11} color={Theme.textMuted} strokeWidth={2.2} />
-              <Text style={styles.filterLabel}>Status</Text>
-              <ScrollView
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                contentContainerStyle={styles.filterChips}
-              >
-                {BID_STATUS_FILTERS.map((f) => (
-                  <FilterChip
-                    key={f}
-                    label={bidStatusFilterLabel(f)}
-                    selected={bidStatusFilter === f}
-                    onPress={() => setBidStatusFilter(f)}
-                  />
-                ))}
-              </ScrollView>
-            </View>
+
+          {openFilterMenu === 'pickup' ? (
+            <FilterOptionsPanel
+              title="Pickup city"
+              selectedValue={pickupFilter ?? ''}
+              options={[
+                { value: '', label: 'Any' },
+                ...pickupOptions.map((city) => ({ value: city, label: city })),
+              ]}
+              onSelect={(v) => {
+                setPickupFilter(v || null);
+                setOpenFilterMenu(null);
+              }}
+            />
           ) : null}
+          {openFilterMenu === 'drop' ? (
+            <FilterOptionsPanel
+              title="Drop city"
+              selectedValue={dropFilter ?? ''}
+              options={[
+                { value: '', label: 'Any' },
+                ...dropOptions.map((city) => ({ value: city, label: city })),
+              ]}
+              onSelect={(v) => {
+                setDropFilter(v || null);
+                setOpenFilterMenu(null);
+              }}
+            />
+          ) : null}
+          {openFilterMenu === 'status' ? (
+            <FilterOptionsPanel
+              title="Bid status"
+              selectedValue={bidStatusFilter}
+              options={BID_STATUS_FILTERS.map((f) => ({
+                value: f,
+                label: bidStatusFilterLabel(f),
+              }))}
+              onSelect={(v) => {
+                setBidStatusFilter(v as BidStatusFilter);
+                setOpenFilterMenu(null);
+              }}
+            />
+          ) : null}
+
           {fleetVehicleTypes.length > 0 ? (
-            <View style={styles.filterRow}>
+            <View style={styles.filterMetaRow}>
               <FilterChip
                 label="Fits my fleet"
                 selected={fitsFleetFilter}
                 onPress={() => setFitsFleetFilter(!fitsFleetFilter)}
               />
+              {hasActiveFilters ? (
+                <Pressable
+                  onPress={() => {
+                    setPickupFilter(null);
+                    setDropFilter(null);
+                    setBidStatusFilter('all');
+                    setFitsFleetFilter(false);
+                    setOpenFilterMenu(null);
+                  }}
+                  hitSlop={8}
+                  style={styles.clearFilters}
+                >
+                  <Text style={styles.clearFiltersText}>Clear</Text>
+                </Pressable>
+              ) : null}
             </View>
-          ) : null}
-          {hasActiveFilters ? (
+          ) : hasActiveFilters ? (
             <Pressable
               onPress={() => {
                 setPickupFilter(null);
                 setDropFilter(null);
                 setBidStatusFilter('all');
                 setFitsFleetFilter(false);
+                setOpenFilterMenu(null);
               }}
               hitSlop={8}
               style={styles.clearFilters}
@@ -729,8 +888,6 @@ export function StoriesContent({
           ) : null}
         </View>
 
-        {source !== 'market' ? (
-          <>
             <DriverPulseStoryReel
               isFleetOwner={isFleetOwner}
               avatarUri={avatarUri}
@@ -748,7 +905,9 @@ export function StoriesContent({
               </View>
             ) : null}
 
+            {storiesQ.isError || recommendedStories.length > 0 ? (
             <View style={styles.sectionPad}>
+              {recommendedStories.length > 0 ? (
               <View style={styles.sectionHeader}>
                 <Text style={[styles.sectionTitle, { color: colors.text }]}>Reach</Text>
                 <Text style={[styles.sectionSub, { color: colors.textMuted }]}>
@@ -757,31 +916,13 @@ export function StoriesContent({
                 : 'Find work for your vehicle — bid on open loads. Awarded jobs stay in History.'}
             </Text>
           </View>
+              ) : null}
 
           {storiesQ.isError ? (
             <View style={[styles.emptyCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
               <Text style={[styles.emptyTitle, { color: colors.text }]}>Couldn't load stories</Text>
               <Text style={[styles.emptyBody, { color: colors.textMuted }]}>
                 {(storiesQ.error as Error)?.message ?? 'Unknown error'}
-              </Text>
-            </View>
-          ) : stories.length === 0 ? (
-            <View style={[styles.emptyCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
-              <Megaphone size={26} color={colors.textMuted} strokeWidth={1.8} />
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>No boosted loads right now</Text>
-              <Text style={[styles.emptyBody, { color: colors.textMuted }]}>
-                When shippers boost loads to drivers, they show up here. Loads disappear once they're
-                assigned to someone else.
-              </Text>
-            </View>
-          ) : recommendedStories.length === 0 ? (
-            <View style={[styles.emptyCard, { backgroundColor: cardBg, borderColor: colors.border }]}>
-              <MapPin size={22} color={colors.textMuted} strokeWidth={1.8} />
-              <Text style={[styles.emptyTitle, { color: colors.text }]}>No open loads right now</Text>
-              <Text style={[styles.emptyBody, { color: colors.textMuted }]}>
-                {pickupFilter || dropFilter
-                  ? 'Try another pickup or drop, or clear filters to see available loads.'
-                  : 'Awarded and completed jobs are not listed here — use History for those. Pull to refresh for new boosted loads.'}
               </Text>
             </View>
           ) : (
@@ -1066,10 +1207,9 @@ export function StoriesContent({
             })
           )}
         </View>
-          </>
-        ) : null}
+            ) : null}
 
-        {source !== 'reach' && footer
+        {footer
           ? footer({ pickup: pickupFilter, drop: dropFilter, fitsFleet: fitsFleetFilter })
           : null}
       </ScrollView>
@@ -1306,93 +1446,217 @@ const styles = StyleSheet.create({
   },
   actionNeededWrap: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 12,
+    paddingTop: 14,
+    gap: 10,
+  },
+  actionNeededHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
+  actionNeededMark: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.warningMuted,
+  },
   actionNeededHeader: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: -0.25,
+  },
+  actionNeededCount: {
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.warningMuted,
+  },
+  actionNeededCountText: {
     fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+    color: Theme.warning,
   },
   actionCard: {
     borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: Theme.accentGoldBorder,
-    padding: 12,
-    gap: 6,
-  },
-  actionCardKicker: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: Theme.warning,
-    textTransform: 'uppercase',
-    letterSpacing: 0.3,
-  },
-  actionCardOrg: { fontSize: 14, fontWeight: '800' },
-  actionCardAmount: { fontSize: 16, fontWeight: '800', letterSpacing: -0.2 },
-  actionCardCta: {
-    alignSelf: 'flex-start',
-    marginTop: 2,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 8,
-    backgroundColor: Theme.accentGold,
-  },
-  actionCardCtaText: { fontSize: 12, fontWeight: '800', color: Theme.textPrimaryDark },
-  sourceRow: {
-    flexDirection: 'row',
-    gap: 8,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 12,
-    paddingBottom: 4,
-  },
-  sourceChip: {
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    borderRadius: 999,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: 'transparent',
-  },
-  sourceChipText: { fontSize: 12, fontWeight: '700' },
-  sectionPad: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 12,
+    borderColor: Theme.borderLight,
+    borderLeftWidth: 3,
+    borderLeftColor: Theme.accentGold,
+    padding: 12,
     gap: 10,
   },
-  sectionHeader: { gap: 2, marginBottom: 2 },
-  sectionTitle: { fontSize: 13, fontWeight: '800', letterSpacing: -0.15 },
-  sectionSub: { fontSize: 11, fontWeight: '500', lineHeight: 15 },
+  actionCardCounter: {
+    borderColor: Theme.accentGoldBorder,
+    borderLeftColor: Theme.warning,
+  },
+  actionCardKicker: {
+    fontSize: 9,
+    fontWeight: '700',
+    color: Theme.textMuted,
+    textTransform: 'uppercase',
+    letterSpacing: 0.35,
+  },
+  actionCardOrg: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+  },
+  actionCardCta: {
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderRadius: 8,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+  },
+  actionCardCtaCounter: {
+    backgroundColor: Theme.accentGold,
+    borderColor: Theme.accentGoldPressed,
+  },
+  actionCardCtaText: { fontSize: 13, fontWeight: '700', color: Theme.textPrimaryDark },
+  actionCardCtaTextCounter: { color: Theme.textPrimaryDark },
+  sectionPad: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 16,
+    gap: 12,
+  },
+  sectionHeader: { gap: 4, marginBottom: 4 },
+  sectionTitle: { fontSize: 15, fontWeight: '800', letterSpacing: -0.25 },
+  sectionSub: { fontSize: 12, fontWeight: '500', lineHeight: 17 },
 
   filtersBlock: {
     gap: 8,
-    paddingVertical: 2,
+    paddingTop: 12,
+    paddingBottom: 8,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
   },
-  filterRow: {
+  filterDropdownRow: {
+    flexDirection: 'row',
+    alignItems: 'stretch',
+    gap: 6,
+  },
+  filterCell: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 48,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    gap: 3,
+    justifyContent: 'center',
+  },
+  filterCellOpen: {
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.surfaceGray,
+  },
+  filterCellFilled: {
+    borderColor: 'rgba(148,163,184,0.45)',
+    backgroundColor: Theme.cardWhite,
+  },
+  filterCellPressed: {
+    opacity: 0.92,
+  },
+  filterCellTop: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    minHeight: 32,
+    gap: 4,
+    minWidth: 0,
   },
-  filterLabel: {
-    width: 52,
+  filterCellLabel: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 9,
+    fontWeight: '700',
+    color: Theme.textMuted,
+    letterSpacing: 0.45,
+    textTransform: 'uppercase',
+    lineHeight: 11,
+  },
+  filterCellValue: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: Theme.textSecondary,
+    letterSpacing: -0.1,
+    lineHeight: 14,
+  },
+  filterCellValueFilled: {
+    color: Theme.textPrimaryDark,
+  },
+  filterCellValueOpen: {
+    color: Theme.textPrimaryDark,
+  },
+  filterMetaRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    flexWrap: 'wrap',
+  },
+  filterPanel: {
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    paddingHorizontal: 10,
+    paddingTop: 10,
+    paddingBottom: 10,
+    gap: 8,
+  },
+  filterPanelTitle: {
     fontSize: 10,
     fontWeight: '700',
     color: Theme.textMuted,
-    letterSpacing: 0.3,
+    letterSpacing: 0.4,
     textTransform: 'uppercase',
   },
-  filterChips: {
+  filterPanelGrid: {
     flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 6,
+  },
+  filterPanelChip: {
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    minHeight: 32,
+    borderRadius: 8,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
     alignItems: 'center',
-    gap: 5,
-    paddingRight: 8,
+    justifyContent: 'center',
+    maxWidth: '100%',
+  },
+  filterPanelChipOn: {
+    backgroundColor: Theme.driverEmeraldMuted,
+    borderColor: Theme.driverEmerald,
+  },
+  filterPanelChipText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: Theme.textSecondary,
+  },
+  filterPanelChipTextOn: {
+    color: Theme.driverEmeraldDark,
+    fontWeight: '800',
   },
   filterChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    minHeight: 28,
-    borderRadius: 6,
+    paddingHorizontal: 11,
+    paddingVertical: 6,
+    minHeight: 30,
+    borderRadius: 8,
     backgroundColor: Theme.surfaceGray,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: Theme.borderLight,
@@ -1400,19 +1664,24 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   filterChipSelected: {
-    backgroundColor: Theme.brandBlueSoft,
-    borderColor: Theme.brandBlueInk,
+    backgroundColor: Theme.cardWhite,
+    borderColor: Theme.borderMedium,
   },
   filterChipText: {
     fontSize: 11,
     fontWeight: '600',
     color: Theme.textSecondary,
+    lineHeight: 14,
+    includeFontPadding: false,
   },
   filterChipTextSelected: {
-    color: Theme.brandBlueInk,
+    color: Theme.textPrimaryDark,
     fontWeight: '700',
   },
-  clearFilters: { alignSelf: 'flex-start', paddingVertical: 2 },
+  clearFilters: {
+    alignSelf: 'center',
+    paddingVertical: 2,
+  },
   clearFiltersText: {
     fontSize: 11,
     fontWeight: '600',
@@ -1420,14 +1689,15 @@ const styles = StyleSheet.create({
   },
 
   emptyCard: {
-    alignItems: 'center',
-    gap: 6,
-    borderRadius: 12,
+    alignItems: 'flex-start',
+    gap: 8,
+    borderRadius: 14,
     borderWidth: StyleSheet.hairlineWidth,
-    padding: 20,
+    paddingVertical: 16,
+    paddingHorizontal: 16,
   },
-  emptyTitle: { fontSize: 13, fontWeight: '700' },
-  emptyBody: { fontSize: 11, fontWeight: '500', textAlign: 'center', lineHeight: 15 },
+  emptyTitle: { fontSize: 14, fontWeight: '700', letterSpacing: -0.15 },
+  emptyBody: { fontSize: 12, fontWeight: '500', textAlign: 'left', lineHeight: 17 },
 
   recCard: {
     borderRadius: 12,

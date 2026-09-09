@@ -35,6 +35,8 @@ export interface AddTripModalLayoutProps {
   scrollBody?: boolean;
   /** Wide desktop: stepped wizard rails instead of enterprise form chrome. */
   steppedLayout?: boolean;
+  /** Desktop: dock GPay keypad in the step card (no inner form scroll). */
+  dockKeypad?: boolean;
   insightPreset?: WizardInsightPreset;
   contextPanel?: ReactNode;
   tertiaryLabel?: string;
@@ -64,6 +66,7 @@ export function AddTripModalLayout({
   fillBody = false,
   scrollBody = false,
   steppedLayout = false,
+  dockKeypad = false,
   insightPreset = "trip",
   contextPanel,
   tertiaryLabel,
@@ -92,6 +95,7 @@ export function AddTripModalLayout({
         onBack={onBack}
         progress={progress}
         fillBody={fillBody}
+        dockKeypad={dockKeypad}
         primaryLabel={submitting ? "Saving…" : submitLabel}
         onPrimaryPress={onSubmit}
         primaryDisabled={submitDisabled}

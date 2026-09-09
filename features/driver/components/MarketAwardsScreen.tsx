@@ -154,7 +154,7 @@ function Group({
         {items.map((trip) => (
           <Pressable
             key={trip.id}
-            onPress={() => router.push(`/(driver)/trip-history/${trip.id}` as Href)}
+            onPress={() => router.push(`/driver-trip/${trip.id}` as Href)}
             style={({ pressed }) => [
               styles.card,
               { backgroundColor: colors.surface, borderColor: cardBorder, opacity: pressed ? 0.92 : 1 },

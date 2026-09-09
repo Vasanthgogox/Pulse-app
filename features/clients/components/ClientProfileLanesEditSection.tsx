@@ -94,7 +94,7 @@ function lanePrice(lane: ClientLaneRate): number {
 }
 
 function lanePricingType(lane: ClientLaneRate): "per_trip" | "per_ton" {
-  if (lane.rate_type === "per_ton" || lane.rate_type === "per_kg" || lane.pricing_model === "per_ton") {
+  if (lane.rate_type === "per_ton" || lane.rate_type === "per_kg" || lane.pricing_model === "per_ton" || lane.pricing_model === "per_mt_km") {
     return "per_ton";
   }
   return "per_trip";

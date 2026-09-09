@@ -221,10 +221,6 @@ export interface FinancialRowData {
   counterpartyIntegrated?: boolean | null;
   /** Ledger-specific: counterparty entity id (client/supplier) for opening Compare & Verify. */
   counterpartyId?: string | null;
-  /** Ledger-specific: open/resolved dispute status for this trip+partner (drives status chip in expanded card). */
-  disputeStatus?: "OPEN" | "RESOLVED" | null;
-  /** Ledger-specific: who raised the dispute — affects chip wording. */
-  disputeDirection?: "RAISED_BY_US" | "RECEIVED" | null;
   contactPercent?: number | null;
   contactPerson?: string | null;
   transactionTypeLabel?: string | null;
@@ -432,8 +428,6 @@ export function LedgerExpandedCardFromData({
       onDownloadPress={onDownloadPress}
       counterpartyIntegrated={data.counterpartyIntegrated}
       onOpenCompareVerify={onOpenCompareVerify}
-      disputeStatus={data.disputeStatus}
-      disputeDirection={data.disputeDirection}
       enableDesktopThreeColumn={enableDesktopThreeColumn}
     />
   );

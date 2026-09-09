@@ -36,6 +36,14 @@ import {
   buildClientLanePrefill,
   repriceLaneForTons,
 } from "@/features/clients/utils/clientLanePrefill.util";
+import {
+  computeClientPrice,
+  formatSaleAmount,
+  hasConvertibleSale,
+  parsePositiveAmount,
+  parsePositiveTons,
+  type SaleRateBasis,
+} from "@/features/clients/utils/saleRateSnapshot.util";
 import { useClientLaneRatesQuery } from "@/lib/queries/useClientLaneRatesQuery";
 import { useDebouncedValue } from "@/lib/hooks/useDebouncedValue";
 import { useClientWarehousesQuery } from "@/lib/queries/useClientWarehousesQuery";
@@ -46,7 +54,9 @@ import {
     updateIndentDraft,
 } from "@/features/indents/services/indents.service";
 import {
+  INDENT_WIZARD_PROGRESS_STEPS,
   INDENT_WIZARD_STEPS,
+  indentShareSubmitLabel,
   indentStepCanAdvance,
   indentWizardStepLabel,
   type IndentWizardStep,
@@ -71,6 +81,8 @@ import {
 } from "@/features/indents/utils/indentShareSubmitGuard.util";
 import { IndentWizardMobileStep } from "@/features/indents/components/create-indent/IndentWizardMobileStep";
 import { CreateIndentNetworkTargetStep } from "@/features/indents/components/create-indent/CreateIndentNetworkTargetStep";
+import { CreateIndentQuoteBasisStep } from "@/features/indents/components/create-indent/CreateIndentQuoteBasisStep";
+import { CreateIndentShareDestinationStep } from "@/features/indents/components/create-indent/CreateIndentShareDestinationStep";
 import { SmartInput } from "@/components/mobile-input";
 import { ADD_TRIP_FORM } from "@/features/trips/components/add-trip/addTripFormTokens";
 import { AddTripModalLayout } from "@/features/trips/components/add-trip/AddTripModalLayout";
@@ -160,15 +172,23 @@ function validateForm(state: FormState): Record<string, string> {
   }
   r("pickup_area", required(), maxLength(255));
   r("drop_location", required(), maxLength(255));
-  const clientPriceErr = positiveAmount()(state.client_price);
-  if (clientPriceErr) errors.client_price = clientPriceErr;
+  const perMt = state.sale_rate_basis === "per_mt";
+  if (perMt) {
+    const unitErr = positiveAmount()(state.sale_unit_rate);
+    if (unitErr) errors.client_price = unitErr;
+  } else {
+    const clientPriceErr = positiveAmount()(state.client_price);
+    if (clientPriceErr) errors.client_price = clientPriceErr;
+  }
   const supplierTargetErr = positiveAmount()(state.supplier_target);
   if (supplierTargetErr) errors.supplier_target = supplierTargetErr;
   r("vehicle_type", required("Vehicle is required"), maxLength(100));
   r("load_type", required("Product type is required"), maxLength(100));
   const weightStr = (state.weight ?? "").trim();
   if (!weightStr) {
-    errors.weight = "Weight is required.";
+    if (!perMt || !parsePositiveAmount(state.sale_unit_rate)) {
+      errors.weight = "Weight is required.";
+    }
   } else {
     const w = parseFloat(weightStr.replace(/,/g, ""));
     if (Number.isNaN(w) || w <= 0)
@@ -284,7 +304,10 @@ const initialFormState: FormState = {
   weight: "",
   vehicle_count: "1",
   client_price: "",
+  sale_rate_basis: "per_trip",
+  sale_unit_rate: "",
   supplier_target: "",
+  supplier_rate_basis: "per_trip",
   pickup_date: getToday(),
   circulation_target: "integrated_supplier",
 };
@@ -315,6 +338,7 @@ function hasIndentDraftProgress(state: FormState): boolean {
   if (t(state.load_type)) return true;
   if (t(state.weight)) return true;
   if (t(state.client_price)) return true;
+  if (t(state.sale_unit_rate)) return true;
   if (t(state.supplier_target)) return true;
   return false;
 }
@@ -634,10 +658,18 @@ export default function CreateIndentScreen() {
               indent.client_price != null
                 ? String(Number(indent.client_price))
                 : "",
+            sale_rate_basis:
+              indent.sale_rate_basis === "per_mt" ? "per_mt" : "per_trip",
+            sale_unit_rate:
+              indent.sale_unit_rate != null && Number(indent.sale_unit_rate) > 0
+                ? String(Number(indent.sale_unit_rate))
+                : "",
             supplier_target:
               indent.supplier_target != null
                 ? String(Number(indent.supplier_target))
                 : "",
+            supplier_rate_basis:
+              indent.supplier_rate_basis === "per_mt" ? "per_mt" : "per_trip",
             pickup_date: String(indent.pickup_date ?? getToday()),
             vehicle_count: resolvedDraftVehicleCount(
               await AsyncStorage.getItem(
@@ -653,6 +685,9 @@ export default function CreateIndentScreen() {
           setForm(nextForm);
           setLastSavedForm(nextForm);
           setDraftIndentId(indent.id);
+          const draftLaneId =
+            typeof indent.lane_id === "string" ? indent.lane_id : null;
+          setSelectedLaneId(draftLaneId);
           if (nextForm.client_id?.trim()) {
             setClientListExpanded(false);
           } else {
@@ -826,7 +861,10 @@ export default function CreateIndentScreen() {
         ...(prefill.vehicleType ? { vehicle_type: prefill.vehicleType } : {}),
         ...(prefill.loadType ? { load_type: prefill.loadType } : {}),
         ...(prefill.tons ? { weight: prefill.tons } : {}),
-        ...(prefill.clientPrice ? { client_price: prefill.clientPrice } : {}),
+        sale_rate_basis: prefill.saleRateBasis,
+        sale_unit_rate:
+          prefill.saleUnitRate != null ? String(prefill.saleUnitRate) : "",
+        client_price: prefill.clientPrice ?? "",
       });
       if (wh?.latitude != null && wh?.longitude != null) {
         setPickupLat(wh.latitude);
@@ -838,23 +876,74 @@ export default function CreateIndentScreen() {
 
   const handleClearLane = useCallback(() => {
     setSelectedLaneId(null);
-  }, []);
+    update({ sale_rate_basis: "per_trip", sale_unit_rate: "" });
+  }, [update]);
+
+  const handleSaleRateBasisChange = useCallback(
+    (basis: SaleRateBasis) => {
+      const next: Partial<FormState> = { sale_rate_basis: basis };
+      if (basis === "per_mt") {
+        const tons = parsePositiveTons(form.weight);
+        const total = parsePositiveAmount(form.client_price);
+        if (tons && total && !parsePositiveAmount(form.sale_unit_rate)) {
+          next.sale_unit_rate = String(Math.round((total / tons) * 100) / 100);
+        }
+        next.client_price = formatSaleAmount(
+          computeClientPrice({
+            basis: "per_mt",
+            unitRate: parsePositiveAmount(next.sale_unit_rate ?? form.sale_unit_rate),
+            tons,
+          }),
+        );
+      }
+      update(next);
+    },
+    [form.client_price, form.sale_unit_rate, form.weight, update],
+  );
+
+  const handleSaleUnitRateChange = useCallback(
+    (value: string) => {
+      update({
+        sale_unit_rate: value,
+        client_price: formatSaleAmount(
+          computeClientPrice({
+            basis: "per_mt",
+            unitRate: parsePositiveAmount(value),
+            tons: parsePositiveTons(form.weight),
+          }),
+        ),
+      });
+    },
+    [form.weight, update],
+  );
 
   /**
-   * Weight drives the price on per-ton / per-kg contract lanes, so editing tons
-   * after picking a lane must re-derive client_price. Non-weight lanes and
-   * ad-hoc indents (no lane selected) just take the new weight.
+   * Weight drives the price on per-MT lanes, so editing tons must re-derive
+   * client_price from the stored unit rate.
    */
   const handleTonsChange = useCallback(
     (value: string) => {
       const tons = value.replace(/[^\d.]/g, "").slice(0, 12);
+      if (form.sale_rate_basis === "per_mt") {
+        update({
+          weight: tons,
+          client_price: formatSaleAmount(
+            computeClientPrice({
+              basis: "per_mt",
+              unitRate: parsePositiveAmount(form.sale_unit_rate),
+              tons: parsePositiveTons(tons),
+            }),
+          ),
+        });
+        return;
+      }
       const lane = selectedLaneId
         ? contractLanes.find((l) => l.id === selectedLaneId)
         : undefined;
       const repriced = lane ? repriceLaneForTons(lane, tons) : null;
       update({ weight: tons, ...(repriced ? { client_price: repriced } : {}) });
     },
-    [contractLanes, selectedLaneId, update],
+    [contractLanes, form.sale_rate_basis, form.sale_unit_rate, selectedLaneId, update],
   );
 
   const indentWizardContextRow = useMemo(() => {
@@ -903,6 +992,8 @@ export default function CreateIndentScreen() {
       update({
         client_id: client.id,
         client_name: clientName,
+        sale_rate_basis: "per_trip",
+        sale_unit_rate: "",
       });
       setSelectedLaneId(null);
       setLaneSearch("");
@@ -913,7 +1004,13 @@ export default function CreateIndentScreen() {
   );
 
   const handleClearClient = useCallback(() => {
-    update({ client_id: null, client_name: "", client_price: "" });
+    update({
+      client_id: null,
+      client_name: "",
+      client_price: "",
+      sale_rate_basis: "per_trip",
+      sale_unit_rate: "",
+    });
     setSelectedLaneId(null);
     setLaneSearch("");
     setClientListExpanded(true);
@@ -955,8 +1052,12 @@ export default function CreateIndentScreen() {
       client_name: form.client_name.trim(),
       client_price:
         parseFloat(String(form.client_price).replace(/,/g, "")) || 0,
+      sale_rate_basis: form.sale_rate_basis,
+      sale_unit_rate: parsePositiveAmount(form.sale_unit_rate),
+      lane_id: selectedLaneId,
       supplier_target:
         parseFloat(String(form.supplier_target).replace(/,/g, "")) || 0,
+      supplier_rate_basis: form.supplier_rate_basis,
       vehicle_type: form.vehicle_type.trim(),
       load_type: form.load_type.trim(),
       weight: (parseFloat((form.weight ?? "").replace(/,/g, "")) || 0) * 1000,
@@ -967,7 +1068,7 @@ export default function CreateIndentScreen() {
     };
     if (form.client_id) payload.client_id = form.client_id;
     return payload;
-  }, [form, profile, user]);
+  }, [form, profile, selectedLaneId, user]);
 
   const persistDraft = useCallback(async () => {
     if (shouldSkipLockedSubmit(submitting, submitLockRef)) return;
@@ -986,10 +1087,11 @@ export default function CreateIndentScreen() {
       return;
     }
     if (!acquireSubmitLock(submitLockRef)) return;
-    setSubmitting(true);
     try {
       const shouldSaveDraft = await requestIndentTicketConfirm("draft");
       if (!shouldSaveDraft) return;
+
+      setSubmitting(true);
 
       const payload = buildPayload();
       const rememberVehicleCount = async (indentId: string) => {
@@ -1075,20 +1177,20 @@ export default function CreateIndentScreen() {
       );
       return;
     }
+    const errs = validateForm(form);
+    setErrors(errs);
+    if (Object.keys(errs).length > 0) return;
+    const vehicleCount = parseIndentVehicleCount(form.vehicle_count);
+    if (vehicleCount == null || !isValidIndentVehicleCount(form.vehicle_count)) {
+      setErrors({ ...errs, vehicle_count: INDENT_VEHICLE_COUNT_ERROR });
+      return;
+    }
     if (!acquireSubmitLock(submitLockRef)) return;
-    setSubmitting(true);
     try {
-      const errs = validateForm(form);
-      setErrors(errs);
-      if (Object.keys(errs).length > 0) return;
-      const vehicleCount = parseIndentVehicleCount(form.vehicle_count);
-      if (vehicleCount == null || !isValidIndentVehicleCount(form.vehicle_count)) {
-        setErrors({ ...errs, vehicle_count: INDENT_VEHICLE_COUNT_ERROR });
-        return;
-      }
       const shouldShare = await requestIndentTicketConfirm("share");
       if (!shouldShare) return;
 
+      setSubmitting(true);
       const payload = buildPayload();
       const { error, indents } = await createSharedIndentCopies(
         orgId,
@@ -1145,11 +1247,15 @@ export default function CreateIndentScreen() {
     (form.drop_location ?? "").trim().length > 0 &&
     (form.vehicle_type ?? "").trim().length > 0 &&
     (form.load_type ?? "").trim().length > 0 &&
-    (form.weight ?? "").trim().length > 0 &&
-    parseFloat((form.weight ?? "").replace(/,/g, "")) > 0 &&
+    (hasConvertibleSale({
+      basis: form.sale_rate_basis,
+      unitRate: parsePositiveAmount(form.sale_unit_rate),
+      clientPrice: parsePositiveAmount(form.client_price),
+    })) &&
+    (form.sale_rate_basis === "per_mt" ||
+      ((form.weight ?? "").trim().length > 0 &&
+        parseFloat((form.weight ?? "").replace(/,/g, "")) > 0)) &&
     isValidIndentVehicleCount(form.vehicle_count) &&
-    (form.client_price ?? "").trim().length > 0 &&
-    parseFloat(String(form.client_price ?? "").replace(/,/g, "")) > 0 &&
     (form.supplier_target ?? "").trim().length > 0 &&
     parseFloat(String(form.supplier_target ?? "").replace(/,/g, "")) > 0;
 
@@ -1162,9 +1268,48 @@ export default function CreateIndentScreen() {
     return indentStepCanAdvance(wizardStep, form);
   }, [canSubmit, form, isMobileWizard, wizardStep]);
 
+  /**
+   * Switching basis re-expresses the existing target in the new unit instead
+   * of leaving a trip total sitting in a ₹/MT field (which then multiplies out
+   * by tonnage into a nonsense figure).
+   */
+  const handleSupplierBasisChange = useCallback(
+    (basis: "per_mt" | "per_trip") => {
+      if (basis === form.supplier_rate_basis) return;
+      const current = parseFloat(String(form.supplier_target).replace(/,/g, ""));
+      const tons = parseFloat(String(form.weight ?? "").replace(/,/g, ""));
+      if (
+        !Number.isFinite(current) ||
+        current <= 0 ||
+        !Number.isFinite(tons) ||
+        tons <= 0
+      ) {
+        update({ supplier_rate_basis: basis });
+        return;
+      }
+      const next =
+        basis === "per_mt"
+          ? Math.round(current / tons)
+          : Math.round(current * tons);
+      update({ supplier_rate_basis: basis, supplier_target: String(next) });
+    },
+    [form.supplier_rate_basis, form.supplier_target, form.weight, update],
+  );
+
+  /** "₹3,200/MT x 38.83 t = ₹1,24,256 per trip" under the per-MT target. */
+  const supplierPerMtTripPreview = useMemo(() => {
+    if (form.supplier_rate_basis !== "per_mt") return null;
+    const rate = parseFloat(String(form.supplier_target).replace(/,/g, ""));
+    const tons = parseFloat(String(form.weight ?? "").replace(/,/g, ""));
+    if (!Number.isFinite(rate) || rate <= 0) return null;
+    if (!Number.isFinite(tons) || tons <= 0) return null;
+    const total = Math.round(rate * tons);
+    return `₹${rate.toLocaleString("en-IN")}/MT x ${tons} t = ₹${total.toLocaleString("en-IN")} per trip`;
+  }, [form.supplier_rate_basis, form.supplier_target, form.weight]);
+
   const indentWizardSteps = useMemo(
     () =>
-      INDENT_WIZARD_STEPS.map((id) => ({
+      INDENT_WIZARD_PROGRESS_STEPS.map((id) => ({
         id,
         label: indentWizardStepLabel(id),
       })),
@@ -1257,9 +1402,9 @@ export default function CreateIndentScreen() {
 
   const wizardSubmitLabel = isMobileWizard
     ? isLastWizardStep
-      ? "Share to Network"
+      ? indentShareSubmitLabel(form.circulation_target)
       : "Continue"
-    : "Share to Network";
+    : indentShareSubmitLabel(form.circulation_target);
 
   const wizardSubtitle = isMobileWizard
     ? wizardStep === "client"
@@ -1270,11 +1415,15 @@ export default function CreateIndentScreen() {
           : "Enter pickup, drop and trip date."
         : wizardStep === "prices"
           ? "Set a supplier target (or pick a margin %) before sharing."
-          : wizardStep === "vehicle"
-            ? "Vehicle type, product type and tonnage."
-            : wizardStep === "loadType"
-              ? "Product type."
-              : "Weight in tons."
+          : wizardStep === "quote"
+            ? "Say whether that target is a trip lump sum or a ₹/MT rate."
+          : wizardStep === "share"
+            ? "Choose where this load should go."
+            : wizardStep === "vehicle"
+              ? "Vehicle type, product type and tonnage."
+              : wizardStep === "loadType"
+                ? "Product type."
+                : "Weight in tons."
     : "Share load details to your network.";
 
   const handleWizardPrimary = () => {
@@ -1310,20 +1459,23 @@ export default function CreateIndentScreen() {
     const fillWizardBody =
       compactWizard &&
       ((wizardStep === "client" && Boolean(form.client_id)) ||
-        wizardStep === "prices");
-    const stepIndex = INDENT_WIZARD_STEPS.indexOf(wizardStep);
-    const progressSteps = INDENT_WIZARD_STEPS.map((id) => ({
+        wizardStep === "prices" ||
+        wizardStep === "quote");
+    const progressCurrentId =
+      wizardStep === "share" ? "prices" : wizardStep;
+    const stepIndex = INDENT_WIZARD_PROGRESS_STEPS.indexOf(progressCurrentId);
+    const progressSteps = INDENT_WIZARD_PROGRESS_STEPS.map((id) => ({
       id,
       label: indentWizardStepLabel(id),
     }));
-    const desktopSteps = INDENT_WIZARD_STEPS.map((id, index) => ({
+    const desktopSteps = INDENT_WIZARD_PROGRESS_STEPS.map((id, index) => ({
       id,
       num: index + 1,
       title: indentWizardStepLabel(id),
     }));
     const handleStepPress = (stepId: string, index: number) => {
       if (index < 0 || index > stepIndex) return;
-      const target = INDENT_WIZARD_STEPS[index];
+      const target = INDENT_WIZARD_PROGRESS_STEPS[index];
       if (target) setWizardStep(target);
     };
     const routeState = {
@@ -1365,9 +1517,9 @@ export default function CreateIndentScreen() {
           insightPreset="load"
           subtitle={wizardSubtitle}
           stepIndex={stepIndex + 1}
-          stepTotal={INDENT_WIZARD_STEPS.length}
+          stepTotal={INDENT_WIZARD_PROGRESS_STEPS.length}
           submitLabel={wizardSubmitLabel}
-          canSubmit={stepCanAdvance}
+          canSubmit={stepCanAdvance && !ticketConfirmState.visible}
           submitting={submitting}
           lockPrimaryUntilValid
           validationMessage="Fill the required details to continue"
@@ -1384,13 +1536,13 @@ export default function CreateIndentScreen() {
             isDesktopEnterprise ? (
               <CreateTripDesktopStepper
                 steps={desktopSteps}
-                currentStepId={wizardStep}
+                currentStepId={progressCurrentId}
                 onStepPress={handleStepPress}
               />
             ) : (
               <AddTripWizardProgress
                 steps={progressSteps}
-                currentStepId={wizardStep}
+                currentStepId={progressCurrentId}
                 onStepPress={handleStepPress}
               />
             )
@@ -1424,6 +1576,10 @@ export default function CreateIndentScreen() {
                 onClientPriceChange={(value) => update({ client_price: value })}
                 clientPriceError={Boolean(errors.client_price)}
                 onClearClient={handleClearClient}
+                saleRateBasis={form.sale_rate_basis}
+                saleUnitRate={form.sale_unit_rate}
+                onSaleRateBasisChange={handleSaleRateBasisChange}
+                onSaleUnitRateChange={handleSaleUnitRateChange}
                 contractLanes={contractLanes}
                 contractLanesLoading={lanesLoading}
                 selectedLaneId={selectedLaneId}
@@ -1482,21 +1638,28 @@ export default function CreateIndentScreen() {
                 vehicleCountErrorMessage={errors.vehicle_count}
               />
             ) : null}
+            {wizardStep === "quote" ? (
+              <CreateIndentQuoteBasisStep
+                compact={compactWizard}
+                supplierTarget={form.supplier_target}
+                supplierRateBasis={form.supplier_rate_basis}
+                onSupplierRateBasisChange={handleSupplierBasisChange}
+                weightTons={form.weight}
+              />
+            ) : null}
             {wizardStep === "prices" ? (
               <CreateIndentNetworkTargetStep
                 compact={compactWizard}
                 supplierTarget={form.supplier_target}
+                supplierRateBasis={form.supplier_rate_basis}
+                weightTons={form.weight}
                 onSupplierTargetChange={(value) =>
                   update({ supplier_target: value })
-                }
-                circulationTarget={form.circulation_target}
-                onCirculationTargetChange={(value) =>
-                  update({ circulation_target: value })
                 }
                 clientPrice={form.client_price}
                 errorMessage={errors.supplier_target}
                 partyPreview={
-                  compactWizard && selectedClientRow
+                  selectedClientRow
                     ? {
                         name: selectedClientRow.name ?? "Client",
                         subtitle:
@@ -1518,11 +1681,14 @@ export default function CreateIndentScreen() {
                       }
                     : undefined
                 }
-                onPartyPress={
-                  compactWizard
-                    ? () => setWizardStep("client")
-                    : undefined
-                }
+                onPartyPress={() => setWizardStep("client")}
+              />
+            ) : null}
+            {wizardStep === "share" ? (
+              <CreateIndentShareDestinationStep
+                compact={compactWizard}
+                value={form.circulation_target}
+                onChange={(value) => update({ circulation_target: value })}
               />
             ) : null}
           </View>
@@ -1596,7 +1762,7 @@ export default function CreateIndentScreen() {
         stepIndex={isMobileWizard ? wizardStepIndex + 1 : undefined}
         stepTotal={isMobileWizard ? INDENT_WIZARD_STEPS.length : undefined}
         submitLabel={wizardSubmitLabel}
-        canSubmit={stepCanAdvance}
+        canSubmit={stepCanAdvance && !ticketConfirmState.visible}
         submitting={submitting}
         validationMessage="Fill route, client, commercials, and load details to share"
         onClose={handleBackPress}
@@ -2304,20 +2470,68 @@ export default function CreateIndentScreen() {
                 {!isMobileWizard ? (
                 <View style={styles.supplierSection}>
                   <View style={styles.supplierLabelRow}>
-                    <Text style={fieldLabelStyle}>Supplier target (₹)</Text>
+                    <Text style={fieldLabelStyle}>
+                      {form.supplier_rate_basis === "per_mt"
+                        ? "Supplier target (₹/MT)"
+                        : "Supplier target (₹/trip)"}
+                    </Text>
                     <View style={styles.estBadge}>
                       <Text style={styles.estBadgeText}>Est. target</Text>
                     </View>
                   </View>
+                  {/*
+                    The basis must be explicit: an unlabelled number left ₹/MT
+                    rates and trip totals indistinguishable in the DB, so read
+                    surfaces showed a ₹1.24L trip as ₹3,200.
+                  */}
+                  <View style={styles.supplierBasisRow}>
+                    {(["per_trip", "per_mt"] as const).map((basis) => {
+                      const selected = form.supplier_rate_basis === basis;
+                      return (
+                        <Pressable
+                          key={basis}
+                          onPress={() => handleSupplierBasisChange(basis)}
+                          style={[
+                            styles.supplierBasisChip,
+                            selected && styles.supplierBasisChipSelected,
+                          ]}
+                          accessibilityRole="radio"
+                          accessibilityState={{ checked: selected }}
+                          accessibilityLabel={
+                            basis === "per_mt" ? "Per metric tonne" : "Per trip"
+                          }
+                        >
+                          <Text
+                            style={[
+                              styles.supplierBasisChipText,
+                              selected && styles.supplierBasisChipTextSelected,
+                            ]}
+                          >
+                            {basis === "per_mt" ? "Per MT" : "Per trip"}
+                          </Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
                   <SmartInput
                     type="currency"
-                    label="Supplier target"
+                    label={
+                      form.supplier_rate_basis === "per_mt"
+                        ? "Supplier target (₹/MT)"
+                        : "Supplier target (₹/trip)"
+                    }
                     value={form.supplier_target}
                     onChange={(raw) => update({ supplier_target: raw })}
                     variant="field"
                     placeholder="Enter target"
                     errorMessage={errors.supplier_target}
                   />
+                  {form.supplier_rate_basis === "per_mt" ? (
+                    <Text style={styles.supplierBasisHint}>
+                      {supplierPerMtTripPreview ??
+                        "Add tonnage to see the trip total."}
+                    </Text>
+                  ) : null}
                 </View>
                 ) : null}
 
@@ -2338,7 +2552,10 @@ export default function CreateIndentScreen() {
                       },
                       {
                         id: "supplier",
-                        label: "Supplier target",
+                        label:
+                          form.supplier_rate_basis === "per_mt"
+                            ? "Supplier target (₹/MT)"
+                            : "Supplier target (₹/trip)",
                         rawValue: currencyFieldToRaw(form.supplier_target),
                         onRawValueChange: (raw) => update({ supplier_target: raw }),
                         errorMessage: errors.supplier_target,
@@ -4053,6 +4270,37 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "space-between",
     marginBottom: 6,
+  },
+  supplierBasisRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 8,
+  },
+  supplierBasisChip: {
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    borderColor: Theme.border,
+    backgroundColor: Theme.surface,
+  },
+  supplierBasisChipSelected: {
+    borderColor: Theme.primary,
+    backgroundColor: Theme.primaryLight,
+  },
+  supplierBasisChipText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.textSecondary,
+  },
+  supplierBasisChipTextSelected: {
+    color: Theme.primary,
+  },
+  supplierBasisHint: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textSecondary,
   },
   estBadge: {
     backgroundColor: "rgba(59, 130, 246, 0.12)",

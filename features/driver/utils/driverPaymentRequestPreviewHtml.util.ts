@@ -1,6 +1,6 @@
 /**
  * Formal payment-request HTML for sharing with fleet / shipper (PDF + in-app preview).
- * Larger type, clear alignment, professional settlement request.
+ * Compact professional settlement layout — fits mobile preview without oversized type.
  */
 
 function safe(s: string): string {
@@ -67,14 +67,14 @@ export function buildEarningsPaymentFollowUpHtml(p: PaymentFollowUpHtmlInput): s
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       color: #0f172a;
       background: #ffffff;
-      font-size: 15px;
-      line-height: 1.45;
+      font-size: 12px;
+      line-height: 1.4;
       -webkit-font-smoothing: antialiased;
     }
-    .page { padding: 16px 14px 20px; }
+    .page { padding: 10px 10px 14px; }
     .doc {
       border: 1px solid #cbd5e1;
-      border-radius: 10px;
+      border-radius: 8px;
       overflow: hidden;
       background: #ffffff;
     }
@@ -85,45 +85,45 @@ export function buildEarningsPaymentFollowUpHtml(p: PaymentFollowUpHtmlInput): s
       justify-content: space-between;
       align-items: flex-start;
       gap: 16px;
-      padding: 18px 18px 16px;
+      padding: 12px 12px 10px;
       background: #0f172a;
       color: #ffffff;
     }
     .brandName {
       margin: 0;
-      font-size: 20px;
+      font-size: 15px;
       font-weight: 800;
       letter-spacing: -0.03em;
       line-height: 1.15;
     }
     .brandSub {
       margin: 4px 0 0;
-      font-size: 12px;
-      letter-spacing: 0.14em;
+      font-size: 9px;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
-      color: rgba(255,255,255,0.62);
+      color: rgba(255,255,255,0.58);
       font-weight: 700;
     }
     .docMeta { text-align: right; flex-shrink: 0; padding-top: 2px; }
     .docTitle {
       margin: 0;
-      font-size: 13px;
+      font-size: 9px;
       font-weight: 800;
-      letter-spacing: 0.14em;
+      letter-spacing: 0.12em;
       text-transform: uppercase;
       color: #fbbf24;
     }
     .docNo {
-      margin: 6px 0 0;
-      font-size: 14px;
+      margin: 3px 0 0;
+      font-size: 11px;
       font-weight: 700;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       color: rgba(255,255,255,0.92);
     }
     .docIssued {
       margin: 4px 0 0;
-      font-size: 12px;
-      color: rgba(255,255,255,0.58);
+      font-size: 9px;
+      color: rgba(255,255,255,0.55);
     }
 
     /* Parties — aligned two columns */
@@ -134,22 +134,22 @@ export function buildEarningsPaymentFollowUpHtml(p: PaymentFollowUpHtmlInput): s
       background: #f8fafc;
     }
     .party {
-      padding: 16px 18px;
+      padding: 10px 12px;
       min-width: 0;
     }
     .party + .party { border-left: 1px solid #e2e8f0; }
     .partyLabel {
       margin: 0 0 6px;
-      font-size: 11px;
-      font-weight: 800;
-      letter-spacing: 0.12em;
+      font-size: 9px;
+      font-weight: 700;
+      letter-spacing: 0.1em;
       text-transform: uppercase;
       color: #64748b;
     }
     .partyName {
       margin: 0;
-      font-size: 17px;
-      font-weight: 800;
+      font-size: 13px;
+      font-weight: 700;
       color: #0f172a;
       letter-spacing: -0.02em;
       word-break: break-word;
@@ -157,8 +157,8 @@ export function buildEarningsPaymentFollowUpHtml(p: PaymentFollowUpHtmlInput): s
     }
     .partyLine {
       margin: 5px 0 0;
-      font-size: 14px;
-      color: #475569;
+      font-size: 11px;
+      color: #64748b;
       word-break: break-word;
     }
 
@@ -168,22 +168,22 @@ export function buildEarningsPaymentFollowUpHtml(p: PaymentFollowUpHtmlInput): s
       align-items: center;
       justify-content: space-between;
       gap: 14px;
-      padding: 16px 18px;
+      padding: 10px 12px;
       border-bottom: 1px solid #e2e8f0;
       background: #fffbeb;
     }
     .amountLeft { min-width: 0; }
     .amountLabel {
       margin: 0;
-      font-size: 12px;
-      letter-spacing: 0.12em;
+      font-size: 9px;
+      letter-spacing: 0.1em;
       text-transform: uppercase;
       color: #92400e;
       font-weight: 800;
     }
     .amountValue {
       margin: 4px 0 0;
-      font-size: 36px;
+      font-size: 22px;
       font-weight: 800;
       letter-spacing: -0.04em;
       color: #0f172a;
@@ -192,21 +192,21 @@ export function buildEarningsPaymentFollowUpHtml(p: PaymentFollowUpHtmlInput): s
     }
     .badge {
       flex-shrink: 0;
-      font-size: 12px;
+      font-size: 9px;
       font-weight: 800;
-      letter-spacing: 0.08em;
+      letter-spacing: 0.06em;
       text-transform: uppercase;
       color: #92400e;
       background: #fef3c7;
       border: 1px solid #fcd34d;
-      padding: 8px 12px;
+      padding: 4px 8px;
       border-radius: 999px;
     }
 
     .intro {
-      padding: 14px 18px;
-      font-size: 14px;
-      line-height: 1.5;
+      padding: 9px 12px;
+      font-size: 11px;
+      line-height: 1.4;
       color: #334155;
       border-bottom: 1px solid #e2e8f0;
     }
@@ -225,7 +225,7 @@ export function buildEarningsPaymentFollowUpHtml(p: PaymentFollowUpHtmlInput): s
       text-transform: uppercase;
       color: #64748b;
       font-weight: 800;
-      padding: 12px 18px;
+      padding: 7px 12px;
       border-bottom: 1px solid #cbd5e1;
       background: #f1f5f9;
     }
@@ -235,8 +235,8 @@ export function buildEarningsPaymentFollowUpHtml(p: PaymentFollowUpHtmlInput): s
     col.trip { width: 25%; }
     col.amt { width: 25%; }
     td {
-      padding: 16px 18px;
-      font-size: 15px;
+      padding: 9px 12px;
+      font-size: 12px;
       color: #0f172a;
       border-bottom: 1px solid #e2e8f0;
       vertical-align: top;
@@ -244,14 +244,14 @@ export function buildEarningsPaymentFollowUpHtml(p: PaymentFollowUpHtmlInput): s
     .route {
       margin: 0;
       font-weight: 800;
-      font-size: 16px;
-      letter-spacing: -0.02em;
+      font-size: 12px;
+      letter-spacing: -0.015em;
       word-break: break-word;
       line-height: 1.3;
     }
     .meta {
       margin: 6px 0 0;
-      font-size: 13px;
+      font-size: 10px;
       color: #64748b;
       line-height: 1.4;
     }
@@ -259,20 +259,20 @@ export function buildEarningsPaymentFollowUpHtml(p: PaymentFollowUpHtmlInput): s
       display: inline-block;
       font-weight: 700;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 13px;
+      font-size: 10px;
       word-break: break-all;
       line-height: 1.35;
     }
     .amt {
       font-weight: 800;
-      font-size: 16px;
+      font-size: 12px;
       white-space: nowrap;
       font-variant-numeric: tabular-nums;
     }
 
     /* Totals — right-aligned values */
     .totals {
-      padding: 4px 18px 8px;
+      padding: 2px 12px 4px;
       background: #fafafa;
     }
     .totalsRow {
@@ -280,8 +280,8 @@ export function buildEarningsPaymentFollowUpHtml(p: PaymentFollowUpHtmlInput): s
       justify-content: space-between;
       align-items: center;
       gap: 16px;
-      padding: 10px 0;
-      font-size: 15px;
+      padding: 7px 0;
+      font-size: 12px;
       color: #334155;
       border-bottom: 1px solid #e2e8f0;
     }
@@ -292,15 +292,15 @@ export function buildEarningsPaymentFollowUpHtml(p: PaymentFollowUpHtmlInput): s
       font-weight: 700;
     }
     .totalsRow.due {
-      font-size: 17px;
-      font-weight: 800;
+      font-size: 13px;
+      font-weight: 700;
       color: #0f172a;
       padding-top: 12px;
       padding-bottom: 12px;
     }
     .totalsRow.due .val {
       color: #b45309;
-      font-size: 18px;
+      font-size: 14px;
     }
 
     /* Key facts — even two-column grid */
@@ -310,7 +310,7 @@ export function buildEarningsPaymentFollowUpHtml(p: PaymentFollowUpHtmlInput): s
       border-top: 1px solid #e2e8f0;
     }
     .detail {
-      padding: 14px 18px;
+      padding: 8px 12px;
       border-bottom: 1px solid #e2e8f0;
       min-width: 0;
     }
@@ -325,7 +325,7 @@ export function buildEarningsPaymentFollowUpHtml(p: PaymentFollowUpHtmlInput): s
     }
     .detailV {
       margin: 5px 0 0;
-      font-size: 15px;
+      font-size: 11px;
       font-weight: 700;
       color: #0f172a;
       word-break: break-word;
@@ -333,9 +333,9 @@ export function buildEarningsPaymentFollowUpHtml(p: PaymentFollowUpHtmlInput): s
     }
 
     .note {
-      padding: 14px 18px;
-      font-size: 14px;
-      line-height: 1.5;
+      padding: 9px 12px;
+      font-size: 11px;
+      line-height: 1.4;
       color: #334155;
       background: #f8fafc;
       border-top: 1px solid #e2e8f0;
@@ -343,8 +343,8 @@ export function buildEarningsPaymentFollowUpHtml(p: PaymentFollowUpHtmlInput): s
     .note strong { color: #0f172a; }
 
     .footer {
-      padding: 12px 18px 14px;
-      font-size: 12px;
+      padding: 8px 12px 10px;
+      font-size: 10px;
       line-height: 1.4;
       color: #94a3b8;
       border-top: 1px solid #e2e8f0;
@@ -531,109 +531,109 @@ export function buildBulkEarningsPaymentFollowUpHtml(p: {
       font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
       color: #0f172a;
       background: #ffffff;
-      font-size: 15px;
-      line-height: 1.45;
+      font-size: 12px;
+      line-height: 1.4;
       -webkit-font-smoothing: antialiased;
     }
-    .page { padding: 16px 14px 20px; }
-    .doc { border: 1px solid #cbd5e1; border-radius: 10px; overflow: hidden; background: #ffffff; }
+    .page { padding: 10px 10px 14px; }
+    .doc { border: 1px solid #cbd5e1; border-radius: 8px; overflow: hidden; background: #ffffff; }
     .topbar {
       display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;
-      padding: 18px 18px 16px; background: #0f172a; color: #ffffff;
+      padding: 12px 12px 10px; background: #0f172a; color: #ffffff;
     }
-    .brandName { margin: 0; font-size: 20px; font-weight: 800; letter-spacing: -0.03em; }
+    .brandName { margin: 0; font-size: 15px; font-weight: 800; letter-spacing: -0.03em; }
     .brandSub {
-      margin: 4px 0 0; font-size: 12px; letter-spacing: 0.14em; text-transform: uppercase;
-      color: rgba(255,255,255,0.62); font-weight: 700;
+      margin: 4px 0 0; font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase;
+      color: rgba(255,255,255,0.58); font-weight: 700;
     }
     .docMeta { text-align: right; flex-shrink: 0; }
     .docTitle {
-      margin: 0; font-size: 13px; font-weight: 800; letter-spacing: 0.14em;
+      margin: 0; font-size: 9px; font-weight: 800; letter-spacing: 0.12em;
       text-transform: uppercase; color: #fbbf24;
     }
     .docNo {
-      margin: 6px 0 0; font-size: 14px; font-weight: 700;
+      margin: 3px 0 0; font-size: 11px; font-weight: 700;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
       color: rgba(255,255,255,0.92);
     }
-    .docIssued { margin: 4px 0 0; font-size: 12px; color: rgba(255,255,255,0.58); }
+    .docIssued { margin: 2px 0 0; font-size: 9px; color: rgba(255,255,255,0.55); }
     .parties {
       display: grid; grid-template-columns: 1fr 1fr; border-bottom: 1px solid #e2e8f0; background: #f8fafc;
     }
-    .party { padding: 16px 18px; min-width: 0; }
+    .party { padding: 10px 12px; min-width: 0; }
     .party + .party { border-left: 1px solid #e2e8f0; }
     .partyLabel {
-      margin: 0 0 6px; font-size: 11px; font-weight: 800; letter-spacing: 0.12em;
+      margin: 0 0 3px; font-size: 9px; font-weight: 700; letter-spacing: 0.1em;
       text-transform: uppercase; color: #64748b;
     }
     .partyName {
-      margin: 0; font-size: 17px; font-weight: 800; color: #0f172a;
-      letter-spacing: -0.02em; word-break: break-word;
+      margin: 0; font-size: 13px; font-weight: 700; color: #0f172a;
+      letter-spacing: -0.015em; word-break: break-word;
     }
-    .partyLine { margin: 5px 0 0; font-size: 14px; color: #475569; word-break: break-word; }
+    .partyLine { margin: 3px 0 0; font-size: 11px; color: #64748b; word-break: break-word; }
     .amountStrip {
       display: flex; align-items: center; justify-content: space-between; gap: 14px;
-      padding: 16px 18px; border-bottom: 1px solid #e2e8f0; background: #fffbeb;
+      padding: 10px 12px; border-bottom: 1px solid #e2e8f0; background: #fffbeb;
     }
     .amountLabel {
-      margin: 0; font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;
-      color: #92400e; font-weight: 800;
+      margin: 0; font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase;
+      color: #92400e; font-weight: 700;
     }
     .amountValue {
-      margin: 4px 0 0; font-size: 36px; font-weight: 800; letter-spacing: -0.04em;
+      margin: 4px 0 0; font-size: 22px; font-weight: 800; letter-spacing: -0.04em;
       color: #0f172a; line-height: 1.05; font-variant-numeric: tabular-nums;
     }
     .badge {
-      flex-shrink: 0; font-size: 12px; font-weight: 800; letter-spacing: 0.08em;
+      flex-shrink: 0; font-size: 9px; font-weight: 800; letter-spacing: 0.06em;
       text-transform: uppercase; color: #92400e; background: #fef3c7;
-      border: 1px solid #fcd34d; padding: 8px 12px; border-radius: 999px;
+      border: 1px solid #fcd34d; padding: 4px 8px; border-radius: 999px;
     }
     .intro {
-      padding: 14px 18px; font-size: 14px; line-height: 1.5; color: #334155;
+      padding: 8px 12px; font-size: 14px; line-height: 1.5; color: #334155;
       border-bottom: 1px solid #e2e8f0;
     }
     .intro p { margin: 0; }
     table { width: 100%; border-collapse: collapse; table-layout: fixed; }
     th {
-      text-align: left; font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase;
-      color: #64748b; font-weight: 800; padding: 12px 18px;
+      text-align: left; font-size: 9px; letter-spacing: 0.08em; text-transform: uppercase;
+      color: #64748b; font-weight: 700; padding: 7px 12px;
       border-bottom: 1px solid #cbd5e1; background: #f1f5f9;
     }
     th.r, td.r { text-align: right; }
     col.desc { width: 50%; } col.trip { width: 25%; } col.amt { width: 25%; }
     td {
-      padding: 14px 18px; font-size: 15px; color: #0f172a;
+      padding: 8px 12px; font-size: 12px; color: #0f172a;
       border-bottom: 1px solid #e2e8f0; vertical-align: top;
     }
     .route {
-      margin: 0; font-weight: 800; font-size: 15px; letter-spacing: -0.02em;
+      margin: 0; font-weight: 700; font-size: 12px; letter-spacing: -0.015em;
       word-break: break-word; line-height: 1.3;
     }
-    .meta { margin: 5px 0 0; font-size: 13px; color: #64748b; line-height: 1.4; }
+    .meta { margin: 3px 0 0; font-size: 10px; color: #64748b; line-height: 1.3; }
     .tripId {
       display: inline-block; font-weight: 700;
       font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
-      font-size: 13px; word-break: break-all;
+      font-size: 10px; word-break: break-all;
     }
-    .amt { font-weight: 800; font-size: 15px; white-space: nowrap; font-variant-numeric: tabular-nums; }
-    .totals { padding: 4px 18px 8px; background: #fafafa; }
+    .amt { font-weight: 700; font-size: 12px; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    .totals { padding: 2px 12px 4px; background: #fafafa; }
     .totalsRow {
       display: flex; justify-content: space-between; align-items: center; gap: 16px;
-      padding: 10px 0; font-size: 15px; color: #334155; border-bottom: 1px solid #e2e8f0;
+      padding: 7px 0; font-size: 12px; color: #475569; border-bottom: 1px solid #e2e8f0;
     }
     .totalsRow:last-child { border-bottom: 0; }
     .totalsRow .val { font-variant-numeric: tabular-nums; text-align: right; font-weight: 700; }
     .totalsRow.due {
-      font-size: 17px; font-weight: 800; color: #0f172a; padding-top: 12px; padding-bottom: 12px;
+      font-size: 13px; font-weight: 800; color: #0f172a; padding-top: 8px; padding-bottom: 8px;
     }
-    .totalsRow.due .val { color: #b45309; font-size: 18px; }
+    .totalsRow.due .val { color: #b45309; font-size: 14px; }
     .note {
-      padding: 14px 18px; font-size: 14px; line-height: 1.5; color: #334155;
+      padding: 8px 12px; font-size: 14px; line-height: 1.5; color: #334155;
       background: #f8fafc; border-top: 1px solid #e2e8f0;
     }
     .note strong { color: #0f172a; }
     .footer {
-      padding: 12px 18px 14px; font-size: 12px; line-height: 1.4; color: #94a3b8;
+      padding: 8px 12px 10px; font-size: 10px; line-height: 1.35; color: #94a3b8;
       border-top: 1px solid #e2e8f0;
     }
     .footer strong { color: #64748b; font-weight: 700; }

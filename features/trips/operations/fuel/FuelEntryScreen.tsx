@@ -1,4 +1,5 @@
 import { SmartInput } from "@/components/mobile-input";
+import type { NumericEntryPartyPreview } from "@/components/mobile-input/NumericEntryPartyBanner";
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import {
   OperationalBottomActionBar,
@@ -10,7 +11,7 @@ import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Alert, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import type { FuelType, OperationalPaymentMode, OperationalPaymentOwner } from "../types";
@@ -39,6 +40,7 @@ import {
 } from "../shared/DriverExpenseEntryLayout";
 import { previewFuelReceiptOcr } from "../shared/applyExpenseReceiptOcr.util";
 import type { ExpenseReceiptOcrResult } from "../shared/expenseReceiptOcr.service";
+import { buildExpenseEntryPartyPreview } from "../shared/expenseEntryPartyPreview.util";
 import {
   type ExpenseBillCaptureBag,
   useExpenseBillCapture,
@@ -51,23 +53,54 @@ function FuelAmountFlow({
   liters,
   onAmountChange,
   onLitersChange,
+  context,
+  partyPreview,
   flowHintColor = Theme.textMuted,
 }: {
   amountInr: number;
   liters: number | null;
   onAmountChange: (numeric: number) => void;
   onLitersChange: (numeric: number) => void;
+  context?: string;
+  partyPreview?: NumericEntryPartyPreview;
   flowHintColor?: string;
 }) {
   const showLitersStep = amountInr > 0;
+  const [litersOpen, setLitersOpen] = useState(false);
+  const litersOpenTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (litersOpenTimerRef.current) clearTimeout(litersOpenTimerRef.current);
+    };
+  }, []);
+
+  const handleSpendChange = useCallback(
+    (_raw: string, numeric: number) => {
+      onAmountChange(numeric);
+      if (numeric <= 0) {
+        setLitersOpen(false);
+        return;
+      }
+      // Let Spend sheet finish closing, then open Liters as the next step.
+      if (litersOpenTimerRef.current) clearTimeout(litersOpenTimerRef.current);
+      litersOpenTimerRef.current = setTimeout(() => {
+        setLitersOpen(true);
+        litersOpenTimerRef.current = null;
+      }, 280);
+    },
+    [onAmountChange],
+  );
 
   return (
     <View style={flowStyles.wrap}>
       <SmartInput
         type="currency"
         value={amountInr}
-        onChange={(_, numeric) => onAmountChange(numeric)}
+        onChange={handleSpendChange}
         label="Spend"
+        context={context}
+        partyPreview={partyPreview}
         submitLabel="Continue"
         variant="field"
         density="compact"
@@ -80,7 +113,7 @@ function FuelAmountFlow({
         <>
           <View style={flowStyles.connector}>
             <View style={[flowStyles.connectorLine, { backgroundColor: flowHintColor }]} />
-            <Text style={[flowStyles.connectorLabel, { color: flowHintColor }]}>Then enter liters</Text>
+            <Text style={[flowStyles.connectorLabel, { color: flowHintColor }]}>Liters</Text>
             <View style={[flowStyles.connectorLine, { backgroundColor: flowHintColor }]} />
           </View>
           <SmartInput
@@ -88,6 +121,8 @@ function FuelAmountFlow({
             value={liters ?? ""}
             onChange={(_, numeric) => onLitersChange(numeric)}
             label="Liters"
+            context={context}
+            partyPreview={partyPreview}
             submitLabel="Apply"
             variant="field"
             density="compact"
@@ -95,11 +130,13 @@ function FuelAmountFlow({
             suffix=" L"
             required={false}
             validation={{ min: 0, max: 5000 }}
+            open={litersOpen}
+            onOpenChange={setLitersOpen}
           />
         </>
       ) : (
         <Text style={[flowStyles.pendingHint, { color: flowHintColor }]}>
-          Enter spend amount to continue to liters
+          Then add liters
         </Text>
       )}
     </View>
@@ -108,13 +145,12 @@ function FuelAmountFlow({
 
 const flowStyles = StyleSheet.create({
   wrap: {
-    gap: 10,
+    gap: 8,
   },
   connector: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
-    paddingVertical: 2,
+    gap: 6,
   },
   connectorLine: {
     flex: 1,
@@ -122,16 +158,16 @@ const flowStyles = StyleSheet.create({
     opacity: 0.35,
   },
   connectorLabel: {
-    fontSize: 10,
+    fontSize: 9,
     fontWeight: "700",
-    letterSpacing: 0.4,
+    letterSpacing: 0.45,
     textTransform: "uppercase",
   },
   pendingHint: {
-    fontSize: 11,
-    fontWeight: "500",
-    lineHeight: 15,
-    paddingHorizontal: 2,
+    fontSize: 10,
+    fontWeight: "600",
+    lineHeight: 13,
+    paddingHorizontal: 1,
   },
 });
 
@@ -218,6 +254,10 @@ export function FuelEntryScreen({
   const contextLine = useMemo(
     () => `${trip.pickup_area || "Pickup"} → ${trip.drop_location || "Drop"}`,
     [trip.drop_location, trip.pickup_area],
+  );
+  const expensePartyPreview = useMemo(
+    () => buildExpenseEntryPartyPreview(trip),
+    [trip],
   );
 
   const paymentOwnerOptions = useMemo(
@@ -343,17 +383,18 @@ export function FuelEntryScreen({
           onAttach: handleCapture,
           onRemove: handleRemovePhoto,
         }}
-      >
-        <DriverExpenseSection title="Amount">
+        amountSlot={
           <FuelAmountFlow
             amountInr={amountInr}
             liters={liters}
             onAmountChange={setAmountInr}
             onLitersChange={setLiters}
+            context={contextLine}
+            partyPreview={expensePartyPreview}
             flowHintColor={Theme.driverEmeraldDark}
           />
-        </DriverExpenseSection>
-
+        }
+      >
         <DriverExpenseSection title="Category & payment">
           <DriverExpenseCategorySwitch
             tripId={trip.id}
@@ -426,6 +467,8 @@ export function FuelEntryScreen({
             liters={liters}
             onAmountChange={setAmountInr}
             onLitersChange={setLiters}
+            context={contextLine}
+            partyPreview={expensePartyPreview}
           />
         </Surface>
 

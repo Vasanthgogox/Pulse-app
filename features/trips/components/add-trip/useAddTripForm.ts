@@ -14,6 +14,7 @@ import {
 } from '@/lib/validation';
 import { getOptimalRoute } from '@/lib/routingService';
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { computeClientPrice } from "@/features/clients/utils/saleRateSnapshot.util";
 import type { AddTripFormData, AddTripFormState } from './types';
 
 export type AddTripIssueField =
@@ -71,8 +72,13 @@ function computeValidationIssues(state: AddTripFormState): AddTripValidationIssu
   const errClient = runValidators(state.clientName, [required(), maxLength(VALIDATION.CLIENT_SUPPLIER_NAME_MAX_LENGTH)]);
   if (errClient) push('client', `Client: ${errClient}`);
 
-  const errPrice = positiveAmount()(state.clientPrice);
-  if (errPrice) push('clientPrice', `Client price: ${errPrice}`);
+  if (state.saleRateBasis === "per_mt") {
+    const errUnit = positiveAmount()(state.saleUnitRate);
+    if (errUnit) push("clientPrice", `Per-MT rate: ${errUnit}`);
+  } else {
+    const errPrice = positiveAmount()(state.clientPrice);
+    if (errPrice) push("clientPrice", `Client price: ${errPrice}`);
+  }
 
   if (state.supplySource === 'aggregate') {
     if (!state.supplierId) {
@@ -170,6 +176,9 @@ const initialState: AddTripFormState = {
   clientName: '',
   clientId: null,
   clientPrice: '',
+  saleRateBasis: 'per_trip',
+  saleUnitRate: '',
+  laneId: null,
   supplierRate: '',
   supplySource: 'asset',
   supplierId: null,
@@ -239,6 +248,19 @@ export function useAddTripForm(options?: {
   const setClientId = useCallback((id: string | null) => setState((s) => ({ ...s, clientId: id })), []);
   const setClientSelection = useCallback((id: string | null, name: string) => setState((s) => ({ ...s, clientId: id, clientName: name })), []);
   const setClientPrice = useCallback((v: string) => setState((s) => ({ ...s, clientPrice: v })), []);
+  const setSaleRateBasis = useCallback(
+    (v: AddTripFormState["saleRateBasis"]) =>
+      setState((s) => ({ ...s, saleRateBasis: v })),
+    [],
+  );
+  const setSaleUnitRate = useCallback(
+    (v: string) => setState((s) => ({ ...s, saleUnitRate: v })),
+    [],
+  );
+  const setLaneId = useCallback(
+    (v: string | null) => setState((s) => ({ ...s, laneId: v })),
+    [],
+  );
   const setSupplierRate = useCallback((v: string) => setState((s) => ({ ...s, supplierRate: v })), []);
   const setSupplySource = useCallback((v: AddTripFormState['supplySource']) => setState((s) => ({
     ...s,
@@ -496,7 +518,16 @@ export function useAddTripForm(options?: {
       const n = parseFloat(String(raw ?? '').replace(/,/g, ''));
       return Number.isFinite(n) ? n : 0;
     };
-    const clientPrice = parseAmount(state.clientPrice);
+    const unitRate = parseAmount(state.saleUnitRate);
+    const tonsNum = parseAmount(state.tons);
+    const clientPrice =
+      state.saleRateBasis === "per_mt"
+        ? computeClientPrice({
+            basis: "per_mt",
+            unitRate,
+            tons: tonsNum,
+          })
+        : parseAmount(state.clientPrice);
     // Asset: no partner; use 0. Aggregate: validated above.
     const supplierRate = state.supplySource === 'asset' ? 0 : parseAmount(state.supplierRate);
     const advancePaid = parseAmount(state.advancePaid);
@@ -531,6 +562,10 @@ export function useAddTripForm(options?: {
       client_name: state.clientName.trim(),
       client_id: state.clientId,
       client_price: clientPrice,
+      sale_rate_basis: state.saleRateBasis,
+      sale_unit_rate:
+        state.saleRateBasis === "per_mt" && unitRate > 0 ? unitRate : null,
+      lane_id: state.laneId,
       supplier_rate: supplierRate,
       supplier_id: state.supplySource === 'aggregate' ? state.supplierId || null : null,
       supplier_name:
@@ -583,6 +618,9 @@ export function useAddTripForm(options?: {
       setClientId,
       setClientSelection,
       setClientPrice,
+      setSaleRateBasis,
+      setSaleUnitRate,
+      setLaneId,
       setSupplierRate,
       setSupplySource,
       setSupplierSelection,
@@ -616,6 +654,9 @@ export function useAddTripForm(options?: {
       setClientId,
       setClientSelection,
       setClientPrice,
+      setSaleRateBasis,
+      setSaleUnitRate,
+      setLaneId,
       setSupplierRate,
       setSupplySource,
       setSupplierSelection,

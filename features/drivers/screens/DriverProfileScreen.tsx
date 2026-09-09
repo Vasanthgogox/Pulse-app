@@ -15,7 +15,10 @@ import {
   getMilestoneCount,
   isMilestoneCompleted,
   isMilestoneInProgress,
+  type ExperienceLevelConfig,
+  type MilestoneGuideActionKind,
 } from '@/features/experience/experienceProgress';
+import { MilestoneHowToModal } from '@/features/experience/components/MilestoneHowToModal';
 import {
   averageScore,
   getRatingsForDriver,
@@ -28,6 +31,7 @@ import * as driversService from '@/features/drivers/services/drivers.service';
 import * as tripsService from '@/features/trips/services/trips.service';
 import { getVehicleById } from '@/features/vehicles/services/vehicles.service';
 import { useDriverFleetOwnerQuery } from '@/lib/queries/useDriverFleetOwnerQuery';
+import { useDcoStatusQuery } from '@/lib/queries/useDcoStatusQuery';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import {
@@ -38,6 +42,7 @@ import {
   Dna,
   Edit3,
   Fuel,
+  Gavel,
   Gauge,
   Globe,
   History,
@@ -54,7 +59,7 @@ import {
   Wrench
 } from 'lucide-react-native';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { Image, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Image, Pressable, ScrollView, Share, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFocusEffect } from '@react-navigation/native';
 
@@ -96,13 +101,16 @@ export default function DriverProfileScreen() {
   const colors = useDriverThemeColors();
   const { user, profile, signOut, refreshSession, patchProfile } = useAuth();
   const { isFleetOwner } = useDriverFleetOwnerQuery(profile?.uid);
+  const { status: dcoStatus } = useDcoStatusQuery(profile?.uid);
   const { locale, localeOptions } = useLanguage();
   const languageLabel =
     localeOptions.find((o) => o.value === locale)?.label ?? 'English';
   const { avatarSeed, setAvatarSeed, setPreviewUri } = useDriverAvatar();
   const [showEditProfileModal, setShowEditProfileModal] = useState(false);
   const [profileView, setProfileView] = useState<ProfileView>('main');
+  const [guideLevel, setGuideLevel] = useState<ExperienceLevelConfig | null>(null);
   const [drivers, setDrivers] = useState<driversService.DriverRow[]>([]);
+  const [driverIds, setDriverIds] = useState<string[]>([]);
   const [trips, setTrips] = useState<tripsService.TripRow[]>([]);
   const [loadingTrips, setLoadingTrips] = useState(true);
   const [driverRatings, setDriverRatings] = useState<RatingRow[]>([]);
@@ -154,6 +162,8 @@ export default function DriverProfileScreen() {
         // All driver rows (including left fleets) — experience is cumulative.
         const allRows = res.drivers ?? [];
         setDrivers(allRows.filter((d) => !d.left_at)); // UI fleet display: active only
+        // Same id set the trips query below uses — drives the realtime subscription filter.
+        setDriverIds(allRows.map((d) => d.id));
         if (allRows.length === 0) {
           setTrips([]);
           setLoadingTrips(false);
@@ -169,6 +179,7 @@ export default function DriverProfileScreen() {
       .catch(() => {
         setTrips([]);
         setDrivers([]);
+        setDriverIds([]);
       })
       .finally(() => {
         setLoadingTrips(false);
@@ -238,18 +249,21 @@ export default function DriverProfileScreen() {
     loadTrips();
   }, [loadTrips]));
 
-  // Shared with LevelProgressionScreen's identical subscription — same key means the
-  // realtime registry dedupes to one channel instead of two when both screens are mounted.
+  // Shared with LevelProgressionScreen's identical subscription (same signed-in user
+  // resolves the same driverIds) — same key means the realtime registry dedupes to one
+  // channel instead of two when both screens are mounted. Scoped to this user's own
+  // driver_id(s) — a driver's trips can span multiple orgs, so organization_id can't be
+  // used here; waits for driverIds to resolve before subscribing.
+  const driverIdsKey = driverIds.join(',');
   useEffect(() => {
-    // Shared ref-counted channel (registry) instead of a private static-named
-    // channel — same behavior (refetch on any trips change), but reuses one
-    // server channel and inherits cap/grace/prune lifecycle.
+    if (!profile?.uid || driverIds.length === 0) return;
     return subscribeSharedPostgresChanges(
-      'driver-app:trips:all',
-      [{ event: '*', schema: 'public', table: 'trips' }],
+      `driver-app:trips:driver:${profile.uid}`,
+      [{ event: '*', schema: 'public', table: 'trips', filter: `driver_id=in.(${driverIdsKey})` }],
       () => { loadTrips(); },
     );
-  }, [loadTrips]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- driverIdsKey is the stable dep for driverIds
+  }, [profile?.uid, driverIdsKey, loadTrips]);
 
   useEffect(() => {
     void loadKycSummary();
@@ -343,6 +357,17 @@ export default function DriverProfileScreen() {
     nextLevelConfig,
     experiencePct,
   } = experience;
+
+  const handleMilestoneGuideAction = (kind: MilestoneGuideActionKind) => {
+    setGuideLevel(null);
+    if (kind === 'documents') {
+      router.push('/(driver)/documents');
+      return;
+    }
+    if (kind === 'find_work') {
+      router.push(ROUTES.driverAvailableLoads());
+    }
+  };
 
   const fleetOrgName =
     (primaryDriver?.organizations as { name?: string } | null | undefined)?.name?.trim() ||
@@ -449,7 +474,14 @@ export default function DriverProfileScreen() {
             const active = isMilestoneInProgress(step.level, experience);
             const count = getMilestoneCount(step, experience.metrics);
             return (
-              <View key={step.level} style={styles.roadStep}>
+                <Pressable
+                  key={step.level}
+                  style={styles.roadStep}
+                  onPress={() => setGuideLevel(step)}
+                  accessibilityRole="button"
+                  accessibilityLabel={`L${step.level} ${step.name}. ${step.goalText}`}
+                  accessibilityHint="Shows what to do to complete this level"
+                >
                 <View
                   style={[
                     styles.roadDot,
@@ -485,7 +517,7 @@ export default function DriverProfileScreen() {
                     </View>
                   ) : null}
                 </View>
-              </View>
+                </Pressable>
             );
           })}
         </View>
@@ -768,6 +800,46 @@ export default function DriverProfileScreen() {
                   </View>
                 </TouchableOpacity>
 
+                <TouchableOpacity
+                  style={[styles.rowCard, { backgroundColor: colors.surface, borderColor: cardBorder }]}
+                  onPress={() =>
+                    router.push(ROUTES.driverDcoStatus() as Parameters<typeof router.push>[0])
+                  }
+                  activeOpacity={0.88}
+                  accessibilityRole="button"
+                  accessibilityLabel="DCO status"
+                >
+                  <View style={styles.rowCardLeft}>
+                    <View style={[styles.blueIcon, { backgroundColor: isDark ? colors.emeraldMuted : 'rgba(167,243,208,0.45)' }]}>
+                      <Gavel size={20} color={colors.emerald} />
+                    </View>
+                    <View style={styles.rowCardText}>
+                      <Text style={[styles.rowEyebrow, { color: muted }]}>
+                        {dcoStatus === 'APPROVED' ? 'DCO' : 'INDEPENDENT OWNER-OPERATOR'}
+                      </Text>
+                      <Text style={[styles.rowTitle, { color: colors.text }]}>
+                        {dcoStatus === 'NONE'
+                          ? 'Become a DCO'
+                          : dcoStatus === 'PENDING'
+                            ? 'DCO — Under review'
+                            : dcoStatus === 'APPROVED'
+                              ? 'DCO status'
+                              : dcoStatus === 'REJECTED'
+                                ? 'DCO — Request again'
+                                : 'DCO — Suspended'}
+                      </Text>
+                      <Text style={[styles.rowSub, { color: muted }]} numberOfLines={2}>
+                        {dcoStatus === 'APPROVED'
+                          ? 'Bid in the marketplace as an independent owner-operator'
+                          : 'Admin-approved independent owner-operator status'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={[styles.chevPill, { backgroundColor: isDark ? colors.surfaceElevated : '#f1f5f9' }]}>
+                    <ChevronRight size={18} color={muted} />
+                  </View>
+                </TouchableOpacity>
+
                 <TouchableOpacity style={[styles.rowCard, { backgroundColor: colors.surface, borderColor: cardBorder }]} onPress={() => setProfileView('vehicle')} activeOpacity={0.88}>
                   <View style={styles.rowCardLeft}>
                     <View style={styles.blueIcon}>
@@ -906,6 +978,15 @@ export default function DriverProfileScreen() {
             {profileView === 'vehicle' && <VehicleTechnicalView />}
         </>
       </ScrollView>
+
+      <MilestoneHowToModal
+        visible={guideLevel != null}
+        level={guideLevel}
+        progress={experience}
+        audience="driver"
+        onClose={() => setGuideLevel(null)}
+        onAction={handleMilestoneGuideAction}
+      />
 
       <EditProfileModal
         visible={showEditProfileModal}

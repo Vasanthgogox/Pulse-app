@@ -22,8 +22,6 @@ export function useRegistryFeed(
   const {
     activeSalaryRequests,
     historySalaryRequests,
-    activeSharedNotifications,
-    historySharedNotifications,
   } = useAlertRegistryNotifications(orgId);
   // Single query for both lifecycle tabs; split locally so only one channel opens.
   const { data: networkNotifications } = useNetworkNotificationsQuery(orgId);
@@ -85,8 +83,6 @@ export function useRegistryFeed(
         opsAlerts: opsAlertsForFeed,
         activeSalary: activeSalaryRequests,
         historySalary: historySalaryRequests,
-        activeShared: activeSharedNotifications,
-        historyShared: historySharedNotifications,
         activeNetwork,
         historyNetwork,
       }),
@@ -95,8 +91,6 @@ export function useRegistryFeed(
       opsAlertsForFeed,
       activeSalaryRequests,
       historySalaryRequests,
-      activeSharedNotifications,
-      historySharedNotifications,
       activeNetwork,
       historyNetwork,
     ],

@@ -44,6 +44,20 @@ const PARTICLE_COLORS = [
 
 export type BidConfirmPhase = "review" | "success";
 
+/**
+ * A11.1 — Marketplace-only fee preview, computed by the caller from the one
+ * authoritative RPC (calculate_marketplace_platform_fee). Optional and
+ * rendered only when supplied, so non-Marketplace callers of this shared
+ * modal (Reach/relationship direct_quotes bidding) are byte-for-byte
+ * unaffected. Never derive "capped"/"amount" any other way than passing
+ * through what that RPC already resolved.
+ */
+export type MarketplaceFeePreview =
+  | { status: "loading" }
+  | { status: "error" }
+  | { status: "inactive" }
+  | { status: "active"; amount: number; capped: boolean };
+
 export type BidConfirmModalProps = {
   visible: boolean;
   phase?: BidConfirmPhase;
@@ -58,6 +72,10 @@ export type BidConfirmModalProps = {
   targetRate?: number | null;
   note?: string;
   submitting?: boolean;
+  /** Marketplace-only. Omit entirely for Reach/relationship bidding. */
+  marketplaceFee?: MarketplaceFeePreview;
+  /** Render inside a parent modal instead of a second RN Modal (iOS stacked-modal tap bug). */
+  embedded?: boolean;
   onCancel: () => void;
   onConfirm: () => void;
   /** Dismiss after success celebration. */
@@ -111,6 +129,8 @@ export const BidConfirmModal = memo(function BidConfirmModal({
   targetRate,
   note,
   submitting = false,
+  marketplaceFee,
+  embedded = false,
   onCancel,
   onConfirm,
   onSuccessDone,
@@ -319,20 +339,11 @@ export const BidConfirmModal = memo(function BidConfirmModal({
     return rows;
   }, [ownerName, routeLine, specs, note]);
 
-  return (
-    <Modal
-      visible={visible}
-      transparent
-      animationType="none"
-      statusBarTranslucent
-      onRequestClose={
-        submitting
-          ? undefined
-          : isSuccess
-            ? onSuccessDone
-            : onCancel
-      }
-    >
+  if (embedded && !visible) {
+    return null;
+  }
+
+  const sheet = (
       <View
         style={[
           styles.overlay,
@@ -560,6 +571,30 @@ export const BidConfirmModal = memo(function BidConfirmModal({
               </View>
 
               <View style={styles.body}>
+                {marketplaceFee && marketplaceFee.status === "active" ? (
+                  <View style={styles.feeBlock}>
+                    <View style={styles.feeRow}>
+                      <Text style={styles.feeRowLabel}>Your bid</Text>
+                      <Text style={styles.feeRowValue}>{formatINR(amount)}</Text>
+                    </View>
+                    <View style={styles.feeRow}>
+                      <Text style={styles.feeRowLabel}>
+                        Marketplace fee{marketplaceFee.capped ? " (capped)" : ""}
+                      </Text>
+                      <Text style={styles.feeRowValue}>
+                        {formatINR(marketplaceFee.amount)}
+                      </Text>
+                    </View>
+                    <Text style={styles.feeNote}>
+                      You pay Pulse {formatINR(marketplaceFee.amount)} separately if you win this bid
+                    </Text>
+                  </View>
+                ) : marketplaceFee && marketplaceFee.status === "inactive" ? (
+                  <View style={styles.feeBlock}>
+                    <Text style={styles.feeNote}>No platform fee currently applies</Text>
+                  </View>
+                ) : null}
+
                 {metaRows.length > 0 ? (
                   <View style={styles.metaList}>
                     {metaRows.map((row, index) => (
@@ -633,6 +668,28 @@ export const BidConfirmModal = memo(function BidConfirmModal({
           )}
         </MotiView>
       </View>
+  );
+
+  if (embedded) {
+    return sheet;
+  }
+
+  return (
+    <Modal
+      visible={visible}
+      transparent
+      animationType="none"
+      presentationStyle="overFullScreen"
+      statusBarTranslucent
+      onRequestClose={
+        submitting
+          ? undefined
+          : isSuccess
+            ? onSuccessDone
+            : onCancel
+      }
+    >
+      {sheet}
     </Modal>
   );
 });
@@ -817,6 +874,36 @@ const styles = StyleSheet.create({
     paddingTop: 4,
     paddingBottom: 16,
     gap: 14,
+  },
+  feeBlock: {
+    borderRadius: 12,
+    backgroundColor: Theme.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    gap: 6,
+  },
+  feeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  feeRowLabel: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+  },
+  feeRowValue: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  feeNote: {
+    fontSize: 11,
+    fontWeight: "400",
+    color: Theme.textMuted,
+    lineHeight: 15,
   },
   metaList: {
     gap: 0,

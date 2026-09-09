@@ -56,6 +56,9 @@ export async function listOpenMarketplaceLoadsForOrg(
  */
 export type MyOrgMarketBidStatus = 'pending' | 'accepted' | 'rejected' | 'withdrawn' | 'superseded';
 
+/** A8.6.2 — independent of MyOrgMarketBidStatus; see network/services/marketBids.service.ts for full doc. */
+export type FeePaymentStatus = 'not_required' | 'required' | 'pending' | 'paid' | 'failed' | 'expired';
+
 export type MyOrgMarketBidRow = {
   id: string;
   indent_id: string;
@@ -68,11 +71,13 @@ export type MyOrgMarketBidRow = {
   owner_organization_name: string | null;
   /** Always populated (last-4 masked). */
   owner_masked_phone: string | null;
-  /** Unmasked — only non-null once this bid is 'accepted'; enforced server-side. */
+  /** Unmasked — only non-null once accepted AND fee_payment_status is paid/not_required. */
   owner_phone: string | null;
   amount: number;
   note: string | null;
   status: MyOrgMarketBidStatus;
+  fee_payment_status: FeePaymentStatus;
+  platform_fee_amount: number | null;
   created_at: string;
   accepted_at: string | null;
 };

@@ -2,7 +2,7 @@
  * Ratings: Client→Supplier, Client→Driver (indent trips), Supplier→Driver, Organization→Driver (asset trips).
  */
 
-export type RaterType = 'client' | 'supplier' | 'organization';
+export type RaterType = 'client' | 'supplier' | 'organization' | 'driver';
 export type RatedType = 'client' | 'supplier' | 'driver';
 
 export interface RatingRow {

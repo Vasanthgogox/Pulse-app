@@ -12,6 +12,7 @@ import { useDriverTheme, useDriverThemeColors } from '@/contexts/DriverThemeCont
 import { createOwnerVehicle } from '@/features/driver/services/ownerVehicles.service';
 import { applyIndianVehicleKeystroke } from '@/lib/indianVehicleInput.util';
 import { useDriverFleetOwnerQuery } from '@/lib/queries/useDriverFleetOwnerQuery';
+import { useDcoStatusQuery } from '@/lib/queries/useDcoStatusQuery';
 import { useOwnerVehiclesQuery } from '@/lib/queries/useOwnerVehiclesQuery';
 import { ROUTES } from '@/lib/routes';
 import { validateIndianVehicleNumber } from '@/lib/validation';
@@ -42,6 +43,8 @@ export default function AddOwnerVehicleScreen() {
   const colors = useDriverThemeColors();
   const pageBg = driverDetailPageBackground(isDark, colors.background);
   const { isFleetOwner } = useDriverFleetOwnerQuery(uid);
+  const { isDcoApproved } = useDcoStatusQuery(uid);
+  const canOwnVehicles = isFleetOwner || isDcoApproved;
   const { invalidate } = useOwnerVehiclesQuery(uid);
 
   const [vehicleNumber, setVehicleNumber] = useState('');
@@ -64,8 +67,8 @@ export default function AddOwnerVehicleScreen() {
   }, [router]);
 
   const handleSave = useCallback(async () => {
-    if (!uid || !isFleetOwner) {
-      setError('Fleet Owner capability required.');
+    if (!uid || !canOwnVehicles) {
+      setError('Fleet Owner or DCO status required.');
       return;
     }
     const ve = validateIndianVehicleNumber(vehicleNumber);
@@ -97,7 +100,7 @@ export default function AddOwnerVehicleScreen() {
     }
   }, [
     uid,
-    isFleetOwner,
+    canOwnVehicles,
     vehicleNumber,
     vehicleType,
     capacity,

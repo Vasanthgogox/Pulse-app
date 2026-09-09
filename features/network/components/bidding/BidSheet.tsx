@@ -135,6 +135,9 @@ export function BidSheet({
       return {
         ...(indent ?? {}),
         supplier_target: target.supplier_target,
+        supplier_rate_basis:
+          target.supplier_rate_basis ?? indent?.supplier_rate_basis ?? null,
+        weight: target.weight ?? indent?.weight ?? null,
       };
     },
     enabled: visible && !!sourceIndentId && !!orgId,
@@ -151,6 +154,8 @@ export function BidSheet({
         postIsActive: post?.is_active,
         bidCount: post?.bid_count ?? (existingBid ? 1 : 0),
         supplierTarget: linkedIndentQ.data?.supplier_target,
+        saleRateBasis: linkedIndentQ.data?.supplier_rate_basis ?? null,
+        weightKg: linkedIndentQ.data?.weight ?? null,
         rateOffer: post?.rate_offer,
         myBidAmount: existingBid?.amount ?? null,
         myBidStatus: existingBid?.status ?? null,
@@ -168,6 +173,8 @@ export function BidSheet({
       post?.reach_campaign_id,
       linkedIndentQ.data?.status,
       linkedIndentQ.data?.supplier_target,
+      linkedIndentQ.data?.supplier_rate_basis,
+      linkedIndentQ.data?.weight,
       existingBid?.amount,
       existingBid?.status,
     ],

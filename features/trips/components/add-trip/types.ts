@@ -25,6 +25,10 @@ export interface AddTripFormData {
   client_name: string;
   client_id?: string | null;
   client_price: number;
+  sale_rate_basis?: "per_mt" | "per_trip";
+  sale_unit_rate?: number | null;
+  lane_id?: string | null;
+  indent_id?: string | null;
   supplier_rate: number;
   supplier_id?: string | null;
   /** Denormalized partner label for lists/detail when supplier_id is set. */
@@ -68,6 +72,9 @@ export interface AddTripFormState {
   clientName: string;
   clientId: string | null;
   clientPrice: string;
+  saleRateBasis: "per_mt" | "per_trip";
+  saleUnitRate: string;
+  laneId: string | null;
   supplierRate: string;
   supplySource: SupplySource;
   supplierId: string | null;
@@ -150,6 +157,9 @@ export type AddTripSourceIndent = {
   client_name?: string;
   client_price?: number;
   client_id?: string | null;
+  lane_id?: string | null;
+  sale_rate_basis?: "per_mt" | "per_trip" | null;
+  sale_unit_rate?: number | null;
 };
 
 export interface AddTripModalProps {

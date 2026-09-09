@@ -920,6 +920,10 @@ export interface CreateTripData {
   client_name: string;
   client_id?: string | null;
   client_price?: number;
+  sale_rate_basis?: "per_mt" | "per_trip" | null;
+  sale_unit_rate?: number | null;
+  lane_id?: string | null;
+  indent_id?: string | null;
   supplier_rate?: number;
   notes?: string | null;
   pickup_date?: string | null;
@@ -1739,7 +1743,6 @@ export async function createTrip(
     owner_user_id: ownerUserId,
     created_by_user_id: creatorUserId,
     trip_number: null as string | null,
-    source: "manual",
     pickup_area: (data.pickup_area ?? "").trim(),
     drop_location: (data.drop_location ?? "").trim(),
     pickup_lat:
@@ -1767,6 +1770,14 @@ export async function createTrip(
     client_name: (data.client_name ?? "").trim() || "—",
     client_id: normalizeNullableUuid(data.client_id),
     client_price: clientPrice,
+    sale_rate_basis: data.sale_rate_basis === "per_mt" ? "per_mt" : data.sale_rate_basis === "per_trip" ? "per_trip" : null,
+    sale_unit_rate:
+      data.sale_unit_rate != null && Number(data.sale_unit_rate) > 0
+        ? Number(data.sale_unit_rate)
+        : null,
+    lane_id: normalizeNullableUuid(data.lane_id),
+    indent_id: normalizeNullableUuid(data.indent_id),
+    source: normalizeNullableUuid(data.indent_id) ? "indent" : "manual",
     supplier_rate: supplierRate,
     platform_fee: 0,
     driver_commission: computedDriverCommission,
@@ -2631,15 +2642,25 @@ async function ensureAssetCompletionAutoEntries(
 
   const existingRes = await supabase()
     .from("transactions")
-    .select("id, contact_type, amount_in, amount_out")
+    .select("id, contact_type, amount_in, amount_out, ledger_category")
     .eq("organization_id", trip.organization_id)
     .eq("trip_id", trip.id);
 
   if (existingRes.error) {
-    console.warn("[trip completion] failed to inspect existing entries", {
+    // A8.4.1: was console.warn-only -- a failure here silently skipped the
+    // whole function (no TRIP_REVENUE/DRIVER_COMMISSION row ever written)
+    // with nothing surfacing beyond a dev-console line nobody monitored.
+    // Upgraded to console.error (searchable/alertable in log aggregation,
+    // unlike warn) without changing control flow -- trip completion itself
+    // must not block on this. A real Sentry-backed logger was tried here
+    // but pulls @sentry/react-native into trips.service.ts's module graph,
+    // which several existing jest suites can't load (no RN native modules
+    // in the test env) -- reverted rather than widen this fix into a test-
+    // infra change.
+    console.error("[trip completion] failed to inspect existing entries", {
       tripId: trip.id,
       organizationId: trip.organization_id,
-      message: existingRes.error.message,
+      error: existingRes.error,
     });
     return;
   }
@@ -2650,6 +2671,7 @@ async function ensureAssetCompletionAutoEntries(
     contact_type: string | null;
     amount_in: number | null;
     amount_out: number | null;
+    ledger_category: string | null;
   }>;
   const hasClientIn = existing.some(
     (r) =>
@@ -2683,7 +2705,7 @@ async function ensureAssetCompletionAutoEntries(
       transaction_date: transactionDate,
       contact_id: trip.client_id ?? null,
       contact_type: "client",
-      ledger_entity_type: "CLIENT",
+      ledger_entity_type: "client",
       ledger_flow_type: "receivable",
       ledger_category: "TRIP_REVENUE",
     });
@@ -2699,25 +2721,76 @@ async function ensureAssetCompletionAutoEntries(
       transaction_date: transactionDate,
       contact_id: trip.driver_id,
       contact_type: "driver",
-      ledger_entity_type: "DRIVER",
+      ledger_entity_type: "driver",
       ledger_flow_type: "payable",
       ledger_category: "DRIVER_COMMISSION",
     });
   }
 
-  if (pendingInserts.length === 0) return;
-
-  const { error: insertError } = await supabase()
-    .from("transactions")
-    .insert(pendingInserts);
-  if (insertError) {
-    console.warn("[trip completion] failed to auto-create asset entries", {
-      tripId: trip.id,
-      organizationId: trip.organization_id,
-      message: insertError.message,
-      count: pendingInserts.length,
-    });
+  if (pendingInserts.length > 0) {
+    const { error: insertError } = await supabase()
+      .from("transactions")
+      .insert(pendingInserts);
+    if (insertError) {
+      // A8.4.1: this insert wrote ledger_entity_type "CLIENT"/"DRIVER"
+      // (uppercase) from 2026-05-02 until this fix -- transactions_ledger_
+      // entity_type_check only ever allowed lowercase, so it failed on
+      // every single call, silently, via console.warn-only handling below.
+      // Fixed at the two literals above; upgraded to console.error (see the
+      // comment on the earlier console.error in this function for why a
+      // Sentry-backed logger was tried and reverted here). See A8.4/A8.4.1
+      // for the historical-repair migration that backfills the rows this
+      // bug prevented from ever being written.
+      console.error("[trip completion] failed to auto-create asset entries", {
+        tripId: trip.id,
+        organizationId: trip.organization_id,
+        error: insertError,
+        count: pendingInserts.length,
+      });
+    }
   }
+
+  // A8.3 -- Marketplace platform fee, Marketplace DCO trips only
+  // (source='market_bid', platform_fee already resolved and locked in by
+  // accept_market_bid() at award time -- this reads that stored value, it
+  // never recomputes the fee). Deliberately a separate insert from the
+  // client/driver rows above rather than appended to the same batch: those
+  // two rows failed their own CHECK constraint before A8.4.1's fix above,
+  // and a single multi-row INSERT is all-or-nothing, so bundling this row
+  // with them would have made it inherit that unrelated failure.
+  if (
+    !hasPlatformFeeEntry(existing) &&
+    trip.source === "market_bid" &&
+    Number(trip.platform_fee ?? 0) > 0
+  ) {
+    const { error: feeInsertError } = await supabase()
+      .from("transactions")
+      .insert({
+        organization_id: trip.organization_id,
+        trip_id: trip.id,
+        party_name: "Pulse Marketplace",
+        description: "MARKETPLACE PLATFORM FEE AUTO | Mode: System",
+        amount_out: Number(trip.platform_fee),
+        amount_in: 0,
+        transaction_date: transactionDate,
+        contact_id: null,
+        contact_type: null,
+        ledger_entity_type: "platform",
+        ledger_flow_type: "expense",
+        ledger_category: "MARKETPLACE_PLATFORM_FEE",
+      });
+    if (feeInsertError) {
+      console.error("[trip completion] failed to auto-create platform fee entry", {
+        tripId: trip.id,
+        organizationId: trip.organization_id,
+        error: feeInsertError,
+      });
+    }
+  }
+}
+
+function hasPlatformFeeEntry(rows: Array<{ ledger_category: string | null }>): boolean {
+  return rows.some((r) => r.ledger_category === "MARKETPLACE_PLATFORM_FEE");
 }
 
 async function validateSupplierLinkForCompletion(

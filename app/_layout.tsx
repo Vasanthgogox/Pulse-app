@@ -286,6 +286,9 @@ LogBox.ignoreLogs([
   'Lock "lock:sb-',
   'was not released within',
   'Lock was stolen by another request',
+  // whatwg-fetch AbortController timeout (Expo Go) — handled in lib/supabase.ts.
+  'AbortError: Aborted',
+  'Aborted',
 ]);
 
 export default function RootLayout() {
@@ -518,6 +521,7 @@ function RootLayoutNav() {
                 options={{ presentation: 'fullScreenModal', animation: 'slide_from_right', headerShown: false }}
               />
               <Stack.Screen name="trip" options={{ animation: 'slide_from_right', headerShown: false }} />
+              <Stack.Screen name="driver-trip" options={{ animation: 'slide_from_right', headerShown: false }} />
               <Stack.Screen name="track" options={{ animation: 'slide_from_right', headerShown: false }} />
               <Stack.Screen name="fleet-operations" options={{ animation: 'slide_from_right', headerShown: false }} />
               <Stack.Screen name="create-indent" options={{ presentation: 'fullScreenModal' }} />
@@ -584,7 +588,10 @@ function RootOverlayTabBar() {
   if (!showOnRootScreens) return null;
 
   // These screens are reached from header actions, so keep the matching nav item active.
-  const activeTab: DemoTabId = pathname === ROUTES.PULSE_LOADS ? 'loadCenter' : 'finance';
+  const activeTab: DemoTabId =
+    pathname === ROUTES.PULSE_LOADS || pathname === ROUTES.FIND_LOADS || pathname.startsWith(`${ROUTES.FIND_LOADS}/`)
+      ? 'loadCenter'
+      : 'finance';
   const isDesktopWeb = Platform.OS === 'web' && layoutWidth >= Layout.webDesktopMinWidth;
 
   const shellStyle = [

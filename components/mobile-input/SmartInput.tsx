@@ -204,6 +204,12 @@ export interface SmartInputProps {
   required?: boolean;
   /** External error from form validation (shown below the trigger). */
   errorMessage?: string;
+  /**
+   * Controlled open state for the fullscreen entry sheet.
+   * Use with `onOpenChange` to chain steps (e.g. Spend → Liters).
+   */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 export function SmartInput({
@@ -227,9 +233,21 @@ export function SmartInput({
   disabled = false,
   required = false,
   errorMessage,
+  open: openProp,
+  onOpenChange,
 }: SmartInputProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
   const [entryError, setEntryError] = useState<string | undefined>();
+  const isControlled = openProp !== undefined;
+  const open = isControlled ? openProp : internalOpen;
+
+  const setOpen = useCallback(
+    (next: boolean) => {
+      if (!isControlled) setInternalOpen(next);
+      onOpenChange?.(next);
+    },
+    [isControlled, onOpenChange],
+  );
 
   // Strip commas and normalise to raw digit string for the entry screen
   const rawInitial = useMemo(() => toRawString(value), [value]);
@@ -271,14 +289,14 @@ export function SmartInput({
       onChange(raw, numeric);
       setOpen(false);
     },
-    [onChange, resolvedRule],
+    [onChange, resolvedRule, setOpen],
   );
 
   const handleOpen = useCallback(() => {
     if (disabled) return;
     setEntryError(undefined);
     setOpen(true);
-  }, [disabled]);
+  }, [disabled, setOpen]);
 
   const { width: winW } = useWindowDimensions();
   // Web desktop (≥600 px): skip numpad — allow native keyboard input.

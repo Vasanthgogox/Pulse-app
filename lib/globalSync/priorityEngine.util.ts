@@ -14,7 +14,6 @@ export type OperationCategory =
   | 'payment_received'
   | 'unassigned_trip'
   | 'late_log'
-  | 'dispute'
   | 'salary'
   | 'other';
 
@@ -287,13 +286,11 @@ function syntheticLateLog(trip: ActiveTripSummary, now: number): GlobalOperation
 }
 
 function alertToSignal(a: GlobalAlertRow): GlobalOperationAlert {
-  const isSalary = a.alert_type === 'salary_request_pending';
-  const w = isSalary ? PRIORITY_WEIGHT_SALARY_WARNING : PRIORITY_WEIGHT_DISPUTE_CRITICAL;
   return {
     id: `alert:${a.id}`,
-    priority_weight: a.dismissed ? -1 : w,
-    kind: isSalary ? 'warning' : 'critical',
-    category: isSalary ? 'salary' : 'dispute',
+    priority_weight: a.dismissed ? -1 : PRIORITY_WEIGHT_SALARY_WARNING,
+    kind: 'warning',
+    category: 'salary',
     trip_id: null,
     trip_number: null,
     title: a.title,
@@ -306,21 +303,6 @@ function alertToSignal(a: GlobalAlertRow): GlobalOperationAlert {
 
 function notifToSignal(n: GlobalNotificationRow): GlobalOperationAlert | null {
   if (n.is_read) return null;
-  if (n.source === 'dispute') {
-    return {
-      id: `notif:${n.id}`,
-      priority_weight: PRIORITY_WEIGHT_DISPUTE_CRITICAL - 8,
-      kind: 'critical',
-      category: 'dispute',
-      trip_id: null,
-      trip_number: null,
-      title: n.title,
-      subtitle: n.subtitle,
-      amount: n.amount_meta,
-      created_at: n.created_at,
-      source: 'global_notification',
-    };
-  }
   if (n.source === 'salary_request') {
     return {
       id: `notif:${n.id}`,

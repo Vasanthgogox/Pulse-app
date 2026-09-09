@@ -3,7 +3,7 @@
  * Live trips + KYC + five-star ratings drive sequential progress.
  */
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, Platform } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Platform, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 import { useRouter } from 'expo-router';
@@ -27,8 +27,11 @@ import {
   getMilestoneCount,
   isMilestoneCompleted,
   isMilestoneInProgress,
+  type ExperienceLevelConfig,
+  type MilestoneGuideActionKind,
 } from '@/features/experience/experienceProgress';
-import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
+import { MilestoneHowToModal } from '@/features/experience/components/MilestoneHowToModal';
+import { ROUTES } from '@/lib/routes';
 import { supabase } from '@/lib/supabase';
 
 const DARK_HERO_BG = '#0f0f0f';
@@ -58,6 +61,8 @@ export default function LevelProgressionScreen() {
   const [ratings, setRatings] = useState<RatingRow[]>([]);
   const [isVerified, setIsVerified] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [linkedDriverIds, setLinkedDriverIds] = useState<string[]>([]);
+  const [guideLevel, setGuideLevel] = useState<ExperienceLevelConfig | null>(null);
 
   const load = useCallback((showLoading = true) => {
     if (!profile?.uid) {
@@ -79,6 +84,8 @@ export default function LevelProgressionScreen() {
 
         const drivers = driversRes.drivers ?? [];
         const driverIds = drivers.map((d) => d.id);
+        // Same id set the trips query below uses — drives the realtime subscription filter.
+        setLinkedDriverIds(driverIds);
         if (driverIds.length === 0) {
           setTripsCount(0);
           setRatings([]);
@@ -108,15 +115,23 @@ export default function LevelProgressionScreen() {
     }, [load]),
   );
 
+  // Shared with DriverProfileScreen's identical subscription (same signed-in user
+  // resolves the same driverIds) — same key means the realtime registry dedupes to one
+  // channel instead of two when both screens are mounted. Scoped to this user's own
+  // driver_id(s) — a driver's trips can span multiple orgs, so organization_id can't be
+  // used here; waits for linkedDriverIds to resolve before subscribing.
+  const linkedDriverIdsKey = linkedDriverIds.join(',');
   useEffect(() => {
+    if (!profile?.uid || linkedDriverIds.length === 0) return;
     return subscribeSharedPostgresChanges(
-      'driver-app:trips:all',
-      [{ event: '*', schema: 'public', table: 'trips' }],
+      `driver-app:trips:driver:${profile.uid}`,
+      [{ event: '*', schema: 'public', table: 'trips', filter: `driver_id=in.(${linkedDriverIdsKey})` }],
       () => {
         load(false);
       },
     );
-  }, [load]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- linkedDriverIdsKey is the stable dep for linkedDriverIds
+  }, [profile?.uid, linkedDriverIdsKey, load]);
 
   const experience = useMemo(
     () =>
@@ -228,8 +243,12 @@ export default function LevelProgressionScreen() {
           const progressPctObj = inProgress ? count.pct : completed ? 100 : 0;
           const iconName = getLevelIcon(lvl.type);
           return (
-            <View
+            <Pressable
               key={lvl.level}
+              onPress={() => setGuideLevel(lvl)}
+              accessibilityRole="button"
+              accessibilityLabel={`${lvl.name}. ${lvl.goalText}`}
+              accessibilityHint="Shows what to do to complete this level"
               style={[
                 styles.questCard,
                 { backgroundColor: colors.surface ?? Theme.screenBackground, borderColor: colors.border ?? Theme.borderLight },
@@ -272,11 +291,23 @@ export default function LevelProgressionScreen() {
                   </View>
                 </View>
               )}
-            </View>
+            </Pressable>
           );
         })}
       </View>
       </ScrollView>
+      <MilestoneHowToModal
+        visible={guideLevel != null}
+        level={guideLevel}
+        progress={experience}
+        audience="driver"
+        onClose={() => setGuideLevel(null)}
+        onAction={(kind: MilestoneGuideActionKind) => {
+          setGuideLevel(null);
+          if (kind === 'documents') router.push('/(driver)/documents');
+          if (kind === 'find_work') router.push(ROUTES.driverAvailableLoads());
+        }}
+      />
     </View>
   );
 }

@@ -9,14 +9,31 @@
  * accepted, so this component never has to decide when to show it — it
  * renders owner_phone ?? owner_masked_phone as-is.
  */
+import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from "@/constants/Theme";
 import {
+  MarketplaceRouteGrid,
+  MarketplaceSpecChips,
+  titleCaseWord,
+} from "@/features/network/components/MarketplaceLoadCardChrome";
+import {
+  type FeePaymentStatus,
   type MyOrgMarketBidRow,
   type MyOrgMarketBidStatus,
 } from "@/features/network/services/findLoadsForOrg.service";
-import { Inbox } from "lucide-react-native";
-import { useMemo } from "react";
-import { StyleSheet, Text, View } from "react-native";
+import { formatStoryDate } from "@/features/network/utils/storyDisplay";
+import { createMarketplaceFeeOrder } from "@/features/network/services/marketBids.service";
+import {
+  RazorpayCheckoutSheet,
+  type RazorpayCheckoutResult,
+} from "@/features/marketplace/components/RazorpayCheckoutSheet";
+import { getTripByIndentId } from "@/features/trips/services/trips.service";
+import { showAppAlert } from "@/lib/appAlert";
+import { ROUTES } from "@/lib/routes";
+import { useRouter } from "expo-router";
+import { ChevronRight, Inbox } from "lucide-react-native";
+import { useMemo, useState, type ReactNode } from "react";
+import { Platform, Pressable, StyleSheet, Text, useWindowDimensions, View } from "react-native";
 
 function formatAmount(amount: number | null | undefined): string {
   if (amount == null || !Number.isFinite(Number(amount))) return "—";
@@ -69,12 +86,33 @@ function routeLabel(bid: MyOrgMarketBidRow): string {
   return `${from} → ${to}`;
 }
 
+/** A8.6.2 — the Marketplace fee gates trip creation now, not just award. */
+function feePaymentGateSatisfied(status: FeePaymentStatus): boolean {
+  return status === "paid" || status === "not_required";
+}
+
+function feePendingLabel(status: FeePaymentStatus, feeAmount: number | null): string {
+  const feeLabel = feeAmount != null ? formatAmount(feeAmount) : "the Marketplace fee";
+  switch (status) {
+    case "pending":
+      return `Payment of ${feeLabel} is processing…`;
+    case "failed":
+      return `Payment of ${feeLabel} failed — retry to unlock this load.`;
+    case "required":
+    default:
+      return `Pay ${feeLabel} to Pulse to unlock this load.`;
+  }
+}
+
 export function OrgMyBidsList({
   bids,
   isLoading,
+  onPaymentUpdated,
 }: {
   bids: MyOrgMarketBidRow[];
   isLoading: boolean;
+  /** A8.7: called after a checkout attempt closes, so the caller can refetch bids/loads. */
+  onPaymentUpdated?: () => void;
 }) {
   const groups = useMemo(() => {
     const pending: MyOrgMarketBidRow[] = [];
@@ -108,26 +146,26 @@ export function OrgMyBidsList({
     );
   }
 
-  return (
+    return (
     <View style={styles.listContent}>
-      {groups.pending.length > 0 ? (
-        <Section title="Pending" count={groups.pending.length}>
-          {groups.pending.map((b) => (
-            <BidCard key={b.id} bid={b} />
-          ))}
-        </Section>
-      ) : null}
       {groups.awarded.length > 0 ? (
         <Section title="Awarded" count={groups.awarded.length}>
           {groups.awarded.map((b) => (
-            <BidCard key={b.id} bid={b} />
+            <BidCard key={b.id} bid={b} onPaymentUpdated={onPaymentUpdated} />
+          ))}
+        </Section>
+      ) : null}
+      {groups.pending.length > 0 ? (
+        <Section title="Pending" count={groups.pending.length}>
+          {groups.pending.map((b) => (
+            <BidCard key={b.id} bid={b} onPaymentUpdated={onPaymentUpdated} />
           ))}
         </Section>
       ) : null}
       {groups.closed.length > 0 ? (
         <Section title="Not selected" count={groups.closed.length}>
           {groups.closed.map((b) => (
-            <BidCard key={b.id} bid={b} />
+            <BidCard key={b.id} bid={b} onPaymentUpdated={onPaymentUpdated} />
           ))}
         </Section>
       ) : null}
@@ -142,33 +180,122 @@ function Section({
 }: {
   title: string;
   count: number;
-  children: React.ReactNode;
+  children: ReactNode;
 }) {
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === "web" && width >= 1024;
+
   return (
     <View style={styles.section}>
       <Text style={styles.sectionTitle}>
         {title.toUpperCase()} · {count}
       </Text>
-      <View style={{ gap: 8 }}>{children}</View>
+      <View style={[styles.sectionGrid, isDesktop && styles.sectionGridDesktop]}>
+        {children}
+      </View>
     </View>
   );
 }
 
-function BidCard({ bid }: { bid: MyOrgMarketBidRow }) {
+function BidCard({
+  bid,
+  onPaymentUpdated,
+}: {
+  bid: MyOrgMarketBidRow;
+  onPaymentUpdated?: () => void;
+}) {
+  const router = useRouter();
+  const { width } = useWindowDimensions();
+  const isDesktop = Platform.OS === "web" && width >= 1024;
   const isAccepted = bid.status === "accepted";
   const isRejected = bid.status === "rejected";
   const phoneDisplay = bid.owner_phone ?? bid.owner_masked_phone;
+  const feeGateSatisfied = feePaymentGateSatisfied(bid.fee_payment_status);
+  const [isNavigating, setIsNavigating] = useState(false);
+  const [isStartingPayment, setIsStartingPayment] = useState(false);
+  const [checkoutOrder, setCheckoutOrder] = useState<{
+    orderId: string;
+    amount: number;
+    currency: string;
+    keyId: string;
+  } | null>(null);
+
+  const canPay = isAccepted && (bid.fee_payment_status === "required" || bid.fee_payment_status === "failed");
+  const shipper = titleCaseWord(
+    (bid.owner_organization_name ?? "").trim() || "Unknown shipper",
+  );
+  const specChips = [bid.load_type]
+    .map((v) => (v ?? "").trim())
+    .filter(Boolean)
+    .map(titleCaseWord);
+  const dateLabel = bid.pickup_date ? formatStoryDate(bid.pickup_date) : null;
+
+  const handlePay = async () => {
+    if (isStartingPayment) return;
+    setIsStartingPayment(true);
+    try {
+      const { error, order } = await createMarketplaceFeeOrder(bid.id);
+      if (error || !order) {
+        showAppAlert("Could not start payment", error?.message ?? "Please try again.");
+        return;
+      }
+      setCheckoutOrder(order);
+    } finally {
+      setIsStartingPayment(false);
+    }
+  };
+
+  // A8.7: the checkout sheet's own result is advisory only -- used to
+  // decide when to close it and refetch. Only a server-confirmed
+  // fee_payment_status (via the webhook) is ever treated as proof of
+  // payment; see RazorpayCheckoutSheet's own header comment.
+  const handleCheckoutClose = (_result: RazorpayCheckoutResult) => {
+    setCheckoutOrder(null);
+    onPaymentUpdated?.();
+  };
+
+  // Reuses the existing Indent allocation flow end to end (same as Load Center's
+  // "Get Load -> Allocate" CTA) -- mirrors IndentDetailScreen's handleSupplierAllocate:
+  // route to the trip if allocation already happened elsewhere, otherwise open Allocation.
+  const handleAssignVehicle = async () => {
+    if (isNavigating) return;
+    setIsNavigating(true);
+    try {
+      const res = await getTripByIndentId(bid.indent_id);
+      if (res.trip?.id) {
+        router.push(ROUTES.tripAssignment(res.trip.id, "vehicle") as never);
+      } else {
+        router.push(ROUTES.indentAllocation(bid.indent_id) as never);
+      }
+    } finally {
+      setIsNavigating(false);
+    }
+  };
 
   return (
     <View
       style={[
         styles.card,
+        isDesktop && styles.cardDesktop,
         isAccepted && styles.cardAccepted,
         isRejected && styles.cardRejected,
       ]}
     >
       <View style={styles.cardTop}>
-        <Text style={styles.amount}>{formatAmount(bid.amount)}</Text>
+        <PartyAvatar
+          name={shipper}
+          initialsColorSeed={bid.owner_organization_id ?? shipper}
+          entityType="client"
+          size={32}
+        />
+        <View style={styles.cardTopText}>
+          <Text style={styles.orgName} numberOfLines={1}>
+            {shipper}
+          </Text>
+          <Text style={styles.metaLine} numberOfLines={1}>
+            {(bid.indent_number ?? "").trim() || bid.indent_id.slice(0, 8).toUpperCase()}
+          </Text>
+        </View>
         <View
           style={[
             styles.statusPill,
@@ -188,17 +315,51 @@ function BidCard({ bid }: { bid: MyOrgMarketBidRow }) {
         </View>
       </View>
 
-      <Text style={styles.route} numberOfLines={1}>
-        {routeLabel(bid)}
-      </Text>
-      <Text style={styles.meta}>{bid.owner_organization_name ?? "Unknown shipper"}</Text>
+      <MarketplaceRouteGrid pickup={bid.pickup_area} drop={bid.drop_location} />
+      <MarketplaceSpecChips chips={specChips} dateLabel={dateLabel} />
 
-      {isAccepted && phoneDisplay ? (
-        <Text style={styles.contact}>{phoneDisplay}</Text>
-      ) : null}
+      <View style={styles.cardFooter}>
+        <View style={styles.rateBlock}>
+          <Text style={styles.rateLabel}>Your bid</Text>
+          <Text style={styles.amount}>{formatAmount(bid.amount)}</Text>
+          {isAccepted && phoneDisplay ? (
+            <Text style={styles.contact} numberOfLines={1}>
+              {phoneDisplay}
+            </Text>
+          ) : null}
+        </View>
+        {isAccepted && feeGateSatisfied ? (
+          <Pressable
+            onPress={handleAssignVehicle}
+            disabled={isNavigating}
+            style={({ pressed }) => [
+              styles.assignCta,
+              pressed && styles.assignRowPressed,
+            ]}
+            accessibilityRole="button"
+            accessibilityLabel="Assign vehicle"
+          >
+            <Text style={styles.assignCtaText} numberOfLines={1}>
+              {isNavigating ? "Opening…" : "Assign"}
+            </Text>
+            <ChevronRight size={13} color={Theme.positive} strokeWidth={2.4} />
+          </Pressable>
+        ) : null}
+        {isAccepted && !feeGateSatisfied && canPay ? (
+          <Pressable
+            onPress={handlePay}
+            disabled={isStartingPayment}
+            style={({ pressed }) => [styles.payButton, pressed && styles.assignRowPressed]}
+          >
+            <Text style={styles.payButtonText} numberOfLines={1}>
+              {isStartingPayment ? "Starting…" : "Pay fee"}
+            </Text>
+          </Pressable>
+        ) : null}
+      </View>
 
       {bid.note?.trim() ? (
-        <Text style={styles.note} numberOfLines={2}>
+        <Text style={styles.note} numberOfLines={1}>
           &ldquo;{bid.note.trim()}&rdquo;
         </Text>
       ) : null}
@@ -207,6 +368,24 @@ function BidCard({ bid }: { bid: MyOrgMarketBidRow }) {
         <Text style={styles.note} numberOfLines={2}>
           {statusExplanation(bid.status)}
         </Text>
+      ) : null}
+
+      {isAccepted && !feeGateSatisfied ? (
+        <Text style={styles.feeGateLabel} numberOfLines={2}>
+          {feePendingLabel(bid.fee_payment_status, bid.platform_fee_amount)}
+        </Text>
+      ) : null}
+
+      {checkoutOrder ? (
+        <RazorpayCheckoutSheet
+          visible
+          orderId={checkoutOrder.orderId}
+          amount={checkoutOrder.amount}
+          currency={checkoutOrder.currency}
+          keyId={checkoutOrder.keyId}
+          description={`Marketplace fee — ${routeLabel(bid)}`}
+          onClose={handleCheckoutClose}
+        />
       ) : null}
 
       <Text style={styles.submitted}>Submitted {formatSubmittedAt(bid.created_at)}</Text>
@@ -229,8 +408,14 @@ const styles = StyleSheet.create({
   },
   emptyTitle: { fontSize: 15, fontWeight: "800", color: Theme.primaryText },
   emptyBody: { fontSize: 13, color: Theme.textSecondary, textAlign: "center" },
-  listContent: { paddingHorizontal: 16, paddingBottom: 32, gap: 16 },
+  listContent: { paddingHorizontal: 20, paddingTop: 0, paddingBottom: 32, gap: 14 },
   section: { gap: 8 },
+  sectionGrid: { gap: 12 },
+  sectionGridDesktop: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 12,
+  },
   sectionTitle: {
     fontSize: 11,
     fontWeight: "700",
@@ -238,35 +423,116 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
   },
   card: {
-    borderRadius: 14,
+    borderRadius: 16,
     borderWidth: 1,
-    borderColor: "rgba(0,0,0,0.08)",
+    borderColor: Theme.surfaceBorder,
     padding: 14,
     backgroundColor: Theme.cardWhite,
-    gap: 4,
+    gap: 12,
+    overflow: "hidden",
+    ...Platform.select({
+      web: {
+        boxSizing: "border-box",
+        boxShadow: `0 8px 20px ${Theme.actionAccentShadow}`,
+      } as object,
+      default: {
+        shadowColor: Theme.primaryText,
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.06,
+        shadowRadius: 8,
+        elevation: 2,
+      },
+    }),
   },
-  cardAccepted: { borderColor: Theme.positiveMutedDarkBorder },
+  cardDesktop: {
+    width: "calc((100% - 36px) / 4)" as unknown as number,
+    maxWidth: "calc((100% - 36px) / 4)" as unknown as number,
+    minWidth: 0,
+    flexGrow: 0,
+    flexShrink: 0,
+    ...Platform.select({
+      web: { boxSizing: "border-box" } as object,
+      default: {},
+    }),
+  },
+  cardAccepted: {
+    borderColor: Theme.positive,
+    borderWidth: 1.5,
+    backgroundColor: Theme.cardWhite,
+  },
   cardRejected: { opacity: 0.8 },
   cardTop: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
+    gap: 10,
   },
-  amount: { fontSize: 16, fontWeight: "700", color: Theme.primary },
+  cardTopText: { flex: 1, minWidth: 0, gap: 2 },
+  orgName: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.1,
+  },
+  metaLine: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textMuted,
+    letterSpacing: 0.2,
+  },
+  cardFooter: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    paddingTop: 10,
+    gap: 8,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.surfaceBorder,
+  },
+  rateBlock: { gap: 1, flex: 1, minWidth: 0 },
+  rateLabel: {
+    fontSize: 9,
+    fontWeight: "600",
+    letterSpacing: 0.45,
+    textTransform: "uppercase",
+    color: Theme.textMuted,
+  },
+  amount: { fontSize: 16, fontWeight: "700", color: Theme.primary, letterSpacing: -0.3 },
   statusPill: {
     paddingHorizontal: 8,
     paddingVertical: 3,
     borderRadius: 8,
     backgroundColor: Theme.surfaceGray,
+    flexShrink: 0,
   },
   statusPillAccepted: { backgroundColor: Theme.positiveMuted },
   statusPillRejected: { backgroundColor: Theme.negativeMuted },
   statusText: { fontSize: 10, fontWeight: "700", color: Theme.textMuted },
   statusTextAccepted: { color: Theme.positive },
   statusTextRejected: { color: Theme.negative },
-  route: { fontSize: 15, fontWeight: "700", color: Theme.primaryText, marginTop: 2 },
-  meta: { fontSize: 12, color: Theme.textSecondary },
-  contact: { fontSize: 12, fontWeight: "600", color: Theme.primaryText, marginTop: 2 },
+  contact: { fontSize: 11, fontWeight: "600", color: Theme.primaryText, marginTop: 2 },
   note: { fontSize: 12, fontStyle: "italic", color: Theme.textSecondary },
-  submitted: { fontSize: 11, color: Theme.textMuted, marginTop: 2 },
+  submitted: { fontSize: 11, color: Theme.textMuted },
+  assignCta: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 2,
+    flexShrink: 0,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: Theme.positiveMuted,
+    borderWidth: 1,
+    borderColor: Theme.positiveMutedDarkBorder,
+  },
+  assignCtaText: { fontSize: 12, fontWeight: "800", color: Theme.positive },
+  assignRowPressed: { opacity: 0.7 },
+  feeGateLabel: { fontSize: 11, fontWeight: "600", color: Theme.warning },
+  payButton: {
+    flexShrink: 0,
+    borderRadius: 999,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    backgroundColor: Theme.darkBackground,
+  },
+  payButtonText: { fontSize: 12, fontWeight: "700", color: Theme.textOnPrimary },
 });

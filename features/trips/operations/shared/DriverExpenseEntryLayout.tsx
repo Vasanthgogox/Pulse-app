@@ -19,6 +19,8 @@ import {
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
 import Layout from "@/constants/Layout";
+import Theme from "@/constants/Theme";
+import Typography from "@/constants/Typography";
 import { getDriverThemeColors } from "@/contexts/DriverThemeContext";
 import { useKeyboardVisible } from "@/lib/hooks/useKeyboardVisible";
 
@@ -92,6 +94,11 @@ type Props = {
   onDismissBillScan?: () => void;
   onReviewBillScan?: () => void;
   attachment?: AttachmentProps;
+  /**
+   * Amount field rendered beside the receipt slot (same row).
+   * Prefer this over a separate Amount section for a compact expense header.
+   */
+  amountSlot?: ReactNode;
   children: ReactNode;
 };
 
@@ -112,6 +119,7 @@ export function DriverExpenseEntryLayout({
   onDismissBillScan,
   onReviewBillScan,
   attachment,
+  amountSlot,
   children,
 }: Props) {
   const insets = useSafeAreaInsets();
@@ -282,25 +290,85 @@ export function DriverExpenseEntryLayout({
         showsVerticalScrollIndicator={false}
       >
         <ScrollAssistContext.Provider value={{ scrollToInput }}>
-          {attachment ? (
-          <OpsEntryBodyPhotoSlot
-            uri={attachment.uri ?? null}
-            title={attachment.label ?? "Bill photo"}
-            emptyTitle={attachment.label ?? "Bill photo"}
-            hint={
-              billScan?.phase === "confirm"
-                ? "Review detected fields below · confirm to fill form"
-                : "Tap image to enlarge · AI fills fields when detected"
-            }
-            emptyHint="Photograph the receipt to auto-fill expense fields"
-            scanning={!!scanActive}
-            busy={attachment.busy || saving}
-            scanLabel="AI scan"
-            onAttach={attachment.onAttach}
-            onPress={hasAttachment ? () => setPreviewOpen(true) : undefined}
-            onRetake={attachment.onAttach}
-            onRemove={attachment.onRemove}
-          />
+          {attachment || amountSlot ? (
+            attachment && amountSlot ? (
+              <View
+                style={[
+                  styles.receiptAmountCard,
+                  {
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <View style={styles.receiptAmountRow}>
+                  <View style={[styles.receiptCol, styles.receiptColSplit]}>
+                    <OpsEntryBodyPhotoSlot
+                      uri={attachment.uri ?? null}
+                      title={attachment.label ?? "Bill photo"}
+                      emptyTitle={attachment.label ?? "Bill photo"}
+                      hint={
+                        billScan?.phase === "confirm"
+                          ? "Review detected fields below · confirm to fill form"
+                          : "Tap image to enlarge · AI fills fields when detected"
+                      }
+                      emptyHint="Photo auto-fills fields"
+                      scanning={!!scanActive}
+                      busy={attachment.busy || saving}
+                      scanLabel="AI scan"
+                      compact
+                      embedded
+                      onAttach={attachment.onAttach}
+                      onPress={hasAttachment ? () => setPreviewOpen(true) : undefined}
+                      onRetake={attachment.onAttach}
+                      onRemove={attachment.onRemove}
+                    />
+                  </View>
+                  <View style={styles.receiptAmountDivider} />
+                  <View style={[styles.amountCol, styles.amountColSplit]}>
+                    <Text style={[styles.inlineSectionTitle, { color: colors.textMuted }]}>
+                      Amount
+                    </Text>
+                    <View style={styles.amountBody}>{amountSlot}</View>
+                  </View>
+                </View>
+              </View>
+            ) : (
+              <View
+                style={[
+                  styles.receiptAmountRow,
+                  !attachment || !amountSlot ? styles.receiptAmountRowSolo : null,
+                ]}
+              >
+                {attachment ? (
+                  <View style={[styles.receiptCol, styles.receiptColFull]}>
+                    <OpsEntryBodyPhotoSlot
+                      uri={attachment.uri ?? null}
+                      title={attachment.label ?? "Bill photo"}
+                      emptyTitle={attachment.label ?? "Bill photo"}
+                      hint={
+                        billScan?.phase === "confirm"
+                          ? "Review detected fields below · confirm to fill form"
+                          : "Tap image to enlarge · AI fills fields when detected"
+                      }
+                      emptyHint="Photo auto-fills fields"
+                      scanning={!!scanActive}
+                      busy={attachment.busy || saving}
+                      scanLabel="AI scan"
+                      onAttach={attachment.onAttach}
+                      onPress={hasAttachment ? () => setPreviewOpen(true) : undefined}
+                      onRetake={attachment.onAttach}
+                      onRemove={attachment.onRemove}
+                    />
+                  </View>
+                ) : null}
+                {amountSlot ? (
+                  <View style={[styles.amountCol, styles.amountColFull]}>
+                    <DriverExpenseSection title="Amount">{amountSlot}</DriverExpenseSection>
+                  </View>
+                ) : null}
+              </View>
+            )
           ) : null}
           {billScan && billScan.phase !== "idle" ? (
             <ExpenseBillScanBanner
@@ -371,15 +439,19 @@ export function DriverExpenseEntryLayout({
 export function DriverExpenseSection({
   title,
   children,
+  fill,
 }: {
   title?: string;
   children: ReactNode;
+  /** Stretch to match sibling height (receipt + amount row). */
+  fill?: boolean;
 }) {
   const colors = getDriverThemeColors("light");
   return (
     <View
       style={[
         ops.section,
+        fill && styles.sectionFill,
         {
           backgroundColor: colors.surface,
           borderColor: colors.border,
@@ -391,7 +463,7 @@ export function DriverExpenseSection({
           <Text style={[ops.sectionTitle, { color: colors.textMuted }]}>{title}</Text>
         </View>
       ) : null}
-      <View style={ops.sectionBody}>{children}</View>
+      <View style={[ops.sectionBody, fill && styles.sectionBodyFill]}>{children}</View>
     </View>
   );
 }
@@ -447,6 +519,77 @@ const styles = StyleSheet.create({
   scroll: {
     flex: 1,
     minHeight: 0,
+  },
+  receiptAmountRow: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 0,
+  },
+  receiptAmountRowSolo: {
+    flexDirection: "column",
+    gap: 10,
+  },
+  receiptAmountCard: {
+    borderRadius: 14,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 12,
+    ...Platform.select({
+      ios: {
+        shadowColor: "#0f172a",
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.04,
+        shadowRadius: 6,
+      },
+      android: { elevation: 1 },
+      default: {},
+    }),
+  },
+  receiptAmountDivider: {
+    width: StyleSheet.hairlineWidth,
+    alignSelf: "stretch",
+    backgroundColor: Theme.borderLight,
+    marginHorizontal: 10,
+  },
+  receiptCol: {
+    minWidth: 0,
+  },
+  receiptColSplit: {
+    flex: 0.92,
+    alignSelf: "stretch",
+  },
+  receiptColFull: {
+    width: "100%",
+  },
+  amountCol: {
+    minWidth: 0,
+    justifyContent: "flex-start",
+    alignSelf: "stretch",
+  },
+  amountColSplit: {
+    flex: 1.08,
+    gap: 6,
+  },
+  amountColFull: {
+    width: "100%",
+  },
+  amountBody: {
+    flex: 1,
+    justifyContent: "center",
+  },
+  inlineSectionTitle: {
+    ...Typography.headerTitle,
+    fontSize: 9,
+    letterSpacing: 0.55,
+    fontWeight: "700",
+    textTransform: "uppercase",
+  },
+  sectionFill: {
+    flex: 1,
+    minHeight: 0,
+  },
+  sectionBodyFill: {
+    flex: 1,
+    justifyContent: "center",
   },
   previewBackdrop: {
     flex: 1,

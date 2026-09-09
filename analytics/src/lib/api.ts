@@ -1,9 +1,9 @@
 import type { Organization, OrgUser, AppStatus, FeatureFlag } from '@/types/admin';
+import { supabaseAuth } from '@/lib/supabaseAuth';
 
 // ─── Config ───────────────────────────────────────────────────────────────────
 
 const API_BASE  = import.meta.env.VITE_API_URL  ?? '';
-const API_TOKEN = import.meta.env.VITE_ADMIN_TOKEN ?? '';
 
 // ─── Sentinel error — thrown when VITE_API_URL is not configured ──────────────
 
@@ -14,23 +14,42 @@ export class ApiNotConfiguredError extends Error {
   }
 }
 
-// ─── Core request helper ──────────────────────────────────────────────────────
+export class UnauthorizedError extends Error {
+  constructor(message = 'Unauthorized') {
+    super(message);
+    this.name = 'UnauthorizedError';
+  }
+}
+
+// ─── Core request helper — forwards active session JWT ──────────────────────
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   if (!API_BASE) throw new ApiNotConfiguredError();
+
+  // Fetch the current session's access token
+  const { data: { session } } = await supabaseAuth.auth.getSession();
+
+  if (!session?.access_token) {
+    throw new UnauthorizedError('No active session — session may have expired');
+  }
 
   const res = await fetch(`${API_BASE}${path}`, {
     ...init,
     headers: {
       'Content-Type': 'application/json',
-      ...(API_TOKEN ? { Authorization: `Bearer ${API_TOKEN}` } : {}),
+      'Authorization': `Bearer ${session.access_token}`,
       ...init.headers,
     },
   });
 
   if (!res.ok) {
-    const body = await res.json().catch(() => ({})) as { message?: string };
-    throw new Error(body.message ?? `HTTP ${res.status} — ${res.statusText}`);
+    const body = await res.json().catch(() => ({})) as { message?: string; error?: string };
+    const errorMsg = body.message || body.error || `HTTP ${res.status} — ${res.statusText}`;
+
+    if (res.status === 401 || res.status === 403) {
+      throw new UnauthorizedError(errorMsg);
+    }
+    throw new Error(errorMsg);
   }
 
   // 204 No Content — return undefined cast to T

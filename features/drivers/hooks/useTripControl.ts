@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import * as tripsService from "@/features/trips/services/trips.service";
 import * as driversService from "@/features/drivers/services/drivers.service";
 import {
@@ -6,6 +7,8 @@ import {
   hasEnteredLrPhase,
   markLrPhaseEntered,
 } from "@/features/drivers/services/tripControlProgress.storage";
+import { useAuth } from "@/contexts/AuthContext";
+import { useInvalidateDriverHomeDashboard } from "@/lib/queries/useInvalidateDriverHomeDashboard";
 
 export const STEPS = [
   { id: "accepted", label: "Start", icon: "compass" as const },
@@ -26,6 +29,9 @@ const STEP_RANK: Record<StepId, number> = {
 };
 
 export function useTripControl(tripId: string | undefined) {
+  const { profile } = useAuth();
+  const queryClient = useQueryClient();
+  const invalidateDriverHomeDashboard = useInvalidateDriverHomeDashboard();
   const [trip, setTrip] = useState<tripsService.TripRow | null>(null);
   const [loading, setLoading] = useState(true);
   const [step, setStep] = useState<StepId>("accepted");
@@ -264,6 +270,17 @@ export function useTripControl(tripId: string | undefined) {
     }
     if (updated) setTrip(updated);
     else await load();
+
+    // Neither cache was invalidated on completion before -- the Dashboard's
+    // availability gate and DriverTripOpsContext's own "current active job"
+    // query could both keep showing this trip as active until something
+    // unrelated (backgrounding the app, a realtime ledger event) happened
+    // to refresh them. is_driver_available() remains the sole backend
+    // authority; this only catches the client's cache up to it promptly.
+    if (profile?.uid) {
+      void invalidateDriverHomeDashboard(profile.uid);
+      void queryClient.invalidateQueries({ queryKey: ["driver-ops-trips", profile.uid] });
+    }
   };
 
   return {

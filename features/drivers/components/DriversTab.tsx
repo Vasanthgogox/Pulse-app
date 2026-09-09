@@ -27,10 +27,11 @@ import { getRatingsForDrivers, averageScore } from '@/features/ratings';
 import type { TripRow } from '@/features/trips/services/trips.service';
 import type { EntityListFilter } from "@/features/finance/components/TreasurySummaryCard";
 import type { FinancialRowData } from "@/features/finance/components/FinancialRow";
-import { aggregateDrivers, type DriverOfferForAggregation, type TripPartyMap } from "@/features/finance/aggregation";
+import { aggregateDriversFromRpc, type TripPartyMap } from "@/features/finance/aggregation";
 import { CUSTOMERS_SUPPLIERS } from "@/features/finance/constants/tableColumns";
 import { useDriversQuery } from '@/lib/queries/useDriversQuery';
 import { useTripsQuery } from '@/lib/queries/useTripsQuery';
+import { useDriverLedgerAggregationQuery } from '@/lib/queries/useLedgerAggregationQuery';
 import { usePaginatedScroll } from '@/lib/usePaginatedScroll';
 import {
   filterActiveFleetRelationshipDrivers,
@@ -123,9 +124,11 @@ export function DriversTab({
   const { data: driversFromQuery = [], isPending: driversLoading } = useDriversQuery(
     isControlled ? null : organizationId
   );
-  const { data: tripsFromQuery = [], isPending: tripsLoading } = useTripsQuery(
+  const { isPending: tripsLoading } = useTripsQuery(
     isControlled ? null : organizationId
   );
+  const { data: driverLedgerRpcRows = [], isPending: driverLedgerLoading } =
+    useDriverLedgerAggregationQuery(organizationId);
 
   const driversRaw = isControlled ? (driversProp ?? []) : driversFromQuery;
   /** Uncontrolled: party roster. Controlled (Finance): parent already applied ledger membership. */
@@ -136,9 +139,7 @@ export function DriversTab({
         : filterActiveFleetRelationshipDrivers(driversRaw),
     [driversRaw, isControlled],
   );
-  const trips = isControlled ? (tripsProp ?? []) : tripsFromQuery;
-  const transactions = transactionsProp ?? [];
-  const loading = isControlled ? false : (driversLoading || tripsLoading);
+  const loading = (isControlled ? false : (driversLoading || tripsLoading)) || driverLedgerLoading;
 
   useEffect(() => {
     if (drivers.length === 0) {
@@ -156,28 +157,9 @@ export function DriversTab({
     });
   }, [drivers]);
 
-  const offersForAggregation = useMemo((): Record<string, DriverOfferForAggregation> | undefined => {
-    if (!driverOffersProp || Object.keys(driverOffersProp).length === 0) return undefined;
-    const out: Record<string, DriverOfferForAggregation> = {};
-    for (const [driverId, o] of Object.entries(driverOffersProp)) {
-      out[driverId] = {
-        payableAmount: o.payableAmount ?? null,
-        commissionPercent: o.commissionPercent ?? null,
-        commissionPerKm: o.commissionPerKm ?? null,
-      };
-    }
-    return out;
-  }, [driverOffersProp]);
-
   const { rows: baseRows, totals } = useMemo(() => {
-    return aggregateDrivers(
-      drivers,
-      trips,
-      transactions,
-      offersForAggregation,
-      tripPartyMap,
-    );
-  }, [drivers, trips, transactions, offersForAggregation, tripPartyMap]);
+    return aggregateDriversFromRpc(drivers, driverLedgerRpcRows);
+  }, [drivers, driverLedgerRpcRows]);
 
   const driverById = useMemo(
     () => new Map(drivers.map((driver) => [driver.id, driver])),

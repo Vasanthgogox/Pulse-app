@@ -78,6 +78,8 @@ export const ROUTES = {
   driverGeneralExpense: () => '/(driver)/general-expense' as const,
   /** Become Fleet Owner (Phase 1 capability enablement). */
   driverBecomeFleetOwner: () => '/(driver)/become-fleet-owner' as const,
+  /** DCO (driver-cum-owner) admin-approval status request/view. */
+  driverDcoStatus: () => '/(driver)/dco-status' as const,
   /** My Fleet list (personal owner vehicles). */
   driverMyFleet: () => '/(driver)/my-fleet' as const,
   driverMyFleetAdd: () => '/(driver)/my-fleet/add' as const,
@@ -85,8 +87,10 @@ export const ROUTES = {
     `/(driver)/my-fleet/${encodeURIComponent(vehicleId)}` as const,
   /** Market: open marketplace loads for Fleet Owner / DCO bidding. */
   driverAvailableLoads: () => '/(driver)/available-loads' as const,
-  driverAvailableLoad: (indentId: string) =>
-    `/(driver)/available-loads/${encodeURIComponent(indentId)}` as const,
+  driverAvailableLoad: (indentId: string, opts?: { bid?: boolean }) => {
+    const path = `/(driver)/available-loads/${encodeURIComponent(indentId)}`;
+    return (opts?.bid ? `${path}?bid=1` : path) as `/(driver)/available-loads/${string}`;
+  },
   /** Phase A/B: this bidder's own market_bids rows. */
   driverMyBids: () => '/(driver)/my-bids' as const,
   /** Phase A/B: awarded Market trips (source='market_bid'). */

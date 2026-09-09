@@ -470,7 +470,7 @@ export interface AddTransactionData {
   driverPaymentType?: DriverPaymentType | null;
   /** For cash_entries: contact_id and contact_type when party is selected. */
   contactId?: string | null;
-  contactType?: "client" | "supplier" | "driver" | null;
+  contactType?: "client" | "supplier" | "driver" | "dco" | null;
   /** Optional: vehicle number and driver name from trip for cash_entries. */
   vehicleNumber?: string | null;
   driverName?: string | null;
@@ -579,7 +579,7 @@ function tripOptionToLedgerFinancialInput(t: TripOption) {
 }
 
 /** When set, Party dropdown shows only that type; 'all' shows clients + suppliers (e.g. Ledger tab). */
-export type PartyContext = "customers" | "suppliers" | "all";
+export type PartyContext = "customers" | "suppliers" | "dco" | "all";
 
 interface AddTransactionModalProps {
   visible: boolean;
@@ -594,6 +594,10 @@ interface AddTransactionModalProps {
   clients: PartyOption[];
   /** Optional suppliers — shown in party dropdown when partyContext is 'all' or 'suppliers'; used for Cash OUT + trip auto-tag. */
   suppliers?: PartyOption[];
+  /** Optional DCO payees — shown in party dropdown when partyContext is 'dco'. DCO-6: Cash OUT
+   * only, no trip-level allocation (a DCO due is derived from their trips' supplier_rate, not
+   * a per-payment trip link). */
+  dcoPayees?: PartyOption[];
   /** Optional drivers — used for Cash OUT + trip auto-tag when user selects a trip. */
   drivers?: PartyOption[];
   /** Optional vehicles — used to display vehicle number when a trip with vehicle_id is selected (Cash OUT). */
@@ -674,6 +678,7 @@ export function AddTransactionModal({
   onSuccessDismiss,
   clients,
   suppliers = [],
+  dcoPayees = [],
   drivers = [],
   vehicles = [],
   trips,
@@ -720,6 +725,7 @@ export function AddTransactionModal({
     winW < 420 ? 14 : winW < LEDGER_STACK_TRIP_BAND_BREAKPOINT ? 16 : 20;
   const safeClients = useMemo(() => clients ?? [], [clients]);
   const safeSuppliers = useMemo(() => suppliers ?? [], [suppliers]);
+  const safeDcoPayees = useMemo(() => dcoPayees ?? [], [dcoPayees]);
   const safeDrivers = useMemo(() => drivers ?? [], [drivers]);
   const baseSafeVehicles = useMemo(() => vehicles ?? [], [vehicles]);
   // When a vehicle is locked (e.g. opened from a Vehicle detail page), make sure it is present
@@ -850,6 +856,13 @@ export function AddTransactionModal({
   const requestLedgerFlowType = useCallback(
     (next: "in" | "out") => {
       if (next === type) return;
+      // DCO-6: a DCO payment is always Cash OUT (Pulse paying the DCO) — there is
+      // no legitimate "DCO pays us" scenario the way a client receipt or supplier
+      // refund can exist. Locking this out entirely, rather than leaving the
+      // toggle open, is what avoids the pre-existing supplier-flow ambiguity
+      // (an unlocked toggle plus contactType derivation that doesn't check the
+      // selected party's actual type can silently mislabel a Cash In row).
+      if (partyContext === "dco" && next === "in") return;
       const guard = ledgerLockedPartyFlowGuard(
         next,
         ledgerLockedEntityType,
@@ -861,7 +874,7 @@ export function AddTransactionModal({
       }
       setType(next);
     },
-    [type, ledgerLockedEntityType, lockedPartyId, showLedgerFlowGuardAlert],
+    [type, partyContext, ledgerLockedEntityType, lockedPartyId, showLedgerFlowGuardAlert],
   );
   const effectivePartyId = isPartyLocked ? lockedPartyId : partyId;
 
@@ -2018,6 +2031,16 @@ export function AddTransactionModal({
         return [{ id: defaultPartyId, name: defaultPartyName }, ...list];
       return list;
     }
+    if (partyContext === "dco") {
+      const list = safeDcoPayees;
+      if (
+        defaultPartyId &&
+        defaultPartyName &&
+        !list.some((p) => p.id === defaultPartyId)
+      )
+        return [{ id: defaultPartyId, name: defaultPartyName }, ...list];
+      return list;
+    }
     let options = allParties;
     // In edit mode, ensure the entry's party appears in the list (e.g. if not in current clients/suppliers).
     if (initialEntry?.contact_id && initialEntry.party_name) {
@@ -2046,6 +2069,7 @@ export function AddTransactionModal({
     selectedTripPayoutMode,
     safeClients,
     safeSuppliers,
+    safeDcoPayees,
     safeDrivers,
     allParties,
     partyContext,
@@ -3319,10 +3343,13 @@ export function AddTransactionModal({
         : type === "out" &&
             cashOutPayeeId &&
             (safeDrivers.some((d) => d.id === cashOutPayeeId) ||
-              safeSuppliers.some((s) => s.id === cashOutPayeeId))
+              safeSuppliers.some((s) => s.id === cashOutPayeeId) ||
+              safeDcoPayees.some((d) => d.id === cashOutPayeeId))
           ? safeDrivers.some((d) => d.id === cashOutPayeeId)
             ? "driver"
-            : "supplier"
+            : safeDcoPayees.some((d) => d.id === cashOutPayeeId)
+              ? "dco"
+              : "supplier"
           : isPartyLocked && effectivePartyId
             ? safeClients.some((c) => c.id === effectivePartyId)
               ? "client"
@@ -3330,13 +3357,17 @@ export function AddTransactionModal({
                 ? "supplier"
                 : safeDrivers.some((d) => d.id === effectivePartyId)
                   ? "driver"
-                  : null
+                  : safeDcoPayees.some((d) => d.id === effectivePartyId)
+                    ? "dco"
+                    : null
             : type === "in"
               ? "client"
               : type === "out" && effectivePartyId
                 ? safeDrivers.some((d) => d.id === effectivePartyId)
                   ? "driver"
-                  : "supplier"
+                  : safeDcoPayees.some((d) => d.id === effectivePartyId)
+                    ? "dco"
+                    : "supplier"
                 : null;
     const finalContactId =
       tripLocked && derivedContactId
@@ -3348,7 +3379,8 @@ export function AddTransactionModal({
             : type === "out" &&
                 cashOutPayeeId &&
                 (safeDrivers.some((d) => d.id === cashOutPayeeId) ||
-                  safeSuppliers.some((s) => s.id === cashOutPayeeId))
+                  safeSuppliers.some((s) => s.id === cashOutPayeeId) ||
+                  safeDcoPayees.some((d) => d.id === cashOutPayeeId))
               ? cashOutPayeeId
               : (effectivePartyId ?? undefined);
     const finalContactType =

@@ -41,6 +41,6 @@ export {
 } from "./utils/tripHubPartyMeta";
 export {
     buildUniqueLinkedOrgIdMap, canOrgSeeTripAsIntegratedClient,
-    canOrgSeeTripAsIntegratedSupplier, isCrossOrgIntegrationTrip, isLoadBasedTrip, isTripEligibleForSharedLedger, isTripVisibleToOrgViaIntegration
+    canOrgSeeTripAsIntegratedSupplier, isCrossOrgIntegrationTrip, isLoadBasedTrip, isTripVisibleToOrgViaIntegration
 } from "./visibility/tripVisibility";
 
