@@ -24,6 +24,7 @@ import {
   TEAM_INVITE_ROLE_OPTIONS,
   type PlatformTeamRole,
 } from "@/features/organization/utils/teamInviteRoles.util";
+import { getGroundOpsDocUploadEnabled } from "@/features/organization/services/organization.service";
 import { shareInvite } from "@/features/organization/utils/inviteShare.util";
 import type { UserProfileForInvite } from "@/types/organization";
 import {
@@ -356,6 +357,12 @@ export function InviteMemberFlow({
   const [liveCheck, setLiveCheck] = useState<TeamInvitePrecheckResult | null>(null);
   const [liveChecking, setLiveChecking] = useState(false);
   const liveCheckIdRef = useRef(0);
+  const [groundOpsEnabled, setGroundOpsEnabled] = useState(false);
+
+  // Load Ground Ops toggle state
+  useEffect(() => {
+    getGroundOpsDocUploadEnabled(orgId).then(setGroundOpsEnabled);
+  }, [orgId]);
 
   // Live cross-org check as the phone is typed on step 1 — same RPC handleContinue
   // uses, just fired earlier so the admin sees the conflict before pressing Continue.
@@ -749,7 +756,9 @@ export function InviteMemberFlow({
             when the invite is accepted.
           </Text>
 
-          {TEAM_INVITE_ROLE_OPTIONS.map((opt) => (
+          {TEAM_INVITE_ROLE_OPTIONS.filter((opt) =>
+            opt.value !== "ground_ops" || groundOpsEnabled
+          ).map((opt) => (
             <RoleOption
               key={opt.value}
               option={opt}

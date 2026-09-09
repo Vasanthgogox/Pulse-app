@@ -24,6 +24,7 @@ export type PlatformTeamRole =
   | "finance"
   | "sales"
   | "tripops"
+  | "ground_ops"
   /**
    * Zero-domain floor. A member with no Finance/Sales/TripOps access left
    * degrades to `restricted` instead of silently inheriting TripOps.
@@ -37,6 +38,7 @@ const ALL_PLATFORM_TEAM_ROLES: readonly PlatformTeamRole[] = [
   "finance",
   "sales",
   "tripops",
+  "ground_ops",
   "restricted",
 ];
 
@@ -120,6 +122,7 @@ export const PLATFORM_ROLE_GRANTS: Record<PlatformTeamRole, string[]> = {
   finance: ["org:read", "finance:read", "finance:manage"],
   sales: ["org:read", "warehouses:read", "commerce:*"],
   tripops: ["org:read", "warehouses:read", "ops:*", "planning:*", "execution:read"],
+  ground_ops: ["org:read", "execution:read"],
   // Baseline only — can see the workspace exists, nothing functional.
   restricted: ["org:read"],
 };
@@ -155,6 +158,12 @@ export const TEAM_INVITE_ROLE_OPTIONS: TeamInviteRoleOption[] = [
     label: "TripOps",
     description: "Day-to-day execution — trips, dispatch, driver coordination, and trip visibility.",
     grants: PLATFORM_ROLE_GRANTS.tripops,
+  },
+  {
+    value: "ground_ops",
+    label: "Ground Ops",
+    description: "Upload trip documents from the field — LR, POD, and other trip paperwork.",
+    grants: PLATFORM_ROLE_GRANTS.ground_ops,
   },
 ];
 
@@ -302,13 +311,19 @@ export function buildPermissionsFromSurfaces(
   const domains = domainsFromSurfaces(surfaces);
   const preferAdmin =
     options?.preferAdmin ?? options?.platformRole === "admin";
+
+  // Preserve non-domain-derived roles like ground_ops that cannot be re-derived from domains.
+  // Admin is the only domain-derived role we preserve by special case.
   const platformRole =
     options?.platformRole === "admin" &&
     domains.finance &&
     domains.sales &&
     domains.tripops
       ? "admin"
-      : platformRoleFromDomains(domains, preferAdmin);
+      : options?.platformRole === "ground_ops"
+        ? "ground_ops"
+        : platformRoleFromDomains(domains, preferAdmin);
+
   return buildTeamInvitePermissions(
     platformRole,
     domains,
@@ -384,6 +399,8 @@ export function orgMemberRoleForPlatformRole(
       return "member";
     case "tripops":
       return "dispatcher";
+    case "ground_ops":
+      return "member";
     case "restricted":
       return "member";
   }
@@ -427,6 +444,7 @@ export function platformRoleFromMember(
  * intersection with the org operating model. `null` covers admin/owner
  * (bypass functional gating entirely) and unassigned/legacy planner/operator
  * rows (no functional domain access until the owner assigns one).
+ * Ground Ops maps to tripops (field operations on trips).
  */
 export function functionalRoleFromPlatformRole(
   platformRole: PlatformTeamRole | null,
@@ -437,6 +455,9 @@ export function functionalRoleFromPlatformRole(
     platformRole === "tripops"
   ) {
     return platformRole;
+  }
+  if (platformRole === "ground_ops") {
+    return "tripops";
   }
   return null;
 }

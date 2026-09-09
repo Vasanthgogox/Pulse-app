@@ -13,7 +13,9 @@ import Theme from "@/constants/Theme";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import {
   changeOperatingModel,
+  getGroundOpsDocUploadEnabled,
   looksLikeModelChangeCooldownError,
+  setGroundOpsDocUploadEnabled,
   type OperatingModel,
   updateOrganizationLogo,
   updateOrganizationName,
@@ -50,6 +52,7 @@ import {
   Image,
   Pressable,
   StyleSheet,
+  Switch,
   Text,
   TextInput,
   View,
@@ -76,10 +79,17 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
   const [nameSaving, setNameSaving] = useState(false);
   const [modelModalOpen, setModelModalOpen] = useState(false);
   const [modelSaving, setModelSaving] = useState(false);
+  const [groundOpsEnabled, setGroundOpsEnabled] = useState(false);
+  const [groundOpsLoading, setGroundOpsLoading] = useState(false);
   const nameInputRef = useRef<TextInput>(null);
 
   const currentModel = (currentOrganization?.operatingModel ??
     "HYBRID") as OperatingModel;
+
+  useEffect(() => {
+    if (!orgId) return;
+    getGroundOpsDocUploadEnabled(orgId).then(setGroundOpsEnabled);
+  }, [orgId]);
 
   const handleChangeModel = async (newModel: OperatingModel) => {
     if (!orgId || modelSaving) return;
@@ -113,6 +123,32 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
       });
     } finally {
       setModelSaving(false);
+    }
+  };
+
+  const handleToggleGroundOps = async () => {
+    if (!orgId || groundOpsLoading || !canEdit) return;
+    setGroundOpsLoading(true);
+    try {
+      const { error } = await setGroundOpsDocUploadEnabled(orgId, !groundOpsEnabled);
+      if (error) {
+        notice({
+          kind: "error",
+          title: "Failed to update setting",
+          message: error.message,
+        });
+        return;
+      }
+      setGroundOpsEnabled(!groundOpsEnabled);
+      notice({
+        kind: "success",
+        title: "Ground Ops setting updated",
+        message: groundOpsEnabled
+          ? "Ground Ops members can no longer upload trip documents."
+          : "Ground Ops members can now upload trip documents.",
+      });
+    } finally {
+      setGroundOpsLoading(false);
     }
   };
 
@@ -390,6 +426,23 @@ export function WorkspaceSettingsPanel({ onBack }: Props) {
               </View>
             )}
           </View>
+
+          <View style={styles.panelFieldGroup}>
+            <View style={local.toggleRow}>
+              <View style={local.toggleLabel}>
+                <Text style={styles.panelFieldLabel}>Ground Ops Document Upload</Text>
+                <Text style={local.toggleHint}>
+                  Allow Ground Ops members to upload trip documents such as LR, POD and manifest on behalf of drivers.
+                </Text>
+              </View>
+              <Switch
+                value={groundOpsEnabled}
+                onValueChange={() => void handleToggleGroundOps()}
+                disabled={!canEdit || groundOpsLoading}
+                style={local.switchControl}
+              />
+            </View>
+          </View>
         </View>
 
         {canBranding ? (
@@ -577,5 +630,27 @@ const local = StyleSheet.create({
     color: Theme.textOnDark,
     letterSpacing: 0.3,
     textTransform: "uppercase",
+  },
+  toggleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: Theme.borderLight,
+  },
+  toggleLabel: {
+    flex: 1,
+    marginRight: 12,
+  },
+  toggleHint: {
+    fontSize: 10,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+    lineHeight: 14,
+    marginTop: 4,
+  },
+  switchControl: {
+    flexShrink: 0,
   },
 });

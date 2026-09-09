@@ -22,11 +22,27 @@ import {
   type TeamInvitePermissions,
 } from "@/features/organization/utils/teamInviteRoles.util";
 import type { MemberSurfaceMap } from "@/lib/memberSurfaces";
+import { getCapabilitiesFromProfile, type Capability } from "@/lib/capabilities";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
 function normalizePhone(phone: string): string {
   return phone.replace(/\s+/g, "").trim();
+}
+
+/** Derive org capabilities from organization record operating model. */
+async function getOrgCapabilities(orgId: string): Promise<Capability[]> {
+  try {
+    const { data, error } = await supabase()
+      .from("organizations")
+      .select("operating_model")
+      .eq("id", orgId)
+      .maybeSingle();
+    if (error || !data) return [];
+    return getCapabilitiesFromProfile({ role: "user" }, data.operating_model || "HYBRID");
+  } catch {
+    return [];
+  }
 }
 
 /** Hide raw Postgres error text (e.g. constraint violations) behind a friendly message. */
@@ -265,7 +281,8 @@ export async function inviteTeamMember(
   belongsToOtherOrg?: boolean;
 }> {
   const role = orgMemberRoleForPlatformRole(platformRole);
-  const permissions = buildTeamInvitePermissions(platformRole);
+  const orgCaps = await getOrgCapabilities(orgId);
+  const permissions = buildTeamInvitePermissions(platformRole, undefined, orgCaps);
   try {
     const { data, error } = await supabase().rpc("invite_existing_user_to_org", {
       p_org_id: orgId,
@@ -314,7 +331,8 @@ export async function createPendingTeamInvite(
   alreadyPending?: boolean;
 }> {
   const role = orgMemberRoleForPlatformRole(params.platformRole);
-  const permissions = buildTeamInvitePermissions(params.platformRole);
+  const orgCaps = await getOrgCapabilities(orgId);
+  const permissions = buildTeamInvitePermissions(params.platformRole, undefined, orgCaps);
   try {
     const { data, error } = await supabase().rpc("create_team_invite_pending", {
       p_org_id: orgId,
@@ -476,12 +494,17 @@ export function looksLikeNotOwnerError(message: string): boolean {
  * Change a member's role/permissions via the owner-only, atomic, audited RPC.
  * The DB is the authority — RLS blocks off-RPC role/permission writes for
  * non-owners. Owner-row reassignment is rejected (use transferOwnership).
+ *
+ * Note: orgId must be passed to fetch org capabilities for surface calculation.
+ * Without it, surfaces default to undefined (pre-existing bug, now required).
  */
 export async function updateMemberRole(
   memberId: string,
   platformRole: PlatformTeamRole,
+  orgId?: string,
 ): Promise<{ error: Error | null }> {
-  return updateMemberPermissions(memberId, buildTeamInvitePermissions(platformRole));
+  const orgCaps = orgId ? await getOrgCapabilities(orgId) : [];
+  return updateMemberPermissions(memberId, buildTeamInvitePermissions(platformRole, undefined, orgCaps));
 }
 
 /**

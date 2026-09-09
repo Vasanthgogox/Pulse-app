@@ -92,8 +92,10 @@ function mapRowToWorkspace(
   };
   const platformRole = platformRoleFromMember(memberPick);
   const domains = domainsFromMember(memberPick);
-  // Org caps applied later in useCapabilities / useMemberAccess — store raw/default map.
-  const surfaces = surfacesFromMember(memberPick, []);
+  // Extract surfaces from permissions without org-caps filtering. Hydration is applied
+  // later in useMemberAccess with actual org capabilities. Store the raw map from the DB.
+  const raw = memberPick.permissions as unknown as { surfaces?: MemberSurfaceMap } | null | undefined;
+  const surfaces = (raw?.surfaces && typeof raw.surfaces === "object") ? raw.surfaces : {};
   const operatingModel =
     o.operating_model === 'ASSET_BASED' ||
     o.operating_model === 'NON_ASSET' ||

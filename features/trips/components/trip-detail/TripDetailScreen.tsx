@@ -12,6 +12,7 @@ import { canAddMoreTripDocs, canMutateTripVaultDoc, isDriverPodVaultDoc, isPdfTr
 import { TripVaultFilePreview } from "@/features/trips/components/trip-detail/TripVaultFilePreview";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useOptionalActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { TripChatRoomSheet } from "@/features/chat/components/TripChatRoomSheet";
 import {
   pushTripLedgerQuickEntry,
@@ -2942,10 +2943,15 @@ export default function TripDetailScreen({
     return text.includes(q);
   });
   const vaultDocs = detail.computedTripDocs;
+  const { memberPlatformRole } = useOptionalActiveWorkspace() ?? {};
+  const isGroundOpsOnly = memberPlatformRole === "ground_ops";
+
   const canUploadTripDocs =
     !!currentOrganization?.id &&
     !!trip.organization_id &&
-    currentOrganization.id === trip.organization_id;
+    currentOrganization.id === trip.organization_id &&
+    !isGroundOpsOnly; // Ground Ops will be gated by RLS + org toggle at upload time
+
   const canUploadThisVaultDoc = (doc: (typeof detail.computedTripDocs)[number]) =>
     canMutateTripVaultDoc({
       doc,

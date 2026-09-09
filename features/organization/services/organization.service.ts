@@ -570,6 +570,7 @@ export type CustomRolePreset = {
 
 type OrgSettings = {
   customRoles?: CustomRolePreset[];
+  groundOpsDocUploadEnabled?: boolean;
 };
 
 /** Drops malformed rows rather than throwing — settings is free-form JSONB. */
@@ -676,4 +677,27 @@ export async function deleteCustomRolePreset(
     .maybeSingle();
   if (error) return { error: new Error(error.message), presets: existing };
   return { error: null, presets: parseCustomRoles(data?.settings) };
+}
+
+export async function getGroundOpsDocUploadEnabled(orgId: string): Promise<boolean> {
+  const { error, settings } = await readOrgSettings(orgId);
+  if (error) return false;
+  return settings.groundOpsDocUploadEnabled === true;
+}
+
+export async function setGroundOpsDocUploadEnabled(
+  orgId: string,
+  enabled: boolean,
+): Promise<{ error: Error | null }> {
+  const { error: readErr, settings } = await readOrgSettings(orgId);
+  if (readErr) return { error: readErr };
+
+  const { error } = await supabase()
+    .from("organizations")
+    .update({ settings: { ...settings, groundOpsDocUploadEnabled: enabled } })
+    .eq("id", orgId)
+    .select("settings")
+    .maybeSingle();
+  if (error) return { error: new Error(error.message) };
+  return { error: null };
 }
