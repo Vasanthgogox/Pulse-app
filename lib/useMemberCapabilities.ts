@@ -143,6 +143,19 @@ export function useMemberCapabilities(): MemberDomainAccess {
     }
 
     const domains = resolveMemberDomains(memberDomains, memberPlatformRole);
+
+    // Ground Ops is authorized solely by surface RBAC (memberDomains),
+    // not by org operating model capabilities. It's a dedicated field-staff
+    // role for document uploads that should work in any org configuration.
+    if (memberPlatformRole === "ground_ops") {
+      return {
+        finance: false,
+        sales: false,
+        tripops: domains.tripops,
+        isLoading: accessLoading,
+      };
+    }
+
     return {
       finance: orgAllowsFinance && domains.finance,
       sales: orgAllowsSales && domains.sales,

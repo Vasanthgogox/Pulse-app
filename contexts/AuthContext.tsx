@@ -201,10 +201,21 @@ function tryReadWebSession(): {
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
-  const [profile, setProfile] = useState<UserProfile | null>(null);
+  // Initialize auth state from localStorage synchronously to avoid race condition
+  // where hooks run before useLayoutEffect populates auth.
+  const initAuthState = () => {
+    const web = tryReadWebSession();
+    return {
+      user: web.user,
+      profile: web.profile,
+      status: web.status,
+    };
+  };
+  const init = initAuthState();
+  const [user, setUser] = useState<AuthUser | null>(init.user);
+  const [profile, setProfile] = useState<UserProfile | null>(init.profile);
   const [roleVerified, setRoleVerified] = useState(false);
-  const [status, setStatus] = useState<AuthStatus>("restoring");
+  const [status, setStatus] = useState<AuthStatus>(init.status);
   const [restoreError, setRestoreError] = useState<AuthError | null>(null);
 
   // On web: read localStorage synchronously before first paint so AppBootGate
