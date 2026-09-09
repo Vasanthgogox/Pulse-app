@@ -13,6 +13,7 @@ export type AdminPermission =
   | 'system.flags.manage'
   | 'users.suspend'
   | 'marketplace_fees.manage'
+  | 'dco.review'
   | 'reach.manage'
   | 'reach.approve'
   | 'analytics.view'
@@ -38,6 +39,7 @@ export const PERMISSION_LABELS: Record<AdminPermission, string> = {
   'system.flags.manage': 'Manage Feature Flags',
   'users.suspend': 'Suspend Users',
   'marketplace_fees.manage': 'Manage Marketplace Fees',
+  'dco.review': 'Review DCO Requests',
   'reach.manage': 'Manage Reach Campaigns',
   'reach.approve': 'Approve Reach Campaigns',
   'analytics.view': 'View Analytics',
@@ -54,6 +56,7 @@ export const ROLE_PERMISSION_PRESETS: Record<AdminRole, AdminPermission[]> = {
     'system.flags.manage',
     'users.suspend',
     'marketplace_fees.manage',
+    'dco.review',
     'reach.manage', 'reach.approve',
     'analytics.view',
     'platform_admin.manage',
@@ -121,6 +124,7 @@ export function getPermissionDescription(permission: AdminPermission): string {
     'system.flags.manage': 'Toggle feature flags across organizations',
     'users.suspend': 'Suspend or unsuspend user accounts',
     'marketplace_fees.manage': 'Adjust marketplace fee rules',
+    'dco.review': 'Review, approve, reject, or suspend DCO status requests',
     'reach.manage': 'Create and edit Reach campaigns',
     'reach.approve': 'Approve Reach campaigns for publishing',
     'analytics.view': 'View internal analytics dashboards',
@@ -150,6 +154,9 @@ export function getAllowedPanels(permissions: string[]): string[] {
   }
   if (hasPermission(permissions, 'marketplace_fees.manage')) {
     panels.push('marketplace-fees');
+  }
+  if (hasPermission(permissions, 'dco.review')) {
+    panels.push('dco-review');
   }
   if (hasPermission(permissions, 'system.flags.manage')) {
     panels.push('boost-ops');
