@@ -1,6 +1,8 @@
 import {
   canAddMoreTripDocs,
   canMutateTripVaultDoc,
+  formatLrVaultDateLabel,
+  formatLrVaultNumberLabel,
   formatVaultDocDate,
   isDriverPodVaultDoc,
   isPdfTripDoc,
@@ -168,5 +170,46 @@ describe("vaultDocDateToIso", () => {
     expect(vaultDocDateToIso("04-Sep-26")).toBe("2026-09-04");
     expect(vaultDocDateToIso("28-08-2026")).toBe("2026-08-28");
     expect(vaultDocDateToIso("2026-09-03")).toBe("2026-09-03");
+  });
+});
+
+describe("formatLrVaultNumberLabel", () => {
+  it("shows the typed LR number on the vault card", () => {
+    expect(formatLrVaultNumberLabel("AI3583")).toBe("LR No. AI3583");
+  });
+
+  it("does not duplicate an existing LR No. prefix", () => {
+    expect(formatLrVaultNumberLabel("LR No. AI3583")).toBe("LR No. AI3583");
+  });
+
+  it("hides the line when no number was entered", () => {
+    expect(formatLrVaultNumberLabel("  ")).toBeNull();
+  });
+
+  it("reads the number from a stored LR payload", () => {
+    expect(
+      formatLrVaultNumberLabel(
+        JSON.stringify({
+          lrNumber: "AI3583",
+          date: "03-09-2026",
+          invoice: "INV-12",
+        }),
+      ),
+    ).toBe("LR No. AI3583");
+  });
+});
+
+describe("formatLrVaultDateLabel", () => {
+  it("prefixes the vault date for the card", () => {
+    expect(formatLrVaultDateLabel("03-Sep-26")).toBe("LR date 03-Sep-26");
+    expect(formatLrVaultDateLabel("03-09-2026")).toBe("LR date 03-Sep-26");
+  });
+
+  it("does not duplicate an existing LR date prefix", () => {
+    expect(formatLrVaultDateLabel("LR date 03-Sep-26")).toBe("LR date 03-Sep-26");
+  });
+
+  it("hides the line when no date was entered", () => {
+    expect(formatLrVaultDateLabel("  ")).toBeNull();
   });
 });

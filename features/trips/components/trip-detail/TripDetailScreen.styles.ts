@@ -4,6 +4,7 @@
  */
 import { Platform, StyleSheet } from "react-native";
 
+import Layout from "@/constants/Layout";
 import { Theme } from "@/constants/Theme";
 
 export const MANIFEST_HERO_AVATAR_MOBILE = 34;
@@ -2908,11 +2909,33 @@ export const neoStyles = StyleSheet.create({
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.03,
     shadowRadius: 8,
+    position: "relative",
   },
-  vaultCardLr: {
+  vaultLrCorner: {
+    position: "absolute",
+    top: 8,
+    left: 10,
+    zIndex: 1,
+    maxWidth: "78%",
+    alignItems: "flex-start",
+    gap: 1,
+  },
+  vaultLrNumber: {
+    color: Theme.textPrimaryDark,
+    fontSize: 11,
+    fontWeight: "800",
+    textAlign: "left",
+    letterSpacing: 0.2,
+  },
+  vaultLrDate: {
+    color: Theme.textPrimaryDark,
+    fontSize: 10,
+    fontWeight: "700",
+    textAlign: "left",
+  },
+  vaultEwayWrap: {
     flexBasis: "100%",
     width: "100%",
-    alignItems: "center",
   },
   vaultTitle: {
     marginTop: 8,
@@ -2930,20 +2953,6 @@ export const neoStyles = StyleSheet.create({
     fontWeight: "800",
     textTransform: "uppercase",
     letterSpacing: 0.8,
-  },
-  vaultLrNumber: {
-    marginTop: 6,
-    color: "#0f172a",
-    fontSize: 11,
-    fontWeight: "800",
-    textAlign: "center",
-    letterSpacing: 0.2,
-  },
-  vaultLrDate: {
-    marginTop: 2,
-    color: "#64748b",
-    fontSize: 10,
-    fontWeight: "700",
     textAlign: "center",
   },
   vaultBtn: {
@@ -6607,26 +6616,72 @@ export const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 12,
   },
-  lrNumberFieldWrap: {
+  docPreviewLrNumber: {
+    marginBottom: 8,
+    fontSize: 14,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    textAlign: "left",
+    alignSelf: "flex-start",
+  },
+  lrFieldsRow: {
     marginTop: 12,
+    flexDirection: "row",
+    alignItems: "flex-start",
+    gap: 8,
+  },
+  lrFieldCol: {
+    flex: 1,
+    minWidth: 0,
     gap: 4,
   },
   lrNumberFieldLabel: {
     fontSize: 10,
     fontWeight: "800",
     letterSpacing: 0.7,
-    color: "#64748b",
+    color: Theme.textMuted,
   },
   lrNumberFieldInput: {
     borderWidth: 1.5,
-    borderColor: "#e2e8f0",
+    borderColor: Theme.borderMedium,
     borderRadius: 10,
-    paddingHorizontal: 12,
+    paddingHorizontal: 10,
     paddingVertical: 10,
-    fontSize: 14,
+    fontSize: 13,
     fontWeight: "700",
-    color: "#0f172a",
-    backgroundColor: "#fff",
+    color: Theme.textPrimaryDark,
+    backgroundColor: Theme.cardWhite,
+  },
+  lrDateField: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 6,
+    borderWidth: 1.5,
+    borderColor: Theme.borderMedium,
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
+    minHeight: Layout.minTouchTargetSize,
+    backgroundColor: Theme.cardWhite,
+  },
+  lrDateFieldText: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  lrDateFieldPlaceholder: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.textMuted,
+  },
+  lrCalendarWrap: {
+    marginTop: 8,
+    alignSelf: "flex-start",
   },
   docModalCenter: {
     flex: 1,

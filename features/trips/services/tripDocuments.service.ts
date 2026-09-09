@@ -11,12 +11,12 @@ import { getPlatformEventBus } from "@/lib/platform/events/InProcessEventBus";
 import { recordTripWorkflowEvent } from "@/features/trips/services/tripWorkflow.service";
 import { createStorageSignedUrlCache } from "@/lib/storageSignedUrlCache";
 import { listOcrJobsForTripDocuments } from "@/features/ocr/services/ocrJob.service";
-import { parseLrFieldsFromOcrJob } from "@/features/trips/services/lrDocumentOcr.util";
+import { parseLrFieldsFromOcrJob, parseLrFieldValues, preferredLrDocumentNumber, serializeLrFieldValues } from "@/features/trips/services/lrDocumentOcr.util";
 import {
   EWAY_BILL_FIELDS_FILE_NAME,
   ewayBillFieldsStoragePath,
   isEwayBillMetaPath,
-  serializeEwayFieldValues,
+  serializeEwayFieldEntries,
   type EwayFieldValues,
 } from "@/features/trips/services/ewayBillFields.util";
 
@@ -127,10 +127,20 @@ async function attachLrOcrFields(rows: TripDocumentRow[]): Promise<TripDocumentR
     return rows.map((row) => {
       if (row.document_type !== "lr") return row;
       const fields = parseLrFieldsFromOcrJob(latestByDoc.get(row.id) ?? null);
+      const stored = parseLrFieldValues(row.document_number);
+      const lrNumber = preferredLrDocumentNumber(
+        stored.lrNumber,
+        fields.lrNumber,
+      );
       return {
         ...row,
-        document_number: row.document_number?.trim() || fields.lrNumber,
-        document_date: fields.lrDate ?? row.document_date ?? null,
+        document_number: serializeLrFieldValues({
+          lrNumber: lrNumber ?? "",
+          date: stored.date || fields.lrDate || "",
+          invoice: stored.invoice,
+        }) || row.document_number,
+        document_date:
+          stored.date || fields.lrDate || row.document_date || null,
       };
     });
   } catch {
@@ -572,15 +582,15 @@ export async function updateTripDocumentNumber(
 }
 
 /**
- * Persist e-way bill fields typed in the LR strip (number, valid-till, doc no).
+ * Persist e-way bill fields typed in the strip (one or more numbers).
  * Reuses an existing e-way file row when present; otherwise stores a metadata-only row.
  */
 export async function upsertEwayBillFields(input: {
   tripId: string;
   uploadedBy: string;
-  values: EwayFieldValues;
+  values: EwayFieldValues[];
 }): Promise<{ error: Error | null }> {
-  const serialized = serializeEwayFieldValues(input.values);
+  const serialized = serializeEwayFieldEntries(input.values);
   const { data, error: listError } = await supabase()
     .from("trip_documents")
     .select("id, storage_path, file_name")

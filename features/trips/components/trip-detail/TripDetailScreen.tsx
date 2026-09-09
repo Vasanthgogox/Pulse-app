@@ -8,8 +8,8 @@ import { PersistentTabPanel } from "@/components/PersistentTabPanel";
 import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { Theme } from "@/constants/Theme";
-import { canAddMoreTripDocs, canMutateTripVaultDoc, formatVaultDocDate, isDriverPodVaultDoc, isEwayBillVaultDoc, isLrVaultDoc, isPdfTripDoc, VAULT_DOC_LIMIT_HINT, VAULT_DOC_MAX_BYTES, VAULT_DOC_MAX_MB, VAULT_DOC_PICKER_TYPES, vaultDocHasPreviewableFile, vaultPickerRejectionMessage } from "@/features/trips/components/trip-detail/tripDocTypes";
-import { EwayBillLrStrip, buildEwayBillStripRows } from "@/features/trips/components/trip-detail/EwayBillVaultTab";
+import { canAddMoreTripDocs, canMutateTripVaultDoc, formatLrVaultDateLabel, formatLrVaultNumberLabel, formatVaultDocDate, isDriverPodVaultDoc, isEwayBillVaultDoc, isLrVaultDoc, isPdfTripDoc, VAULT_DOC_LIMIT_HINT, VAULT_DOC_MAX_BYTES, VAULT_DOC_MAX_MB, VAULT_DOC_PICKER_TYPES, vaultDocDateToIso, vaultDocHasPreviewableFile, vaultPickerRejectionMessage } from "@/features/trips/components/trip-detail/tripDocTypes";
+import { CompactValidTillCalendar, EwayBillLrStrip, buildEwayBillStripRows } from "@/features/trips/components/trip-detail/EwayBillVaultTab";
 import {
   ewayDocHasPreviewableFile,
   type EwayFieldValues,
@@ -43,6 +43,10 @@ import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { getOptimalRoute } from "@/lib/routingService";
 import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
 import { extractLrFieldsFromUploadedDocument } from "@/features/trips/services/lrDocumentOcr.service";
+import {
+  parseLrFieldValues,
+  serializeLrFieldValues,
+} from "@/features/trips/services/lrDocumentOcr.util";
 import {
   deleteVehicleDocument,
   deleteVehicleExtraDocument,
@@ -1127,7 +1131,30 @@ export default function TripDetailScreen({
     extraFiles?: { uri: string; fileName: string; mimeType: string }[];
     vehicleKind?: VehicleComplianceDocType | "extra";
   } | null>(null);
-  const [pendingLrNumber, setPendingLrNumber] = useState('');
+  const [pendingLrNumber, setPendingLrNumber] = useState("");
+  const [pendingLrDate, setPendingLrDate] = useState("");
+  const [pendingLrInvoice, setPendingLrInvoice] = useState("");
+  const [showPendingLrCalendar, setShowPendingLrCalendar] = useState(false);
+  const resetPendingLrFields = useCallback(() => {
+    setPendingLrNumber("");
+    setPendingLrDate("");
+    setPendingLrInvoice("");
+    setShowPendingLrCalendar(false);
+  }, []);
+  const fillPendingLrFields = useCallback(
+    (
+      raw?: string | null,
+      dateFallback?: string | null,
+      invoiceFallback?: string | null,
+    ) => {
+      const fields = parseLrFieldValues(raw);
+      setPendingLrNumber(fields.lrNumber);
+      setPendingLrDate(fields.date || dateFallback?.trim() || "");
+      setPendingLrInvoice(fields.invoice || invoiceFallback?.trim() || "");
+      setShowPendingLrCalendar(false);
+    },
+    [],
+  );
   const [lrOcrReading, setLrOcrReading] = useState(false);
   const lrOcrAttemptedRef = useRef<string | null>(null);
   const [addDocChooserVisible, setAddDocChooserVisible] = useState(false);
@@ -1162,7 +1189,7 @@ export default function TripDetailScreen({
   const lrNeedsOcr =
     !!lrVaultSlot &&
     lrVaultSlot.status !== "Pending" &&
-    !(lrVaultSlot.documentNumber?.trim() && lrVaultSlot.documentDate);
+    !lrVaultSlot.documentNumber?.trim();
 
   useEffect(() => {
     lrOcrAttemptedRef.current = null;
@@ -1190,6 +1217,7 @@ export default function TripDetailScreen({
           tripDocumentId: lrDocId,
           storagePath: lrStoragePath,
           createdBy,
+          existingDocumentNumber: lrVaultSlot?.documentNumber,
         }),
       )
       .catch(() => undefined)
@@ -1339,6 +1367,14 @@ export default function TripDetailScreen({
             Alert.alert("File not accepted", tooLarge);
             return;
           }
+          const lrPayload =
+            pending.docType === "lr"
+              ? serializeLrFieldValues({
+                  lrNumber: pendingLrNumber,
+                  date: pendingLrDate,
+                  invoice: pendingLrInvoice,
+                })
+              : "";
           const { doc, error } = await tripDocumentsService.uploadTripDocument(
             tripIdForUpload,
             uploaderId,
@@ -1348,9 +1384,7 @@ export default function TripDetailScreen({
               mimeType: file.mimeType,
             },
             pending.docType,
-            pending.docType === "lr"
-              ? pendingLrNumber
-              : undefined,
+            pending.docType === "lr" ? lrPayload || undefined : undefined,
           );
           if (error) {
             Alert.alert(
@@ -1361,12 +1395,22 @@ export default function TripDetailScreen({
             );
             if (uploadedCount > 0) {
               setPendingVaultUpload(null);
-              setPendingLrNumber("");
+              resetPendingLrFields();
               detail.handleRefresh();
             }
             return;
           }
           uploadedCount += 1;
+          if (doc) {
+            if (lrPayload && !doc.document_number?.trim()) {
+              await tripDocumentsService.updateTripDocumentNumber(doc.id, lrPayload);
+              doc.document_number = lrPayload;
+            }
+            detail.upsertTripDocument({
+              ...doc,
+              document_number: lrPayload || doc.document_number,
+            });
+          }
           if (
             pending.docType === "lr" &&
             doc?.id &&
@@ -1382,7 +1426,7 @@ export default function TripDetailScreen({
         }
       }
       setPendingVaultUpload(null);
-      setPendingLrNumber("");
+      resetPendingLrFields();
       detail.handleRefresh();
       Alert.alert(
         "Uploaded",
@@ -1390,7 +1434,11 @@ export default function TripDetailScreen({
           ? `${uploadedCount} documents are saved in the vault.`
           : `${pending.label} is saved in the vault.`,
       );
-      if (lrOcrTarget && currentOrganization?.id) {
+      const typedLr = pending.docType === "lr" ? pendingLrNumber.trim() : "";
+      const typedLrFields =
+        pending.docType === "lr" &&
+        (typedLr || pendingLrDate.trim() || pendingLrInvoice.trim());
+      if (lrOcrTarget && currentOrganization?.id && !typedLrFields) {
         lrOcrAttemptedRef.current = lrOcrTarget.tripDocumentId;
         setLrOcrReading(true);
         void extractLrFieldsFromUploadedDocument({
@@ -1400,6 +1448,7 @@ export default function TripDetailScreen({
           tripDocumentId: lrOcrTarget.tripDocumentId,
           storagePath: lrOcrTarget.storagePath,
           createdBy: uploaderId,
+          existingDocumentNumber: typedLr,
         })
           .catch(() => undefined)
           .finally(() => {
@@ -1418,6 +1467,9 @@ export default function TripDetailScreen({
   }, [
     pendingVaultUpload,
     pendingLrNumber,
+    pendingLrDate,
+    pendingLrInvoice,
+    resetPendingLrFields,
     detail.trip?.id,
     detail.trip?.organization_id,
     detail.trip?.vehicle_id,
@@ -1425,6 +1477,7 @@ export default function TripDetailScreen({
     detail.vehicleDocs,
     detail.setVehicleDocs,
     detail.handleRefresh,
+    detail.upsertTripDocument,
     currentOrganization?.id,
     uploadingDocId,
     readFileAsArrayBuffer,
@@ -1653,10 +1706,21 @@ export default function TripDetailScreen({
         };
 
         // Preview + confirm before any network upload (prevents accidental saves).
+        const nextDocType =
+          CATEGORY_TO_DOC_TYPE[doc.category ?? ""] ?? "manifest";
+        if (nextDocType === "lr") {
+          fillPendingLrFields(
+            doc.documentNumber,
+            doc.documentDate,
+            doc.invoiceNumber,
+          );
+        } else {
+          resetPendingLrFields();
+        }
         setPendingVaultUpload({
           slotId: doc.id,
           label: doc.label,
-          docType: CATEGORY_TO_DOC_TYPE[doc.category ?? ""] ?? "manifest",
+          docType: nextDocType,
           uri,
           fileName,
           mimeType,
@@ -1674,6 +1738,8 @@ export default function TripDetailScreen({
       detail.currentUserId,
       uploadingDocId,
       pendingVaultUpload,
+      fillPendingLrFields,
+      resetPendingLrFields,
     ],
   );
 
@@ -1695,6 +1761,11 @@ export default function TripDetailScreen({
       const fileName = asset.name || `lr-${Date.now()}.pdf`;
       const mimeType = asset.mimeType || "application/pdf";
 
+      fillPendingLrFields(
+        lrVaultSlot?.documentNumber,
+        lrVaultSlot?.documentDate,
+        lrVaultSlot?.invoiceNumber,
+      );
       setPendingVaultUpload({
         slotId: "lr",
         label: rest.length > 0 ? "LR Documents" : "LR Document",
@@ -1722,6 +1793,10 @@ export default function TripDetailScreen({
     detail.currentUserId,
     uploadingDocId,
     pendingVaultUpload,
+    lrVaultSlot?.documentNumber,
+    lrVaultSlot?.documentDate,
+    lrVaultSlot?.invoiceNumber,
+    fillPendingLrFields,
   ]);
 
   const pickVehicleDocument = useCallback(
@@ -1942,7 +2017,7 @@ export default function TripDetailScreen({
   );
 
   const saveEwayBillFields = useCallback(
-    async (values: EwayFieldValues) => {
+    async (values: EwayFieldValues[]) => {
       const tripIdForSave = detail.trip?.id;
       if (!tripIdForSave) return false;
       const uploadedBy = detail.currentUserId;
@@ -1959,7 +2034,7 @@ export default function TripDetailScreen({
         Alert.alert("Could not save", error.message);
         return false;
       }
-      detail.loadTripDocuments();
+      await detail.loadTripDocuments();
       return true;
     },
     [detail.trip?.id, detail.currentUserId, detail.loadTripDocuments],
@@ -3078,30 +3153,15 @@ export default function TripDetailScreen({
   const vaultDocs = detail.computedTripDocs;
   const ewayBillDoc = vaultDocs.find(isEwayBillVaultDoc);
   const vaultCardDocs = vaultDocs.filter((doc) => !isEwayBillVaultDoc(doc));
-  const lrVaultDoc = vaultCardDocs.find(isLrVaultDoc);
   const ewayStripRows = buildEwayBillStripRows({
     ewayDoc: ewayBillDoc,
-    lrDoc: lrVaultDoc,
-    lrNumber: lrVaultDoc?.documentNumber,
   });
   const openEwayBillPreview = (rowId: string) => {
-    if (ewayBillDoc && ewayDocHasPreviewableFile(ewayBillDoc) && rowId !== "eway-empty") {
-      const files = ewayBillDoc.files ?? [];
-      const fileIndex = files.findIndex((file) => file.id === rowId);
-      if (fileIndex >= 0) {
-        detail.setVehiclePreviewIndex(fileIndex);
-      } else {
-        detail.setVehiclePreviewIndex(0);
-      }
-      detail.setSelectedDoc(ewayBillDoc);
-      return;
-    }
-    const lrReady =
-      !!lrVaultDoc &&
-      (lrVaultDoc.status !== "Pending" || !!lrVaultDoc.storagePath);
-    if (lrReady) {
-      detail.setSelectedDoc(lrVaultDoc);
-    }
+    if (!ewayBillDoc || !ewayDocHasPreviewableFile(ewayBillDoc)) return;
+    const files = ewayBillDoc.files ?? [];
+    const fileIndex = files.findIndex((file) => file.id === rowId);
+    detail.setVehiclePreviewIndex(fileIndex >= 0 ? fileIndex : 0);
+    detail.setSelectedDoc(ewayBillDoc);
   };
   const canUploadTripDocs =
     !!currentOrganization?.id &&
@@ -5110,12 +5170,12 @@ export default function TripDetailScreen({
                           ).length
                         : 0;
                       const isLrDoc = isLrVaultDoc(doc);
-                      const lrDate = isLrDoc
-                        ? formatVaultDocDate(doc.documentDate)
-                        : null;
                       const lrNumber = isLrDoc
-                        ? doc.documentNumber?.trim()
+                        ? formatLrVaultNumberLabel(doc.documentNumber)
                         : "";
+                      const lrDate = isLrDoc
+                        ? formatLrVaultDateLabel(doc.documentDate)
+                        : null;
                       const statusLabel = isVehicleDoc
                         ? [
                             vehicleTypeSummary,
@@ -5126,8 +5186,7 @@ export default function TripDetailScreen({
                             .filter(Boolean)
                             .join(" · ") || VEHICLE_COMPLIANCE_TYPE_HINT
                         : isLrDoc && !isPending
-                          ? [lrNumber, lrDate].filter(Boolean).join(" · ") ||
-                            "Uploaded"
+                          ? lrNumber || "Uploaded"
                           : podUploadLocked && isPending
                             ? "After trip completed"
                             : doc.documentNumber?.trim()
@@ -5158,13 +5217,27 @@ export default function TripDetailScreen({
                             ? "lock"
                             : "clock";
                       return (
-                        <View
-                          key={doc.id}
-                          style={[
-                            neoStyles.vaultCard,
-                            isLrDoc && neoStyles.vaultCardLr,
-                          ]}
-                        >
+                        <View key={doc.id} style={neoStyles.vaultCard}>
+                          {isLrDoc && !isPending && (lrNumber || lrDate) ? (
+                            <View style={neoStyles.vaultLrCorner}>
+                              {lrNumber ? (
+                                <Text
+                                  style={neoStyles.vaultLrNumber}
+                                  numberOfLines={1}
+                                >
+                                  {lrNumber}
+                                </Text>
+                              ) : null}
+                              {lrDate ? (
+                                <Text
+                                  style={neoStyles.vaultLrDate}
+                                  numberOfLines={1}
+                                >
+                                  {lrDate}
+                                </Text>
+                              ) : null}
+                            </View>
+                          ) : null}
                           <Feather
                             name={
                               isPending && !isVehicleDoc
@@ -5179,20 +5252,11 @@ export default function TripDetailScreen({
                           <Text style={neoStyles.vaultTitle} numberOfLines={2}>
                             {doc.label}
                           </Text>
-                          {isLrDoc && !isPending ? (
-                            <>
-                              <Text style={neoStyles.vaultLrNumber} numberOfLines={1}>
-                                {lrNumber || "Uploaded"}
-                              </Text>
-                              {lrDate ? (
-                                <Text style={neoStyles.vaultLrDate} numberOfLines={1}>
-                                  {lrDate}
-                                </Text>
-                              ) : null}
-                            </>
-                          ) : (
-                            <Text style={neoStyles.vaultSub}>{statusLabel}</Text>
-                          )}
+                          <Text style={neoStyles.vaultSub} numberOfLines={1}>
+                            {isLrDoc && !isPending && lrNumber
+                              ? "Uploaded"
+                              : statusLabel}
+                          </Text>
                           <View style={neoStyles.vaultBtnRow}>
                             <TouchableOpacity
                               onPress={() => handleVaultCardPress(doc)}
@@ -5270,17 +5334,17 @@ export default function TripDetailScreen({
                               </TouchableOpacity>
                             ) : null}
                           </View>
-                          {isLrDoc ? (
-                            <EwayBillLrStrip
-                              rows={ewayStripRows}
-                              onView={openEwayBillPreview}
-                              canEdit={canUploadTripDocs}
-                              onSave={saveEwayBillFields}
-                            />
-                          ) : null}
                         </View>
                       );
                     })}
+                    <View style={neoStyles.vaultEwayWrap}>
+                      <EwayBillLrStrip
+                        rows={ewayStripRows}
+                        onView={openEwayBillPreview}
+                        canEdit={canUploadTripDocs}
+                        onSave={saveEwayBillFields}
+                      />
+                    </View>
                   </View>
                   </View>
                 )}
@@ -5844,6 +5908,10 @@ export default function TripDetailScreen({
                             (d.files?.length ?? 0) > 1
                               ? `${d.files?.length} files`
                               : d.type,
+                          subtitle: isLrVaultDoc(d)
+                            ? formatLrVaultNumberLabel(d.documentNumber) ??
+                              undefined
+                            : undefined,
                           status:
                             d.status === "Verified" ? "Uploaded" : d.status,
                           onView: isUploaded
@@ -6325,11 +6393,9 @@ export default function TripDetailScreen({
                     : (detail.selectedDoc?.label ?? "Document")}
                 </Text>
                 <Text style={styles.docModalSubtitle} numberOfLines={1}>
-                  {detail.selectedDoc?.documentNumber?.trim()
-                    ? `No. ${detail.selectedDoc.documentNumber.trim()}`
-                    : isGalleryPreview && previewGalleryDocs.length > 1
-                      ? `${detail.vehiclePreviewIndex + 1} of ${previewGalleryDocs.length}`
-                      : "Preview"}
+                  {isGalleryPreview && previewGalleryDocs.length > 1
+                    ? `${detail.vehiclePreviewIndex + 1} of ${previewGalleryDocs.length}`
+                    : "Preview"}
                 </Text>
               </View>
               <TouchableOpacity
@@ -6344,6 +6410,11 @@ export default function TripDetailScreen({
             </View>
 
             <View style={styles.docModalBody}>
+              {formatLrVaultNumberLabel(detail.selectedDoc?.documentNumber) ? (
+                <Text style={styles.docPreviewLrNumber} numberOfLines={1}>
+                  {formatLrVaultNumberLabel(detail.selectedDoc?.documentNumber)}
+                </Text>
+              ) : null}
               {detail.docPreviewLoading ? (
                 <View style={styles.docModalCenter}>
                   <LoadingIndicator size="large" color={Theme.primary} />
@@ -6652,7 +6723,7 @@ export default function TripDetailScreen({
         onRequestClose={() => {
           if (!uploadingDocId) {
             setPendingVaultUpload(null);
-            setPendingLrNumber("");
+            resetPendingLrFields();
           }
         }}
       >
@@ -6672,7 +6743,7 @@ export default function TripDetailScreen({
                 onPress={() => {
                   if (!uploadingDocId) {
                     setPendingVaultUpload(null);
-                    setPendingLrNumber("");
+                    resetPendingLrFields();
                   }
                 }}
                 style={styles.docModalCloseIcon}
@@ -6756,18 +6827,75 @@ export default function TripDetailScreen({
               ) : null}
 
               {pendingVaultUpload?.docType === "lr" ? (
-                <View style={styles.lrNumberFieldWrap}>
-                  <Text style={styles.lrNumberFieldLabel}>LR NUMBER</Text>
-                  <TextInput
-                    value={pendingLrNumber}
-                    onChangeText={setPendingLrNumber}
-                    placeholder="Read automatically from the document"
-                    placeholderTextColor={Theme.textMuted}
-                    style={styles.lrNumberFieldInput}
-                    autoCapitalize="characters"
-                    editable={!uploadingDocId}
-                    returnKeyType="done"
-                  />
+                <View>
+                  <View style={styles.lrFieldsRow}>
+                    <View style={styles.lrFieldCol}>
+                      <Text style={styles.lrNumberFieldLabel}>LR NUMBER</Text>
+                      <TextInput
+                        value={pendingLrNumber}
+                        onChangeText={setPendingLrNumber}
+                        placeholder="LR No."
+                        placeholderTextColor={Theme.textMuted}
+                        style={styles.lrNumberFieldInput}
+                        autoCapitalize="characters"
+                        editable={!uploadingDocId}
+                        returnKeyType="next"
+                      />
+                    </View>
+                    <View style={styles.lrFieldCol}>
+                      <Text style={styles.lrNumberFieldLabel}>LR DATE</Text>
+                      <Pressable
+                        style={styles.lrDateField}
+                        onPress={() => {
+                          if (uploadingDocId) return;
+                          setShowPendingLrCalendar((open) => !open);
+                        }}
+                        disabled={!!uploadingDocId}
+                        accessibilityRole="button"
+                        accessibilityLabel="Pick LR date"
+                      >
+                        <Text
+                          style={
+                            pendingLrDate
+                              ? styles.lrDateFieldText
+                              : styles.lrDateFieldPlaceholder
+                          }
+                          numberOfLines={1}
+                        >
+                          {pendingLrDate || "Pick date"}
+                        </Text>
+                        <Feather
+                          name="calendar"
+                          size={16}
+                          color={Theme.primary}
+                        />
+                      </Pressable>
+                    </View>
+                    <View style={styles.lrFieldCol}>
+                      <Text style={styles.lrNumberFieldLabel}>INVOICE</Text>
+                      <TextInput
+                        value={pendingLrInvoice}
+                        onChangeText={setPendingLrInvoice}
+                        placeholder="Invoice no."
+                        placeholderTextColor={Theme.textMuted}
+                        style={styles.lrNumberFieldInput}
+                        autoCapitalize="characters"
+                        editable={!uploadingDocId}
+                        returnKeyType="done"
+                      />
+                    </View>
+                  </View>
+                  {showPendingLrCalendar ? (
+                    <View style={styles.lrCalendarWrap}>
+                      <CompactValidTillCalendar
+                        selectedIso={vaultDocDateToIso(pendingLrDate) ?? ""}
+                        onSelect={(iso) => {
+                          setPendingLrDate(formatVaultDocDate(iso) ?? iso);
+                          setShowPendingLrCalendar(false);
+                        }}
+                      />
+                    </View>
+                  ) : null}
                 </View>
               ) : null}
             </ScrollView>
@@ -6777,7 +6905,7 @@ export default function TripDetailScreen({
                 style={styles.docModalFooterCancelBtn}
                 onPress={() => {
                   setPendingVaultUpload(null);
-                  setPendingLrNumber("");
+                  resetPendingLrFields();
                 }}
                 activeOpacity={0.85}
                 disabled={!!uploadingDocId}

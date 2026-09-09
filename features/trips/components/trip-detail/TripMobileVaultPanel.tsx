@@ -4,7 +4,7 @@
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Theme from "@/constants/Theme";
-import { canAddMoreTripDocs, canMutateTripVaultDoc, formatVaultDocDate, isDriverPodVaultDoc, isEwayBillVaultDoc, isLrVaultDoc, type TripDocItem, VAULT_DOC_LIMIT_HINT, vaultDocHasPreviewableFile } from "@/features/trips/components/trip-detail/tripDocTypes";
+import { canAddMoreTripDocs, canMutateTripVaultDoc, formatLrVaultDateLabel, formatLrVaultNumberLabel, isDriverPodVaultDoc, isEwayBillVaultDoc, isLrVaultDoc, type TripDocItem, VAULT_DOC_LIMIT_HINT, vaultDocHasPreviewableFile } from "@/features/trips/components/trip-detail/tripDocTypes";
 import {
   EwayBillLrStrip,
   type EwayBillStripRow,
@@ -44,7 +44,7 @@ type Props = {
   ewayStripRows?: EwayBillStripRow[];
   onViewEwayBill?: (rowId: string) => void;
   canEditEwayBill?: boolean;
-  onSaveEwayBill?: (values: EwayFieldValues) => Promise<boolean>;
+  onSaveEwayBill?: (values: EwayFieldValues[]) => Promise<boolean>;
   tripIdLabel: string;
   createdAtLabel: string;
 };
@@ -317,6 +317,12 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
               !!onAddMore &&
               canAddMoreTripDocs(doc) &&
               (doc.id !== "vehicle-documents" || !!vehicleId);
+            const lrNumber = isLrVaultDoc(doc)
+              ? formatLrVaultNumberLabel(doc.documentNumber)
+              : null;
+            const lrDate = isLrVaultDoc(doc)
+              ? formatLrVaultDateLabel(doc.documentDate)
+              : null;
 
             return (
               <View key={doc.id} style={styles.card}>
@@ -363,22 +369,27 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
                       <Text style={styles.cardTitle} numberOfLines={1}>
                         {doc.label}
                       </Text>
-                      <Text style={styles.cardDetail} numberOfLines={2}>
-                        {doc.id === "vehicle-documents"
-                          ? isPending
-                            ? VEHICLE_COMPLIANCE_TYPE_HINT
-                            : doc.files?.length
-                              ? doc.files.map((file) => file.label).join(" · ")
-                              : doc.type
-                          : isLrVaultDoc(doc) && !isPending
-                            ? [
-                                doc.documentNumber?.trim()
-                                  ? `No. ${doc.documentNumber.trim()}`
-                                  : null,
-                                formatVaultDocDate(doc.documentDate),
-                              ]
-                                .filter(Boolean)
-                                .join(" · ") || "Uploaded"
+                      {!isPending && (lrNumber || lrDate) ? (
+                        <>
+                          {lrNumber ? (
+                            <Text style={styles.cardLrNumber} numberOfLines={1}>
+                              {lrNumber}
+                            </Text>
+                          ) : null}
+                          {lrDate ? (
+                            <Text style={styles.cardLrDate} numberOfLines={1}>
+                              {lrDate}
+                            </Text>
+                          ) : null}
+                        </>
+                      ) : (
+                        <Text style={styles.cardDetail} numberOfLines={2}>
+                          {doc.id === "vehicle-documents"
+                            ? isPending
+                              ? VEHICLE_COMPLIANCE_TYPE_HINT
+                              : doc.files?.length
+                                ? doc.files.map((file) => file.label).join(" · ")
+                                : doc.type
                             : podUploadLocked && isPending
                               ? "Available after the trip is completed"
                               : doc.documentNumber?.trim()
@@ -386,7 +397,8 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
                                 : (doc.files?.length ?? 0) > 1
                                   ? `${doc.files?.length} files on file — tap to view`
                                   : copy.detail}
-                      </Text>
+                        </Text>
+                      )}
                       <Text
                         style={[
                           styles.cardAction,
@@ -421,18 +433,20 @@ export const TripMobileVaultPanel = memo(function TripMobileVaultPanel({
                     <Text style={styles.addMoreText}>Add another</Text>
                   </TouchableOpacity>
                 ) : null}
-                {isLrVaultDoc(doc) ? (
-                  <EwayBillLrStrip
-                    rows={ewayStripRows}
-                    onView={onViewEwayBill ?? (() => undefined)}
-                    canEdit={canEditEwayBill}
-                    onSave={onSaveEwayBill}
-                  />
-                ) : null}
               </View>
             );
           })
         )}
+        {cardDocs.some((doc) => isLrVaultDoc(doc)) ? (
+          <View style={styles.ewayWrap}>
+            <EwayBillLrStrip
+              rows={ewayStripRows}
+              onView={onViewEwayBill ?? (() => undefined)}
+              canEdit={canEditEwayBill}
+              onSave={onSaveEwayBill}
+            />
+          </View>
+        ) : null}
       </View>
 
       <View style={styles.bottomBar}>
@@ -485,6 +499,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: PAD,
     paddingTop: 8,
     gap: 8,
+  },
+  ewayWrap: {
+    width: "100%",
   },
   emptyCard: {
     backgroundColor: Theme.cardWhite,
@@ -610,6 +627,19 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
     color: BODY,
+  },
+  cardLrNumber: {
+    marginTop: 2,
+    fontSize: 13,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    letterSpacing: 0.2,
+  },
+  cardLrDate: {
+    marginTop: 1,
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
   },
   cardDetail: {
     marginTop: 2,

@@ -54,6 +54,11 @@ import { queryKeys } from "@/lib/queryKeys";
 import * as driverLocationService from "@/features/driver/services/driverLocation.service";
 import { getMoverAssetClientPaid } from "@/features/trips/services/moverAssetPayment.service";
 import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
+import { parseLrFieldValues } from "@/features/trips/services/lrDocumentOcr.util";
+import {
+  parseEwayFieldEntries,
+  parseEwayFieldValues,
+} from "@/features/trips/services/ewayBillFields.util";
 import { useQueryClient } from "@tanstack/react-query";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { useRouter } from "expo-router";
@@ -161,8 +166,11 @@ function buildSlotCard(
       category: slot.category,
     };
   }
+  const isEwaySlot = slot.category === "eway" || slot.id === "eway_bill";
   const files = rows.map((row, index) => {
-    const number = row.document_number?.trim();
+    const number = isEwaySlot
+      ? parseEwayFieldValues(row.document_number).ewayNo
+      : parseLrFieldValues(row.document_number).lrNumber;
     return {
       id: `${slot.id}-${row.id}`,
       label: number
@@ -175,8 +183,18 @@ function buildSlotCard(
       documentId: row.id,
     };
   });
-  const documentNumber =
-    rows.map((row) => row.document_number?.trim()).find(Boolean) ?? null;
+  const storedFields = rows
+    .map((row) => parseLrFieldValues(row.document_number))
+    .find((fields) => fields.lrNumber || fields.date || fields.invoice);
+  const ewayRaw = isEwaySlot
+    ? rows.find((row) => parseEwayFieldEntries(row.document_number).length > 0)
+        ?.document_number ??
+      rows.find((row) => row.document_number?.trim())?.document_number ??
+      null
+    : null;
+  const documentNumber = isEwaySlot
+    ? ewayRaw?.trim() || null
+    : storedFields?.lrNumber || null;
   return {
     id: slot.id,
     label: slot.label,
@@ -187,7 +205,8 @@ function buildSlotCard(
     category: slot.category,
     files,
     documentNumber,
-    documentDate: rows[0]?.document_date ?? null,
+    documentDate: storedFields?.date || rows[0]?.document_date || null,
+    invoiceNumber: storedFields?.invoice || null,
     uploadedAt: rows[0]?.uploaded_at ?? null,
   };
 }
@@ -1631,9 +1650,9 @@ export function useTripDetail({
   }, [trip?.id, trip?.supplier_id, trip?.driver_id, trip?.vehicle_id, trip?.vehicle_display_number, driverLinked]);
 
   const loadTripDocuments = useCallback(() => {
-    if (!tripId) return;
+    if (!tripId) return Promise.resolve();
     const requestedTripId = tripId;
-    tripDocumentsService
+    return tripDocumentsService
       .getDocumentsByTripId(tripId)
       .then(({ documents, error }) => {
         // The active trip changed while this request was in flight -- a
@@ -1645,6 +1664,16 @@ export function useTripDetail({
         else setTripDocuments(documents ?? []);
       });
   }, [tripId]);
+
+  const upsertTripDocument = useCallback(
+    (row: tripDocumentsService.TripDocumentRow) => {
+      setTripDocuments((prev) => {
+        const without = prev.filter((doc) => doc.id !== row.id);
+        return [row, ...without];
+      });
+    },
+    [],
+  );
 
   // Ops has no other signal for a driver-uploaded document (e.g. POD) — trip_documents
   // has no org-scoped realtime coverage elsewhere, so this per-trip subscription is the
@@ -2598,6 +2627,7 @@ export function useTripDetail({
     // Documents
     tripDocuments,
     loadTripDocuments,
+    upsertTripDocument,
     computedTripDocs,
     vehiclePreviewDocs,
     vehiclePreviewUrls,

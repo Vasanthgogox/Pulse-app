@@ -3,6 +3,7 @@
  * Defined here (not in TripDetailFinanceView) so the hook layer can import
  * them without creating an inverted dependency on a UI component.
  */
+import { parseLrFieldValues } from "@/features/trips/services/lrDocumentOcr.util";
 
 export type DocCategory = "vehicle" | "trip" | "driver" | "lr" | "eway";
 
@@ -33,6 +34,8 @@ export interface TripDocItem {
   documentNumber?: string | null;
   /** Printed LR date from OCR when available. */
   documentDate?: string | null;
+  /** Printed invoice number typed with the LR. */
+  invoiceNumber?: string | null;
   /** Upload timestamp for the latest file in this slot (ISO). */
   uploadedAt?: string | null;
 }
@@ -241,6 +244,23 @@ export function formatVaultDocDate(value?: string | null): string | null {
   }
 
   return null;
+}
+
+/** LR number shown on the vault card, e.g. `LR No. AI3583`. */
+export function formatLrVaultNumberLabel(number?: string | null): string | null {
+  const trimmed = parseLrFieldValues(number).lrNumber;
+  if (!trimmed) return null;
+  return /^lr\s*no\.?/i.test(trimmed) ? trimmed : `LR No. ${trimmed}`;
+}
+
+/** LR date shown on the vault card, e.g. `LR date 03-Sep-26`. */
+export function formatLrVaultDateLabel(value?: string | null): string | null {
+  const raw = (value ?? "").trim();
+  if (!raw) return null;
+  const withoutPrefix = raw.replace(/^lr\s*date\s*/i, "").trim();
+  const formatted = formatVaultDocDate(withoutPrefix || raw);
+  if (!formatted) return null;
+  return `LR date ${formatted}`;
 }
 
 /** Convert a vault date (ISO, DD-MM-YYYY, or 04-Sep-26) to `YYYY-MM-DD` for date pickers. */

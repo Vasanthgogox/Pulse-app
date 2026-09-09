@@ -9,6 +9,8 @@ export async function extractLrFieldsFromUploadedDocument(input: {
   tripDocumentId: string;
   storagePath: string;
   createdBy: string;
+  /** When set, OCR must not replace the number typed in Confirm upload. */
+  existingDocumentNumber?: string | null;
 }): Promise<{ lrNumber: string | null; lrDate: string | null }> {
   if (input.tripDocumentId.startsWith("storage-")) {
     return { lrNumber: null, lrDate: null };
@@ -24,10 +26,14 @@ export async function extractLrFieldsFromUploadedDocument(input: {
       createdBy: input.createdBy,
     });
     const fields = parseLrFieldsFromOcrJob(job);
-    if (fields.lrNumber) {
+    const existing = input.existingDocumentNumber?.trim() || null;
+    if (fields.lrNumber && !existing) {
       await updateTripDocumentNumber(input.tripDocumentId, fields.lrNumber);
     }
-    return fields;
+    return {
+      ...fields,
+      lrNumber: existing ?? fields.lrNumber,
+    };
   } catch (error) {
     if (error instanceof OcrQuotaExceededError) {
       return { lrNumber: null, lrDate: null };
