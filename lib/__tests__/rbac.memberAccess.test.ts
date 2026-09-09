@@ -21,6 +21,7 @@ import {
   capabilitiesFromMemberSurfaces,
   defaultSurfacesForRole,
   domainsFromSurfaces,
+  hydrateMemberSurfaces,
   memberHasSurface,
   orgAllowsSurface,
   surfaceGroupsForDomains,
@@ -284,6 +285,61 @@ describe("TC-21A — Indents render under Sales and stay grantable", () => {
     ).map((d) => d.requires);
 
     expect(parents).not.toContain("tripops.tab");
+  });
+});
+
+// ══════════════════════════════════════════════════════════════════════════
+// Ground Ops — field staff who upload documents; no sibling-auto-add in hydration
+// ══════════════════════════════════════════════════════════════════════════
+describe("Ground Ops — hydration does not auto-add sibling surfaces", () => {
+  it("Ground Ops default surfaces", () => {
+    const groundOpsDefaults = defaultSurfacesForRole("ground_ops", HYBRID);
+    const ids = Object.keys(groundOpsDefaults).filter((id) => groundOpsDefaults[id as MemberSurfaceId]);
+
+    // Ground Ops should have exactly these surfaces (and parents will be added by hydration)
+    expect(ids).toContain("tripops.tab");
+    expect(ids).toContain("tripops.trips.view");
+    expect(ids).toContain("tripops.trips.detail");
+    expect(ids).toContain("tripops.trips.docs");
+  });
+
+  it("Ground Ops does NOT have finance/expenses/assign/reassign/tracking/verification/simulate/ratings by default", () => {
+    const groundOpsDefaults = defaultSurfacesForRole("ground_ops", HYBRID);
+
+    // These should NOT be in the default preset
+    const forbiddenSurfaces: MemberSurfaceId[] = [
+      "tripops.trips.finance",
+      "tripops.trips.expenses",
+      "tripops.trips.assign",
+      "tripops.trips.reassign",
+      "tripops.trips.tracking",
+      "tripops.trips.verification",
+      "tripops.trips.simulate",
+      "tripops.trips.ratings",
+    ];
+
+    for (const surface of forbiddenSurfaces) {
+      expect(groundOpsDefaults[surface]).not.toBe(true);
+    }
+  });
+
+  it("hydrateMemberSurfaces preserves explicit false and does not overwrite it", () => {
+    // Edge case: if a parent is explicitly false (via applySurfaceToggle OFF cascade),
+    // hydration must not overwrite it to true, even if the child is true.
+    // (This should not happen in production, but defensive code prevents it anyway.)
+    const stored: MemberSurfaceMap = {
+      "tripops.trips.docs": true,
+      "tripops.trips.detail": false, // explicitly disabled (edge case, shouldn't occur)
+    };
+
+    const hydrated = hydrateMemberSurfaces(stored, HYBRID);
+
+    // Parent chain should be filled in (tripops.trips.view, tripops.tab)
+    expect(hydrated["tripops.trips.view"]).toBe(true);
+    expect(hydrated["tripops.tab"]).toBe(true);
+
+    // But the explicit false should be preserved (defensive measure)
+    expect(hydrated["tripops.trips.detail"]).toBe(false);
   });
 });
 

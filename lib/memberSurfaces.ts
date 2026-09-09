@@ -1124,23 +1124,43 @@ export function orgAllowsSurface(
 }
 
 /**
- * When catalog grows, fill missing child surfaces under already-enabled parents
- * so existing members keep access until an owner explicitly turns them off.
+ * For each explicitly-granted surface, ensure its full requires-chain exists
+ * (fill in missing parents). Do NOT auto-add sibling surfaces that share a parent.
+ *
+ * Example: Ground Ops grants tripops.trips.docs, which requires tripops.trips.detail,
+ * which requires tripops.trips.view, which requires tripops.tab. Hydration ensures
+ * all parents exist. But tripops.trips.finance ALSO requires tripops.trips.detail —
+ * it is NOT auto-added just because the parent is true. Only explicitly-set surfaces
+ * get their requires-chain completed.
+ *
+ * Invariant: properly-formed data never has a parent explicitly false (false vs
+ * undefined are equivalent; both mean "not granted") while its child is true.
+ * This is enforced by applySurfaceToggle (cascades OFF to children when parent
+ * turns OFF) and normalizeSurfaces (completes parent chain on save). But to be
+ * defensive: only fill in missing parents, never overwrite an explicit false.
  */
 export function hydrateMemberSurfaces(
   stored: MemberSurfaceMap,
   orgCaps: Capability[],
 ): MemberSurfaceMap {
   const out: MemberSurfaceMap = { ...stored };
-  // Topological-ish: walk catalog order (parents declared before children).
+
+  // For each explicitly-set true surface, walk up its requires chain
+  // and ensure all parents are also true.
   for (const def of MEMBER_SURFACE_CATALOG) {
-    if (out[def.id] !== undefined) continue;
-    if (!orgAllowsSurface(orgCaps, def.id)) continue;
-    if (!def.requires) continue;
-    if (out[def.requires] === true) {
-      out[def.id] = true;
+    if (out[def.id] !== true) continue;
+
+    let cursor: MemberSurfaceId | undefined = def.requires;
+    while (cursor) {
+      // Only fill in missing parents; never overwrite an explicit false.
+      if (out[cursor] === undefined && orgAllowsSurface(orgCaps, cursor)) {
+        out[cursor] = true;
+      }
+      const parentDef = SURFACE_BY_ID[cursor];
+      cursor = parentDef?.requires;
     }
   }
+
   return out;
 }
 
@@ -1296,8 +1316,21 @@ export function defaultSurfacesForRole(
         "tripops.indents.view",
         "tripops.indents.allocate",
       ]);
-    default:
+    case "ground_ops":
+      return allOn([
+        "tripops.tab",
+        "tripops.trips.view",
+        "tripops.trips.detail",
+        "tripops.trips.docs",
+        // Note: Ground Ops intentionally excludes assign/reassign/tracking/expenses/finance
+        // to prevent field staff from altering trip logistics or viewing financials.
+      ]);
+    case "restricted":
       return {};
+    default: {
+      const _exhaustive: never = role;
+      return _exhaustive;
+    }
   }
 }
 
