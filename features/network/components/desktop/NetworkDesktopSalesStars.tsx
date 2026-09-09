@@ -53,7 +53,11 @@ export function NetworkProfileAvatarRating({
         accessibilityLabel={empty ? "No rating" : `${label} rating`}
       >
         <Text
-          style={[styles.singleScore, empty && styles.noRatingLabel]}
+          style={[
+            styles.singleScore,
+            empty && styles.noRatingLabel,
+            !empty && { fontSize: starSize, lineHeight: starSize },
+          ]}
           numberOfLines={empty ? 2 : 1}
         >
           {empty ? "No rating" : label}
@@ -130,17 +134,15 @@ const styles = StyleSheet.create({
     maxWidth: "100%",
   },
   singleStar: {
-    marginTop: 1,
     flexShrink: 0,
   },
   singleScore: {
-    fontSize: 20,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     fontVariant: ["tabular-nums"],
-    letterSpacing: -0.4,
+    letterSpacing: -0.2,
     includeFontPadding: false,
-    lineHeight: 22,
     textAlignVertical: "center",
   },
   noRatingLabel: {

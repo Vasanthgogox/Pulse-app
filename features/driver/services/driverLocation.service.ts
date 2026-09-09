@@ -153,6 +153,60 @@ export async function getLatestDriverLocationForTrip(
  * Fetch location history for a trip. Uses RPC (SECURITY DEFINER) so org members get rows.
  * Falls back to direct table select if RPC is not available.
  */
+export interface TripAppLocationPoint {
+  latitude: number;
+  longitude: number;
+  recorded_at: string;
+  address_label: string | null;
+  source: string | null;
+}
+
+/**
+ * App GPS pings for a trip timeline. Prefers rows tied to the trip, then the
+ * driver's own pings in the trip window when trip_id was not set.
+ */
+export async function getTripAppLocationsForTimeline(
+  tripId: string,
+  driverId: string | null | undefined,
+  windowStartIso: string | null | undefined,
+  windowEndIso: string | null | undefined,
+): Promise<{ error: Error | null; points: TripAppLocationPoint[] }> {
+  const { data, error } = await supabase()
+    .from('driver_locations')
+    .select('latitude, longitude, recorded_at, address_label, source')
+    .eq('trip_id', tripId)
+    .order('recorded_at', { ascending: true })
+    .limit(200);
+
+  if (!error && (data?.length ?? 0) > 0) {
+    return { error: null, points: data as TripAppLocationPoint[] };
+  }
+
+  if (!driverId) {
+    return { error: error ? new Error(error.message) : null, points: [] };
+  }
+
+  let query = supabase()
+    .from('driver_locations')
+    .select('latitude, longitude, recorded_at, address_label, source')
+    .eq('driver_id', driverId)
+    .order('recorded_at', { ascending: true })
+    .limit(200);
+
+  if (windowStartIso) {
+    const start = new Date(new Date(windowStartIso).getTime() - 15 * 60 * 1000).toISOString();
+    query = query.gte('recorded_at', start);
+  }
+  if (windowEndIso) {
+    const end = new Date(new Date(windowEndIso).getTime() + 15 * 60 * 1000).toISOString();
+    query = query.lte('recorded_at', end);
+  }
+
+  const { data: driverRows, error: driverError } = await query;
+  if (driverError) return { error: new Error(driverError.message), points: [] };
+  return { error: null, points: (driverRows ?? []) as TripAppLocationPoint[] };
+}
+
 export async function getTripLocationHistory(
   tripId: string,
   limit = 100

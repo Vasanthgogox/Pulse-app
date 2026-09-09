@@ -6,7 +6,7 @@ import { PartyAvatar } from '@/components/PartyAvatar';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import type { FleetOwnerCapacityStory } from '@/features/driver/services/fleetOwnerCapacityStory.service';
-import { splitLocationParts } from '@/features/network/utils/storyDisplay';
+import { storyCityLabel } from '@/features/network/utils/storyDisplay';
 import type { DriverReachStoryRow } from '@/features/reach/services/driverReferrals.service';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Plus } from 'lucide-react-native';
@@ -43,15 +43,8 @@ type Props = {
   onPressLoad: (story: DriverReachStoryRow) => void;
 };
 
-function shortLoc(value: string | null | undefined): string {
-  const city = splitLocationParts(value).city;
-  if (!city || city === '—') return '—';
-  return city.length > 8 ? `${city.slice(0, 7)}…` : city;
-}
-
-function shortVehicle(value: string | null | undefined, fallback: string): string {
-  const raw = (value ?? '').trim() || fallback;
-  return raw.length > 14 ? `${raw.slice(0, 13)}…` : raw;
+function shortLoc(value: string | null | undefined, empty = '—'): string {
+  return storyCityLabel(value) || empty;
 }
 
 function GradientRing({
@@ -87,13 +80,28 @@ function LoadPreview({
 }) {
   return (
     <View style={[styles.loadPreview, { width: AVATAR, height: AVATAR, borderRadius: AVATAR / 2 }]}>
-      <Text style={styles.loadPreviewVehicle} numberOfLines={1}>
+      <Text
+        style={styles.loadPreviewVehicle}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.8}
+      >
         {vehicle}
       </Text>
-      <Text style={styles.loadPreviewRoute} numberOfLines={1}>
+      <Text
+        style={styles.loadPreviewRoute}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.75}
+      >
         {origin}
       </Text>
-      <Text style={styles.loadPreviewRoute} numberOfLines={1}>
+      <Text
+        style={styles.loadPreviewRoute}
+        numberOfLines={1}
+        adjustsFontSizeToFit
+        minimumFontScale={0.75}
+      >
         → {destination}
       </Text>
     </View>
@@ -234,9 +242,9 @@ export function DriverPulseStoryReel({
             accessibilityLabel={`Fleet availability, ${story.vehicle_type ?? 'vehicle'}, ${shortLoc(story.origin)} to ${shortLoc(story.destination)}`}
           >
             <LoadPreview
-              vehicle={shortVehicle(story.vehicle_type, 'Vehicle')}
+              vehicle={(story.vehicle_type ?? '').trim() || 'Vehicle'}
               origin={shortLoc(story.origin)}
-              destination={shortLoc(story.destination) === '—' ? 'Anywhere' : shortLoc(story.destination)}
+              destination={shortLoc(story.destination, 'Anywhere')}
             />
           </StoryBubble>
         ))}
@@ -260,7 +268,7 @@ export function DriverPulseStoryReel({
               }
             >
               <LoadPreview
-                vehicle={shortVehicle(story.snapshot_vehicle_type, 'Load')}
+                vehicle={(story.snapshot_vehicle_type ?? '').trim() || 'Load'}
                 origin={shortLoc(story.snapshot_origin)}
                 destination={shortLoc(story.snapshot_destination)}
               />

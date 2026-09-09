@@ -135,6 +135,7 @@ export const queryKeys = {
       ["q", "finance-aggregation", "supplier", orgId, applyAdjustments] as const,
     customer: (orgId: string, applyAdjustments: boolean) =>
       ["q", "finance-aggregation", "customer", orgId, applyAdjustments] as const,
+    dco: (orgId: string) => ["q", "finance-aggregation", "dco", orgId] as const,
   },
 
   vehicles: {
@@ -211,6 +212,11 @@ export const queryKeys = {
     /** Explicit Fleet Owner capability (not employment). */
     fleetOwner: (userId: string) =>
       ["q", "driver-app", userId, "fleet-owner"] as const,
+    /** DCO (driver-cum-owner / independent owner-operator) admin-approval
+     * status — unrelated to the "DCO Available" A7.3 surface above; named
+     * dcoOwnerOperator here specifically to avoid confusion with that. */
+    dcoOwnerOperator: (userId: string) =>
+      ["q", "driver-app", userId, "dco-owner-operator"] as const,
     /** Personal owner vehicles (Phase 1b). */
     ownerVehicles: (userId: string) =>
       ["q", "driver-app", userId, "owner-vehicles"] as const,

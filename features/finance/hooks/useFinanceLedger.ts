@@ -352,7 +352,7 @@ export function useFinanceLedger({
 
   const ledgerRowsByCategory = useMemo(() => {
     const match = (
-      r: { contact_type?: "client" | "supplier" | "driver" | null },
+      r: { contact_type?: "client" | "supplier" | "driver" | "dco" | null },
       cat: LedgerCategory,
     ): boolean => {
       if (cat === "all") return true;
@@ -491,7 +491,7 @@ export function useFinanceLedger({
   const ledgerCategoryCounts = useMemo(() => {
     const base = filteredLedgerBySource;
     const match = (
-      r: { contact_type?: "client" | "supplier" | "driver" | null },
+      r: { contact_type?: "client" | "supplier" | "driver" | "dco" | null },
       cat: LedgerCategory,
     ): boolean => {
       if (cat === "all") return true;

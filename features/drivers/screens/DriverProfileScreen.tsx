@@ -31,6 +31,7 @@ import * as driversService from '@/features/drivers/services/drivers.service';
 import * as tripsService from '@/features/trips/services/trips.service';
 import { getVehicleById } from '@/features/vehicles/services/vehicles.service';
 import { useDriverFleetOwnerQuery } from '@/lib/queries/useDriverFleetOwnerQuery';
+import { useDcoStatusQuery } from '@/lib/queries/useDcoStatusQuery';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import {
@@ -41,6 +42,7 @@ import {
   Dna,
   Edit3,
   Fuel,
+  Gavel,
   Gauge,
   Globe,
   History,
@@ -99,6 +101,7 @@ export default function DriverProfileScreen() {
   const colors = useDriverThemeColors();
   const { user, profile, signOut, refreshSession, patchProfile } = useAuth();
   const { isFleetOwner } = useDriverFleetOwnerQuery(profile?.uid);
+  const { status: dcoStatus } = useDcoStatusQuery(profile?.uid);
   const { locale, localeOptions } = useLanguage();
   const languageLabel =
     localeOptions.find((o) => o.value === locale)?.label ?? 'English';
@@ -789,6 +792,46 @@ export default function DriverProfileScreen() {
                         {isFleetOwner
                           ? 'Vehicles · documents · browse available loads'
                           : 'Add your fleet · bid for loads · track vehicle earnings'}
+                      </Text>
+                    </View>
+                  </View>
+                  <View style={[styles.chevPill, { backgroundColor: isDark ? colors.surfaceElevated : '#f1f5f9' }]}>
+                    <ChevronRight size={18} color={muted} />
+                  </View>
+                </TouchableOpacity>
+
+                <TouchableOpacity
+                  style={[styles.rowCard, { backgroundColor: colors.surface, borderColor: cardBorder }]}
+                  onPress={() =>
+                    router.push(ROUTES.driverDcoStatus() as Parameters<typeof router.push>[0])
+                  }
+                  activeOpacity={0.88}
+                  accessibilityRole="button"
+                  accessibilityLabel="DCO status"
+                >
+                  <View style={styles.rowCardLeft}>
+                    <View style={[styles.blueIcon, { backgroundColor: isDark ? colors.emeraldMuted : 'rgba(167,243,208,0.45)' }]}>
+                      <Gavel size={20} color={colors.emerald} />
+                    </View>
+                    <View style={styles.rowCardText}>
+                      <Text style={[styles.rowEyebrow, { color: muted }]}>
+                        {dcoStatus === 'APPROVED' ? 'DCO' : 'INDEPENDENT OWNER-OPERATOR'}
+                      </Text>
+                      <Text style={[styles.rowTitle, { color: colors.text }]}>
+                        {dcoStatus === 'NONE'
+                          ? 'Become a DCO'
+                          : dcoStatus === 'PENDING'
+                            ? 'DCO — Under review'
+                            : dcoStatus === 'APPROVED'
+                              ? 'DCO status'
+                              : dcoStatus === 'REJECTED'
+                                ? 'DCO — Request again'
+                                : 'DCO — Suspended'}
+                      </Text>
+                      <Text style={[styles.rowSub, { color: muted }]} numberOfLines={2}>
+                        {dcoStatus === 'APPROVED'
+                          ? 'Bid in the marketplace as an independent owner-operator'
+                          : 'Admin-approved independent owner-operator status'}
                       </Text>
                     </View>
                   </View>

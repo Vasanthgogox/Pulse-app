@@ -1,0 +1,11 @@
+import { chromium } from 'playwright';
+const OUT = '/private/tmp/claude-501/-Users-ggx-Desktop-Pulse-app/3fa56c9e-c811-4f44-bc3a-b1b68b1011ee/scratchpad/dco-shots';
+const browser = await chromium.launch({ headless: true });
+const page = await browser.newPage({ viewport: { width: 414, height: 896 } });
+page.on('pageerror', (e) => console.log('PAGE ERROR:', e.message));
+page.on('console', (msg) => { if (msg.type() === 'error') console.log('CONSOLE ERROR:', msg.text()); });
+await page.goto('http://localhost:8081/dco-status', { waitUntil: 'load', timeout: 60000 });
+await page.waitForTimeout(3000);
+console.log('URL after direct nav:', page.url());
+await page.screenshot({ path: `${OUT}/direct-nav-check.png`, fullPage: true });
+await browser.close();

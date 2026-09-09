@@ -184,3 +184,69 @@ export async function createMarketplaceFeeOrder(
     },
   };
 }
+
+/**
+ * A10.2 — PILOT/TEST ONLY. Mirrors createMarketplaceFeeOrder() but for the
+ * `marketplace-test-payment` edge function (cash / test_online), used to
+ * exercise the required -> paid -> trip state machine without Razorpay
+ * credentials. Server-side gated (MARKETPLACE_TEST_PAYMENTS_ENABLED); this
+ * client call never supplies an amount. Remove alongside the edge function
+ * once the pilot's temporary payment methods are retired.
+ */
+export type TestMarketplaceFeeProvider = 'cash' | 'test_online';
+
+export type TestMarketplaceFeeOrder = {
+  orderId: string;
+  amount: number;
+  currency: string;
+  provider: TestMarketplaceFeeProvider;
+};
+
+export async function createTestMarketplaceFeeOrder(
+  bidId: string,
+  provider: TestMarketplaceFeeProvider,
+): Promise<{ error: Error | null; order: TestMarketplaceFeeOrder | null }> {
+  const { data, error } = await supabase().functions.invoke('marketplace-test-payment', {
+    body: { action: 'create', bidId, provider },
+  });
+  if (error) {
+    const payload = (data ?? null) as { error?: string; message?: string } | null;
+    const detail = payload?.message?.trim() || payload?.error?.trim() || error.message;
+    return { error: new Error(detail), order: null };
+  }
+  const result = data as { orderId?: string; amount?: number; currency?: string; provider?: string } | null;
+  if (!result?.orderId) {
+    return { error: new Error('Test payment order response was incomplete.'), order: null };
+  }
+  return {
+    error: null,
+    order: {
+      orderId: result.orderId,
+      amount: result.amount ?? 0,
+      currency: result.currency ?? 'INR',
+      provider,
+    },
+  };
+}
+
+/**
+ * A10.2 — PILOT/TEST ONLY. Simulates a provider outcome for the bidder's
+ * OWN current pending test-payment attempt on this bid. Never tells the
+ * server which payment/amount to confirm -- only "paid" or "failed" for
+ * "my current attempt on this bid"; the server derives the rest and calls
+ * the same confirm_marketplace_fee_payment() Razorpay itself uses.
+ */
+export async function simulateTestMarketplaceFeePayment(
+  bidId: string,
+  outcome: 'paid' | 'failed',
+): Promise<{ error: Error | null }> {
+  const { data, error } = await supabase().functions.invoke('marketplace-test-payment', {
+    body: { action: 'simulate', bidId, outcome },
+  });
+  if (error) {
+    const payload = (data ?? null) as { error?: string; message?: string } | null;
+    const detail = payload?.message?.trim() || payload?.error?.trim() || error.message;
+    return { error: new Error(detail) };
+  }
+  return { error: null };
+}

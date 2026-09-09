@@ -21,6 +21,7 @@ export const ROUTE_INVENTORY: readonly RouteInventoryEntry[] = [
   { file: 'app/(driver)/expense-capture.tsx', samplePath: '/(driver)/expense-capture' },
   { file: 'app/(driver)/general-expense.tsx', samplePath: '/(driver)/general-expense' },
   { file: 'app/(driver)/become-fleet-owner.tsx', samplePath: '/(driver)/become-fleet-owner' },
+  { file: 'app/(driver)/dco-status.tsx', samplePath: '/(driver)/dco-status' },
   { file: 'app/(driver)/my-fleet/index.tsx', samplePath: '/(driver)/my-fleet' },
   { file: 'app/(driver)/my-fleet/add.tsx', samplePath: '/(driver)/my-fleet/add' },
   { file: 'app/(driver)/my-fleet/[vehicleId].tsx', samplePath: '/(driver)/my-fleet/:vehicleId' },

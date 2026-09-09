@@ -193,7 +193,7 @@ export interface LedgerRow {
   created_at: string;
   /** From cash_entries for entity tab aggregation */
   contact_id?: string | null;
-  contact_type?: "client" | "supplier" | "driver" | null;
+  contact_type?: "client" | "supplier" | "driver" | "dco" | null;
   vehicle_number?: string | null;
   driver_name?: string | null;
   trips?: {
@@ -244,7 +244,7 @@ export interface CreateLedgerEntryData {
   transaction_date?: string;
   /** When provided, stored on cash_entries for aggregation and auto-tag */
   contact_id?: string | null;
-  contact_type?: "client" | "supplier" | "driver" | null;
+  contact_type?: "client" | "supplier" | "driver" | "dco" | null;
   category?: string | null;
   indent_id?: string | null;
   vehicle_number?: string | null;
@@ -254,7 +254,7 @@ export interface CreateLedgerEntryData {
   ledger_category?: string | null;
 }
 
-type LedgerContactType = "client" | "supplier" | "driver";
+type LedgerContactType = "client" | "supplier" | "driver" | "dco";
 
 const GENERIC_PARTY_LABELS = new Set([
   "",
@@ -359,6 +359,28 @@ async function resolveContactDisplayName(
     return (
       normalizePartyName(row?.name) ||
       normalizePartyName(row?.company_name) ||
+      null
+    );
+  }
+
+  if (contactType === "dco") {
+    // dco_payees has no organization_id (a DCO is a global, person-owned
+    // identity, not an org-owned record like suppliers/drivers) — cannot
+    // filter by orgId here. Name itself lives on profiles, not dco_payees.
+    const { data: payee } = await supabase()
+      .from("dco_payees")
+      .select("user_id")
+      .eq("id", trimmedContactId)
+      .maybeSingle();
+    const userId = (payee as { user_id?: string | null } | null)?.user_id;
+    if (!userId) return null;
+    const { data: profile } = await supabase()
+      .from("profiles")
+      .select("full_name")
+      .eq("id", userId)
+      .maybeSingle();
+    return (
+      normalizePartyName((profile as { full_name?: string | null } | null)?.full_name) ||
       null
     );
   }

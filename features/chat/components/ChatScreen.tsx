@@ -2,7 +2,10 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { useQuery } from "@tanstack/react-query";
 import { getLinkedOrgProfilesBatch } from "@/features/clients/services/clients.service";
 import { ChatPartyAvatar } from "@/features/chat/components/ChatPartyAvatar";
-import { shouldHideLoadStoryFromAuthor } from "@/features/network/utils/storyLoadVisibility.util";
+import {
+  isSelfNetworkStory,
+  shouldHideLoadStoryFromAuthor,
+} from "@/features/network/utils/storyLoadVisibility.util";
 import { isIndentStoryLive } from "@/features/network/utils/indentStoryWindow.util";
 import {
   isDriverSwapPreviewMessage,
@@ -1642,10 +1645,9 @@ export function ChatScreen() {
   );
   const integratedNetworkStories = useMemo(() => {
     if (!shouldLoadStoryFeed || networkFeedPosts.length === 0) return [];
-    const integratedOrgIds = new Set<string>([
-      currentOrgId,
-      ...sortedNetChats.map((row) => row.partnerId).filter(Boolean),
-    ]);
+    const partnerOrgIds = new Set<string>(
+      sortedNetChats.map((row) => row.partnerId).filter(Boolean),
+    );
     const supplierOrgIds = new Set<string>();
     const clientOrgIds = new Set<string>();
     for (const partner of netPartners) {
@@ -1654,12 +1656,12 @@ export function ChatScreen() {
     }
     return networkFeedPosts.filter((post) => {
       if (post.type !== "LOAD" && post.type !== "VEHICLE_AVAILABILITY") return false;
-      if (!post.organization_id || !integratedOrgIds.has(post.organization_id)) return false;
-      if (
-        post.type === "LOAD" &&
-        !post.is_sponsored &&
-        !isIndentStoryLive(post)
-      ) {
+      if (isSelfNetworkStory(post, currentOrgId)) return false;
+      if (post.is_sponsored) return true;
+      if (!post.organization_id || !partnerOrgIds.has(post.organization_id)) {
+        return false;
+      }
+      if (post.type === "LOAD" && !isIndentStoryLive(post)) {
         return false;
       }
       if (

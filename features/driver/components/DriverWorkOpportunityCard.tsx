@@ -4,9 +4,10 @@
 import { PartyAvatar } from '@/components/PartyAvatar';
 import Theme from '@/constants/Theme';
 import { splitLocationParts } from '@/features/network/utils/storyDisplay';
+import { withWebSafeShadows } from '@/lib/platformViewStyle.util';
 import { ArrowRight, Calendar, Package, Truck } from 'lucide-react-native';
 import type { ReactNode } from 'react';
-import { StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { Platform, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 
 export type WorkOpportunityBadge = 'boosted' | 'open' | 'awarded' | 'quoted' | null;
 
@@ -241,14 +242,24 @@ export function DriverWorkOpportunityCard({
 }
 
 const styles = StyleSheet.create({
-  card: {
-    borderRadius: 12,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.borderLight,
+  card: withWebSafeShadows({
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: '#d7dee8',
     padding: 12,
     gap: 10,
     backgroundColor: Theme.cardWhite,
-  },
+    ...Platform.select({
+      ios: {
+        shadowColor: '#0f172a',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.1,
+        shadowRadius: 10,
+      },
+      android: { elevation: 3 },
+      default: {},
+    }),
+  }),
   cardAwarded: {
     borderColor: Theme.darkGreen,
     borderWidth: 1,

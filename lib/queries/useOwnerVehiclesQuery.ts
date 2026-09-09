@@ -13,6 +13,7 @@ import {
   infrastructureShouldRetry,
 } from '@/lib/queryRetry';
 import { useDriverFleetOwnerQuery } from '@/lib/queries/useDriverFleetOwnerQuery';
+import { useDcoStatusQuery } from '@/lib/queries/useDcoStatusQuery';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback } from 'react';
 
@@ -20,6 +21,8 @@ export function useOwnerVehiclesQuery(userId?: string | null) {
   const { status, profile } = useAuth();
   const uid = userId ?? profile?.uid ?? '';
   const { isFleetOwner } = useDriverFleetOwnerQuery(uid);
+  const { isDcoApproved } = useDcoStatusQuery(uid);
+  const canOwnVehicles = isFleetOwner || isDcoApproved;
 
   const query = useQuery({
     queryKey: queryKeys.driverApp.ownerVehicles(uid),
@@ -28,7 +31,7 @@ export function useOwnerVehiclesQuery(userId?: string | null) {
       if (error) throw error;
       return vehicles;
     },
-    enabled: !!uid && isFleetOwner && status !== 'restoring',
+    enabled: !!uid && canOwnVehicles && status !== 'restoring',
     staleTime: 30_000,
     gcTime: 10 * 60_000,
     retry: infrastructureShouldRetry,
@@ -54,6 +57,7 @@ export function useOwnerVehicleDetailQuery(
   const { status, profile } = useAuth();
   const uid = userId ?? profile?.uid ?? '';
   const { isFleetOwner } = useDriverFleetOwnerQuery(uid);
+  const { isDcoApproved } = useDcoStatusQuery(uid);
   const id = vehicleId?.trim() || '';
 
   return useQuery({
@@ -63,7 +67,7 @@ export function useOwnerVehicleDetailQuery(
       if (error) throw error;
       return vehicle;
     },
-    enabled: !!uid && !!id && isFleetOwner && status !== 'restoring',
+    enabled: !!uid && !!id && (isFleetOwner || isDcoApproved) && status !== 'restoring',
     staleTime: 30_000,
     retry: infrastructureShouldRetry,
     retryDelay: infrastructureRetryDelay,

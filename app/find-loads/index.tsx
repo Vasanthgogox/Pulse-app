@@ -26,6 +26,7 @@ import {
   titleCaseWord,
 } from "@/features/network/components/MarketplaceLoadCardChrome";
 import { OrgMyBidsList } from "@/features/network/components/OrgMyBidsList";
+import type { MarketplaceFeePreview } from "@/features/network/components/bidding/BidConfirmModal";
 import {
   composeFindLoadsOpportunity,
   findLoadsDisplayId,
@@ -37,10 +38,12 @@ import {
   type OrgOpenMarketplaceLoad,
 } from "@/features/network/services/findLoadsForOrg.service";
 import { formatStoryDate } from "@/features/network/utils/storyDisplay";
+import { calculateMarketplacePlatformFee } from "@/features/network/services/marketBids.service";
 import { isVehicleTypeCompatibleWithFleet } from "@/features/marketplace/utils/fleetFit.util";
 import { formatMarketplaceTransactionError } from "@/features/marketplace/utils/marketplaceErrorFormat.util";
 import { getVehiclesByOrganization } from "@/features/vehicles/services/vehicles.service";
 import { showAppAlert } from "@/lib/appAlert";
+import { formatINR } from "@/lib/format";
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import { queryKeys } from "@/lib/queryKeys";
 import { ROUTES } from "@/lib/routes";
@@ -48,7 +51,7 @@ import { useMemberAccess } from "@/lib/useMemberAccess";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { Award, ChevronRight, X } from "lucide-react-native";
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import {
   FlatList,
   Modal,
@@ -474,6 +477,8 @@ function OrgMarketBidModal({
   const [note, setNote] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [feePreview, setFeePreview] = useState<MarketplaceFeePreview | undefined>(undefined);
+  const feeRequestRef = useRef(0);
 
   React.useEffect(() => {
     if (load) {
@@ -481,13 +486,45 @@ function OrgMarketBidModal({
       setNote("");
       setError(null);
       setSubmitting(false);
+      setFeePreview(undefined);
     }
   }, [load]);
 
-  if (!load) return null;
-
   const parsedAmount = Number(amount.replace(/[^0-9.]/g, ""));
   const amountValid = Number.isFinite(parsedAmount) && parsedAmount > 0;
+
+  // A11.1 — live fee preview, debounced, skipped entirely for an
+  // invalid/empty amount so no request fires while the field is blank.
+  useEffect(() => {
+    if (!load || !amountValid) {
+      setFeePreview(undefined);
+      return;
+    }
+    const requestId = ++feeRequestRef.current;
+    setFeePreview({ status: "loading" });
+    const timer = setTimeout(() => {
+      void calculateMarketplacePlatformFee(parsedAmount).then(({ error: calcError, calc }) => {
+        if (feeRequestRef.current !== requestId) return;
+        if (calcError || !calc) {
+          setFeePreview({ status: "error" });
+          return;
+        }
+        if (!calc.is_active_config_found) {
+          setFeePreview({ status: "inactive" });
+          return;
+        }
+        setFeePreview({
+          status: "active",
+          amount: calc.resolved_fee,
+          capped: Boolean(calc.capped),
+        });
+      });
+    }, 400);
+    return () => clearTimeout(timer);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [load?.id, amountValid, parsedAmount]);
+
+  if (!load) return null;
 
   const handleSubmit = async () => {
     if (!amountValid || submitting) return;
@@ -529,6 +566,28 @@ function OrgMarketBidModal({
             style={[styles.modalInput, !amountValid && amount.length > 0 && styles.modalInputError]}
             editable={!submitting}
           />
+
+          {feePreview?.status === "active" ? (
+            <View style={styles.feePreviewBlock}>
+              <View style={styles.feePreviewRow}>
+                <Text style={styles.feePreviewLabel}>Your bid</Text>
+                <Text style={styles.feePreviewValue}>{formatINR(parsedAmount)}</Text>
+              </View>
+              <View style={styles.feePreviewRow}>
+                <Text style={styles.feePreviewLabel}>
+                  Marketplace fee{feePreview.capped ? " (capped)" : ""}
+                </Text>
+                <Text style={styles.feePreviewValue}>{formatINR(feePreview.amount)}</Text>
+              </View>
+              <Text style={styles.feePreviewNote}>
+                You pay Pulse {formatINR(feePreview.amount)} separately if you win this bid
+              </Text>
+            </View>
+          ) : feePreview?.status === "inactive" ? (
+            <View style={styles.feePreviewBlock}>
+              <Text style={styles.feePreviewNote}>No platform fee currently applies</Text>
+            </View>
+          ) : null}
 
           <Text style={styles.modalFieldLabel}>Note (optional)</Text>
           <TextInput
@@ -894,6 +953,24 @@ const styles = StyleSheet.create({
   },
   modalInputError: { borderColor: Theme.negative },
   modalError: { fontSize: 12, color: Theme.negative, marginTop: 8 },
+  feePreviewBlock: {
+    borderRadius: 10,
+    backgroundColor: Theme.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginTop: 8,
+    gap: 6,
+  },
+  feePreviewRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+  feePreviewLabel: { fontSize: 12, fontWeight: "500", color: Theme.textSecondary },
+  feePreviewValue: { fontSize: 13, fontWeight: "700", color: Theme.textPrimaryDark },
+  feePreviewNote: { fontSize: 11, fontWeight: "400", color: Theme.textMuted, lineHeight: 15 },
   modalActions: {
     flexDirection: "row",
     gap: 10,

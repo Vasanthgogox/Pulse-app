@@ -1,4 +1,6 @@
 import {
+  isSelfNetworkStory,
+  selectNetworkAndSponsoredStoryPosts,
   shouldHideLoadStoryFromAuthor,
   shouldShowFeedPostForOrg,
 } from "@/features/network/utils/storyLoadVisibility.util";
@@ -113,6 +115,80 @@ describe("shouldShowFeedPostForOrg — organic rules still apply", () => {
 
   it("returns false when there is no viewing org", () => {
     expect(shouldShowFeedPostForOrg({ ...base, viewerOrgId: null })).toBe(false);
+  });
+});
+
+describe("selectNetworkAndSponsoredStoryPosts", () => {
+  const me = AJIO;
+  const partner = AERO;
+
+  it("drops own-org posts but keeps partner organic and sponsored ads", () => {
+    const selected = selectNetworkAndSponsoredStoryPosts(
+      [
+        {
+          organization_id: me,
+          type: "LOAD",
+          is_sponsored: false,
+          created_at: "2026-09-09T10:00:00Z",
+        },
+        {
+          organization_id: partner,
+          type: "LOAD",
+          is_sponsored: false,
+          created_at: "2026-09-09T09:00:00Z",
+        },
+        {
+          organization_id: PR_LOGISTICS,
+          type: "LOAD",
+          is_sponsored: true,
+          created_at: "2026-09-09T08:00:00Z",
+        },
+      ],
+      me,
+    );
+    expect(selected.map((p) => p.organization_id)).toEqual([partner, PR_LOGISTICS]);
+  });
+
+  it("collapses multiple LOAD posts from the same org into one bubble", () => {
+    const selected = selectNetworkAndSponsoredStoryPosts(
+      [
+        {
+          id: "load-a",
+          organization_id: partner,
+          type: "LOAD",
+          is_sponsored: false,
+          created_at: "2026-09-09T10:00:00Z",
+        },
+        {
+          id: "load-b",
+          organization_id: partner,
+          type: "LOAD",
+          is_sponsored: false,
+          created_at: "2026-09-09T09:00:00Z",
+        },
+        {
+          id: "load-a-twin",
+          organization_id: partner,
+          type: "LOAD",
+          is_sponsored: false,
+          created_at: "2026-09-09T08:30:00Z",
+        },
+      ],
+      me,
+    );
+    expect(selected.map((p) => p.id)).toEqual(["load-a"]);
+  });
+
+  it("treats padded org ids as self so Mine twins cannot leak onto the right", () => {
+    expect(
+      isSelfNetworkStory({ organization_id: ` ${AJIO} ` }, AJIO),
+    ).toBe(true);
+    expect(
+      selectNetworkAndSponsoredStoryPosts(
+        [{ organization_id: ` ${AJIO} `, type: "LOAD", created_at: "2026-09-09T10:00:00Z" }],
+        AJIO,
+      ),
+    ).toEqual([]);
   });
 });
 

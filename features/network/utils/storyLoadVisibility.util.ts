@@ -50,6 +50,77 @@ export function shouldShowFeedPostForOrg(opts: {
   return opts.partnerOrgIds.has(authorOrgId);
 }
 
+/** Trimmed org ids — feed rows and viewer context must compare the same way. */
+export function sameOrgId(
+  a: string | null | undefined,
+  b: string | null | undefined,
+): boolean {
+  const left = (a ?? "").trim();
+  const right = (b ?? "").trim();
+  return Boolean(left) && left === right;
+}
+
+/** Own-org broadcasts belong in Load Center / history, not the network story strip. */
+export function isSelfNetworkStory(
+  post: { organization_id?: string | null },
+  viewerOrgId: string | null | undefined,
+): boolean {
+  return sameOrgId(post.organization_id, viewerOrgId);
+}
+
+export function isStoryReelPostType(type: string | null | undefined): boolean {
+  return type === "LOAD" || type === "VEHICLE_AVAILABILITY";
+}
+
+function storyReelDedupeKey(post: {
+  organization_id?: string | null;
+  type?: string | null;
+  is_sponsored?: boolean | null;
+}): string {
+  const lane = post.is_sponsored ? "ad" : "organic";
+  // One bubble per org per type per lane. Per-indent keys stacked every
+  // Godrej load (and twins of the same lane) across the strip.
+  return `${post.organization_id ?? "fleet"}:${post.type}:${lane}`;
+}
+
+/**
+ * Horizontal pulse-story row: connected-org indent stories + sponsored
+ * Pulse Reach indent ads (and capacity alerts). Never includes the viewer's
+ * own posts (no Mine bubble, no self twins on the right).
+ */
+export function selectNetworkAndSponsoredStoryPosts<
+  T extends {
+    id?: string | null;
+    organization_id?: string | null;
+    type?: string | null;
+    is_sponsored?: boolean | null;
+    created_at?: string | null;
+  },
+>(posts: T[], viewerOrgId: string | null | undefined, limit = 24): T[] {
+  const businessOnly = [...posts]
+    .filter((p) => isStoryReelPostType(p.type ?? null))
+    .filter((p) => !isSelfNetworkStory(p, viewerOrgId))
+    .sort((a, b) => {
+      const aAd = a.is_sponsored ? 1 : 0;
+      const bAd = b.is_sponsored ? 1 : 0;
+      if (aAd !== bAd) return bAd - aAd;
+      return (
+        new Date(b.created_at ?? 0).getTime() -
+        new Date(a.created_at ?? 0).getTime()
+      );
+    });
+  const seenKeys = new Set<string>();
+  const stories: T[] = [];
+  for (const p of businessOnly) {
+    const storyKey = storyReelDedupeKey(p);
+    if (seenKeys.has(storyKey)) continue;
+    seenKeys.add(storyKey);
+    stories.push(p);
+    if (stories.length >= limit) break;
+  }
+  return stories;
+}
+
 export function shouldHideLoadStoryFromAuthor(opts: {
   authorOrgId: string | null | undefined;
   /** linked_organization_id values from my integrated suppliers book */

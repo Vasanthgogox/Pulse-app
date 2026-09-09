@@ -31,6 +31,15 @@ export interface SupplierLedgerAggregationRow {
   unsettled: number;
 }
 
+export interface DcoLedgerAggregationRow {
+  dco_payee_id: string;
+  dco_user_id: string;
+  trips_count: number;
+  due: number;
+  paid: number;
+  outstanding: number;
+}
+
 export interface CustomerLedgerTripInput {
   client_id: string;
   trip_id: string;
@@ -94,6 +103,30 @@ export async function getSupplierLedgerAggregation(
     due: n(r.due),
     paid: n(r.paid),
     unsettled: n(r.unsettled),
+  }));
+}
+
+/**
+ * DCO-6: unlike suppliers/drivers, there is no org-owned anchor table to
+ * iterate — dco_payees has no organization_id (a DCO is a global,
+ * person-owned identity). The RPC's own result set is already the full
+ * list of DCO payees with at least one trip in this org; a payee with zero
+ * trips here is correctly absent, not something the caller needs to add.
+ */
+export async function getDcoLedgerAggregation(
+  orgId: string,
+): Promise<DcoLedgerAggregationRow[]> {
+  const { data, error } = await supabase().rpc("get_dco_ledger_aggregation", {
+    p_org_id: orgId,
+  });
+  if (error) throw new Error(error.message);
+  return ((data ?? []) as Record<string, unknown>[]).map((r) => ({
+    dco_payee_id: String(r.dco_payee_id),
+    dco_user_id: String(r.dco_user_id),
+    trips_count: n(r.trips_count),
+    due: n(r.due),
+    paid: n(r.paid),
+    outstanding: n(r.outstanding),
   }));
 }
 

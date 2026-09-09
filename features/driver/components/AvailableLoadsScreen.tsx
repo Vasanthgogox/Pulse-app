@@ -377,7 +377,7 @@ const styles = StyleSheet.create({
     paddingBottom: 8,
     gap: 8,
   },
-  marketListPad: { paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD, gap: 8 },
+  marketListPad: { paddingHorizontal: DRIVER_DETAIL_HORIZONTAL_PAD, gap: 12 },
   marketplaceDivider: {
     height: StyleSheet.hairlineWidth,
     backgroundColor: 'rgba(148,163,184,0.35)',

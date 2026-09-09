@@ -21,6 +21,7 @@ export { aggregateDrivers, computeDriverCommissionForTrip } from './aggregateDri
 export { aggregateDriversFromRpc } from './aggregateDriversFromRpc';
 export { aggregateSuppliersFromRpc } from './aggregateSuppliersFromRpc';
 export { aggregateCustomersFromRpc } from './aggregateCustomersFromRpc';
+export { aggregateDcoPayeesFromRpc, type DcoPayeeName } from './aggregateDcoPayeesFromRpc';
 export {
   buildMonthlyDriverStatement,
   type MonthlyStatementRow,

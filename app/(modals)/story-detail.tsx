@@ -272,23 +272,32 @@ export default function StoryDetailRoute() {
     myOrgId && preview && preview.organization_id === myOrgId,
   );
 
-  if (isDriver && params.postId) {
+  if (isDriver && params.postId && (driverStory || driverStoriesQ.isLoading)) {
     const driverQueue =
       (driverStoriesQ.data?.length ?? 0) > 0
         ? driverStoriesQ.data!
         : driverStory
           ? [driverStory]
           : [];
-    return (
-      <DriverPulseStoryViewer
-        stories={driverQueue}
-        initialPostId={params.postId}
-        postId={params.postId}
-        story={driverStory}
-        shipperName={driverStory?.org_name ?? preview?.org_name}
-        onClose={() => router.back()}
-      />
-    );
+    if (driverStoriesQ.isLoading && !driverStory) {
+      return (
+        <StoryMobilePopupShell onBackdropPress={() => router.back()}>
+          <LazySuspenseInlineFallback />
+        </StoryMobilePopupShell>
+      );
+    }
+    if (driverStory) {
+      return (
+        <DriverPulseStoryViewer
+          stories={driverQueue.filter((s) => s.post_id)}
+          initialPostId={params.postId}
+          postId={params.postId}
+          story={driverStory}
+          shipperName={driverStory.org_name ?? preview?.org_name}
+          onClose={() => router.back()}
+        />
+      );
+    }
   }
 
   if (storyClosed && !isOwnStory) {
@@ -310,7 +319,12 @@ export default function StoryDetailRoute() {
   if (!preview) {
     return (
       <StoryMobilePopupShell onBackdropPress={() => router.back()}>
-        <LazySuspenseInlineFallback />
+        <View style={[styles.centered, { flex: 1, padding: 24 }]}>
+          <Text style={styles.metaText}>This story could not be opened.</Text>
+          <Pressable onPress={() => router.back()} style={styles.ctaBtn}>
+            <Text style={styles.ctaBtnText}>Close</Text>
+          </Pressable>
+        </View>
       </StoryMobilePopupShell>
     );
   }

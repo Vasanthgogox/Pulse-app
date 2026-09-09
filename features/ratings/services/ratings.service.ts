@@ -227,7 +227,30 @@ export async function getRatingsForClient(clientId: string): Promise<{
   return { error: null, ratings: (data ?? []) as RatingRow[] };
 }
 
-/** Bulk fetch client ratings for many clients (one query). */
+/** Keep PostgREST `IN` lists off the statement-timeout cliff (525 on /ratings). */
+const RATINGS_IN_CHUNK = 40;
+
+async function fetchRatingsByRatedIds(
+  ratedType: RatingRow['rated_type'],
+  ratedIds: string[],
+): Promise<{ error: Error | null; rows: RatingRow[] }> {
+  const unique = [...new Set(ratedIds.filter(Boolean))];
+  const rows: RatingRow[] = [];
+  for (let i = 0; i < unique.length; i += RATINGS_IN_CHUNK) {
+    const chunk = unique.slice(i, i + RATINGS_IN_CHUNK);
+    const { data, error } = await supabase()
+      .from('ratings')
+      .select('*')
+      .eq('rated_type', ratedType)
+      .in('rated_id', chunk)
+      .order('created_at', { ascending: false });
+    if (error) return { error: new Error(error.message), rows: [] };
+    rows.push(...((data ?? []) as RatingRow[]));
+  }
+  return { error: null, rows };
+}
+
+/** Bulk fetch client ratings for many clients (chunked queries). */
 export async function getRatingsForClients(clientIds: string[]): Promise<{
   error: Error | null;
   byClientId: Record<string, RatingRow[]>;
@@ -235,15 +258,8 @@ export async function getRatingsForClients(clientIds: string[]): Promise<{
   if (clientIds.length === 0) {
     return { error: null, byClientId: {} };
   }
-  const { data, error } = await supabase()
-    .from('ratings')
-    .select('*')
-    .eq('rated_type', 'client')
-    .in('rated_id', clientIds)
-    .order('created_at', { ascending: false });
-
-  if (error) return { error: new Error(error.message), byClientId: {} };
-  const rows = (data ?? []) as RatingRow[];
+  const { error, rows } = await fetchRatingsByRatedIds('client', clientIds);
+  if (error) return { error, byClientId: {} };
   const byClientId: Record<string, RatingRow[]> = {};
   for (const id of clientIds) {
     byClientId[id] = [];
@@ -255,7 +271,7 @@ export async function getRatingsForClients(clientIds: string[]): Promise<{
   return { error: null, byClientId };
 }
 
-/** Bulk fetch supplier ratings for many suppliers (one query). */
+/** Bulk fetch supplier ratings for many suppliers (chunked queries). */
 export async function getRatingsForSuppliers(supplierIds: string[]): Promise<{
   error: Error | null;
   bySupplierId: Record<string, RatingRow[]>;
@@ -263,15 +279,8 @@ export async function getRatingsForSuppliers(supplierIds: string[]): Promise<{
   if (supplierIds.length === 0) {
     return { error: null, bySupplierId: {} };
   }
-  const { data, error } = await supabase()
-    .from('ratings')
-    .select('*')
-    .eq('rated_type', 'supplier')
-    .in('rated_id', supplierIds)
-    .order('created_at', { ascending: false });
-
-  if (error) return { error: new Error(error.message), bySupplierId: {} };
-  const rows = (data ?? []) as RatingRow[];
+  const { error, rows } = await fetchRatingsByRatedIds('supplier', supplierIds);
+  if (error) return { error, bySupplierId: {} };
   const bySupplierId: Record<string, RatingRow[]> = {};
   for (const id of supplierIds) {
     bySupplierId[id] = [];
@@ -298,7 +307,7 @@ export async function getRatingsForDriver(driverId: string): Promise<{
   return { error: null, ratings: (data ?? []) as RatingRow[] };
 }
 
-/** Bulk fetch driver ratings for many drivers (one query). Used by Drivers tab so ratings show in the table. */
+/** Bulk fetch driver ratings for many drivers (chunked). Used by Drivers tab so ratings show in the table. */
 export async function getRatingsForDrivers(driverIds: string[]): Promise<{
   error: Error | null;
   byDriverId: Record<string, RatingRow[]>;
@@ -306,15 +315,8 @@ export async function getRatingsForDrivers(driverIds: string[]): Promise<{
   if (driverIds.length === 0) {
     return { error: null, byDriverId: {} };
   }
-  const { data, error } = await supabase()
-    .from('ratings')
-    .select('*')
-    .eq('rated_type', 'driver')
-    .in('rated_id', driverIds)
-    .order('created_at', { ascending: false });
-
-  if (error) return { error: new Error(error.message), byDriverId: {} };
-  const rows = (data ?? []) as RatingRow[];
+  const { error, rows } = await fetchRatingsByRatedIds('driver', driverIds);
+  if (error) return { error, byDriverId: {} };
   const byDriverId: Record<string, RatingRow[]> = {};
   for (const id of driverIds) {
     byDriverId[id] = [];
