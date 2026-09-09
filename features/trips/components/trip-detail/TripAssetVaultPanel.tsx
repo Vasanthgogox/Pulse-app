@@ -7,7 +7,7 @@ import {
   type EwayFieldValues,
 } from '@/features/trips/components/trip-detail/EwayBillVaultTab';
 import {
-  formatVaultDocDate,
+  formatLrVaultNumberLabel,
   isEwayBillVaultDoc,
   isLrVaultDoc,
   type TripDocItem,
@@ -118,8 +118,6 @@ export function TripAssetVaultPanel({
               : 'eye';
           const showPrimaryAction = showUploadPrimary;
 
-          const isLrDoc = isLrVaultDoc(doc);
-
           return (
             <MotiView
               key={doc.id}
@@ -133,7 +131,6 @@ export function TripAssetVaultPanel({
               style={[
                 styles.card,
                 cardDocs.length <= 3 && styles.cardCompact,
-                isLrDoc && styles.cardLr,
               ]}
             >
               <View style={styles.cardTopRow}>
@@ -147,12 +144,7 @@ export function TripAssetVaultPanel({
                 <View style={[styles.statusChip, palette.chip]}>
                   <Text style={[styles.statusText, palette.chipText]} numberOfLines={1}>
                     {!isPending && isLrVaultDoc(doc)
-                      ? [
-                          doc.documentNumber?.trim(),
-                          formatVaultDocDate(doc.documentDate),
-                        ]
-                          .filter(Boolean)
-                          .join(' · ') || doc.status
+                      ? formatLrVaultNumberLabel(doc.documentNumber) || doc.status
                       : !isPending && (doc.files?.length ?? 0) > 1
                       ? doc.id === 'vehicle-documents'
                         ? doc.type
@@ -214,17 +206,17 @@ export function TripAssetVaultPanel({
                   </>
                 )}
               </TouchableOpacity>
-              {isLrDoc ? (
-                <EwayBillLrStrip
-                  rows={ewayStripRows}
-                  onView={onViewEwayBill ?? (() => undefined)}
-                  canEdit={canEditEwayBill}
-                  onSave={onSaveEwayBill}
-                />
-              ) : null}
             </MotiView>
           );
         })}
+      </View>
+      <View style={styles.ewayWrap}>
+        <EwayBillLrStrip
+          rows={ewayStripRows}
+          onView={onViewEwayBill ?? (() => undefined)}
+          canEdit={canEditEwayBill}
+          onSave={onSaveEwayBill}
+        />
       </View>
     </View>
   );
@@ -301,6 +293,9 @@ const styles = StyleSheet.create({
   gridCompact: {
     flexWrap: 'nowrap',
   },
+  ewayWrap: {
+    width: '100%',
+  },
   card: {
     width: '48%',
     flexGrow: 1,
@@ -328,12 +323,6 @@ const styles = StyleSheet.create({
     width: undefined,
     flex: 1,
     flexBasis: 0,
-  },
-  cardLr: {
-    width: '100%',
-    flexBasis: '100%',
-    flexGrow: 1,
-    minHeight: 0,
   },
   cardTopRow: {
     flexDirection: 'row',

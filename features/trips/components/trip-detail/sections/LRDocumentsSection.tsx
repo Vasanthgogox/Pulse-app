@@ -13,6 +13,8 @@ export interface DocItem {
   type: string;
   uploadedAt?: string;
   status: "Uploaded" | "Pending";
+  /** Extra line on the card, e.g. typed LR number. */
+  subtitle?: string;
   onView?: () => void;
   onDelete?: () => void;
 }
@@ -127,6 +129,11 @@ function GalleryDocCard({ doc, rowLayout }: { doc: DocItem; rowLayout?: boolean 
   const uploaded = doc.status === "Uploaded";
   const body = (
     <View style={styles.galleryCardContent}>
+      {doc.subtitle ? (
+        <Text style={styles.galleryCardNumber} numberOfLines={1}>
+          {doc.subtitle}
+        </Text>
+      ) : null}
       <FontAwesome name="file-text-o" size={22} color="#9ca3af" />
       <Text style={styles.galleryCardTitle} numberOfLines={2}>
         {doc.label.toUpperCase()}
@@ -166,7 +173,9 @@ function DocRow({ doc }: { doc: DocItem }) {
       </View>
       <View style={styles.docInfo}>
         <Text style={styles.docLabel}>{doc.label}</Text>
-        {doc.uploadedAt ? (
+        {doc.subtitle ? (
+          <Text style={styles.docDate}>{doc.subtitle}</Text>
+        ) : doc.uploadedAt ? (
           <Text style={styles.docDate}>{doc.uploadedAt}</Text>
         ) : null}
       </View>
@@ -376,6 +385,14 @@ const styles = StyleSheet.create({
     textAlign: "center",
     letterSpacing: 0.2,
     lineHeight: 14,
+  },
+  galleryCardNumber: {
+    marginBottom: 6,
+    alignSelf: "flex-start",
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textPrimary,
+    textAlign: "left",
   },
   galleryCardType: {
     fontSize: 10,

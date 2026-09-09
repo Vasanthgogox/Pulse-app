@@ -55,3 +55,63 @@ export function parseLrFieldsFromOcrResult(
 export function parseLrFieldsFromOcrJob(job: Pick<OcrJobRow, "result_json"> | null): LrOcrFields {
   return parseLrFieldsFromOcrResult(job?.result_json ?? null);
 }
+
+/** Typed LR number always wins over a later OCR guess. */
+export function preferredLrDocumentNumber(
+  manual: string | null | undefined,
+  ocr: string | null | undefined,
+): string | null {
+  const typed = parseLrFieldValues(manual).lrNumber || null;
+  if (typed) return typed;
+  const scanned = ocr?.trim() || null;
+  return scanned;
+}
+
+export type LrFieldValues = {
+  lrNumber: string;
+  date: string;
+  invoice: string;
+};
+
+const EMPTY_LR_FIELDS: LrFieldValues = {
+  lrNumber: "",
+  date: "",
+  invoice: "",
+};
+
+function asTrimmedString(value: unknown): string {
+  return typeof value === "string" ? value.trim() : "";
+}
+
+/** Reads a stored LR `document_number` — plain text or `{ lrNumber, date, invoice }`. */
+export function parseLrFieldValues(raw?: string | null): LrFieldValues {
+  const text = (raw ?? "").trim();
+  if (!text) return { ...EMPTY_LR_FIELDS };
+  if (text.startsWith("{")) {
+    try {
+      const parsed = JSON.parse(text) as Record<string, unknown>;
+      if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
+        return {
+          lrNumber: asTrimmedString(
+            parsed.lrNumber ?? parsed.n ?? parsed.number,
+          ),
+          date: asTrimmedString(parsed.date ?? parsed.d),
+          invoice: asTrimmedString(
+            parsed.invoice ?? parsed.invoiceNumber ?? parsed.i,
+          ),
+        };
+      }
+    } catch {
+      return { ...EMPTY_LR_FIELDS, lrNumber: text };
+    }
+  }
+  return { ...EMPTY_LR_FIELDS, lrNumber: text };
+}
+
+export function serializeLrFieldValues(values: LrFieldValues): string {
+  const lrNumber = values.lrNumber.trim();
+  const date = values.date.trim();
+  const invoice = values.invoice.trim();
+  if (!date && !invoice) return lrNumber;
+  return JSON.stringify({ lrNumber, date, invoice });
+}

@@ -1,4 +1,9 @@
-import { parseLrFieldsFromOcrResult } from "../lrDocumentOcr.util";
+import {
+  parseLrFieldValues,
+  parseLrFieldsFromOcrResult,
+  preferredLrDocumentNumber,
+  serializeLrFieldValues,
+} from "../lrDocumentOcr.util";
 
 describe("parseLrFieldsFromOcrResult", () => {
   it("reads lr_number and date from a POD-style extraction", () => {
@@ -45,5 +50,44 @@ describe("parseLrFieldsFromOcrResult", () => {
         },
       }),
     ).toEqual({ lrNumber: "LSC589489", lrDate: "03-Sep-26" });
+  });
+});
+
+describe("preferredLrDocumentNumber", () => {
+  it("keeps the number typed in Confirm upload over OCR", () => {
+    expect(preferredLrDocumentNumber("AI3583", "AI 3583")).toBe("AI3583");
+  });
+
+  it("uses OCR when the user left the field blank", () => {
+    expect(preferredLrDocumentNumber("  ", "BHD-4026")).toBe("BHD-4026");
+  });
+});
+
+describe("parseLrFieldValues / serializeLrFieldValues", () => {
+  it("keeps a plain LR number as the number", () => {
+    expect(parseLrFieldValues("AI3583")).toEqual({
+      lrNumber: "AI3583",
+      date: "",
+      invoice: "",
+    });
+  });
+
+  it("round-trips date and invoice beside the LR number", () => {
+    const stored = serializeLrFieldValues({
+      lrNumber: "AI3583",
+      date: "03-09-2026",
+      invoice: "INV-12",
+    });
+    expect(parseLrFieldValues(stored)).toEqual({
+      lrNumber: "AI3583",
+      date: "03-09-2026",
+      invoice: "INV-12",
+    });
+  });
+
+  it("stores a number-only value as plain text", () => {
+    expect(
+      serializeLrFieldValues({ lrNumber: "AI3583", date: "", invoice: "" }),
+    ).toBe("AI3583");
   });
 });

@@ -91,7 +91,7 @@ function monthCells(year: number, month: number): Array<{
   });
 }
 
-function CompactValidTillCalendar({
+export function CompactValidTillCalendar({
   selectedIso,
   onSelect,
 }: {

@@ -54,6 +54,7 @@ import { queryKeys } from "@/lib/queryKeys";
 import * as driverLocationService from "@/features/driver/services/driverLocation.service";
 import { getMoverAssetClientPaid } from "@/features/trips/services/moverAssetPayment.service";
 import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
+import { parseLrFieldValues } from "@/features/trips/services/lrDocumentOcr.util";
 import { useQueryClient } from "@tanstack/react-query";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { useRouter } from "expo-router";
@@ -162,7 +163,7 @@ function buildSlotCard(
     };
   }
   const files = rows.map((row, index) => {
-    const number = row.document_number?.trim();
+    const number = parseLrFieldValues(row.document_number).lrNumber;
     return {
       id: `${slot.id}-${row.id}`,
       label: number
@@ -175,8 +176,10 @@ function buildSlotCard(
       documentId: row.id,
     };
   });
-  const documentNumber =
-    rows.map((row) => row.document_number?.trim()).find(Boolean) ?? null;
+  const storedFields = rows
+    .map((row) => parseLrFieldValues(row.document_number))
+    .find((fields) => fields.lrNumber || fields.date || fields.invoice);
+  const documentNumber = storedFields?.lrNumber || null;
   return {
     id: slot.id,
     label: slot.label,
@@ -187,7 +190,8 @@ function buildSlotCard(
     category: slot.category,
     files,
     documentNumber,
-    documentDate: rows[0]?.document_date ?? null,
+    documentDate: storedFields?.date || rows[0]?.document_date || null,
+    invoiceNumber: storedFields?.invoice || null,
     uploadedAt: rows[0]?.uploaded_at ?? null,
   };
 }
@@ -1646,6 +1650,16 @@ export function useTripDetail({
       });
   }, [tripId]);
 
+  const upsertTripDocument = useCallback(
+    (row: tripDocumentsService.TripDocumentRow) => {
+      setTripDocuments((prev) => {
+        const without = prev.filter((doc) => doc.id !== row.id);
+        return [row, ...without];
+      });
+    },
+    [],
+  );
+
   // Ops has no other signal for a driver-uploaded document (e.g. POD) — trip_documents
   // has no org-scoped realtime coverage elsewhere, so this per-trip subscription is the
   // only way this screen learns about a new upload without a manual refresh.
@@ -2598,6 +2612,7 @@ export function useTripDetail({
     // Documents
     tripDocuments,
     loadTripDocuments,
+    upsertTripDocument,
     computedTripDocs,
     vehiclePreviewDocs,
     vehiclePreviewUrls,

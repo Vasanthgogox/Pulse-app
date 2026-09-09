@@ -11,7 +11,7 @@ import { getPlatformEventBus } from "@/lib/platform/events/InProcessEventBus";
 import { recordTripWorkflowEvent } from "@/features/trips/services/tripWorkflow.service";
 import { createStorageSignedUrlCache } from "@/lib/storageSignedUrlCache";
 import { listOcrJobsForTripDocuments } from "@/features/ocr/services/ocrJob.service";
-import { parseLrFieldsFromOcrJob } from "@/features/trips/services/lrDocumentOcr.util";
+import { parseLrFieldsFromOcrJob, parseLrFieldValues, preferredLrDocumentNumber, serializeLrFieldValues } from "@/features/trips/services/lrDocumentOcr.util";
 import {
   EWAY_BILL_FIELDS_FILE_NAME,
   ewayBillFieldsStoragePath,
@@ -127,10 +127,20 @@ async function attachLrOcrFields(rows: TripDocumentRow[]): Promise<TripDocumentR
     return rows.map((row) => {
       if (row.document_type !== "lr") return row;
       const fields = parseLrFieldsFromOcrJob(latestByDoc.get(row.id) ?? null);
+      const stored = parseLrFieldValues(row.document_number);
+      const lrNumber = preferredLrDocumentNumber(
+        stored.lrNumber,
+        fields.lrNumber,
+      );
       return {
         ...row,
-        document_number: row.document_number?.trim() || fields.lrNumber,
-        document_date: fields.lrDate ?? row.document_date ?? null,
+        document_number: serializeLrFieldValues({
+          lrNumber: lrNumber ?? "",
+          date: stored.date || fields.lrDate || "",
+          invoice: stored.invoice,
+        }) || row.document_number,
+        document_date:
+          stored.date || fields.lrDate || row.document_date || null,
       };
     });
   } catch {
