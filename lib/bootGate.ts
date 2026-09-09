@@ -65,3 +65,42 @@ export function nextBootSettled(settled: boolean, coldStartResolved: boolean): b
 export function shouldShowBootOverlay(settled: boolean, coldStartResolved: boolean): boolean {
   return !settled && !coldStartResolved;
 }
+
+const PUBLIC_AUTH_ROUTES = new Set([
+  '/sign-in',
+  '/sign-up',
+  '/driver-signup',
+  '/driver-sign-in',
+  '/welcome',
+  '/forgot-password',
+  '/auth/reset-password',
+  '/onboarding',
+]);
+
+export function isPublicAuthRoute(pathname: string): boolean {
+  if (PUBLIC_AUTH_ROUTES.has(pathname)) return true;
+  return pathname.startsWith('/onboarding/');
+}
+
+/** Authenticated org/GlobalSync/nav data plane — only after JS client session attach. */
+export function shouldMountAuthenticatedDataPlane(sessionAttached: boolean): boolean {
+  return sessionAttached;
+}
+
+/**
+ * Public sign-in tree without org providers. Waiting for hydrate (cached JWT,
+ * status may already be authenticated) is neither this nor the data plane —
+ * that path is splash-only.
+ */
+export function shouldRenderPublicAuthTree(input: {
+  sessionAttached: boolean;
+  publicRoute: boolean;
+  status: 'restoring' | 'authenticated' | 'unauthenticated' | 'expired';
+}): boolean {
+  if (input.sessionAttached) return false;
+  return (
+    input.publicRoute ||
+    input.status === 'unauthenticated' ||
+    input.status === 'expired'
+  );
+}

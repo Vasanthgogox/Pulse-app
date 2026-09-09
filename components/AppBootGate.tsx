@@ -27,29 +27,12 @@ import { AppLoadingSplash } from '@/components/AppLoadingSplash';
 import { useAuth } from '@/contexts/AuthContext';
 import { safeHideSplashAsync } from '@/lib/safeSplashScreen.util';
 import { dumpStartupMetrics, markStartupPhase } from '@/lib/startupMetrics';
-import { isColdStartResolved, shouldShowBootOverlay } from '@/lib/bootGate';
+import { isColdStartResolved, shouldShowBootOverlay, isPublicAuthRoute } from '@/lib/bootGate';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { pe } from '@/lib/platformViewStyle.util';
 import { Platform, StyleSheet, View } from 'react-native';
 import { usePathname } from 'expo-router';
 import { hydrateSignupFlowFlags } from '@/lib/onboarding/businessSignupBranding.util';
-
-// Routes that render without needing resolved auth state.
-const PUBLIC_ROUTES = new Set([
-  '/sign-in',
-  '/sign-up',
-  '/driver-signup',
-  '/driver-sign-in',
-  '/welcome',
-  '/forgot-password',
-  '/auth/reset-password',
-  '/onboarding',
-]);
-
-function isPublicAuthRoute(pathname: string): boolean {
-  if (PUBLIC_ROUTES.has(pathname)) return true;
-  return pathname.startsWith('/onboarding/');
-}
 
 const BOOT_HARD_TIMEOUT_MS = 8_000;
 

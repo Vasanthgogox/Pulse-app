@@ -2,6 +2,8 @@ import {
   isColdStartResolved,
   nextBootSettled,
   shouldShowBootOverlay,
+  shouldMountAuthenticatedDataPlane,
+  shouldRenderPublicAuthTree,
   type BootGateInput,
 } from '@/lib/bootGate';
 
@@ -114,5 +116,46 @@ describe('boot gate lifecycle', () => {
       input({ publicRoute: true }),
     ]);
     expect(steps.every((s) => s.overlay === false)).toBe(true);
+  });
+});
+
+describe('authenticated data-plane mount', () => {
+  it('does not mount on cached identity without sessionAttached', () => {
+    expect(shouldMountAuthenticatedDataPlane(false)).toBe(false);
+  });
+
+  it('mounts only after sessionAttached', () => {
+    expect(shouldMountAuthenticatedDataPlane(true)).toBe(true);
+  });
+
+  it('keeps public auth tree off while waiting for hydrate even if status is authenticated', () => {
+    expect(
+      shouldRenderPublicAuthTree({
+        sessionAttached: false,
+        publicRoute: false,
+        status: 'authenticated',
+      }),
+    ).toBe(false);
+  });
+
+  it('renders public auth tree when signed out', () => {
+    expect(
+      shouldRenderPublicAuthTree({
+        sessionAttached: false,
+        publicRoute: false,
+        status: 'unauthenticated',
+      }),
+    ).toBe(true);
+  });
+
+  it('does not unmount data plane on TOKEN_REFRESHED (sessionAttached stays true)', () => {
+    expect(shouldMountAuthenticatedDataPlane(true)).toBe(true);
+    expect(
+      shouldRenderPublicAuthTree({
+        sessionAttached: true,
+        publicRoute: false,
+        status: 'authenticated',
+      }),
+    ).toBe(false);
   });
 });

@@ -6,6 +6,11 @@ import { ensureWebShellParity } from '@/lib/htmlShell';
 // Background GPS task must be registered before any component mounts — do not move this import.
 import '@/lib/tracking/backgroundTasks';
 import { markStartupPhase } from '@/lib/startupMetrics';
+import {
+  isPublicAuthRoute,
+  shouldMountAuthenticatedDataPlane,
+  shouldRenderPublicAuthTree,
+} from '@/lib/bootGate';
 import { AppAlertHost } from '@/components/AppAlertHost';
 import { ConfirmDialogHost } from '@/components/ConfirmDialogHost';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
@@ -67,7 +72,7 @@ import { QUERY_CACHE_BUSTER } from '@/lib/cache/cacheBuster';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { useFonts } from 'expo-font';
 import { Stack, usePathname, useRouter, type ErrorBoundaryProps } from 'expo-router';
-import { safePreventAutoHideAsync } from '@/lib/safeSplashScreen.util';
+import { safePreventAutoHideAsync, safeHideSplashAsync } from '@/lib/safeSplashScreen.util';
 import { useQueryClient } from '@tanstack/react-query';
 import { installDriverInviteDeepLinkListener } from '@/lib/driverInviteDeepLink.util';
 import { useEffect, useMemo } from 'react';
@@ -81,12 +86,11 @@ import 'react-native-reanimated';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
 import { useColorScheme } from '@/components/useColorScheme';
-import { AuthProvider } from '@/contexts/AuthContext';
+import { AuthProvider, useAuth, useOptionalAuth } from '@/contexts/AuthContext';
 import { PendingOnboardingProvider } from '@/contexts/PendingOnboardingContext';
 import { PendingInviteResumeGate } from '@/components/PendingInviteResumeGate';
 import { ReferralCaptureGate } from '@/components/ReferralCaptureGate';
 import { PushTokenRegistration } from '@/components/PushTokenRegistration';
-import { useOptionalAuth } from '@/contexts/AuthContext';
 import { NavigationPolicyShadowHost } from '@/lib/navigationPolicy/NavigationPolicyShadowHost';
 import { LanguageProvider, tGlobal } from '@/contexts/LanguageContext';
 import { NetworkProvider } from '@/contexts/NetworkContext';
@@ -410,24 +414,7 @@ export default function RootLayout() {
             <NetworkProvider>
               <AuthProvider>
                 <PendingOnboardingProvider>
-                <PushTokenRegistration />
-                <OrganizationProvider>
-                  <ActiveWorkspaceProvider>
-                  <PendingInviteResumeGate />
-                  <ReferralCaptureGate />
-                  <WalletProvider>
-                    <KeyboardAccessoryProvider>
-                      <GlobalSyncProvider>
-                        <AppBootGate>
-                          <OrgVerificationReminderProvider>
-                            <RootLayoutNav />
-                          </OrgVerificationReminderProvider>
-                        </AppBootGate>
-                      </GlobalSyncProvider>
-                    </KeyboardAccessoryProvider>
-                  </WalletProvider>
-                  </ActiveWorkspaceProvider>
-                </OrganizationProvider>
+                  <AppSessionTree />
                 </PendingOnboardingProvider>
               </AuthProvider>
             </NetworkProvider>
@@ -454,6 +441,71 @@ function ConfigErrorScreen() {
       </Text>
     </View>
   );
+}
+
+function AuthenticatedDataPlane() {
+  return (
+    <>
+      <PushTokenRegistration />
+      <OrganizationProvider>
+        <ActiveWorkspaceProvider>
+          <PendingInviteResumeGate />
+          <ReferralCaptureGate />
+          <WalletProvider>
+            <KeyboardAccessoryProvider>
+              <GlobalSyncProvider>
+                <AppBootGate>
+                  <OrgVerificationReminderProvider>
+                    <RootLayoutNav />
+                  </OrgVerificationReminderProvider>
+                </AppBootGate>
+              </GlobalSyncProvider>
+            </KeyboardAccessoryProvider>
+          </WalletProvider>
+        </ActiveWorkspaceProvider>
+      </OrganizationProvider>
+    </>
+  );
+}
+
+function PublicAuthTree() {
+  return (
+    <AppBootGate>
+      <RootLayoutNav />
+    </AppBootGate>
+  );
+}
+
+/**
+ * Mount boundary: Organization / workspace / GlobalSync / gated nav only after
+ * the Supabase JS session is attached. Cached web JWT (status authenticated)
+ * is not enough.
+ */
+function AppSessionTree() {
+  const { status, sessionAttached } = useAuth();
+  const pathname = usePathname();
+  const publicRoute = isPublicAuthRoute(pathname);
+
+  useEffect(() => {
+    if (sessionAttached) return;
+    void safeHideSplashAsync().catch(() => {});
+  }, [sessionAttached]);
+
+  if (shouldMountAuthenticatedDataPlane(sessionAttached)) {
+    return <AuthenticatedDataPlane />;
+  }
+
+  if (
+    shouldRenderPublicAuthTree({
+      sessionAttached,
+      publicRoute,
+      status,
+    })
+  ) {
+    return <PublicAuthTree />;
+  }
+
+  return <AppLoadingSplash variant="session" />;
 }
 
 function RootLayoutNav() {

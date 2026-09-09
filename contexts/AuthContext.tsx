@@ -69,6 +69,12 @@ interface AuthContextType {
   profile: UserProfile | null;
   roleVerified: boolean;
   status: AuthStatus;
+  /**
+   * True only after the Supabase JS client has hydrated and getSession() (or an
+   * equivalent restore/sign-in commit) attached a real session. Cached web JWT
+   * identity must not set this — it gates the authenticated data-plane mount.
+   */
+  sessionAttached: boolean;
   /** @deprecated Use `status === "restoring"` */
   loading: boolean;
   /** @deprecated Use `status === "expired"` */
@@ -124,8 +130,9 @@ export function useAuth() {
 
 /**
  * On web, Supabase persists the session in localStorage synchronously accessible.
- * Read it before React renders so AppBootGate never blocks for returning users.
- * The async restore still runs in background to refresh tokens and verify profile.
+ * Read it before React renders so splash/chrome can show a returning-user identity.
+ * This MUST NOT be treated as "Supabase JS session attached" — the client hydrates
+ * storage asynchronously. Authenticated data-plane mount uses sessionAttached.
  */
 function tryReadWebSession(): {
   status: AuthStatus;
@@ -216,6 +223,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [profile, setProfile] = useState<UserProfile | null>(init.profile);
   const [roleVerified, setRoleVerified] = useState(false);
   const [status, setStatus] = useState<AuthStatus>(init.status);
+  const [sessionAttached, setSessionAttached] = useState(false);
   const [restoreError, setRestoreError] = useState<AuthError | null>(null);
 
   // On web: read localStorage synchronously before first paint so AppBootGate
@@ -284,6 +292,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setUser(null);
     setProfile(null);
     setRoleVerified(false);
+    setSessionAttached(false);
     setStatus(expired ? "expired" : "unauthenticated");
   }, []);
 
@@ -373,6 +382,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setUser(nextUser);
       setProfile(freezeInDev(authProfileToUserProfile(sessionProfile)));
       setRoleVerified(trustRole);
+      setSessionAttached(true);
       setStatus("authenticated");
       setRestoreError(null);
       if (options?.logEvent) {
@@ -838,6 +848,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       roleVerified,
       status,
+      sessionAttached,
       loading,
       sessionExpired,
       restoreError,
@@ -854,6 +865,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       profile,
       roleVerified,
       status,
+      sessionAttached,
       loading,
       sessionExpired,
       restoreError,
