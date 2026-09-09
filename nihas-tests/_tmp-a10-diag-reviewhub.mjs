@@ -1,0 +1,41 @@
+import { chromium } from 'playwright';
+import { loadCredentials } from './credentials.mjs';
+const { email: E2E_EMAIL, password: E2E_PASSWORD } = loadCredentials();
+const BASE = 'http://localhost:8081';
+const OUT = '/private/tmp/claude-501/-Users-ggx-Desktop-Pulse-app/aa0cd08c-fbaa-43db-a775-ddb930ada764/scratchpad/shots';
+(async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await (await browser.newContext({ viewport: { width: 414, height: 896 } })).newPage();
+  const logs = [];
+  page.on('console', (m) => logs.push(`[${m.type()}] ${m.text()}`));
+  page.on('pageerror', (e) => logs.push(`[pageerror] ${e.message}`));
+  await page.goto(`${BASE}/sign-in`, { waitUntil: 'load', timeout: 60000 });
+  await page.waitForTimeout(2000);
+  await page.locator('input[type="email"]').first().fill(E2E_EMAIL);
+  await page.locator('input[type="password"]').first().fill(E2E_PASSWORD);
+  await page.locator('[data-testid="signin-submit-btn"]').first().click();
+  await page.waitForURL((u) => !u.pathname.includes('sign-in'), { timeout: 60000 }).catch(() => {});
+  await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
+  await page.waitForTimeout(2000);
+  await page.goto(`${BASE}/pulse-loads`, { waitUntil: 'domcontentloaded', timeout: 30000 }).catch(() => {});
+  await page.waitForLoadState('networkidle', { timeout: 30000 }).catch(() => {});
+  await page.waitForTimeout(2500);
+  const anchor = page.getByText('SpaceXLogistics', { exact: true }).first();
+  await anchor.waitFor({ state: 'visible', timeout: 15000 });
+  await anchor.scrollIntoViewIfNeeded();
+  await page.waitForTimeout(300);
+  logs.length = 0;
+  const reviewBtn = page.locator('xpath=//*[text()="SpaceXLogistics"]/following::*[contains(text(),"Review")][1]').first();
+  await reviewBtn.click();
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(1000);
+    const hubText = await page.getByText('REVIEW HUB', { exact: true }).first().isVisible().catch(() => false);
+    const loadingText = await page.getByText('LOADING OFFERS', { exact: false }).first().isVisible().catch(() => false);
+    console.log(`t+${i+1}s hub=${hubText} loading=${loadingText}`);
+    if (hubText && !loadingText) break;
+  }
+  await page.screenshot({ path: `${OUT}/diag-reviewhub-final.png`, fullPage: true });
+  console.log('--- console/errors during this window ---');
+  console.log(logs.filter(l => l.includes('market_bid') || l.includes('error') || l.includes('Error') || l.includes('slow')).join('\n'));
+  await browser.close();
+})();

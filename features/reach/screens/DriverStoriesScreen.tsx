@@ -669,38 +669,101 @@ export function StoriesContent({
         {listHeader}
         {actionNeededItems.length > 0 ? (
           <View style={styles.actionNeededWrap}>
-            <Text style={[styles.actionNeededHeader, { color: colors.textMuted }]}>
-              ACTION NEEDED · {actionNeededItems.length}
-            </Text>
+            <View style={styles.actionNeededHeaderRow}>
+              <View style={styles.actionNeededMark}>
+                <Clock3 size={13} color={Theme.warning} strokeWidth={2.4} />
+              </View>
+              <Text style={[styles.actionNeededHeader, { color: colors.text }]}>Action needed</Text>
+              <View style={styles.actionNeededCount}>
+                <Text style={styles.actionNeededCountText}>{actionNeededItems.length}</Text>
+              </View>
+            </View>
             {actionNeededItems.map(({ story, bucket }) => {
               const counterRate = positiveMoneyOrNull(story.direct_bid_counter_amount);
               const quotedAmount = positiveMoneyOrNull(story.direct_bid_amount);
+              const origin = cityOf(story.snapshot_origin) || 'Pickup';
+              const destination = cityOf(story.snapshot_destination) || 'Drop';
+              const isCounter = bucket === 'counter';
               return (
                 <Pressable
                   key={story.post_id}
                   onPress={() => openBid(story)}
-                  style={[styles.actionCard, { backgroundColor: cardBg }]}
+                  accessibilityRole="button"
+                  accessibilityLabel={
+                    isCounter
+                      ? `Review counter from ${story.org_name}`
+                      : `View your pending bid for ${story.org_name}`
+                  }
+                  style={[
+                    styles.actionCard,
+                    { backgroundColor: cardBg },
+                    isCounter && styles.actionCardCounter,
+                  ]}
                 >
-                  <Text style={styles.actionCardKicker}>
-                    {bucket === 'counter' ? 'Counter offer received' : 'Your bid is pending'}
-                  </Text>
-                  <Text style={[styles.actionCardOrg, { color: colors.text }]} numberOfLines={1}>
-                    {story.org_name}
-                  </Text>
-                  {bucket === 'counter' && counterRate != null ? (
+                  <View style={styles.recOrgRow}>
+                    <PartyAvatar
+                      name={story.org_name || 'Shipper'}
+                      initialsColorSeed={story.campaign_org_id}
+                      organizationImageUrl={story.org_logo_url}
+                      entityType="client"
+                      size={36}
+                      shape="rounded"
+                    />
+                    <View style={styles.recOrgText}>
+                      <Text style={styles.actionCardOrg} numberOfLines={1}>
+                        {story.org_name}
+                      </Text>
+                      <Text style={[styles.actionCardKicker, isCounter && styles.counterKicker]}>
+                        {isCounter ? 'Counter — your move' : 'Awaiting shipper'}
+                      </Text>
+                    </View>
+                    <View style={[styles.statusChip, styles.statusChipPending]}>
+                      <Clock3 size={12} color={Theme.accentGoldPressed} strokeWidth={2.2} />
+                      <Text style={[styles.statusChipText, styles.statusChipTextPending]}>
+                        {isCounter ? 'Respond' : 'Pending'}
+                      </Text>
+                    </View>
+                  </View>
+
+                  <View style={styles.routeBlock}>
+                    <View style={styles.routeCityCol}>
+                      <Text style={styles.routeCity} numberOfLines={1}>
+                        {origin}
+                      </Text>
+                      <Text style={styles.routeMeta}>Pickup</Text>
+                    </View>
+                    <View style={styles.routeArrowWrap}>
+                      <ArrowRight size={13} color={Theme.textMuted} strokeWidth={2.2} />
+                    </View>
+                    <View style={[styles.routeCityCol, styles.routeCityColEnd]}>
+                      <Text style={[styles.routeCity, styles.routeCityEnd]} numberOfLines={1}>
+                        {destination}
+                      </Text>
+                      <Text style={[styles.routeMeta, styles.routeMetaEnd]}>Drop</Text>
+                    </View>
+                  </View>
+
+                  {isCounter && counterRate != null ? (
                     <ShipperCounterHighlight
                       counterAmountInr={counterRate}
                       yourQuoteInr={quotedAmount}
                     />
                   ) : quotedAmount != null ? (
-                    <Text style={[styles.actionCardAmount, { color: colors.text }]}>
-                      {formatINR(quotedAmount)}
-                    </Text>
+                    <View style={styles.targetRow}>
+                      <Text style={styles.targetLabel}>Your quote</Text>
+                      <Text style={styles.targetValue}>{formatINR(quotedAmount)}</Text>
+                    </View>
                   ) : null}
-                  <View style={styles.actionCardCta}>
-                    <Text style={styles.actionCardCtaText}>
-                      {bucket === 'counter' ? 'Review counter' : 'View your bid'}
+
+                  <View style={[styles.actionCardCta, isCounter && styles.actionCardCtaCounter]}>
+                    <Text style={[styles.actionCardCtaText, isCounter && styles.actionCardCtaTextCounter]}>
+                      {isCounter ? 'Review counter' : 'View your bid'}
                     </Text>
+                    <ArrowRight
+                      size={14}
+                      color={isCounter ? Theme.textPrimaryDark : Theme.textPrimaryDark}
+                      strokeWidth={2.4}
+                    />
                   </View>
                 </Pressable>
               );
@@ -1383,40 +1446,86 @@ const styles = StyleSheet.create({
   },
   actionNeededWrap: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 12,
+    paddingTop: 14,
+    gap: 10,
+  },
+  actionNeededHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
     gap: 8,
   },
+  actionNeededMark: {
+    width: 26,
+    height: 26,
+    borderRadius: 8,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.warningMuted,
+  },
   actionNeededHeader: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 15,
+    fontWeight: '800',
+    letterSpacing: -0.25,
+  },
+  actionNeededCount: {
+    minWidth: 22,
+    height: 22,
+    paddingHorizontal: 6,
+    borderRadius: 999,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: Theme.warningMuted,
+  },
+  actionNeededCountText: {
     fontSize: 11,
     fontWeight: '800',
-    letterSpacing: 0.5,
-    textTransform: 'uppercase',
+    color: Theme.warning,
   },
   actionCard: {
     borderRadius: 12,
-    borderWidth: 1.5,
-    borderColor: Theme.accentGoldBorder,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
+    borderLeftWidth: 3,
+    borderLeftColor: Theme.accentGold,
     padding: 12,
-    gap: 6,
+    gap: 10,
+  },
+  actionCardCounter: {
+    borderColor: Theme.accentGoldBorder,
+    borderLeftColor: Theme.warning,
   },
   actionCardKicker: {
-    fontSize: 10,
-    fontWeight: '800',
-    color: Theme.warning,
+    fontSize: 9,
+    fontWeight: '700',
+    color: Theme.textMuted,
     textTransform: 'uppercase',
-    letterSpacing: 0.3,
+    letterSpacing: 0.35,
   },
-  actionCardOrg: { fontSize: 14, fontWeight: '800' },
-  actionCardAmount: { fontSize: 16, fontWeight: '800', letterSpacing: -0.2 },
+  actionCardOrg: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.2,
+  },
   actionCardCta: {
-    alignSelf: 'flex-start',
-    marginTop: 2,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
+    minHeight: 44,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
     borderRadius: 8,
-    backgroundColor: Theme.accentGold,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderLight,
   },
-  actionCardCtaText: { fontSize: 12, fontWeight: '800', color: Theme.textPrimaryDark },
+  actionCardCtaCounter: {
+    backgroundColor: Theme.accentGold,
+    borderColor: Theme.accentGoldPressed,
+  },
+  actionCardCtaText: { fontSize: 13, fontWeight: '700', color: Theme.textPrimaryDark },
+  actionCardCtaTextCounter: { color: Theme.textPrimaryDark },
   sectionPad: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingTop: 16,

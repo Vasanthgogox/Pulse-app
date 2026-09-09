@@ -44,6 +44,7 @@ import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } fro
 import {
   Alert,
   ScrollView,
+  Image,
   Share,
   StyleSheet,
   Text,
@@ -59,7 +60,10 @@ import Animated, {
   withTiming,
 } from "react-native-reanimated";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { getTripAppLocationsForTimeline } from "@/features/driver/services/driverLocation.service";
+import { reverseGeocodeCityStateLabel } from "@/lib/reverseGeocodePlace.util";
 import {
+  attachDriverAppLocations,
   buildMissionLog,
   formatDistance,
   formatDurationForTrip,
@@ -69,6 +73,7 @@ import {
   parseTripCoordinate,
   splitLocationPrimarySecondary,
   toEtaInterval,
+  type DriverAppLocationPoint,
 } from "@/features/driver/tripHistory/tripHistoryDetail.util";
 import { tripHistoryDetailStyles as styles } from "@/features/driver/tripHistory/tripHistoryDetail.styles";
 import { TripDetailSettlementPanel } from "@/features/driver/components/TripDetailSettlementPanel";
@@ -144,6 +149,62 @@ export function DriverTripHistoryDetailScreen({
   const [podPreviewIndex, setPodPreviewIndex] = useState<number | null>(null);
 
   useRegisterDriverContextTrip(trip);
+
+  useEffect(() => {
+    if (!trip?.id) {
+      setAppLocationPoints([]);
+      return;
+    }
+    let mounted = true;
+    void getTripAppLocationsForTimeline(
+      trip.id,
+      trip.driver_id,
+      trip.created_at,
+      trip.completed_at ?? trip.updated_at,
+    ).then(async ({ points }) => {
+      if (!mounted) return;
+      const labeled = points.map((point) => ({
+        latitude: point.latitude,
+        longitude: point.longitude,
+        recorded_at: point.recorded_at,
+        address_label: point.address_label,
+        source: point.source,
+      }));
+      setAppLocationPoints(labeled);
+
+      const missing = labeled.filter((point) => !point.address_label?.trim());
+      const seen = new Set<string>();
+      const unique = missing.filter((point) => {
+        const key = `${point.latitude.toFixed(3)},${point.longitude.toFixed(3)}`;
+        if (seen.has(key)) return false;
+        seen.add(key);
+        return true;
+      }).slice(0, 8);
+
+      if (unique.length === 0) return;
+      const resolved = new Map<string, string>();
+      await Promise.all(
+        unique.map(async (point) => {
+          const label = await reverseGeocodeCityStateLabel(point.latitude, point.longitude);
+          if (label?.trim()) {
+            resolved.set(`${point.latitude.toFixed(3)},${point.longitude.toFixed(3)}`, label.trim());
+          }
+        }),
+      );
+      if (!mounted || resolved.size === 0) return;
+      setAppLocationPoints((current) =>
+        current.map((point) => {
+          if (point.address_label?.trim()) return point;
+          const key = `${point.latitude.toFixed(3)},${point.longitude.toFixed(3)}`;
+          const label = resolved.get(key);
+          return label ? { ...point, address_label: label } : point;
+        }),
+      );
+    });
+    return () => {
+      mounted = false;
+    };
+  }, [trip?.id, trip?.driver_id, trip?.created_at, trip?.completed_at, trip?.updated_at]);
 
   // Fleet attribution state
   const [linkedDriversFull, setLinkedDriversFull] = useState<driversService.DriverRow[]>([]);
@@ -337,7 +398,12 @@ export function DriverTripHistoryDetailScreen({
     );
   }, [trip, invites, driver?.organization_id, assignmentActorByTripId]);
 
-  const archiveMissionLog = useMemo(() => (trip ? buildMissionLog(trip) : []), [trip]);
+  const [appLocationPoints, setAppLocationPoints] = useState<DriverAppLocationPoint[]>([]);
+
+  const archiveMissionLog = useMemo(() => {
+    if (!trip) return [];
+    return attachDriverAppLocations(buildMissionLog(trip), appLocationPoints);
+  }, [trip, appLocationPoints]);
   const pickupParts = useMemo(
     () => splitLocationPrimarySecondary(trip?.pickup_area),
     [trip?.pickup_area],
@@ -848,30 +914,95 @@ export function DriverTripHistoryDetailScreen({
                                   style={[styles.tdLogLoc, { color: colors.textMuted }]}
                                   numberOfLines={expanded ? undefined : 2}
                                 >
-                                  {log.loc}
+                                  {log.driverLoc ?? log.loc}
                                 </Text>
                                 {expanded ? (
                                   <View style={styles.tdLogExpanded}>
-                                    {isInTransitStatus(log.status) ? (
-                                      <View style={styles.tdLogInTransitGrid}>
-                                        <View style={styles.tdLogInTransitCol}>
-                                          <Text style={[styles.tdLogMetaK, { color: colors.textMuted }]}>
-                                            Location
+                                    <View
+                                      style={[
+                                        styles.tdLogFactCard,
+                                        {
+                                          backgroundColor: colors.background,
+                                          borderColor: colors.border,
+                                        },
+                                      ]}
+                                    >
+                                      <View style={styles.tdLogDriverLocRow}>
+                                        <View
+                                          style={[
+                                            styles.tdLogDriverLocIcon,
+                                            { backgroundColor: isDark ? "rgba(255,255,255,0.08)" : Theme.surfaceGray },
+                                          ]}
+                                        >
+                                          <Navigation size={12} color={colors.textMuted} />
+                                        </View>
+                                        <View style={styles.tdLogDriverLocCopy}>
+                                          <Text style={[styles.tdLogFactLabel, { color: colors.textMuted }]}>
+                                            {log.driverLocKind === "business"
+                                              ? "Business location"
+                                              : "Driver location"}
                                           </Text>
-                                          <Text style={[styles.tdLogMetaV, { color: colors.text }]}>
+                                          <Text style={[styles.tdLogFactValue, { color: colors.text }]}>
+                                            {log.driverLoc ?? "Not captured"}
+                                          </Text>
+                                        </View>
+                                      </View>
+                                      <View style={[styles.tdLogFactDivider, { backgroundColor: colors.border }]} />
+                                      <View style={styles.tdLogFactGrid}>
+                                        <View style={styles.tdLogFactCol}>
+                                          <Text style={[styles.tdLogFactLabel, { color: colors.textMuted }]}>
+                                            Scheduled stop
+                                          </Text>
+                                          <Text style={[styles.tdLogFactValue, { color: colors.text }]} numberOfLines={2}>
                                             {log.loc}
                                           </Text>
                                         </View>
-                                        <View style={styles.tdLogInTransitCol}>
-                                          <Text style={[styles.tdLogMetaK, { color: colors.textMuted }]}>
+                                        <View style={[styles.tdLogFactRule, { backgroundColor: colors.border }]} />
+                                        <View style={styles.tdLogFactCol}>
+                                          <Text style={[styles.tdLogFactLabel, { color: colors.textMuted }]}>
                                             Timestamp
                                           </Text>
-                                          <Text style={[styles.tdLogMetaV, { color: colors.text }]}>
+                                          <Text style={[styles.tdLogFactValue, { color: colors.text }]}>
                                             {formatLedgerDateTime(log.atIso)}
                                           </Text>
                                         </View>
                                       </View>
-                                    ) : (
+                                    </View>
+                                    {log.status.trim().toLowerCase() === "delivered" &&
+                                    detailPodDocuments.length > 0 ? (
+                                      <View style={styles.tdLogDocRow}>
+                                        {detailPodDocuments.map((doc, docIndex) => {
+                                          const previewUrl = detailPodViewUrls[doc.id];
+                                          const isImage =
+                                            (doc.mime_type ?? "").startsWith("image/") ||
+                                            /\.(jpe?g|png|webp|gif)$/i.test(doc.file_name || doc.storage_path);
+                                          return (
+                                            <TouchableOpacity
+                                              key={doc.id}
+                                              style={[
+                                                styles.tdLogDocThumb,
+                                                { borderColor: colors.border, backgroundColor: colors.background },
+                                              ]}
+                                              onPress={() => setPodPreviewIndex(docIndex)}
+                                              activeOpacity={0.85}
+                                              accessibilityRole="button"
+                                              accessibilityLabel={`Preview ${doc.file_name || "document"}`}
+                                            >
+                                              {isImage && previewUrl ? (
+                                                <Image
+                                                  source={{ uri: previewUrl }}
+                                                  style={styles.tdLogDocImage}
+                                                  resizeMode="cover"
+                                                />
+                                              ) : (
+                                                <FileImage size={16} color={colors.textMuted} />
+                                              )}
+                                            </TouchableOpacity>
+                                          );
+                                        })}
+                                      </View>
+                                    ) : null}
+                                    {isInTransitStatus(log.status) ? null : (
                                       <>
                                         <Text style={[styles.tdLogDetailsKicker, { color: colors.textMuted }]}>
                                           Details
@@ -888,16 +1019,6 @@ export function DriverTripHistoryDetailScreen({
                                           <Text style={[styles.tdLogDetailsText, { color: colors.text }]}>
                                             {log.details}
                                           </Text>
-                                        </View>
-                                        <View style={styles.tdLogMetaGrid}>
-                                          <View style={{ flex: 1, minWidth: 0 }}>
-                                            <Text style={[styles.tdLogMetaK, { color: colors.textMuted }]}>
-                                              Timestamp
-                                            </Text>
-                                            <Text style={[styles.tdLogMetaV, { color: colors.textMuted }]}>
-                                              {formatLedgerDateTime(log.atIso)}
-                                            </Text>
-                                          </View>
                                         </View>
                                       </>
                                     )}
@@ -941,8 +1062,12 @@ export function DriverTripHistoryDetailScreen({
                           doc.file_name ||
                           doc.storage_path.split("/").pop() ||
                           "POD";
+                        const previewUrl = detailPodViewUrls[doc.id];
+                        const isImage =
+                          (doc.mime_type ?? "").startsWith("image/") ||
+                          /\.(jpe?g|png|webp|gif)$/i.test(doc.file_name || doc.storage_path);
                         return (
-                          <View
+                          <TouchableOpacity
                             key={doc.id}
                             style={[
                               styles.tdPodRow,
@@ -950,34 +1075,37 @@ export function DriverTripHistoryDetailScreen({
                                 ? { borderBottomColor: colors.border, borderBottomWidth: StyleSheet.hairlineWidth }
                                 : null,
                             ]}
+                            onPress={() => setPodPreviewIndex(index)}
+                            activeOpacity={0.85}
+                            accessibilityRole="button"
+                            accessibilityLabel={`Preview ${name}`}
                           >
-                            <FileImage
-                              size={15}
-                              color={colors.emerald}
-                              style={{ marginRight: 8 }}
-                            />
+                            <View
+                              style={[
+                                styles.tdLogDocThumb,
+                                { borderColor: colors.border, backgroundColor: colors.background },
+                              ]}
+                            >
+                              {isImage && previewUrl ? (
+                                <Image
+                                  source={{ uri: previewUrl }}
+                                  style={styles.tdLogDocImage}
+                                  resizeMode="cover"
+                                />
+                              ) : (
+                                <FileImage size={16} color={colors.textMuted} />
+                              )}
+                            </View>
                             <Text
                               style={[styles.tdPodFileName, { color: colors.text }]}
                               numberOfLines={1}
                             >
                               {name}
                             </Text>
-                            <TouchableOpacity
-                              onPress={() => setPodPreviewIndex(index)}
-                              activeOpacity={0.85}
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            >
-                              <Text
-                                style={{
-                                  color: colors.emerald,
-                                  fontWeight: "800",
-                                  fontSize: 13,
-                                }}
-                              >
-                                View
-                              </Text>
-                            </TouchableOpacity>
-                          </View>
+                            <Text style={[styles.tdPodPreview, { color: colors.textMuted }]}>
+                              Preview
+                            </Text>
+                          </TouchableOpacity>
                         );
                       })
                     ) : (

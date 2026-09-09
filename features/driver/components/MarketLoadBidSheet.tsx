@@ -11,8 +11,10 @@ import {
 import {
   BidConfirmModal,
   type BidConfirmPhase,
+  type MarketplaceFeePreview,
 } from '@/features/network/components/bidding/BidConfirmModal';
 import { splitLocationParts } from '@/features/network/utils/storyDisplay';
+import { calculateMarketplacePlatformFee } from '@/features/network/services/marketBids.service';
 import { formatINR } from '@/lib/format';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 
@@ -64,6 +66,8 @@ export function MarketLoadBidSheet({
   const [confirmPhase, setConfirmPhase] = useState<BidConfirmPhase>('review');
   const [pendingAmount, setPendingAmount] = useState(0);
   const [confirmSubmitting, setConfirmSubmitting] = useState(false);
+  const [feePreview, setFeePreview] = useState<MarketplaceFeePreview | undefined>(undefined);
+  const feeRequestRef = useRef(0);
   const celebrationLockRef = useRef(false);
 
   useEffect(() => {
@@ -73,6 +77,7 @@ export function MarketLoadBidSheet({
     setConfirmPhase('review');
     setConfirmSubmitting(false);
     setPendingAmount(0);
+    setFeePreview(undefined);
   }, [visible]);
 
   const originCity = cityOf(pickup);
@@ -124,6 +129,29 @@ export function MarketLoadBidSheet({
       setPendingAmount(amount);
       setConfirmPhase('review');
       setConfirmOpen(true);
+
+      // A11.1 — computed once per confirm, not per keystroke, mirroring the
+      // one-shot precedent already used elsewhere in this screen tree. A
+      // request token guards against a stale response landing after the
+      // sheet was cancelled/reopened with a different amount.
+      const requestId = ++feeRequestRef.current;
+      setFeePreview({ status: 'loading' });
+      void calculateMarketplacePlatformFee(amount).then(({ error, calc }) => {
+        if (feeRequestRef.current !== requestId) return;
+        if (error || !calc) {
+          setFeePreview({ status: 'error' });
+          return;
+        }
+        if (!calc.is_active_config_found) {
+          setFeePreview({ status: 'inactive' });
+          return;
+        }
+        setFeePreview({
+          status: 'active',
+          amount: calc.resolved_fee,
+          capped: Boolean(calc.capped),
+        });
+      });
     },
     [onClearValidationError],
   );
@@ -205,6 +233,7 @@ export function MarketLoadBidSheet({
             material={material}
             targetRate={target}
             submitting={confirmSubmitting}
+            marketplaceFee={feePreview}
             onCancel={handleCancelConfirm}
             onConfirm={() => {
               void handleConfirm();

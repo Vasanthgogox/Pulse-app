@@ -128,7 +128,8 @@ export function DcoReviewPanel() {
       if (!q) return true;
       return (
         (r.driver_name ?? '').toLowerCase().includes(q) ||
-        (r.driver_phone ?? '').toLowerCase().includes(q)
+        (r.driver_phone ?? '').toLowerCase().includes(q) ||
+        (r.driver_email ?? '').toLowerCase().includes(q)
       );
     });
   }, [rows, filter, search]);
@@ -250,8 +251,11 @@ export function DcoReviewPanel() {
                     <td className="px-3 py-2">
                       <div className="font-semibold">{r.driver_name ?? 'Unknown driver'}</div>
                       <div className="text-[10px] text-muted-foreground">
-                        {r.driver_phone ?? '—'}
+                        {r.driver_phone ?? 'No phone'}
                       </div>
+                      {r.driver_email ? (
+                        <div className="text-[10px] text-muted-foreground">{r.driver_email}</div>
+                      ) : null}
                     </td>
                     <td className="px-3 py-2 text-[11px] text-muted-foreground">
                       {formatDate(r.requested_at)}

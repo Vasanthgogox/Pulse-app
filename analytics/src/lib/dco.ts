@@ -17,6 +17,7 @@ export interface DcoReviewRow {
   decision_reason: string | null;
   driver_name: string | null;
   driver_phone: string | null;
+  driver_email: string | null;
 }
 
 type DbRow = {
@@ -27,12 +28,43 @@ type DbRow = {
   decision_reason: string | null;
 };
 
+type QueueRow = DbRow & {
+  driver_name: string | null;
+  driver_phone: string | null;
+  driver_email: string | null;
+};
+
+function asStatus(status: string): DcoProfileStatus {
+  return (['PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED'].includes(status)
+    ? status
+    : 'PENDING') as DcoProfileStatus;
+}
+
+function toReviewRow(row: QueueRow): DcoReviewRow {
+  return {
+    user_id: row.user_id,
+    status: asStatus(row.status),
+    requested_at: row.requested_at,
+    reviewed_at: row.reviewed_at,
+    decision_reason: row.decision_reason,
+    driver_name: row.driver_name,
+    driver_phone: row.driver_phone,
+    driver_email: row.driver_email,
+  };
+}
+
 /**
- * Every dco_profiles row this admin session can see (self or reviewer),
- * newest request first. Profile name/phone joined separately, same
- * two-step pattern as fetchDriverKycQueue in driverKyc.ts.
+ * Every dco_profiles row this reviewer can see, newest request first.
+ * Identity comes from list_dco_review_queue (SECURITY DEFINER) because
+ * profiles RLS does not grant dco.review SELECT on other users. Falls
+ * back to a profiles join if the RPC is not deployed yet.
  */
 export async function fetchDcoProfiles(): Promise<DcoReviewRow[]> {
+  const queued = await supabase.rpc('list_dco_review_queue');
+  if (!queued.error && queued.data) {
+    return (queued.data as QueueRow[]).map(toReviewRow);
+  }
+
   const { data, error } = await supabase
     .from('dco_profiles')
     .select('user_id,status,requested_at,reviewed_at,decision_reason')
@@ -44,27 +76,27 @@ export async function fetchDcoProfiles(): Promise<DcoReviewRow[]> {
   const uids = [...new Set(rows.map((r) => r.user_id))];
   const { data: profiles } = await supabase
     .from('profiles')
-    .select('id,full_name,phone')
+    .select('id,full_name,phone,email')
     .in('id', uids);
   const profileById = new Map(
-    ((profiles ?? []) as { id: string; full_name: string | null; phone: string | null }[]).map(
-      (p) => [p.id, p],
-    ),
+    (
+      (profiles ?? []) as {
+        id: string;
+        full_name: string | null;
+        phone: string | null;
+        email: string | null;
+      }[]
+    ).map((p) => [p.id, p]),
   );
 
   return rows.map((row) => {
     const profile = profileById.get(row.user_id);
-    return {
-      user_id: row.user_id,
-      status: (['PENDING', 'APPROVED', 'REJECTED', 'SUSPENDED'].includes(row.status)
-        ? row.status
-        : 'PENDING') as DcoProfileStatus,
-      requested_at: row.requested_at,
-      reviewed_at: row.reviewed_at,
-      decision_reason: row.decision_reason,
+    return toReviewRow({
+      ...row,
       driver_name: profile?.full_name ?? null,
       driver_phone: profile?.phone ?? null,
-    };
+      driver_email: profile?.email ?? null,
+    });
   });
 }
 
