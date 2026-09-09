@@ -70,9 +70,8 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
 
   /**
    * Tracks which userId had its org state populated by ActiveWorkspaceContext.
-   * When set, OrganizationContext skips its own fetch for that user — avoiding
-   * a duplicate startup request. Cleared on userId change so a different user
-   * always gets a fresh fetch. refreshOrganization bypasses this guard entirely.
+   * Cleared on userId change so a different user is not treated as already hydrated.
+   * refreshOrganization (forceRefresh) bypasses the cold-login skip entirely.
    */
   const workspacePopulatedForUserRef = useRef<string | null>(null);
 
@@ -90,12 +89,15 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   const ORG_RETRY_BASE_MS = 5_000;
   const ORG_RETRY_CAP_MS = 60_000;
 
-  // Public setter — wraps state setter so ActiveWorkspaceContext can signal
-  // that it has already populated org state for the current user.
+  // Public setter — ActiveWorkspaceContext writes the cold-login org here
+  // after its single membership fetch. Do not start a second membership query.
   const setCurrentOrganization = useCallback((org: CurrentOrganization | null) => {
     const currentUid = userRef.current?.uid ?? null;
     if (currentUid) workspacePopulatedForUserRef.current = currentUid;
     setCurrentOrganizationState(org);
+    setError(null);
+    setIsLoading(false);
+    if (!isStartupComplete()) markStartupPhase('org_resolved');
   }, []);
 
   /** `signal.cancelled` is set in effect cleanup (user change, unmount). Refresh uses `sessionSignalRef` so it honours the same cancellation. */
@@ -119,10 +121,15 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       return;
     }
 
-    // Skip fetch if ActiveWorkspaceContext already populated org state for this
-    // exact user session. forceRefresh (used by refreshOrganization) bypasses this.
-    if (!forceRefresh && workspacePopulatedForUserRef.current === sessionUser.uid) {
-      if (!stale()) setIsLoading(false);
+    // Cold login: ActiveWorkspaceProvider owns organization_members / organizations.
+    // Skip getOrganizationsForUser so the two providers cannot race a duplicate fetch.
+    // If workspace already called setCurrentOrganization, drop isLoading; otherwise
+    // stay loading until that setter runs. forceRefresh (refreshOrganization) still fetches.
+    if (!forceRefresh) {
+      if (workspacePopulatedForUserRef.current === sessionUser.uid && !stale()) {
+        if (!isStartupComplete()) markStartupPhase('org_resolved');
+        setIsLoading(false);
+      }
       return;
     }
 
@@ -234,7 +241,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   // OrganizationProvider (e.g. each isLoading flip triggers 20+ consumers).
   const value = useMemo(
     () => ({ currentOrganization, setCurrentOrganization, isLoading, error, refreshOrganization }),
-    [currentOrganization, isLoading, error, refreshOrganization],
+    [currentOrganization, setCurrentOrganization, isLoading, error, refreshOrganization],
   );
 
   return (
