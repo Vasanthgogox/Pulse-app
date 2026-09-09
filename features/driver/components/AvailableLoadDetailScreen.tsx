@@ -38,6 +38,10 @@ import {
   RazorpayCheckoutSheet,
   type RazorpayCheckoutResult,
 } from '@/features/marketplace/components/RazorpayCheckoutSheet';
+import {
+  PilotPaymentMethodSheet,
+  PilotTestCheckoutSheet,
+} from '@/features/marketplace/components/PilotPaymentMethodSheet';
 import { showAppAlert } from '@/lib/appAlert';
 import { useFleetOwnerOpenLoadsQuery } from '@/lib/queries/useFleetOwnerOpenLoadsQuery';
 import { useMyMarketAwardsQuery } from '@/lib/queries/useMyMarketAwardsQuery';
@@ -51,7 +55,6 @@ import { useLocalSearchParams, useRouter, type Href } from 'expo-router';
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
-  Modal,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -145,6 +148,12 @@ export default function AvailableLoadDetailScreen() {
     keyId: string;
   } | null>(null);
   const [isCreatingTrip, setIsCreatingTrip] = useState(false);
+  // A11.2 — surfaces a createMarketTripAfterFeePayment() failure instead of
+  // leaving the card stuck on "Connecting your awarded job..." forever.
+  // retryNonce exists purely to re-trigger the effect below on demand; it
+  // carries no data of its own.
+  const [tripCreationError, setTripCreationError] = useState<string | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
 
   // A10.2 — PILOT/TEST ONLY payment methods, alongside real Razorpay.
   // Gated server-side (MARKETPLACE_TEST_PAYMENTS_ENABLED); this UI only
@@ -257,18 +266,26 @@ export default function AvailableLoadDetailScreen() {
     if (awardedTrip) return; // trip already exists
     if (isCreatingTrip) return;
     setIsCreatingTrip(true);
+    setTripCreationError(null);
     void createMarketTripAfterFeePayment(myBid.id)
       .then(({ error }) => {
         if (error) {
           console.warn('[AvailableLoadDetailScreen] createMarketTripAfterFeePayment failed:', error.message);
+          setTripCreationError(formatMarketBidSubmitError(error.message));
           return;
         }
+        setTripCreationError(null);
         invalidateAwards();
         invalidateMyBid();
       })
       .finally(() => setIsCreatingTrip(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myBid?.id, myBid?.status, myBid?.fee_payment_status, awardedTrip]);
+  }, [myBid?.id, myBid?.status, myBid?.fee_payment_status, awardedTrip, retryNonce]);
+
+  const handleRetryTripCreation = useCallback(() => {
+    setTripCreationError(null);
+    setRetryNonce((n) => n + 1);
+  }, []);
   const compatible = useMemo(
     () =>
       load
@@ -398,6 +415,8 @@ export default function AvailableLoadDetailScreen() {
             }}
             onPay={() => setMethodSheetOpen(true)}
             isStartingPayment={isStartingPayment}
+            tripCreationError={tripCreationError}
+            onRetryTripCreation={handleRetryTripCreation}
           />
           {checkoutOrder ? (
             <RazorpayCheckoutSheet
@@ -625,6 +644,8 @@ function AwardedMarketJobCard({
   onOpenJob,
   onPay,
   isStartingPayment,
+  tripCreationError,
+  onRetryTripCreation,
 }: {
   trip: DriverTripRow | null;
   bidAmount: number | null | undefined;
@@ -640,6 +661,9 @@ function AwardedMarketJobCard({
   onOpenJob: () => void;
   onPay?: () => void;
   isStartingPayment?: boolean;
+  /** A11.2 — set only when createMarketTripAfterFeePayment() has failed after a paid fee. */
+  tripCreationError?: string | null;
+  onRetryTripCreation?: () => void;
 }) {
   const pickup = trip?.pickup_location?.trim() || 'Pickup';
   const drop = trip?.dropoff_location?.trim() || 'Drop';
@@ -647,10 +671,13 @@ function AwardedMarketJobCard({
     ? awardedEarningsLabel(trip, bidAmount)
     : formatMarketBidAmount(bidAmount) || 'Rate on request';
   const feePending = feePaymentStatus !== 'paid' && feePaymentStatus !== 'not_required';
+  const tripCreationFailed = !trip && !feePending && Boolean(tripCreationError);
   const statusHint = !trip
     ? feePending
       ? feePendingHint(feePaymentStatus, platformFeeAmount)
-      : 'Connecting your awarded job…'
+      : tripCreationFailed
+        ? (tripCreationError as string)
+        : 'Connecting your awarded job…'
     : isAssignedNotStarted(trip.status)
       ? 'Opening on Dashboard…'
       : isActiveMission(trip.status)
@@ -694,126 +721,27 @@ function AwardedMarketJobCard({
               hint: feePendingHint(feePaymentStatus, platformFeeAmount),
               onPress: onPay!,
             }
-          : awaitingPayment
+          : tripCreationFailed
             ? {
-                title: 'Awaiting payment',
-                variant: 'info',
-                onPress: onOpenJob,
+                title: 'Retry',
+                hint: 'We could not confirm your job after payment.',
+                onPress: onRetryTripCreation ?? onOpenJob,
               }
-            : {
-                title: 'Open job',
-                hint: 'Continue on Dashboard',
-                onPress: onOpenJob,
-              }
+            : awaitingPayment
+              ? {
+                  title: 'Awaiting payment',
+                  variant: 'info',
+                  onPress: onOpenJob,
+                }
+              : {
+                  title: 'Open job',
+                  hint: 'Continue on Dashboard',
+                  onPress: onOpenJob,
+                }
       }
     />
   );
 }
-
-/**
- * A10.2 — PILOT/TEST ONLY. Lets the bidder pick real Razorpay or one of the
- * two pilot test methods for the Marketplace fee. The methods are clearly
- * labeled; the real protection is the server-side
- * MARKETPLACE_TEST_PAYMENTS_ENABLED gate in the marketplace-test-payment
- * edge function, not this UI. Remove once the pilot's temporary payment
- * methods are retired.
- */
-function PilotPaymentMethodSheet({
-  visible,
-  busy,
-  onClose,
-  onRazorpay,
-  onTestProvider,
-}: {
-  visible: boolean;
-  busy: boolean;
-  onClose: () => void;
-  onRazorpay: () => void;
-  onTestProvider: (provider: TestMarketplaceFeeProvider) => void;
-}) {
-  return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
-      <View style={pilotStyles.overlay}>
-        <View style={pilotStyles.sheet}>
-          <Text style={pilotStyles.title}>Pay Marketplace fee</Text>
-          <Pressable disabled={busy} onPress={onRazorpay} style={pilotStyles.option}>
-            <Text style={pilotStyles.optionText}>Pay Online</Text>
-          </Pressable>
-          <Pressable disabled={busy} onPress={() => onTestProvider('test_online')} style={pilotStyles.option}>
-            <Text style={pilotStyles.optionText}>Razorpay Test Preview</Text>
-          </Pressable>
-          <Pressable disabled={busy} onPress={() => onTestProvider('cash')} style={pilotStyles.option}>
-            <Text style={pilotStyles.optionText}>Cash — Pilot/Test only</Text>
-          </Pressable>
-          <Pressable disabled={busy} onPress={onClose} style={pilotStyles.cancel}>
-            <Text style={pilotStyles.cancelText}>Cancel</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-/**
- * A10.2 — PILOT/TEST ONLY fake checkout. For "cash", the bidder self-attests
- * payment (Confirm cash paid); for "test_online", the bidder simulates the
- * outcome a real gateway would return. Either way this only ever calls
- * simulateTestMarketplaceFeePayment(bidId, outcome) -- it never supplies an
- * amount, and the actual state transition still happens inside the
- * unmodified confirm_marketplace_fee_payment() RPC.
- */
-function PilotTestCheckoutSheet({
-  order,
-  busy,
-  onCancel,
-  onOutcome,
-}: {
-  order: { provider: TestMarketplaceFeeProvider; amount: number } | null;
-  busy: boolean;
-  onCancel: () => void;
-  onOutcome: (outcome: 'paid' | 'failed') => void;
-}) {
-  if (!order) return null;
-  const isCash = order.provider === 'cash';
-  return (
-    <Modal visible transparent animationType="fade" onRequestClose={onCancel}>
-      <View style={pilotStyles.overlay}>
-        <View style={pilotStyles.sheet}>
-          <Text style={pilotStyles.title}>{isCash ? 'Cash — Pilot/Test only' : 'Pay Online — Test'}</Text>
-          <Text style={pilotStyles.amount}>{formatINR(order.amount)}</Text>
-          {isCash ? (
-            <Pressable disabled={busy} onPress={() => onOutcome('paid')} style={pilotStyles.option}>
-              <Text style={pilotStyles.optionText}>Confirm cash paid</Text>
-            </Pressable>
-          ) : (
-            <>
-              <Pressable disabled={busy} onPress={() => onOutcome('paid')} style={pilotStyles.option}>
-                <Text style={pilotStyles.optionText}>Simulate success</Text>
-              </Pressable>
-              <Pressable disabled={busy} onPress={() => onOutcome('failed')} style={pilotStyles.option}>
-                <Text style={pilotStyles.optionText}>Simulate failure</Text>
-              </Pressable>
-            </>
-          )}
-          <Pressable disabled={busy} onPress={onCancel} style={pilotStyles.cancel}>
-            <Text style={pilotStyles.cancelText}>Cancel</Text>
-          </Pressable>
-        </View>
-      </View>
-    </Modal>
-  );
-}
-
-const pilotStyles = StyleSheet.create({
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
-  sheet: { backgroundColor: '#fff', borderTopLeftRadius: 16, borderTopRightRadius: 16, padding: 20, gap: 10 },
-  title: { fontSize: 15, fontWeight: '700', color: '#0f172a', marginBottom: 4 },
-  amount: { fontSize: 22, fontWeight: '800', color: '#0f172a', marginBottom: 8 },
-  option: { paddingVertical: 14, borderRadius: 10, backgroundColor: '#f1f5f9', alignItems: 'center' },
-  optionText: { fontSize: 14, fontWeight: '600', color: '#0f172a' },
-  cancel: { paddingVertical: 12, alignItems: 'center', marginTop: 4 },
-  cancelText: { fontSize: 13, fontWeight: '600', color: '#64748b' },
-});
 
 const styles = StyleSheet.create({
   root: { flex: 1 },

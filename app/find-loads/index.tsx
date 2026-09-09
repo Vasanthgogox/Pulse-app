@@ -108,10 +108,18 @@ export default function FindLoadsScreen() {
 
   const loadsQ = useQuery({
     queryKey: queryKeys.findLoadsForOrg.list(orgId ?? ""),
-    queryFn: () => listOpenMarketplaceLoadsForOrg(orgId as string),
+    // A11.3 — listOpenMarketplaceLoadsForOrg never rejects; it resolves
+    // { error, loads } even on an RPC failure. Unwrap and throw here so
+    // react-query's own error/isError state actually populates, mirroring
+    // the existing useFleetOwnerOpenLoadsQuery pattern on the DCO side.
+    queryFn: async () => {
+      const { error, loads } = await listOpenMarketplaceLoadsForOrg(orgId as string);
+      if (error) throw error;
+      return loads;
+    },
     enabled: !!orgId,
   });
-  const loads = loadsQ.data?.loads ?? [];
+  const loads = loadsQ.data ?? [];
 
   const vehiclesQ = useQuery({
     queryKey: queryKeys.vehicles.all(orgId ?? ""),
@@ -320,7 +328,19 @@ export default function FindLoadsScreen() {
       ) : (
         <>
 
-          {loadsQ.isLoading ? (
+          {loadsQ.isError ? (
+            <View style={styles.centered}>
+              <Text style={styles.message}>Couldn't load Marketplace loads.</Text>
+              <Pressable
+                onPress={() => loadsQ.refetch()}
+                style={({ pressed }) => [styles.retryBtn, pressed && styles.retryBtnPressed]}
+                accessibilityRole="button"
+                accessibilityLabel="Retry"
+              >
+                <Text style={styles.retryBtnText}>Retry</Text>
+              </Pressable>
+            </View>
+          ) : loadsQ.isLoading ? (
             <View style={styles.centered}>
               <Text style={styles.message}>Loading Marketplace opportunities…</Text>
             </View>
@@ -639,6 +659,15 @@ const styles = StyleSheet.create({
     padding: 24,
   },
   message: { fontSize: 16, color: Theme.textSecondary },
+  retryBtn: {
+    marginTop: 14,
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 10,
+    backgroundColor: Theme.buttonPrimary,
+  },
+  retryBtnPressed: { opacity: 0.85 },
+  retryBtnText: { fontSize: 14, fontWeight: "700", color: Theme.buttonPrimaryText },
   chrome: {
     backgroundColor: Theme.cardWhite,
     borderBottomWidth: StyleSheet.hairlineWidth,
