@@ -7,6 +7,7 @@ import {
   getDriverLedgerAggregation,
   getSupplierLedgerAggregation,
   getCustomerLedgerInputs,
+  getDcoLedgerAggregation,
 } from '@/features/finance/services/ledgerAggregationRpc.service';
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
@@ -27,6 +28,15 @@ export function useSupplierLedgerAggregationQuery(
   return useQuery({
     queryKey: queryKeys.financeAggregation.supplier(orgId ?? '', applyAdjustments),
     queryFn: () => getSupplierLedgerAggregation(orgId!, applyAdjustments),
+    enabled: !!orgId,
+    staleTime: STALE.realtime,
+  });
+}
+
+export function useDcoLedgerAggregationQuery(orgId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.financeAggregation.dco(orgId ?? ''),
+    queryFn: () => getDcoLedgerAggregation(orgId!),
     enabled: !!orgId,
     staleTime: STALE.realtime,
   });

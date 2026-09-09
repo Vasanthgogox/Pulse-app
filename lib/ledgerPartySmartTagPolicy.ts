@@ -80,13 +80,15 @@ export function ledgerDisplayClientDue(
 
 export function deriveLedgerLockedEntityType(
   explicit: LedgerLockedEntityType | null | undefined,
-  partyContext: "customers" | "suppliers" | "all",
+  partyContext: "customers" | "suppliers" | "dco" | "all",
   isPartyLocked: boolean,
 ): LedgerLockedEntityType | null {
   if (explicit) return explicit;
   if (!isPartyLocked) return null;
   if (partyContext === "customers") return "CLIENT";
   if (partyContext === "suppliers") return "SUPPLIER";
+  // DCO-6: no locked-entity-type chip for DCO yet (LedgerLockedEntityType has
+  // no DCO value) — falls through to null, same as "all" already does.
   return null;
 }
 

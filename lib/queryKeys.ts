@@ -135,6 +135,7 @@ export const queryKeys = {
       ["q", "finance-aggregation", "supplier", orgId, applyAdjustments] as const,
     customer: (orgId: string, applyAdjustments: boolean) =>
       ["q", "finance-aggregation", "customer", orgId, applyAdjustments] as const,
+    dco: (orgId: string) => ["q", "finance-aggregation", "dco", orgId] as const,
   },
 
   vehicles: {

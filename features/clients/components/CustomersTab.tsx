@@ -1586,7 +1586,7 @@ export interface LedgerTransactionRow {
   amount_in?: number;
   amount_out?: number;
   contact_id?: string | null;
-  contact_type?: "client" | "supplier" | "driver" | null;
+  contact_type?: "client" | "supplier" | "driver" | "dco" | null;
 }
 
 /** Minimal shape for a pending client invitation (invite-by-phone sent, awaiting approval). */
