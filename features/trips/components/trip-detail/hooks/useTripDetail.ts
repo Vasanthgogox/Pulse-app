@@ -55,6 +55,10 @@ import * as driverLocationService from "@/features/driver/services/driverLocatio
 import { getMoverAssetClientPaid } from "@/features/trips/services/moverAssetPayment.service";
 import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
 import { parseLrFieldValues } from "@/features/trips/services/lrDocumentOcr.util";
+import {
+  parseEwayFieldEntries,
+  parseEwayFieldValues,
+} from "@/features/trips/services/ewayBillFields.util";
 import { useQueryClient } from "@tanstack/react-query";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { useRouter } from "expo-router";
@@ -162,8 +166,11 @@ function buildSlotCard(
       category: slot.category,
     };
   }
+  const isEwaySlot = slot.category === "eway" || slot.id === "eway_bill";
   const files = rows.map((row, index) => {
-    const number = parseLrFieldValues(row.document_number).lrNumber;
+    const number = isEwaySlot
+      ? parseEwayFieldValues(row.document_number).ewayNo
+      : parseLrFieldValues(row.document_number).lrNumber;
     return {
       id: `${slot.id}-${row.id}`,
       label: number
@@ -179,7 +186,15 @@ function buildSlotCard(
   const storedFields = rows
     .map((row) => parseLrFieldValues(row.document_number))
     .find((fields) => fields.lrNumber || fields.date || fields.invoice);
-  const documentNumber = storedFields?.lrNumber || null;
+  const ewayRaw = isEwaySlot
+    ? rows.find((row) => parseEwayFieldEntries(row.document_number).length > 0)
+        ?.document_number ??
+      rows.find((row) => row.document_number?.trim())?.document_number ??
+      null
+    : null;
+  const documentNumber = isEwaySlot
+    ? ewayRaw?.trim() || null
+    : storedFields?.lrNumber || null;
   return {
     id: slot.id,
     label: slot.label,
@@ -1635,9 +1650,9 @@ export function useTripDetail({
   }, [trip?.id, trip?.supplier_id, trip?.driver_id, trip?.vehicle_id, trip?.vehicle_display_number, driverLinked]);
 
   const loadTripDocuments = useCallback(() => {
-    if (!tripId) return;
+    if (!tripId) return Promise.resolve();
     const requestedTripId = tripId;
-    tripDocumentsService
+    return tripDocumentsService
       .getDocumentsByTripId(tripId)
       .then(({ documents, error }) => {
         // The active trip changed while this request was in flight -- a

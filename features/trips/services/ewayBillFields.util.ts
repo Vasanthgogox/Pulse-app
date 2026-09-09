@@ -153,10 +153,6 @@ function dash(value?: string | null): string {
   return text ? text : "—";
 }
 
-function isUploadedDoc(doc?: TripDocItem | null): boolean {
-  return !!doc && (doc.status !== "Pending" || !!doc.storagePath);
-}
-
 export function ewayDocHasPreviewableFile(doc?: TripDocItem | null): boolean {
   if (!doc) return false;
   const paths = [
@@ -172,12 +168,8 @@ function displayDate(value?: string | null): string {
 
 export function buildEwayBillStripRows(params: {
   ewayDoc?: TripDocItem | null;
-  lrDoc?: TripDocItem | null;
-  lrNumber?: string | null;
 }): EwayBillStripRow[] {
-  const lrFallback = params.lrNumber || params.lrDoc?.documentNumber || "";
   const entries = parseEwayFieldEntries(params.ewayDoc?.documentNumber);
-  const lrUploaded = isUploadedDoc(params.lrDoc);
   const ewayDoc = params.ewayDoc;
   const files = (ewayDoc?.files ?? []).filter(
     (file) =>
@@ -187,7 +179,6 @@ export function buildEwayBillStripRows(params: {
     ewayDocHasPreviewableFile(ewayDoc) &&
     !!ewayDoc?.storagePath &&
     !isEwayBillMetaPath(ewayDoc.storagePath);
-  const canViewSlot = slotPreviewable || lrUploaded;
   const baseId = ewayDoc?.documentId ?? ewayDoc?.id ?? "eway";
 
   const toRow = (
@@ -201,7 +192,7 @@ export function buildEwayBillStripRows(params: {
     ewayNo: dash(fields.ewayNo),
     createdDate: displayDate(fields.createdDate),
     validTill: displayDate(fields.validTill),
-    docNo: dash(fields.docNo || (index === 0 ? lrFallback : "")),
+    docNo: dash(fields.docNo),
     canView,
   });
 
@@ -211,7 +202,7 @@ export function buildEwayBillStripRows(params: {
         fields,
         index,
         files[index]?.id ?? `${baseId}-entry-${index}`,
-        !!files[index] || canViewSlot,
+        !!files[index] || slotPreviewable,
       ),
     );
   }
@@ -221,8 +212,6 @@ export function buildEwayBillStripRows(params: {
       {
         ...EMPTY_STRIP_ROW,
         id: ewayDoc ? `${baseId}-entry-0` : EMPTY_STRIP_ROW.id,
-        docNo: dash(lrFallback),
-        canView: canViewSlot,
       },
     ];
   }

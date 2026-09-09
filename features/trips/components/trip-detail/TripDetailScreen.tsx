@@ -2023,7 +2023,7 @@ export default function TripDetailScreen({
         Alert.alert("Could not save", error.message);
         return false;
       }
-      detail.loadTripDocuments();
+      await detail.loadTripDocuments();
       return true;
     },
     [detail.trip?.id, detail.currentUserId, detail.loadTripDocuments],
@@ -3142,31 +3142,15 @@ export default function TripDetailScreen({
   const vaultDocs = detail.computedTripDocs;
   const ewayBillDoc = vaultDocs.find(isEwayBillVaultDoc);
   const vaultCardDocs = vaultDocs.filter((doc) => !isEwayBillVaultDoc(doc));
-  const lrVaultDoc = vaultCardDocs.find(isLrVaultDoc);
   const ewayStripRows = buildEwayBillStripRows({
     ewayDoc: ewayBillDoc,
-    lrDoc: lrVaultDoc,
-    lrNumber: lrVaultDoc?.documentNumber,
   });
   const openEwayBillPreview = (rowId: string) => {
-    const ewayReady = ewayDocHasPreviewableFile(ewayBillDoc);
-    if (ewayReady && rowId !== "eway-empty") {
-      const files = ewayBillDoc.files ?? [];
-      const fileIndex = files.findIndex((file) => file.id === rowId);
-      if (fileIndex >= 0) {
-        detail.setVehiclePreviewIndex(fileIndex);
-      } else {
-        detail.setVehiclePreviewIndex(0);
-      }
-      detail.setSelectedDoc(ewayBillDoc);
-      return;
-    }
-    const lrReady =
-      !!lrVaultDoc &&
-      (lrVaultDoc.status !== "Pending" || !!lrVaultDoc.storagePath);
-    if (lrReady) {
-      detail.setSelectedDoc(lrVaultDoc);
-    }
+    if (!ewayBillDoc || !ewayDocHasPreviewableFile(ewayBillDoc)) return;
+    const files = ewayBillDoc.files ?? [];
+    const fileIndex = files.findIndex((file) => file.id === rowId);
+    detail.setVehiclePreviewIndex(fileIndex >= 0 ? fileIndex : 0);
+    detail.setSelectedDoc(ewayBillDoc);
   };
   const canUploadTripDocs =
     !!currentOrganization?.id &&

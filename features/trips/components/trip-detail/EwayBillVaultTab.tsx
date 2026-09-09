@@ -489,7 +489,7 @@ export function EwayBillLrStrip({ rows, onView, canEdit, onSave }: Props) {
                 style={styles.fieldInput}
                 value={draft.docNo}
                 onChangeText={(docNo) => setDraft((prev) => ({ ...prev, docNo }))}
-                placeholder="LR / document number"
+                placeholder="E-way document number"
                 placeholderTextColor={Theme.textMuted}
                 autoCapitalize="characters"
                 autoCorrect={false}

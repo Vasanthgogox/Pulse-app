@@ -45,7 +45,7 @@ describe("isEwayBillMetaPath", () => {
 });
 
 describe("buildEwayBillStripRows", () => {
-  it("shows typed fields and uses the LR for preview when no e-way file exists", () => {
+  it("shows typed e-way fields without using an LR document", () => {
     const rows = buildEwayBillStripRows({
       ewayDoc: {
         id: "eway_bill",
@@ -60,14 +60,6 @@ describe("buildEwayBillStripRows", () => {
         }),
         storagePath: ewayBillFieldsStoragePath("trip-1"),
       },
-      lrDoc: {
-        id: "lr",
-        label: "LR Document",
-        type: "PDF",
-        status: "Uploaded",
-        storagePath: "trip-1/lr/scan.pdf",
-        documentNumber: "LR-9",
-      },
     });
     expect(rows).toEqual([
       {
@@ -77,28 +69,26 @@ describe("buildEwayBillStripRows", () => {
         createdDate: "01-Sep-26",
         validTill: "03-Sep-26",
         docNo: "262718182",
-        canView: true,
+        canView: false,
       },
     ]);
   });
 
-  it("falls back to the LR number when doc no was not typed", () => {
+  it("does not copy the LR number into e-way columns", () => {
     const rows = buildEwayBillStripRows({
-      lrDoc: {
-        id: "lr",
-        label: "LR Document",
+      ewayDoc: {
+        id: "eway_bill",
+        label: "Eway Bill",
         type: "PDF",
-        status: "Uploaded",
-        storagePath: "trip-1/lr/scan.pdf",
-        documentNumber: "BHD-4026",
+        status: "Pending",
       },
     });
     expect(rows[0]).toMatchObject({
       ewayNo: "—",
       createdDate: "—",
       validTill: "—",
-      docNo: "BHD-4026",
-      canView: true,
+      docNo: "—",
+      canView: false,
     });
   });
 
