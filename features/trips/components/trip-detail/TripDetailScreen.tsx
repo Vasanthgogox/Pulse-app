@@ -18,6 +18,7 @@ import { TripVaultFilePreview } from "@/features/trips/components/trip-detail/Tr
 import { useLanguage } from "@/contexts/LanguageContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useOptionalActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
+import { getGroundOpsDocUploadEnabled } from "@/features/organization/services/organization.service";
 import { TripChatRoomSheet } from "@/features/chat/components/TripChatRoomSheet";
 import {
   pushTripLedgerQuickEntry,
@@ -546,6 +547,13 @@ export default function TripDetailScreen({
   const { can: canSurface } = useMemberAccess();
   const { memberPlatformRole } = useOptionalActiveWorkspace() ?? {};
   const isGroundOpsOnly = memberPlatformRole === "ground_ops";
+  const groundOpsDocUploadQuery = useQuery({
+    queryKey: ["q", "org", currentOrganization?.id ?? "", "ground-ops-doc-upload"],
+    enabled: isGroundOpsOnly && !!currentOrganization?.id,
+    queryFn: () => getGroundOpsDocUploadEnabled(currentOrganization!.id),
+    staleTime: 60_000,
+  });
+  const groundOpsDocUploadEnabled = groundOpsDocUploadQuery.data === true;
   const canTripFinanceTab = canSurface("tripops.trips.finance");
   // Settlement write actions (capture payment / record payout). The trip finance
   // tab is read-only for a dispatcher — money movement needs its own grant.
@@ -3077,8 +3085,7 @@ export default function TripDetailScreen({
     lrNumber: lrVaultDoc?.documentNumber,
   });
   const openEwayBillPreview = (rowId: string) => {
-    const ewayReady = ewayDocHasPreviewableFile(ewayBillDoc);
-    if (ewayReady && rowId !== "eway-empty") {
+    if (ewayBillDoc && ewayDocHasPreviewableFile(ewayBillDoc) && rowId !== "eway-empty") {
       const files = ewayBillDoc.files ?? [];
       const fileIndex = files.findIndex((file) => file.id === rowId);
       if (fileIndex >= 0) {
@@ -3100,7 +3107,7 @@ export default function TripDetailScreen({
     !!currentOrganization?.id &&
     !!trip.organization_id &&
     currentOrganization.id === trip.organization_id &&
-    !isGroundOpsOnly; // Ground Ops will be gated by RLS + org toggle at upload time
+    (!isGroundOpsOnly || groundOpsDocUploadEnabled); // Ground Ops needs the org toggle on; RLS is the real boundary
 
   const canUploadThisVaultDoc = (doc: (typeof detail.computedTripDocs)[number]) =>
     canMutateTripVaultDoc({
