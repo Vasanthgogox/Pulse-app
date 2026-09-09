@@ -3,23 +3,19 @@
 //
 // Per-document-type prompts + evaluation for GST, PAN, address proof, and
 // structure KYC docs (CIN/COI, partnership deed, LLP agreement, MSME, IEC).
-
 import { ingestLog } from '../_shared/logWatcherIngest.ts';
 import { createClient } from 'npm:@supabase/supabase-js@2';
-
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
-
 function json(body: object, status = 200) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
   });
 }
-
 function normaliseTaxId(s: string): string {
   return (s ?? '')
     .toUpperCase()
@@ -28,7 +24,6 @@ function normaliseTaxId(s: string): string {
     .replace(/1/g, 'I')
     .replace(/5/g, 'S');
 }
-
 function levenshtein(a: string, b: string): number {
   const m = a.length, n = b.length;
   const dp: number[][] = Array.from({ length: m + 1 }, (_, i) =>
@@ -43,7 +38,6 @@ function levenshtein(a: string, b: string): number {
   }
   return dp[m][n];
 }
-
 function taxIdSimilarity(typed: string, extracted: string): number {
   const a = normaliseTaxId(typed);
   const b = normaliseTaxId(extracted);
@@ -51,7 +45,6 @@ function taxIdSimilarity(typed: string, extracted: string): number {
   const maxLen = Math.max(a.length, b.length);
   return 1 - levenshtein(a, b) / maxLen;
 }
-
 type KycUploadDocumentType =
   | 'gst_certificate'
   | 'pan_card'
@@ -64,7 +57,6 @@ type KycUploadDocumentType =
   | 'llp_agreement'
   | 'msme_certificate'
   | 'iec_certificate';
-
 interface VerifyRequest {
   document_type: KycUploadDocumentType;
   storage_path: string;
@@ -74,7 +66,6 @@ interface VerifyRequest {
   typed_msme?: string;
   typed_iec?: string;
 }
-
 interface ExtractedFields {
   gstin: string | null;
   pan: string | null;
@@ -85,9 +76,7 @@ interface ExtractedFields {
   document_type: string | null;
   legible: boolean;
 }
-
 const HARD_THRESHOLD = 0.85;
-
 const GSTIN_REGEX = /^[0-9]{2}[A-Z]{5}[0-9]{4}[A-Z][1-9A-Z]Z[0-9A-Z]$/;
 const PAN_REGEX = /^[A-Z]{5}[0-9]{4}[A-Z]$/;
 /** Indian CIN / LLPIN — 21 alphanumeric (MCA). */
@@ -96,13 +85,10 @@ const CIN_REGEX = /^[A-Z0-9]{21}$/;
 const UDYAM_REGEX = /^UDYAM-[A-Z]{2}-\d{2}-\d{7}$/i;
 /** IEC — 10 digits (DGFT). */
 const IEC_REGEX = /^\d{10}$/;
-
 const INCORPORATION_TYPES = new Set(['cin_certificate', 'incorporation_certificate']);
-
 function buildPrompt(documentType: KycUploadDocumentType): string {
   const commonFooter =
     'Return ONLY the JSON object — no markdown fences, no explanation.';
-
   if (documentType === 'gst_certificate') {
     return `You are verifying an Indian GST registration certificate.
 Extract fields. Return ONLY valid JSON:
@@ -121,7 +107,6 @@ Rules:
 - Only set gstin from a GST certificate. Do not invent values.
 ${commonFooter}`;
   }
-
   if (documentType === 'pan_card') {
     return `You are verifying an Indian Permanent Account Number (PAN) card.
 Extract fields. Return ONLY valid JSON:
@@ -140,7 +125,6 @@ Rules:
 - Only set pan from a PAN card. Ignore other IDs.
 ${commonFooter}`;
   }
-
   if (
     documentType === 'address_proof_lease' ||
     documentType === 'address_proof_utility_bill' ||
@@ -165,7 +149,6 @@ Rules:
 - Do not extract tax IDs from address proofs.
 ${commonFooter}`;
   }
-
   if (INCORPORATION_TYPES.has(documentType)) {
     return `You are verifying an Indian Certificate of Incorporation / CIN document (MCA COI, SPICe+, LLP incorporation certificate, or CIN allotment letter).
 Extract fields. Return ONLY valid JSON:
@@ -185,7 +168,6 @@ Rules:
 - Reject unrelated docs (PAN, Aadhaar, GST) as other/unreadable.
 ${commonFooter}`;
   }
-
   if (documentType === 'partnership_deed') {
     return `You are verifying an Indian partnership deed (registered or notarised).
 Extract fields. Return ONLY valid JSON:
@@ -204,7 +186,6 @@ Rules:
 - Reject unrelated identity or tax cards.
 ${commonFooter}`;
   }
-
   if (documentType === 'llp_agreement') {
     return `You are verifying an Indian LLP Agreement (Limited Liability Partnership agreement).
 Extract fields. Return ONLY valid JSON:
@@ -223,7 +204,6 @@ Rules:
 - Reject unrelated documents.
 ${commonFooter}`;
   }
-
   if (documentType === 'msme_certificate') {
     return `You are verifying an Indian Udyam / MSME registration certificate.
 Extract fields. Return ONLY valid JSON:
@@ -242,7 +222,6 @@ Rules:
 - Only classify as msme_certificate for Udyam/MSME certificates.
 ${commonFooter}`;
   }
-
   // iec_certificate
   return `You are verifying an Indian IEC (Importer Exporter Code) certificate / DGFT document.
 Extract fields. Return ONLY valid JSON:
@@ -261,7 +240,6 @@ Rules:
 - Only classify as iec_certificate for DGFT / IEC allotment documents.
 ${commonFooter}`;
 }
-
 function emptyExtracted(partial?: Partial<ExtractedFields>): ExtractedFields {
   return {
     gstin: null,
@@ -275,7 +253,6 @@ function emptyExtracted(partial?: Partial<ExtractedFields>): ExtractedFields {
     ...partial,
   };
 }
-
 function fail(message: string, extracted: ExtractedFields) {
   return json({
     passed: false,
@@ -284,7 +261,6 @@ function fail(message: string, extracted: ExtractedFields) {
     extracted,
   });
 }
-
 function pass(message: string, extracted: ExtractedFields, score?: number) {
   return json({
     passed: true,
@@ -294,47 +270,31 @@ function pass(message: string, extracted: ExtractedFields, score?: number) {
     extracted,
   });
 }
-
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
   if (req.method !== 'POST') return json({ error: 'Method not allowed' }, 405);
-
   try {
     return await handle(req);
   } catch (e) {
     const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
     const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
-    if (supabaseUrl && serviceRoleKey) {
-      const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
-      await ingestLog(
-        supabase,
-        'error',
-        `Unhandled error in Gemini document verification: ${e instanceof Error ? e.message : String(e)}`,
-        'UnhandledError',
-        { service: 'gemini-doc-verify', operation: 'verify-document', statusCode: 500 }
-      );
-    }
     return json({ error: `Unhandled error: ${e instanceof Error ? e.message : String(e)}` }, 500);
   }
 });
-
 async function handle(req: Request): Promise<Response> {
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
   const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
   const geminiKey = Deno.env.get('GEMINI_API_KEY') ?? '';
   const geminiModel = Deno.env.get('GEMINI_MODEL') ?? 'gemini-2.5-flash';
-
   if (!geminiKey) {
     return json({ error: 'GEMINI_API_KEY not configured' }, 500);
   }
-
   let body: VerifyRequest;
   try {
     body = await req.json();
   } catch {
     return json({ error: 'Invalid JSON body' }, 400);
   }
-
   const {
     document_type,
     storage_path,
@@ -346,7 +306,6 @@ async function handle(req: Request): Promise<Response> {
   } = body;
   if (!storage_path) return json({ error: 'storage_path required' }, 400);
   if (!document_type) return json({ error: 'document_type required' }, 400);
-
   const encodedStoragePath = storage_path.split('/').map(encodeURIComponent).join('/');
   const signedUrlRes = await fetch(
     `${supabaseUrl}/storage/v1/object/sign/verification-documents/${encodedStoragePath}`,
@@ -360,55 +319,33 @@ async function handle(req: Request): Promise<Response> {
       body: JSON.stringify({ expiresIn: 120 }),
     },
   );
-
   if (!signedUrlRes.ok) {
     const errText = await signedUrlRes.text();
-    const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
-    await ingestLog(
-      supabase,
-      'error',
-      'Failed to generate signed URL for document storage',
-      'StorageError',
-      { service: 'gemini-doc-verify', operation: 'generate-signed-url', statusCode: signedUrlRes.status }
-    );
-    return json({ error: `Failed to generate signed URL for document: ${errText}` }, 500);
+    const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });    return json({ error: `Failed to generate signed URL for document: ${errText}` }, 500);
   }
   const { signedURL } = await signedUrlRes.json() as { signedURL: string };
   const absoluteSignedUrl = signedURL.startsWith('http')
     ? signedURL
     : `${supabaseUrl}/storage/v1${signedURL}`;
-
   const docRes = await fetch(absoluteSignedUrl);
   if (!docRes.ok) {
     const errText = await docRes.text();
-    const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
-    await ingestLog(
-      supabase,
-      'error',
-      'Failed to download document from Supabase storage',
-      'StorageDownloadError',
-      { service: 'gemini-doc-verify', operation: 'download-document', statusCode: docRes.status }
-    );
-    return json({
+    const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });    return json({
       error: `Failed to download document from storage: ${docRes.status} ${errText}`,
     }, 500);
   }
-
   const docBuffer = await docRes.arrayBuffer();
   const docBytes = new Uint8Array(docBuffer);
   let binary = '';
   for (let i = 0; i < docBytes.length; i++) binary += String.fromCharCode(docBytes[i]!);
   const base64Doc = btoa(binary);
-
   const contentType = docRes.headers.get('content-type') ?? 'image/jpeg';
   const isImage = contentType.startsWith('image/');
   const isPdf = contentType === 'application/pdf';
   if (!isImage && !isPdf) {
     return json({ error: `Unsupported document type: ${contentType}` }, 400);
   }
-
   const prompt = buildPrompt(document_type);
-
   const geminiRes = await fetch(
     `https://generativelanguage.googleapis.com/v1beta/models/${geminiModel}:generateContent?key=${geminiKey}`,
     {
@@ -429,16 +366,13 @@ async function handle(req: Request): Promise<Response> {
       }),
     },
   );
-
   if (!geminiRes.ok) {
     const errText = await geminiRes.text();
     return json({ error: `Gemini API error: ${errText}` }, 500);
   }
-
   const geminiData = await geminiRes.json() as {
     candidates?: Array<{ content?: { parts?: Array<{ text?: string }> } }>;
   };
-
   const rawText = geminiData.candidates?.[0]?.content?.parts?.[0]?.text ?? '{}';
   let extracted: ExtractedFields;
   try {
@@ -466,9 +400,7 @@ async function handle(req: Request): Promise<Response> {
       debug_raw_gemini_text: rawText,
     });
   }
-
   // ── Evaluate per declared upload type ──────────────────────────────────────
-
   if (document_type === 'gst_certificate') {
     if (!extracted.legible) {
       return fail(
@@ -505,7 +437,6 @@ async function handle(req: Request): Promise<Response> {
         next,
       );
   }
-
   if (document_type === 'pan_card') {
     if (!extracted.legible) {
       return fail(
@@ -542,7 +473,6 @@ async function handle(req: Request): Promise<Response> {
         next,
       );
   }
-
   if (
     document_type === 'address_proof_lease' ||
     document_type === 'address_proof_utility_bill' ||
@@ -562,7 +492,6 @@ async function handle(req: Request): Promise<Response> {
     }
     return pass('Document looks readable.', extracted);
   }
-
   if (INCORPORATION_TYPES.has(document_type)) {
     const looksLikeCoi =
       extracted.document_type === 'incorporation_certificate' ||
@@ -603,7 +532,6 @@ async function handle(req: Request): Promise<Response> {
         next,
       );
   }
-
   if (document_type === 'partnership_deed') {
     if (!extracted.legible || extracted.document_type !== 'partnership_deed') {
       return fail(
@@ -615,7 +543,6 @@ async function handle(req: Request): Promise<Response> {
     }
     return pass('Partnership deed looks readable.', extracted);
   }
-
   if (document_type === 'llp_agreement') {
     if (!extracted.legible || extracted.document_type !== 'llp_agreement') {
       return fail(
@@ -629,7 +556,6 @@ async function handle(req: Request): Promise<Response> {
     if (cin && !CIN_REGEX.test(cin)) cin = '';
     return pass('LLP agreement looks readable.', { ...extracted, cin: cin || null });
   }
-
   if (document_type === 'msme_certificate') {
     if (!extracted.legible || extracted.document_type !== 'msme_certificate') {
       return fail(
@@ -662,7 +588,6 @@ async function handle(req: Request): Promise<Response> {
       next,
     );
   }
-
   if (document_type === 'iec_certificate') {
     if (!extracted.legible || extracted.document_type !== 'iec_certificate') {
       return fail(
@@ -695,6 +620,5 @@ async function handle(req: Request): Promise<Response> {
       next,
     );
   }
-
   return fail('Unsupported document type for verification.', extracted);
 }

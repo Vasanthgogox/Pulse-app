@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Shield, Moon, Sun, ChevronRightSquare, Coins, Users, SlidersHorizontal, Rocket, Ticket, UserRound, LogOut, Loader2, UserCog, Wallet, Gavel } from 'lucide-react';
+import { Shield, Moon, Sun, ChevronRightSquare, Coins, Users, SlidersHorizontal, Rocket, Ticket, UserRound, LogOut, Loader2, UserCog, Wallet, Gavel, AlertCircle } from 'lucide-react';
 import { AdminDataProvider, useAdmin } from '@/context/AdminDataProvider';
 import { AdminAuthProvider, useAdminAuth } from '@/context/AdminAuthProvider';
 import { AdminLoginScreen } from '@/components/auth/AdminLoginScreen';
@@ -17,6 +17,7 @@ import { MarketplaceFeeSettingsPanel } from '@/components/marketplace/Marketplac
 import { BoostControlCenterPanel } from '@/components/growth/BoostControlCenterPanel';
 import { SupportPanel } from '@/components/support/SupportPanel';
 import { AdminUsersPanel } from '@/components/admin/AdminUsersPanel';
+import { LogWatcherPanel } from '@/components/admin/LogWatcherPanel';
 import { Badge } from '@/components/ui/badge';
 // The Support nav badge subscribes on the admin's session client: its query path
 // is session-based (Phase 1), and a channel on the service_role client would both
@@ -37,7 +38,8 @@ type ConsoleView =
   | 'marketplace-fees'
   | 'boost-ops'
   | 'support'
-  | 'admin-users';
+  | 'admin-users'
+  | 'log-watcher';
 
 function navTabClass(active: boolean) {
   return `inline-flex h-7 shrink-0 items-center gap-1 whitespace-nowrap rounded-md px-2.5 text-xs font-medium transition-colors ${
@@ -73,6 +75,7 @@ function Topbar({
   const canManageSupport = permissions.includes('support.manage');
   const canManageBoost = permissions.includes('system.flags.manage');
   const canManageAdmins = permissions.includes('platform_admin.manage');
+  const canViewLogWatcher = permissions.includes('system.flags.manage');
   const pendingCount   = applications.filter(a => ['Pending', 'Under Review'].includes(a.status)).length;
   const escalatedCount = applications.filter(a => a.status === 'Escalated').length;
   const [supportUpdateCount, setSupportUpdateCount] = useState(0);
@@ -198,6 +201,14 @@ function Topbar({
               className={navTabClass(view === 'admin-users')}
             >
               <UserCog className="size-3 shrink-0" /> Admin Users
+            </button>
+          )}
+          {canViewLogWatcher && (
+            <button
+              onClick={() => setView('log-watcher')}
+              className={navTabClass(view === 'log-watcher')}
+            >
+              <AlertCircle className="size-3 shrink-0" /> Log Watcher
             </button>
           )}
         </nav>
@@ -329,6 +340,10 @@ function AdminShell() {
           </PermissionGate>
         ) : view === 'admin-users' ? (
           <AdminUsersPanel />
+        ) : view === 'log-watcher' ? (
+          <PermissionGate permission="system.flags.manage" fallback={<AccessDenied />}>
+            <LogWatcherPanel />
+          </PermissionGate>
         ) : (
           <PermissionGate permission={['verification.review', 'verification.approve']} fallback={<AccessDenied />}>
             <div className="flex flex-1 overflow-hidden">

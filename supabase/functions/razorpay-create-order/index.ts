@@ -15,7 +15,6 @@
 // key_id is Razorpay's public identifier, safe to hand to the client for
 // checkout.
 
-import { ingestLog } from '../_shared/logWatcherIngest.ts';
 import { createClient as createClientDirect } from 'npm:@supabase/supabase-js@2';
 
 const corsAllowHeaders = 'authorization, x-client-info, apikey, content-type';
@@ -88,14 +87,6 @@ Deno.serve(async (req) => {
 
   const { data: userData, error: userError } = await userClient.auth.getUser(bearerToken);
   if (userError || !userData?.user) {
-    const admin = createClientDirect(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '', { auth: { persistSession: false } });
-    await ingestLog(
-      admin,
-      'warn',
-      'razorpay-create-order: authentication failed',
-      'AuthenticationFailure',
-      { service: 'razorpay-create-order', operation: 'verify-user', statusCode: 401 }
-    );
     return jsonResponse({ error: 'Invalid or expired session' }, 401, req);
   }
 
@@ -106,14 +97,6 @@ Deno.serve(async (req) => {
     .maybeSingle();
   if (bidError) {
     console.warn('[razorpay-create-order] bid lookup failed:', bidError.message);
-    const admin = createClientDirect(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '', { auth: { persistSession: false } });
-    await ingestLog(
-      admin,
-      'error',
-      'Failed to lookup bid for order creation',
-      'DatabaseError',
-      { service: 'razorpay-create-order', operation: 'lookup-bid', bidId: bidId, statusCode: 502, error: bidError.message }
-    );
     return jsonResponse({ error: 'Lookup failed', detail: bidError.message }, 502, req);
   }
   if (!bid) {
@@ -175,14 +158,6 @@ Deno.serve(async (req) => {
   if (!orderResp.ok) {
     const detail = await orderResp.text();
     console.warn('[razorpay-create-order] Razorpay order creation failed:', orderResp.status, detail);
-    const admin = createClientDirect(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '', { auth: { persistSession: false } });
-    await ingestLog(
-      admin,
-      'error',
-      'Razorpay API call failed during order creation',
-      'ExternalAPIError',
-      { service: 'razorpay-create-order', operation: 'create-razorpay-order', statusCode: orderResp.status, provider: 'razorpay', bidId: bidId }
-    );
     return jsonResponse({ error: 'provider_error', message: 'Could not create payment order' }, 502, req);
   }
   const order = await orderResp.json();
@@ -198,14 +173,6 @@ Deno.serve(async (req) => {
   });
   if (initError) {
     console.warn('[razorpay-create-order] initiate_marketplace_fee_payment_order failed:', initError.message);
-    const admin = createClientDirect(supabaseUrl, Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '', { auth: { persistSession: false } });
-    await ingestLog(
-      admin,
-      'error',
-      'Failed to initiate marketplace fee payment order',
-      'RPCFailure',
-      { service: 'razorpay-create-order', operation: 'initiate-payment-order', statusCode: 409, error: initError.message, bidId: bidId }
-    );
     return jsonResponse({ error: 'invalid_state', message: initError.message }, 409, req);
   }
 

@@ -9,13 +9,10 @@
  *   sent_at IS NULL  → pending
  *   sent_at IS NOT NULL → processed (regardless of delivery outcome)
  */
-
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import { ingestLog } from "../_shared/logWatcherIngest.ts";
-
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 const BATCH_SIZE = 100;
-
 interface PushOutboxRow {
   id: string;
   user_id: string | null;
@@ -27,12 +24,10 @@ interface PushOutboxRow {
   payload: Record<string, unknown> | null;
   created_at: string;
 }
-
 interface PushToken {
   token: string;
   platform: string;
 }
-
 interface ExpoPushMessage {
   to: string;
   title?: string;
@@ -41,7 +36,6 @@ interface ExpoPushMessage {
   sound?: "default" | null;
   badge?: number;
 }
-
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response(null, {
@@ -51,7 +45,6 @@ Deno.serve(async (req) => {
       },
     });
   }
-
   const supabaseUrl = Deno.env.get("SUPABASE_URL");
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceRoleKey) {
@@ -60,9 +53,7 @@ Deno.serve(async (req) => {
       headers: { "Content-Type": "application/json" },
     });
   }
-
   const supabase = createClient(supabaseUrl, serviceRoleKey);
-
   // Fetch pending outbox rows
   const { data: pendingRows, error: fetchError } = await supabase
     .from("chat_push_outbox")
@@ -70,46 +61,32 @@ Deno.serve(async (req) => {
     .is("sent_at", null)
     .order("created_at", { ascending: true })
     .limit(BATCH_SIZE);
-
-  if (fetchError) {
-    await ingestLog(
-      supabase,
-      'error',
-      'Failed to fetch pending push notifications from outbox',
-      'DatabaseError',
-      { service: 'send-push-notifications', operation: 'fetch-outbox', statusCode: 500, error: fetchError.message }
-    );
-    return new Response(JSON.stringify({ error: fetchError.message }), {
+  if (fetchError) {    return new Response(JSON.stringify({ error: fetchError.message }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
     });
   }
-
   const rows = (pendingRows ?? []) as PushOutboxRow[];
   if (rows.length === 0) {
     return new Response(JSON.stringify({ processed: 0 }), {
       headers: { "Content-Type": "application/json" },
     });
   }
-
   // Build user_id → push tokens map
   const userIds = [...new Set(rows.map((r) => r.user_id).filter(Boolean))] as string[];
   const { data: tokenRows } = await supabase
     .from("user_push_tokens")
     .select("user_id, token, platform")
     .in("user_id", userIds);
-
   const tokensByUserId = new Map<string, PushToken[]>();
   for (const row of tokenRows ?? []) {
     const existing = tokensByUserId.get(row.user_id) ?? [];
     existing.push({ token: row.token, platform: row.platform });
     tokensByUserId.set(row.user_id, existing);
   }
-
   // Build Expo messages
   const messages: ExpoPushMessage[] = [];
   const rowIds: string[] = [];
-
   for (const row of rows) {
     if (!row.user_id) continue;
     const tokens = tokensByUserId.get(row.user_id) ?? [];
@@ -129,25 +106,16 @@ Deno.serve(async (req) => {
     }
     rowIds.push(row.id);
   }
-
   // Send to Expo (best-effort; mark sent regardless)
   if (messages.length > 0) {
     await fetch(EXPO_PUSH_URL, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(messages),
-    }).catch(async (err) => {
+    }).catch(() => {
       // Log delivery errors — still mark rows sent to avoid retry storms
-      await ingestLog(
-        supabase,
-        'warn',
-        'Failed to deliver push notifications to Expo',
-        'ExternalServiceError',
-        { service: 'send-push-notifications', operation: 'deliver-expo', messageCount: messages.length, error: err instanceof Error ? err.message : String(err) }
-      );
     });
   }
-
   // Mark all processed rows as sent
   if (rowIds.length > 0) {
     await supabase
@@ -155,7 +123,6 @@ Deno.serve(async (req) => {
       .update({ sent_at: new Date().toISOString() })
       .in("id", rowIds);
   }
-
   return new Response(
     JSON.stringify({ processed: rowIds.length, pushed: messages.length }),
     { headers: { "Content-Type": "application/json" } },

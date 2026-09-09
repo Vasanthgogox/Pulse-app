@@ -21,15 +21,11 @@
 // pattern as razorpay-create-order; the final confirm call uses
 // service_role only because confirm_marketplace_fee_payment() itself
 // requires it (same as razorpay-webhook).
-
 import { ingestLog } from '../_shared/logWatcherIngest.ts';
 import { createClient as createClientDirect } from 'npm:@supabase/supabase-js@2';
-
 const ALLOWED_PROVIDERS = ['cash', 'test_online'] as const;
 type AllowedProvider = (typeof ALLOWED_PROVIDERS)[number];
-
 const corsAllowHeaders = 'authorization, x-client-info, apikey, content-type';
-
 function getCorsOrigin(req: Request): string {
   const allowed = Deno.env.get('CORS_ALLOWED_ORIGIN')?.trim();
   if (!allowed) return '*';
@@ -37,7 +33,6 @@ function getCorsOrigin(req: Request): string {
   if (origin && origin === allowed) return origin;
   return 'null';
 }
-
 function corsHeaders(req: Request): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': getCorsOrigin(req),
@@ -45,14 +40,12 @@ function corsHeaders(req: Request): Record<string, string> {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
   };
 }
-
 function jsonResponse(body: object, status: number, req: Request) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
   });
 }
-
 /** Fresh, globally-unique id per attempt/confirmation -- provider_order_id,
  * provider_payment_id, and provider_event_id are all unique-where-not-null
  * across the WHOLE marketplace_fee_payments table (including cancelled/
@@ -61,7 +54,6 @@ function jsonResponse(body: object, status: number, req: Request) {
 function freshId(prefix: string): string {
   return `${prefix}_${crypto.randomUUID()}`;
 }
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders(req) });
@@ -69,17 +61,14 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') {
     return jsonResponse({ error: 'Method not allowed' }, 405, req);
   }
-
   if (Deno.env.get('MARKETPLACE_TEST_PAYMENTS_ENABLED') !== 'true') {
     return jsonResponse({ error: 'disabled', message: 'Pilot test payments are not enabled' }, 403, req);
   }
-
   const authHeader = req.headers.get('authorization') ?? '';
   const bearerToken = authHeader.replace(/^Bearer\s+/i, '').trim();
   if (!bearerToken) {
     return jsonResponse({ error: 'Missing authorization' }, 401, req);
   }
-
   let action: string | undefined;
   let bidId: string | undefined;
   let provider: string | undefined;
@@ -99,33 +88,27 @@ Deno.serve(async (req) => {
   if (action !== 'create' && action !== 'simulate') {
     return jsonResponse({ error: 'invalid_action', message: 'action must be "create" or "simulate"' }, 400, req);
   }
-
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
     return jsonResponse({ error: 'Server configuration error' }, 503, req);
   }
-
   const { createClient } = await import('npm:@supabase/supabase-js@2');
-
   // Forwards the caller's own JWT -- every lookup below runs AS the caller,
   // RLS-scoped, exactly as razorpay-create-order does.
   const userClient = createClient(supabaseUrl, anonKey, {
     global: { headers: { Authorization: `Bearer ${bearerToken}` } },
     auth: { persistSession: false },
   });
-
   const { data: userData, error: userError } = await userClient.auth.getUser(bearerToken);
   if (userError || !userData?.user) {
     return jsonResponse({ error: 'Invalid or expired session' }, 401, req);
   }
-
   if (action === 'create') {
     if (!provider || !ALLOWED_PROVIDERS.includes(provider as AllowedProvider)) {
       return jsonResponse({ error: 'invalid_provider', message: `provider must be one of: ${ALLOWED_PROVIDERS.join(', ')}` }, 400, req);
     }
-
     const { data: bid, error: bidError } = await userClient
       .from('market_bids')
       .select('id, status, fee_payment_status, platform_fee_amount')
@@ -133,15 +116,7 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (bidError) {
       console.warn('[marketplace-test-payment] bid lookup failed:', bidError.message);
-      const admin = createClientDirect(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
-      await ingestLog(
-        admin,
-        'error',
-        'Bid lookup failed in marketplace test payment',
-        'DatabaseError',
-        { service: 'marketplace-test-payment', operation: 'lookup-bid', statusCode: 502, error: bidError.message }
-      );
-      return jsonResponse({ error: 'Lookup failed', detail: bidError.message }, 502, req);
+      const admin = createClientDirect(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });      return jsonResponse({ error: 'Lookup failed', detail: bidError.message }, 502, req);
     }
     if (!bid) {
       // RLS-scoped SELECT: either the bid doesn't exist, or it isn't this caller's own.
@@ -161,7 +136,6 @@ Deno.serve(async (req) => {
     if (!(feeAmount > 0)) {
       return jsonResponse({ error: 'invalid_fee', message: 'No positive platform fee to collect for this bid' }, 409, req);
     }
-
     const orderId = freshId(`${provider}_order`);
     const { data: initResult, error: initError } = await userClient.rpc('initiate_marketplace_fee_payment_order', {
       p_bid_id: bidId,
@@ -170,31 +144,20 @@ Deno.serve(async (req) => {
     });
     if (initError) {
       console.warn('[marketplace-test-payment] initiate_marketplace_fee_payment_order failed:', initError.message);
-      const admin = createClientDirect(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
-      await ingestLog(
-        admin,
-        'error',
-        'Payment initiation RPC failed in marketplace test payment',
-        'RPCFailure',
-        { service: 'marketplace-test-payment', operation: 'initiate-payment', statusCode: 409, error: initError.message }
-      );
-      return jsonResponse({ error: 'invalid_state', message: initError.message }, 409, req);
+      const admin = createClientDirect(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });      return jsonResponse({ error: 'invalid_state', message: initError.message }, 409, req);
     }
-
     return jsonResponse(
       { orderId, amount: (initResult as { amount?: number } | null)?.amount ?? feeAmount, currency: 'INR', provider },
       200,
       req,
     );
   }
-
   // action === 'simulate' -- the frontend only ever says "simulate <outcome>
   // for my current attempt on this bid". Everything else (which attempt,
   // which provider, the frozen amount) is derived here, never supplied.
   if (outcome !== 'paid' && outcome !== 'failed') {
     return jsonResponse({ error: 'invalid_outcome', message: 'outcome must be "paid" or "failed"' }, 400, req);
   }
-
   const { data: payment, error: paymentError } = await userClient
     .from('marketplace_fee_payments')
     .select('id, market_bid_id, provider, provider_order_id, amount, status')
@@ -215,7 +178,6 @@ Deno.serve(async (req) => {
     // Defensive: never let this endpoint touch a real (e.g. razorpay) attempt.
     return jsonResponse({ error: 'not_a_test_payment', message: 'This attempt was not created by the pilot test provider' }, 409, req);
   }
-
   const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
   const { data, error } = await admin.rpc('confirm_marketplace_fee_payment', {
     p_provider_order_id: payment.provider_order_id,
@@ -227,7 +189,6 @@ Deno.serve(async (req) => {
     p_failure_reason: outcome === 'failed' ? 'Simulated failure (A10.2 pilot test payment)' : null,
     p_expected_market_bid_id: bidId,
   });
-
   if (error) {
     const knownNonRetryable = /^(not_found|amount_mismatch|bid_mismatch|payment_id_reused|invalid_outcome):/;
     if (knownNonRetryable.test(error.message)) {
@@ -237,6 +198,5 @@ Deno.serve(async (req) => {
     console.error('[marketplace-test-payment] confirm_marketplace_fee_payment failed unexpectedly:', error.message);
     return jsonResponse({ error: 'confirmation_failed', detail: error.message }, 500, req);
   }
-
   return jsonResponse({ ok: true, result: data }, 200, req);
 });

@@ -16,12 +16,9 @@
 // Security: the caller's phone is read from THEIR OWN verified JWT (phone_confirmed_at
 // must be set), never from the request body — a request cannot claim an arbitrary
 // phone number to link into someone else's account.
-
 import { ingestLog } from '../_shared/logWatcherIngest.ts';
 import { createClient as createClientDirect } from 'npm:@supabase/supabase-js@2';
-
 const corsAllowHeaders = 'authorization, x-client-info, apikey, content-type';
-
 function getCorsOrigin(req: Request): string {
   const allowed = Deno.env.get('CORS_ALLOWED_ORIGIN')?.trim();
   if (!allowed) return '*';
@@ -29,7 +26,6 @@ function getCorsOrigin(req: Request): string {
   if (origin && origin === allowed) return origin;
   return 'null';
 }
-
 function corsHeaders(req: Request): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': getCorsOrigin(req),
@@ -37,18 +33,15 @@ function corsHeaders(req: Request): Record<string, string> {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
   };
 }
-
 function jsonResponse(body: object, status: number, req: Request) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
   });
 }
-
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_MAX_PER_IP = 10;
 const rateLimitMap = new Map<string, number[]>();
-
 function pruneAndCheckRateLimit(ip: string): boolean {
   const now = Date.now();
   const list = rateLimitMap.get(ip) ?? [];
@@ -58,7 +51,6 @@ function pruneAndCheckRateLimit(ip: string): boolean {
   rateLimitMap.set(ip, kept);
   return true;
 }
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders(req) });
@@ -66,27 +58,22 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') {
     return jsonResponse({ error: 'Method not allowed' }, 405, req);
   }
-
   const ip = req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ?? req.headers.get('x-real-ip') ?? 'unknown';
   if (!pruneAndCheckRateLimit(ip)) {
     return jsonResponse({ error: 'Too many requests. Try again in a minute.' }, 429, req);
   }
-
   const authHeader = req.headers.get('authorization') ?? '';
   const bearerToken = authHeader.replace(/^Bearer\s+/i, '').trim();
   if (!bearerToken) {
     return jsonResponse({ error: 'Missing authorization' }, 401, req);
   }
-
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!supabaseUrl || !anonKey || !serviceRoleKey) {
     return jsonResponse({ error: 'Server configuration error' }, 503, req);
   }
-
   const { createClient } = await import('npm:@supabase/supabase-js@2');
-
   // Verify the caller's own JWT — this is the ONLY source of truth for "which phone
   // does this request actually control." The request body is never trusted for this.
   const anonClient = createClient(supabaseUrl, anonKey);
@@ -98,49 +85,28 @@ Deno.serve(async (req) => {
   if (!caller.phone || !caller.phone_confirmed_at) {
     return jsonResponse({ error: 'Phone not verified on this session' }, 400, req);
   }
-
   const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
-
   const { data: matches, error: matchError } = await admin.rpc('get_driver_invitee_by_phone', {
     p_phone: caller.phone,
   });
   if (matchError) {
-    console.warn('[link-driver-phone] lookup failed:', matchError.message);
-    await ingestLog(
-      admin,
-      'error',
-      'RPC get_driver_invitee_by_phone failed',
-      'RPCFailure',
-      { service: 'link-driver-phone', operation: 'lookup-driver', statusCode: 502, error: matchError.message }
-    );
-    return jsonResponse({ error: 'Lookup failed', detail: matchError.message }, 502, req);
+    console.warn('[link-driver-phone] lookup failed:', matchError.message);    return jsonResponse({ error: 'Lookup failed', detail: matchError.message }, 502, req);
   }
   const match = Array.isArray(matches) ? matches[0] : null;
   if (!match?.user_id || !match?.email) {
     return jsonResponse({ error: 'no_account', message: 'No driver account found for this phone number.' }, 404, req);
   }
-
   if (match.user_id === caller.id) {
     // Already linked — this is the steady-state path for every sign-in after the first.
     return jsonResponse({ linked: true, alreadyCurrent: true }, 200, req);
   }
-
   const { error: updateError } = await admin.auth.admin.updateUserById(match.user_id, {
     phone: caller.phone,
     phone_confirm: true,
   });
   if (updateError) {
-    console.warn('[link-driver-phone] failed to attach phone to real account:', updateError.message);
-    await ingestLog(
-      admin,
-      'error',
-      'Failed to attach verified phone to driver account',
-      'AuthUpdateError',
-      { service: 'link-driver-phone', operation: 'attach-phone', statusCode: 502, error: updateError.message }
-    );
-    return jsonResponse({ error: 'Linking failed', detail: updateError.message }, 502, req);
+    console.warn('[link-driver-phone] failed to attach phone to real account:', updateError.message);    return jsonResponse({ error: 'Linking failed', detail: updateError.message }, 502, req);
   }
-
   // Best-effort cleanup of the disconnected phone-only identity verifyOtp created.
   // Failure here is cleanup debt only — the phone is already correctly linked above,
   // and a retry of signInWithOtp/verifyOtp will now resolve straight to the real account.
@@ -149,7 +115,6 @@ Deno.serve(async (req) => {
   } catch (e) {
     console.warn('[link-driver-phone] failed to delete disconnected phone identity:', e);
   }
-
   const { data: linkData, error: linkError } = await admin.auth.admin.generateLink({
     type: 'magiclink',
     email: match.email,
@@ -165,7 +130,6 @@ Deno.serve(async (req) => {
       req,
     );
   }
-
   return jsonResponse(
     { linked: true, email: match.email, magicLinkToken: linkData.properties.hashed_token },
     200,

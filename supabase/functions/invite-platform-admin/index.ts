@@ -16,12 +16,9 @@
 //      the caller's own forwarded JWT so auth.uid()/granted_by resolve to the real inviter, not
 //      this function's service-role identity. Belt and suspenders: the DB stays the ultimate
 //      authority even if this function's own check were ever wrong.
-
 import { ingestLog } from '../_shared/logWatcherIngest.ts';
 import { createClient as createClientDirect } from 'npm:@supabase/supabase-js@2';
-
 const corsAllowHeaders = 'authorization, x-client-info, apikey, content-type';
-
 function getCorsOrigin(req: Request): string {
   const allowed = Deno.env.get('CORS_ALLOWED_ORIGIN')?.trim();
   if (!allowed) return '*';
@@ -29,7 +26,6 @@ function getCorsOrigin(req: Request): string {
   if (origin && origin === allowed) return origin;
   return 'null';
 }
-
 function corsHeaders(req: Request): Record<string, string> {
   return {
     'Access-Control-Allow-Origin': getCorsOrigin(req),
@@ -37,18 +33,15 @@ function corsHeaders(req: Request): Record<string, string> {
     'Access-Control-Allow-Methods': 'POST, OPTIONS',
   };
 }
-
 function jsonResponse(body: object, status: number, req: Request) {
   return new Response(JSON.stringify(body), {
     status,
     headers: { ...corsHeaders(req), 'Content-Type': 'application/json' },
   });
 }
-
 const RATE_LIMIT_WINDOW_MS = 60 * 1000;
 const RATE_LIMIT_MAX_PER_IP = 10;
 const rateLimitMap = new Map<string, number[]>();
-
 function pruneAndCheckRateLimit(ip: string): boolean {
   const now = Date.now();
   const list = rateLimitMap.get(ip) ?? [];
@@ -58,18 +51,15 @@ function pruneAndCheckRateLimit(ip: string): boolean {
   rateLimitMap.set(ip, kept);
   return true;
 }
-
 // Mirrors lib/emailValidation.ts's EMAIL_REGEX/MAX_EMAIL_LENGTH exactly, so an admin sees the
 // same "is this a valid email" rule everywhere in the product, not a looser one just because this
 // happens to be a server-side check.
 const MAX_EMAIL_LENGTH = 255;
 const EMAIL_REGEX = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 function containsNullByte(value: string): boolean {
   return value.includes('\0');
 }
-
 function validateEmail(email: string): string | null {
   if (containsNullByte(email)) return 'Email contains invalid characters.';
   if (email.length === 0) return 'Enter an email address.';
@@ -77,7 +67,6 @@ function validateEmail(email: string): string | null {
   if (!EMAIL_REGEX.test(email)) return 'Enter a valid email address (e.g. name@example.com).';
   return null;
 }
-
 Deno.serve(async (req) => {
   if (req.method === 'OPTIONS') {
     return new Response(null, { status: 204, headers: corsHeaders(req) });
@@ -85,7 +74,6 @@ Deno.serve(async (req) => {
   if (req.method !== 'POST') {
     return jsonResponse({ error: 'Method not allowed' }, 405, req);
   }
-
   const ip =
     req.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ??
     req.headers.get('x-real-ip') ??
@@ -93,7 +81,6 @@ Deno.serve(async (req) => {
   if (!pruneAndCheckRateLimit(ip)) {
     return jsonResponse({ error: 'Too many requests. Try again in a minute.' }, 429, req);
   }
-
   // No unauthenticated request can reach anything below this point -- checked before the body is
   // even parsed.
   const authHeader = req.headers.get('authorization') ?? '';
@@ -101,18 +88,15 @@ Deno.serve(async (req) => {
   if (!bearerToken) {
     return jsonResponse({ error: 'Missing authorization' }, 401, req);
   }
-
   let body: { email?: string; roleId?: string; redirectTo?: string };
   try {
     body = await req.json();
   } catch {
     return jsonResponse({ error: 'Invalid JSON body' }, 400, req);
   }
-
   const email = (body.email ?? '').trim();
   const roleId = (body.roleId ?? '').trim();
   const redirectTo = (body.redirectTo ?? '').trim();
-
   const emailError = validateEmail(email);
   if (emailError) {
     return jsonResponse({ error: emailError }, 400, req);
@@ -131,7 +115,6 @@ Deno.serve(async (req) => {
   if (allowedOrigin && !redirectTo.startsWith(allowedOrigin)) {
     return jsonResponse({ error: 'Invalid redirect.' }, 400, req);
   }
-
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
   const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
@@ -139,9 +122,7 @@ Deno.serve(async (req) => {
     // Deliberately generic -- never echo which env var is missing.
     return jsonResponse({ error: 'Server configuration error' }, 503, req);
   }
-
   const { createClient } = await import('npm:@supabase/supabase-js@2');
-
   // Verify the caller's own JWT -- the only source of truth for "who is making this request."
   const anonClient = createClient(supabaseUrl, anonKey);
   const { data: userData, error: userError } = await anonClient.auth.getUser(bearerToken);
@@ -149,9 +130,7 @@ Deno.serve(async (req) => {
     return jsonResponse({ error: 'Invalid or expired session' }, 401, req);
   }
   const caller = userData.user;
-
   const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
-
   // Check #1 -- before touching auth.users at all, so an unauthorized request never creates an
   // account or sends an email.
   const { data: canManage, error: permError } = await admin.rpc('has_platform_permission', {
@@ -159,20 +138,11 @@ Deno.serve(async (req) => {
     p_permission: 'platform_admin.manage',
   });
   if (permError) {
-    console.warn('[invite-platform-admin] permission check failed:', permError.message);
-    await ingestLog(
-      admin,
-      'error',
-      'Permission check RPC failed in invite-platform-admin',
-      'RPCFailure',
-      { service: 'invite-platform-admin', operation: 'check-permission', statusCode: 500, error: permError.message }
-    );
-    return jsonResponse({ error: 'Could not verify permission' }, 500, req);
+    console.warn('[invite-platform-admin] permission check failed:', permError.message);    return jsonResponse({ error: 'Could not verify permission' }, 500, req);
   }
   if (!canManage) {
     return jsonResponse({ error: 'unauthorized' }, 403, req);
   }
-
   const { data: inviteData, error: inviteError } = await admin.auth.admin.inviteUserByEmail(
     email,
     { redirectTo },
@@ -186,7 +156,6 @@ Deno.serve(async (req) => {
   if (!targetUserId) {
     return jsonResponse({ error: 'Invite succeeded but no user id was returned' }, 500, req);
   }
-
   // Check #2 -- the real, independent authorization boundary. Forwards the caller's own JWT so
   // auth.uid()/granted_by inside invite_platform_admin() resolve to the real inviter, not this
   // function's service-role identity.
@@ -213,15 +182,7 @@ Deno.serve(async (req) => {
       '[invite-platform-admin] auth.users exists but role grant failed:',
       targetUserId,
       rpcError.message,
-    );
-    await ingestLog(
-      admin,
-      'error',
-      'Role grant RPC failed after auth.users created in invite-platform-admin',
-      'RPCFailure',
-      { service: 'invite-platform-admin', operation: 'grant-role', targetUserId: targetUserId, statusCode: 400, error: rpcError.message }
-    );
-    return jsonResponse(
+    );    return jsonResponse(
       {
         error: `Account created/found, but the role could not be granted (${rpcError.message}). This person is not yet a platform admin -- fix the issue and invite this email again to retry.`,
       },
@@ -229,6 +190,5 @@ Deno.serve(async (req) => {
       req,
     );
   }
-
   return jsonResponse({ platformUserId }, 200, req);
 });
