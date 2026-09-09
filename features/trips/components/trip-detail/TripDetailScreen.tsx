@@ -544,6 +544,8 @@ export default function TripDetailScreen({
   );
 
   const { can: canSurface } = useMemberAccess();
+  const { memberPlatformRole } = useOptionalActiveWorkspace() ?? {};
+  const isGroundOpsOnly = memberPlatformRole === "ground_ops";
   const canTripFinanceTab = canSurface("tripops.trips.finance");
   // Settlement write actions (capture payment / record payout). The trip finance
   // tab is read-only for a dispatcher — money movement needs its own grant.
@@ -3066,8 +3068,6 @@ export default function TripDetailScreen({
     return text.includes(q);
   });
   const vaultDocs = detail.computedTripDocs;
-  const { memberPlatformRole } = useOptionalActiveWorkspace() ?? {};
-  const isGroundOpsOnly = memberPlatformRole === "ground_ops";
   const ewayBillDoc = vaultDocs.find(isEwayBillVaultDoc);
   const vaultCardDocs = vaultDocs.filter((doc) => !isEwayBillVaultDoc(doc));
   const lrVaultDoc = vaultCardDocs.find(isLrVaultDoc);
