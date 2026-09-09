@@ -41,6 +41,11 @@ import type { ActiveWorkspaceState, Workspace, WorkspaceMember } from '@/types/w
 
 const STORAGE_KEY = 'pulse:active_workspace_id';
 
+/** Outer membership-error retry — same shape as OrganizationContext infra retry. */
+const WORKSPACE_RETRY_MAX_ATTEMPTS = 6;
+const WORKSPACE_RETRY_BASE_MS = 5_000;
+const WORKSPACE_RETRY_CAP_MS = 60_000;
+
 // ─────────────────────────────────────────────────────────────────────────────
 // Internal DB row type
 // ─────────────────────────────────────────────────────────────────────────────
@@ -260,10 +265,39 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
   userRef.current = user;
   /** Monotonic load id — ignore out-of-order completions from overlapping fetches. */
   const loadGenerationRef = useRef(0);
+  const loadInFlightRef = useRef(false);
+  const pendingRefreshRef = useRef(false);
+  const inFlightPromiseRef = useRef<Promise<void> | null>(null);
+  const retryAttemptRef = useRef(0);
+  const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const requestLoadWorkspacesRef = useRef<() => Promise<void>>(async () => {});
+
+  const clearRetryTimer = useCallback(() => {
+    if (retryTimerRef.current != null) {
+      clearTimeout(retryTimerRef.current);
+      retryTimerRef.current = null;
+    }
+  }, []);
+
+  const scheduleOuterRetry = useCallback(() => {
+    if (retryAttemptRef.current >= WORKSPACE_RETRY_MAX_ATTEMPTS) {
+      return false;
+    }
+    clearRetryTimer();
+    const attempt = retryAttemptRef.current;
+    const base = Math.min(WORKSPACE_RETRY_BASE_MS * 2 ** attempt, WORKSPACE_RETRY_CAP_MS);
+    const jittered = base * (0.8 + Math.random() * 0.4);
+    retryTimerRef.current = setTimeout(() => {
+      retryTimerRef.current = null;
+      retryAttemptRef.current = attempt + 1;
+      void requestLoadWorkspacesRef.current();
+    }, jittered);
+    return true;
+  }, [clearRetryTimer]);
 
   // ── Load workspaces from DB ─────────────────────────────────────────────────
 
-  const loadWorkspaces = useCallback(
+  const runLoadWorkspaces = useCallback(
     async (signal: { cancelled: boolean }) => {
       const generation = ++loadGenerationRef.current;
       const stale = () => signal.cancelled || generation !== loadGenerationRef.current;
@@ -271,6 +305,8 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
 
       if (!currentUser) {
         if (!stale()) {
+          retryAttemptRef.current = 0;
+          clearRetryTimer();
           setWorkspaces([]);
           setActiveWorkspace(null);
           setMemberRole(null);
@@ -303,9 +339,11 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
         if (!accessToken) {
           shouldFinishLoading = false;
           if (!stale()) {
-            setTimeout(() => {
-              void loadWorkspaces(sessionSignalRef.current);
-            }, 400);
+            if (pendingRefreshRef.current) {
+              // Trailing coalesced load will run; do not start a second retry chain.
+            } else if (!scheduleOuterRetry()) {
+              shouldFinishLoading = true;
+            }
           }
           return;
         }
@@ -319,9 +357,11 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
           setError(fetchError);
           shouldFinishLoading = false;
           if (!stale()) {
-            setTimeout(() => {
-              void loadWorkspaces(sessionSignalRef.current);
-            }, 800);
+            if (pendingRefreshRef.current) {
+              // Trailing coalesced load will run; do not start a second retry chain.
+            } else if (!scheduleOuterRetry()) {
+              shouldFinishLoading = true;
+            }
           }
           return;
         }
@@ -340,9 +380,11 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
               setError(fetchError);
               shouldFinishLoading = false;
               if (!stale()) {
-                setTimeout(() => {
-                  void loadWorkspaces(sessionSignalRef.current);
-                }, 800);
+                if (pendingRefreshRef.current) {
+                  // Trailing coalesced load will run; do not start a second retry chain.
+                } else if (!scheduleOuterRetry()) {
+                  shouldFinishLoading = true;
+                }
               }
               return;
             }
@@ -369,6 +411,9 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
         );
 
         if (stale()) return;
+
+        retryAttemptRef.current = 0;
+        clearRetryTimer();
 
         setWorkspaces(loadedWorkspaces);
         setRoleMap(newRoleMap);
@@ -418,11 +463,12 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
       } catch (e) {
         if (!stale()) {
           setError(e instanceof Error ? e : new Error(String(e)));
-          // Retry instead of settling into a false "no access" state.
           shouldFinishLoading = false;
-          setTimeout(() => {
-            void loadWorkspaces(sessionSignalRef.current);
-          }, 800);
+          if (pendingRefreshRef.current) {
+            // Trailing coalesced load will run; do not start a second retry chain.
+          } else if (!scheduleOuterRetry()) {
+            shouldFinishLoading = true;
+          }
         }
       } finally {
         if (!stale() && shouldFinishLoading) {
@@ -430,29 +476,64 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
         }
       }
     },
-    [], // stable: accesses user via userRef, setCurrentOrganization via setCurrentOrganizationRef
+    [clearRetryTimer, scheduleOuterRetry],
   );
+
+  const requestLoadWorkspaces = useCallback((): Promise<void> => {
+    if (loadInFlightRef.current && inFlightPromiseRef.current) {
+      pendingRefreshRef.current = true;
+      return inFlightPromiseRef.current;
+    }
+    // A live request (auth, Realtime, refresh) replaces a pending delayed retry
+    // so we never run two independent outer-retry chains.
+    clearRetryTimer();
+    loadInFlightRef.current = true;
+    const p = (async () => {
+        try {
+          do {
+            pendingRefreshRef.current = false;
+            await runLoadWorkspaces(sessionSignalRef.current);
+            if (pendingRefreshRef.current) {
+              // Coalesced Realtime/refresh during this run: one more load,
+              // not a parallel membership fetch and not a second retry timer.
+              clearRetryTimer();
+            }
+          } while (pendingRefreshRef.current);
+      } finally {
+        loadInFlightRef.current = false;
+      }
+    })();
+    inFlightPromiseRef.current = p.finally(() => {
+      if (inFlightPromiseRef.current === p) inFlightPromiseRef.current = null;
+    });
+    return p;
+  }, [runLoadWorkspaces, clearRetryTimer]);
+  requestLoadWorkspacesRef.current = requestLoadWorkspaces;
 
   // ── Re-run on user identity change only ────────────────────────────────────
   // Depend on userId (primitive string) not user (object) to prevent
   // re-firing when the auth object reference changes but the uid is the same.
 
   useEffect(() => {
+    retryAttemptRef.current = 0;
+    clearRetryTimer();
+    pendingRefreshRef.current = false;
+
     if (authStatus !== 'authenticated' || !userId) {
       if (authStatus === 'unauthenticated' || authStatus === 'expired') {
         const signal = { cancelled: false };
         sessionSignalRef.current = signal;
-        void loadWorkspaces(signal);
+        void requestLoadWorkspaces();
       }
       return;
     }
     const signal = { cancelled: false };
     sessionSignalRef.current = signal;
-    void loadWorkspaces(signal);
+    void requestLoadWorkspaces();
     return () => {
       signal.cancelled = true;
     };
-  }, [userId, authStatus, loadWorkspaces]);
+  }, [userId, authStatus, requestLoadWorkspaces, clearRetryTimer]);
 
   // ── Live permission/role updates ────────────────────────────────────────────
   // Revokes (e.g. removing "create indent") are enforced server-side via RLS
@@ -472,10 +553,10 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
         },
       ],
       () => {
-        void loadWorkspaces(sessionSignalRef.current);
+        void requestLoadWorkspaces();
       },
     );
-  }, [userId, authStatus, loadWorkspaces]);
+  }, [userId, authStatus, requestLoadWorkspaces]);
 
   // ── Public actions ──────────────────────────────────────────────────────────
 
@@ -505,8 +586,8 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
   );
 
   const refresh = useCallback(async () => {
-    await loadWorkspaces(sessionSignalRef.current);
-  }, [loadWorkspaces]);
+    await requestLoadWorkspaces();
+  }, [requestLoadWorkspaces]);
 
   const canManageWorkspace =
     memberRole === 'owner' || memberRole === 'admin';
