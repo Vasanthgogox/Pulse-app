@@ -2,6 +2,8 @@ import {
   exchangeMagicLinkForSession,
   generateDriverMagicLinkToken,
 } from '../_shared/driverSessionExchange.ts';
+import { ingestLog } from '../_shared/logWatcherIngest.ts';
+import { createClient as createClientDirect } from 'npm:@supabase/supabase-js@2';
 
 // TEMPORARY / INSECURE: signs a driver in from a phone number alone, with NO real
 // OTP verification — Supabase's SMS provider is not configured yet ("Unsupported
@@ -110,6 +112,13 @@ Deno.serve(async (req) => {
   });
   if (rpcError) {
     console.warn('[driver-phone-signin-unverified] lookup failed:', rpcError.message);
+    await ingestLog(
+      admin,
+      'error',
+      'RPC get_email_by_phone failed in driver-phone-signin-unverified',
+      'RPCFailure',
+      { service: 'driver-phone-signin-unverified', operation: 'lookup-email', statusCode: 502, error: rpcError.message }
+    );
     return jsonResponse({ error: 'Lookup failed', detail: rpcError.message }, 502, req);
   }
   const email = typeof emailRpc === 'string' ? emailRpc.trim() : '';

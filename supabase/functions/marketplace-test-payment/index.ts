@@ -22,6 +22,9 @@
 // service_role only because confirm_marketplace_fee_payment() itself
 // requires it (same as razorpay-webhook).
 
+import { ingestLog } from '../_shared/logWatcherIngest.ts';
+import { createClient as createClientDirect } from 'npm:@supabase/supabase-js@2';
+
 const ALLOWED_PROVIDERS = ['cash', 'test_online'] as const;
 type AllowedProvider = (typeof ALLOWED_PROVIDERS)[number];
 
@@ -130,6 +133,14 @@ Deno.serve(async (req) => {
       .maybeSingle();
     if (bidError) {
       console.warn('[marketplace-test-payment] bid lookup failed:', bidError.message);
+      const admin = createClientDirect(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+      await ingestLog(
+        admin,
+        'error',
+        'Bid lookup failed in marketplace test payment',
+        'DatabaseError',
+        { service: 'marketplace-test-payment', operation: 'lookup-bid', statusCode: 502, error: bidError.message }
+      );
       return jsonResponse({ error: 'Lookup failed', detail: bidError.message }, 502, req);
     }
     if (!bid) {
@@ -159,6 +170,14 @@ Deno.serve(async (req) => {
     });
     if (initError) {
       console.warn('[marketplace-test-payment] initiate_marketplace_fee_payment_order failed:', initError.message);
+      const admin = createClientDirect(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+      await ingestLog(
+        admin,
+        'error',
+        'Payment initiation RPC failed in marketplace test payment',
+        'RPCFailure',
+        { service: 'marketplace-test-payment', operation: 'initiate-payment', statusCode: 409, error: initError.message }
+      );
       return jsonResponse({ error: 'invalid_state', message: initError.message }, 409, req);
     }
 

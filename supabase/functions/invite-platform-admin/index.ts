@@ -17,6 +17,9 @@
 //      this function's service-role identity. Belt and suspenders: the DB stays the ultimate
 //      authority even if this function's own check were ever wrong.
 
+import { ingestLog } from '../_shared/logWatcherIngest.ts';
+import { createClient as createClientDirect } from 'npm:@supabase/supabase-js@2';
+
 const corsAllowHeaders = 'authorization, x-client-info, apikey, content-type';
 
 function getCorsOrigin(req: Request): string {
@@ -157,6 +160,13 @@ Deno.serve(async (req) => {
   });
   if (permError) {
     console.warn('[invite-platform-admin] permission check failed:', permError.message);
+    await ingestLog(
+      admin,
+      'error',
+      'Permission check RPC failed in invite-platform-admin',
+      'RPCFailure',
+      { service: 'invite-platform-admin', operation: 'check-permission', statusCode: 500, error: permError.message }
+    );
     return jsonResponse({ error: 'Could not verify permission' }, 500, req);
   }
   if (!canManage) {
@@ -203,6 +213,13 @@ Deno.serve(async (req) => {
       '[invite-platform-admin] auth.users exists but role grant failed:',
       targetUserId,
       rpcError.message,
+    );
+    await ingestLog(
+      admin,
+      'error',
+      'Role grant RPC failed after auth.users created in invite-platform-admin',
+      'RPCFailure',
+      { service: 'invite-platform-admin', operation: 'grant-role', targetUserId: targetUserId, statusCode: 400, error: rpcError.message }
     );
     return jsonResponse(
       {

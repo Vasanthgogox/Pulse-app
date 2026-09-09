@@ -4,6 +4,9 @@
 // fuzzy-match the registry legal name (to block typoed / falsified names).
 // On API timeout/error → returns MANUAL_REVIEW so operations are never blocked.
 
+import { ingestLog } from '../_shared/logWatcherIngest.ts';
+import { createClient } from 'npm:@supabase/supabase-js@2';
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -67,6 +70,10 @@ Deno.serve(async (req: Request) => {
     return json({ valid: true, status: 'MANUAL_REVIEW', message: 'GST API not configured. Routed to manual review.' });
   }
 
+  const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+  const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+  const supabase = supabaseUrl && serviceRoleKey ? createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } }) : null;
+
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 8000);
@@ -81,6 +88,15 @@ Deno.serve(async (req: Request) => {
     clearTimeout(timeout);
 
     if (!gstRes.ok) {
+      if (supabase) {
+        await ingestLog(
+          supabase,
+          'warn',
+          'GST registry API returned error during GSTIN validation',
+          'ExternalAPIError',
+          { service: 'validate-gstin', operation: 'query-registry', statusCode: gstRes.status }
+        );
+      }
       return json({ valid: true, status: 'MANUAL_REVIEW', message: 'GST API returned an error. Routed to manual review.' });
     }
 
@@ -119,7 +135,25 @@ Deno.serve(async (req: Request) => {
 
   } catch (err: unknown) {
     if (err instanceof Error && err.name === 'AbortError') {
+      if (supabase) {
+        await ingestLog(
+          supabase,
+          'warn',
+          'GST registry API timeout during GSTIN validation',
+          'ExternalServiceTimeout',
+          { service: 'validate-gstin', operation: 'query-registry', timeout_ms: 8000 }
+        );
+      }
       return json({ valid: true, status: 'MANUAL_REVIEW', message: 'GST API timed out. Routed to manual review.' });
+    }
+    if (supabase) {
+      await ingestLog(
+        supabase,
+        'warn',
+        'GST registry API unreachable during GSTIN validation',
+        'ExternalServiceUnavailable',
+        { service: 'validate-gstin', operation: 'query-registry', error: err instanceof Error ? err.message : String(err) }
+      );
     }
     return json({ valid: true, status: 'MANUAL_REVIEW', message: 'GST API unreachable. Routed to manual review.' });
   }

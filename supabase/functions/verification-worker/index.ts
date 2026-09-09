@@ -15,6 +15,7 @@
 // fires → upgrades organizations.verification_tier if thresholds met.
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { ingestLog } from '../_shared/logWatcherIngest.ts';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
@@ -228,6 +229,15 @@ async function processRequest(req: Request): Promise<Response> {
 
   const { data: jobs, error: jobErr } = await jobQuery;
   if (jobErr || !jobs?.length) {
+    if (jobErr) {
+      await ingestLog(
+        db,
+        'error',
+        'Failed to fetch verification job from queue',
+        'DatabaseError',
+        { service: 'verification-worker', operation: 'fetch-job', error: jobErr.message, statusCode: 500 }
+      );
+    }
     return json({ ok: true, message: 'No jobs to process' });
   }
 
@@ -258,6 +268,13 @@ async function processRequest(req: Request): Promise<Response> {
       error_logs: [...(job.error_logs ?? []), errorEntry],
       updated_at: new Date().toISOString(),
     }).eq('id', job.id);
+    await ingestLog(
+      db,
+      'error',
+      'Organization not found during verification job processing',
+      'DataValidationError',
+      { service: 'verification-worker', operation: 'fetch-organization', orgId: job.organization_id, statusCode: 500 }
+    );
     return json({ ok: false, error: errorEntry });
   }
 
@@ -300,6 +317,13 @@ async function processRequest(req: Request): Promise<Response> {
       updates.ocr_detail = { error: 'OCR_FUNCTION_UNAVAILABLE' };
       anyFailed = true;
       stepErrors.push('OCR:FUNCTION_UNAVAILABLE');
+      await ingestLog(
+        db,
+        'error',
+        'OCR document verification function returned error',
+        'ExternalServiceError',
+        { service: 'verification-worker', operation: 'ocr-verify', statusCode: ocrRes.status, jobId: job.id }
+      );
     }
   }
 

@@ -4,6 +4,7 @@
  * Use this Edge Function when you need service-role validation or external ingest.
  */
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
+import { ingestLog } from '../_shared/logWatcherIngest.ts';
 
 const corsHeaders = {
   'Access-Control-Allow-Origin': '*',
@@ -44,6 +45,13 @@ Deno.serve(async (req) => {
     });
 
     if (error) {
+      await ingestLog(
+        supabase,
+        'error',
+        'RPC tracking_record_checkpoint failed',
+        'RPCFailure',
+        { service: 'tracking-checkpoint', operation: 'record-checkpoint', statusCode: 400, error: error.message }
+      );
       return new Response(JSON.stringify({ error: error.message }), {
         status: 400,
         headers: { ...corsHeaders, 'Content-Type': 'application/json' },
@@ -54,6 +62,18 @@ Deno.serve(async (req) => {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
     });
   } catch (e) {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL');
+    const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
+    if (supabaseUrl && serviceKey) {
+      const supabase = createClient(supabaseUrl, serviceKey, { auth: { persistSession: false } });
+      await ingestLog(
+        supabase,
+        'error',
+        'Unhandled error in tracking-checkpoint',
+        'UnhandledError',
+        { service: 'tracking-checkpoint', operation: 'checkpoint', statusCode: 500, error: String(e) }
+      );
+    }
     return new Response(JSON.stringify({ error: String(e) }), {
       status: 500,
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },

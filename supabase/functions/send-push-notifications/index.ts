@@ -11,6 +11,7 @@
  */
 
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
+import { ingestLog } from "../_shared/logWatcherIngest.ts";
 
 const EXPO_PUSH_URL = "https://exp.host/--/api/v2/push/send";
 const BATCH_SIZE = 100;
@@ -71,6 +72,13 @@ Deno.serve(async (req) => {
     .limit(BATCH_SIZE);
 
   if (fetchError) {
+    await ingestLog(
+      supabase,
+      'error',
+      'Failed to fetch pending push notifications from outbox',
+      'DatabaseError',
+      { service: 'send-push-notifications', operation: 'fetch-outbox', statusCode: 500, error: fetchError.message }
+    );
     return new Response(JSON.stringify({ error: fetchError.message }), {
       status: 500,
       headers: { "Content-Type": "application/json" },
@@ -128,8 +136,15 @@ Deno.serve(async (req) => {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
       body: JSON.stringify(messages),
-    }).catch(() => {
-      // Swallow delivery errors — still mark rows sent to avoid retry storms
+    }).catch(async (err) => {
+      // Log delivery errors — still mark rows sent to avoid retry storms
+      await ingestLog(
+        supabase,
+        'warn',
+        'Failed to deliver push notifications to Expo',
+        'ExternalServiceError',
+        { service: 'send-push-notifications', operation: 'deliver-expo', messageCount: messages.length, error: err instanceof Error ? err.message : String(err) }
+      );
     });
   }
 

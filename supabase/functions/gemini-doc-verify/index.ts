@@ -4,6 +4,9 @@
 // Per-document-type prompts + evaluation for GST, PAN, address proof, and
 // structure KYC docs (CIN/COI, partnership deed, LLP agreement, MSME, IEC).
 
+import { ingestLog } from '../_shared/logWatcherIngest.ts';
+import { createClient } from 'npm:@supabase/supabase-js@2';
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -299,6 +302,18 @@ Deno.serve(async (req: Request) => {
   try {
     return await handle(req);
   } catch (e) {
+    const supabaseUrl = Deno.env.get('SUPABASE_URL') ?? '';
+    const serviceRoleKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? '';
+    if (supabaseUrl && serviceRoleKey) {
+      const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+      await ingestLog(
+        supabase,
+        'error',
+        `Unhandled error in Gemini document verification: ${e instanceof Error ? e.message : String(e)}`,
+        'UnhandledError',
+        { service: 'gemini-doc-verify', operation: 'verify-document', statusCode: 500 }
+      );
+    }
     return json({ error: `Unhandled error: ${e instanceof Error ? e.message : String(e)}` }, 500);
   }
 });
@@ -348,6 +363,14 @@ async function handle(req: Request): Promise<Response> {
 
   if (!signedUrlRes.ok) {
     const errText = await signedUrlRes.text();
+    const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+    await ingestLog(
+      supabase,
+      'error',
+      'Failed to generate signed URL for document storage',
+      'StorageError',
+      { service: 'gemini-doc-verify', operation: 'generate-signed-url', statusCode: signedUrlRes.status }
+    );
     return json({ error: `Failed to generate signed URL for document: ${errText}` }, 500);
   }
   const { signedURL } = await signedUrlRes.json() as { signedURL: string };
@@ -358,8 +381,16 @@ async function handle(req: Request): Promise<Response> {
   const docRes = await fetch(absoluteSignedUrl);
   if (!docRes.ok) {
     const errText = await docRes.text();
+    const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+    await ingestLog(
+      supabase,
+      'error',
+      'Failed to download document from Supabase storage',
+      'StorageDownloadError',
+      { service: 'gemini-doc-verify', operation: 'download-document', statusCode: docRes.status }
+    );
     return json({
-      error: `Failed to download document from storage: ${docRes.status} ${errText} url=${absoluteSignedUrl}`,
+      error: `Failed to download document from storage: ${docRes.status} ${errText}`,
     }, 500);
   }
 

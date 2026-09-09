@@ -7,6 +7,8 @@ import {
   exchangeMagicLinkForSession,
   generateDriverMagicLinkToken,
 } from '../_shared/driverSessionExchange.ts';
+import { ingestLog } from '../_shared/logWatcherIngest.ts';
+import { createClient as createClientDirect } from 'npm:@supabase/supabase-js@2';
 
 const corsAllowHeaders = 'authorization, x-client-info, apikey, content-type';
 
@@ -168,6 +170,14 @@ Deno.serve(async (req) => {
     // Lookup infrastructure (indexed RPC) is unavailable — fail closed with a
     // controlled 503 instead of degrading into an expensive fallback scan.
     const msg = e instanceof Error ? e.message : 'lookup_error';
+    const admin = await createClientDirect(Deno.env.get('SUPABASE_URL') || '', Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') || '', { auth: { persistSession: false } });
+    await ingestLog(
+      admin,
+      'error',
+      'RPC get_email_by_phone failed in check-user-by-phone',
+      'LookupError',
+      { service: 'check-user-by-phone', operation: 'lookup-email', statusCode: 503, error: msg }
+    );
     return jsonResponse(
       { error: 'lookup_unavailable', message: 'Phone lookup is temporarily unavailable. Please retry.', detail: msg },
       503,

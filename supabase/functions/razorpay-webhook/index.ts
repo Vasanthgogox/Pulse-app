@@ -15,6 +15,9 @@
 // service_role. The RPC remains the single authority for the state
 // transition, exactly as designed in A8.6.2/A8.7.
 
+import { ingestLog } from '../_shared/logWatcherIngest.ts';
+import { createClient } from 'npm:@supabase/supabase-js@2';
+
 function jsonResponse(body: object, status: number) {
   return new Response(JSON.stringify(body), {
     status,
@@ -75,6 +78,14 @@ Deno.serve(async (req) => {
   const validSignature = signature.length > 0 && (await verifyRazorpaySignature(rawBody, signature, webhookSecret));
   if (!validSignature) {
     console.warn('[razorpay-webhook] signature verification failed');
+    const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+    await ingestLog(
+      admin,
+      'warn',
+      'Razorpay webhook signature verification failed',
+      'SignatureVerificationFailure',
+      { service: 'razorpay-webhook', operation: 'signature-verification' }
+    );
     return jsonResponse({ error: 'invalid_signature' }, 400);
   }
 
@@ -82,7 +93,15 @@ Deno.serve(async (req) => {
   let payload: Record<string, unknown>;
   try {
     payload = JSON.parse(rawBody);
-  } catch {
+  } catch (e) {
+    const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+    await ingestLog(
+      admin,
+      'warn',
+      'Failed to parse Razorpay webhook JSON payload',
+      'PayloadParseError',
+      { service: 'razorpay-webhook', operation: 'parse-payload', error: e instanceof Error ? e.message : String(e) }
+    );
     return jsonResponse({ error: 'invalid_payload' }, 400);
   }
 
@@ -110,6 +129,21 @@ Deno.serve(async (req) => {
   }
   if (!paymentEntity?.order_id || !paymentEntity?.id || !eventId) {
     console.warn('[razorpay-webhook] malformed payload, missing order/payment/event id');
+    const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+    await ingestLog(
+      admin,
+      'warn',
+      'Razorpay webhook payload missing required fields',
+      'MalformedWebhookPayload',
+      {
+        service: 'razorpay-webhook',
+        operation: 'validate-payload',
+        eventType: eventType,
+        hasOrderId: !!paymentEntity?.order_id,
+        hasPaymentId: !!paymentEntity?.id,
+        hasEventId: !!eventId
+      }
+    );
     return jsonResponse({ error: 'malformed_payload' }, 400);
   }
 
@@ -126,7 +160,6 @@ Deno.serve(async (req) => {
   const receiptHint = typeof orderEntity?.receipt === 'string' ? orderEntity.receipt : null;
   const bidIdHint = [notesHint, receiptHint].find((v) => v && UUID_RE.test(v)) ?? null;
 
-  const { createClient } = await import('npm:@supabase/supabase-js@2');
   const admin = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
 
   const { data, error } = await admin.rpc('confirm_marketplace_fee_payment', {
@@ -158,6 +191,20 @@ Deno.serve(async (req) => {
       return jsonResponse({ ok: true, rejected: true, reason: error.message }, 200);
     }
     console.error('[razorpay-webhook] confirm_marketplace_fee_payment failed unexpectedly:', error.message);
+    await ingestLog(
+      admin,
+      'error',
+      'RPC confirm_marketplace_fee_payment failed',
+      'RPCFailure',
+      {
+        service: 'razorpay-webhook',
+        operation: 'confirm-payment',
+        eventType: eventType,
+        outcome: outcome,
+        rpcError: error.message,
+        statusCode: 500
+      }
+    );
     return jsonResponse({ error: 'confirmation_failed', detail: error.message }, 500);
   }
 

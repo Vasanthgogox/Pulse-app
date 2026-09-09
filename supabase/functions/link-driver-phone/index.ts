@@ -17,6 +17,9 @@
 // must be set), never from the request body — a request cannot claim an arbitrary
 // phone number to link into someone else's account.
 
+import { ingestLog } from '../_shared/logWatcherIngest.ts';
+import { createClient as createClientDirect } from 'npm:@supabase/supabase-js@2';
+
 const corsAllowHeaders = 'authorization, x-client-info, apikey, content-type';
 
 function getCorsOrigin(req: Request): string {
@@ -103,6 +106,13 @@ Deno.serve(async (req) => {
   });
   if (matchError) {
     console.warn('[link-driver-phone] lookup failed:', matchError.message);
+    await ingestLog(
+      admin,
+      'error',
+      'RPC get_driver_invitee_by_phone failed',
+      'RPCFailure',
+      { service: 'link-driver-phone', operation: 'lookup-driver', statusCode: 502, error: matchError.message }
+    );
     return jsonResponse({ error: 'Lookup failed', detail: matchError.message }, 502, req);
   }
   const match = Array.isArray(matches) ? matches[0] : null;
@@ -121,6 +131,13 @@ Deno.serve(async (req) => {
   });
   if (updateError) {
     console.warn('[link-driver-phone] failed to attach phone to real account:', updateError.message);
+    await ingestLog(
+      admin,
+      'error',
+      'Failed to attach verified phone to driver account',
+      'AuthUpdateError',
+      { service: 'link-driver-phone', operation: 'attach-phone', statusCode: 502, error: updateError.message }
+    );
     return jsonResponse({ error: 'Linking failed', detail: updateError.message }, 502, req);
   }
 

@@ -9,6 +9,9 @@
 // expensive external registry APIs (Pillar 1/2) or is immediately flagged.
 // Threshold: score < 0.85 on GSTIN or PAN → route to manual_review.
 
+import { ingestLog } from '../_shared/logWatcherIngest.ts';
+import { createClient } from 'npm:@supabase/supabase-js@2';
+
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin':  '*',
   'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
@@ -121,6 +124,16 @@ Deno.serve(async (req: Request) => {
 
   if (!signedUrlRes.ok) {
     const errText = await signedUrlRes.text();
+    if (supabaseUrl && serviceRoleKey) {
+      const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+      await ingestLog(
+        supabase,
+        'error',
+        'Failed to generate signed URL for OCR document',
+        'StorageError',
+        { service: 'ocr-doc-verify', operation: 'generate-signed-url', statusCode: signedUrlRes.status }
+      );
+    }
     return json({ error: `Failed to generate signed URL for document: ${errText}` }, 500);
   }
   const { signedURL } = await signedUrlRes.json() as { signedURL: string };
@@ -132,7 +145,19 @@ Deno.serve(async (req: Request) => {
 
   // ── 2. Download document bytes ─────────────────────────────────────────────
   const docRes = await fetch(absoluteSignedUrl);
-  if (!docRes.ok) return json({ error: 'Failed to download document from storage' }, 500);
+  if (!docRes.ok) {
+    if (supabaseUrl && serviceRoleKey) {
+      const supabase = createClient(supabaseUrl, serviceRoleKey, { auth: { persistSession: false } });
+      await ingestLog(
+        supabase,
+        'error',
+        'Failed to download OCR document from storage',
+        'StorageDownloadError',
+        { service: 'ocr-doc-verify', operation: 'download-document', statusCode: docRes.status }
+      );
+    }
+    return json({ error: 'Failed to download document from storage' }, 500);
+  }
 
   const docBuffer = await docRes.arrayBuffer();
   const docBytes  = new Uint8Array(docBuffer);
