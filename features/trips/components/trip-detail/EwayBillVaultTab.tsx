@@ -6,6 +6,7 @@ import {
 } from "@/features/trips/components/trip-detail/tripDocTypes";
 import {
   buildEwayBillStripRows,
+  EMPTY_EWAY_FIELD_VALUES,
   type EwayBillStripRow,
   type EwayFieldValues,
 } from "@/features/trips/services/ewayBillFields.util";
@@ -34,12 +35,14 @@ type Props = {
   rows: EwayBillStripRow[];
   onView: (rowId: string) => void;
   canEdit?: boolean;
-  onSave?: (values: EwayFieldValues) => Promise<boolean>;
+  onSave?: (values: EwayFieldValues[]) => Promise<boolean>;
 };
 
 const EMPTY_ROW: EwayBillStripRow = {
   id: "eway-empty",
+  entryIndex: 0,
   ewayNo: "—",
+  createdDate: "—",
   validTill: "—",
   docNo: "—",
   canView: false,
@@ -47,6 +50,25 @@ const EMPTY_ROW: EwayBillStripRow = {
 
 function displayToDraft(value: string): string {
   return value === "—" ? "" : value;
+}
+
+function rowToDraft(row: EwayBillStripRow): EwayFieldValues {
+  return {
+    ewayNo: displayToDraft(row.ewayNo),
+    createdDate: displayToDraft(row.createdDate),
+    validTill: displayToDraft(row.validTill),
+    docNo: displayToDraft(row.docNo),
+  };
+}
+
+function rowsToEntries(rows: EwayBillStripRow[]): EwayFieldValues[] {
+  return rows
+    .filter((row) => row.id !== EMPTY_ROW.id)
+    .map(rowToDraft)
+    .filter(
+      (entry) =>
+        entry.ewayNo || entry.createdDate || entry.validTill || entry.docNo,
+    );
 }
 
 function isoFromDate(date: Date): string {
@@ -189,43 +211,64 @@ export function EwayBillLrStrip({ rows, onView, canEdit, onSave }: Props) {
   const displayRows = rows.length > 0 ? rows : [EMPTY_ROW];
   const showEdit = !!canEdit && !!onSave;
   const [editing, setEditing] = useState(false);
+  const [editingIndex, setEditingIndex] = useState<number | "new">(0);
   const [saving, setSaving] = useState(false);
-  const [showDatePicker, setShowDatePicker] = useState(false);
+  const [showDatePicker, setShowDatePicker] = useState<
+    null | "createdDate" | "validTill"
+  >(null);
   const [draft, setDraft] = useState<EwayFieldValues>({
-    ewayNo: "",
-    validTill: "",
-    docNo: "",
+    ...EMPTY_EWAY_FIELD_VALUES,
   });
+  const createdDateIso = vaultDocDateToIso(draft.createdDate) ?? "";
   const validTillIso = vaultDocDateToIso(draft.validTill) ?? "";
+  const existingEntries = rowsToEntries(displayRows);
+  const canRemove =
+    editingIndex !== "new" && existingEntries.length > 1;
 
-  const applyValidTillIso = (iso: string) => {
+  const applyDraftDate = (field: "createdDate" | "validTill", iso: string) => {
     setDraft((prev) => ({
       ...prev,
-      validTill: formatVaultDocDate(iso) ?? iso,
+      [field]: formatVaultDocDate(iso) ?? iso,
     }));
   };
 
   const openEditor = (row: EwayBillStripRow) => {
-    setDraft({
-      ewayNo: displayToDraft(row.ewayNo),
-      validTill: displayToDraft(row.validTill),
-      docNo: displayToDraft(row.docNo),
-    });
-    setShowDatePicker(false);
+    setDraft(rowToDraft(row));
+    setEditingIndex(row.id === EMPTY_ROW.id ? "new" : row.entryIndex);
+    setShowDatePicker(null);
+    setEditing(true);
+  };
+
+  const openAdd = () => {
+    setDraft({ ...EMPTY_EWAY_FIELD_VALUES });
+    setEditingIndex("new");
+    setShowDatePicker(null);
     setEditing(true);
   };
 
   const closeEditor = () => {
     if (saving) return;
-    setShowDatePicker(false);
+    setShowDatePicker(null);
     setEditing(false);
   };
 
-  const saveEditor = async () => {
+  const buildNextEntries = (mode: "save" | "remove"): EwayFieldValues[] => {
+    if (mode === "remove") {
+      if (editingIndex === "new") return existingEntries;
+      return existingEntries.filter((_, index) => index !== editingIndex);
+    }
+    if (editingIndex === "new") return [...existingEntries, draft];
+    if (existingEntries.length === 0) return [draft];
+    return existingEntries.map((entry, index) =>
+      index === editingIndex ? draft : entry,
+    );
+  };
+
+  const saveEditor = async (mode: "save" | "remove" = "save") => {
     if (!onSave || saving) return;
     setSaving(true);
     try {
-      const ok = await onSave(draft);
+      const ok = await onSave(buildNextEntries(mode));
       if (ok) setEditing(false);
     } finally {
       setSaving(false);
@@ -237,6 +280,7 @@ export function EwayBillLrStrip({ rows, onView, canEdit, onSave }: Props) {
       <View style={styles.table}>
         <View style={styles.header}>
           <Text style={[styles.headCell, styles.colEway]}>E-way No</Text>
+          <Text style={[styles.headCell, styles.colDate]}>Created date</Text>
           <Text style={[styles.headCell, styles.colDate]}>Valid till</Text>
           <Text style={[styles.headCell, styles.colDoc]}>Doc No</Text>
           <Text style={[styles.headCell, styles.colAction]}>View</Text>
@@ -248,6 +292,9 @@ export function EwayBillLrStrip({ rows, onView, canEdit, onSave }: Props) {
           <View key={row.id} style={styles.dataRow}>
             <Text style={[styles.cell, styles.colEway]} numberOfLines={1}>
               {row.ewayNo}
+            </Text>
+            <Text style={[styles.cell, styles.colDate]} numberOfLines={1}>
+              {row.createdDate}
             </Text>
             <Text style={[styles.cell, styles.colDate]} numberOfLines={1}>
               {row.validTill}
@@ -299,6 +346,18 @@ export function EwayBillLrStrip({ rows, onView, canEdit, onSave }: Props) {
           </View>
         ))}
       </View>
+      {showEdit ? (
+        <TouchableOpacity
+          style={styles.addBtn}
+          onPress={openAdd}
+          activeOpacity={0.85}
+          accessibilityRole="button"
+          accessibilityLabel="Add e-way number"
+        >
+          <Feather name="plus" size={14} color={Theme.primary} />
+          <Text style={styles.addBtnText}>Add e-way number</Text>
+        </TouchableOpacity>
+      ) : null}
 
       <Modal
         visible={editing}
@@ -331,7 +390,9 @@ export function EwayBillLrStrip({ rows, onView, canEdit, onSave }: Props) {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={styles.modalBody}
             >
-            <Text style={styles.modalTitle}>E-way bill</Text>
+            <Text style={styles.modalTitle}>
+              {editingIndex === "new" ? "Add e-way bill" : "E-way bill"}
+            </Text>
             <Text style={styles.modalSubtitle}>
               Fill these if the number and date did not come from the document.
             </Text>
@@ -349,12 +410,51 @@ export function EwayBillLrStrip({ rows, onView, canEdit, onSave }: Props) {
               />
             </View>
             <View style={styles.fieldWrap}>
+              <Text style={styles.fieldLabel}>Created date</Text>
+              <Pressable
+                style={styles.dateField}
+                onPress={() => {
+                  if (saving) return;
+                  setShowDatePicker((open) =>
+                    open === "createdDate" ? null : "createdDate",
+                  );
+                }}
+                accessibilityRole="button"
+                accessibilityLabel="Pick created date"
+              >
+                <View style={styles.dateFieldInner}>
+                  <Text
+                    style={
+                      draft.createdDate
+                        ? styles.dateFieldText
+                        : styles.dateFieldPlaceholder
+                    }
+                    numberOfLines={1}
+                  >
+                    {draft.createdDate || "Pick date"}
+                  </Text>
+                  <Feather name="calendar" size={16} color={Theme.primary} />
+                </View>
+              </Pressable>
+              {showDatePicker === "createdDate" ? (
+                <CompactValidTillCalendar
+                  selectedIso={createdDateIso}
+                  onSelect={(iso) => {
+                    applyDraftDate("createdDate", iso);
+                    setShowDatePicker(null);
+                  }}
+                />
+              ) : null}
+            </View>
+            <View style={styles.fieldWrap}>
               <Text style={styles.fieldLabel}>Valid till</Text>
               <Pressable
                 style={styles.dateField}
                 onPress={() => {
                   if (saving) return;
-                  setShowDatePicker((open) => !open);
+                  setShowDatePicker((open) =>
+                    open === "validTill" ? null : "validTill",
+                  );
                 }}
                 accessibilityRole="button"
                 accessibilityLabel="Pick valid till date"
@@ -373,12 +473,12 @@ export function EwayBillLrStrip({ rows, onView, canEdit, onSave }: Props) {
                   <Feather name="calendar" size={16} color={Theme.primary} />
                 </View>
               </Pressable>
-              {showDatePicker ? (
+              {showDatePicker === "validTill" ? (
                 <CompactValidTillCalendar
                   selectedIso={validTillIso}
                   onSelect={(iso) => {
-                    applyValidTillIso(iso);
-                    setShowDatePicker(false);
+                    applyDraftDate("validTill", iso);
+                    setShowDatePicker(null);
                   }}
                 />
               ) : null}
@@ -397,6 +497,17 @@ export function EwayBillLrStrip({ rows, onView, canEdit, onSave }: Props) {
               />
             </View>
             <View style={styles.modalActions}>
+              {canRemove ? (
+                <TouchableOpacity
+                  style={styles.cancelBtn}
+                  onPress={() => void saveEditor("remove")}
+                  disabled={saving}
+                  accessibilityRole="button"
+                  accessibilityLabel="Remove e-way bill"
+                >
+                  <Text style={styles.removeBtnText}>Remove</Text>
+                </TouchableOpacity>
+              ) : null}
               <TouchableOpacity
                 style={styles.cancelBtn}
                 onPress={closeEditor}
@@ -408,7 +519,7 @@ export function EwayBillLrStrip({ rows, onView, canEdit, onSave }: Props) {
               </TouchableOpacity>
               <TouchableOpacity
                 style={styles.saveBtn}
-                onPress={() => void saveEditor()}
+                onPress={() => void saveEditor("save")}
                 disabled={saving}
                 accessibilityRole="button"
                 accessibilityLabel="Save e-way bill details"
@@ -433,6 +544,7 @@ const styles = StyleSheet.create({
     width: "100%",
     alignSelf: "stretch",
     marginTop: 10,
+    gap: 8,
   },
   table: {
     width: "100%",
@@ -466,17 +578,30 @@ const styles = StyleSheet.create({
     borderTopWidth: 1,
     borderTopColor: Theme.borderLight,
   },
+  addBtn: {
+    alignSelf: "flex-start",
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: Layout.minTouchTargetSize,
+    paddingHorizontal: 4,
+  },
+  addBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.primary,
+  },
   cell: {
     fontSize: 11,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
   },
   colEway: {
-    flex: 1.3,
+    flex: 1.1,
     minWidth: 0,
   },
   colDate: {
-    flex: 1,
+    flex: 0.95,
     minWidth: 0,
   },
   colDoc: {
@@ -647,6 +772,7 @@ const styles = StyleSheet.create({
   },
   modalActions: {
     flexDirection: "row",
+    flexWrap: "wrap",
     justifyContent: "flex-end",
     gap: 8,
     marginTop: 6,
@@ -662,6 +788,11 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: "700",
     color: Theme.textMuted,
+  },
+  removeBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: Theme.teslaRed,
   },
   saveBtn: {
     minHeight: Layout.minTouchTargetSize,

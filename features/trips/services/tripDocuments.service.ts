@@ -16,7 +16,7 @@ import {
   EWAY_BILL_FIELDS_FILE_NAME,
   ewayBillFieldsStoragePath,
   isEwayBillMetaPath,
-  serializeEwayFieldValues,
+  serializeEwayFieldEntries,
   type EwayFieldValues,
 } from "@/features/trips/services/ewayBillFields.util";
 
@@ -582,15 +582,15 @@ export async function updateTripDocumentNumber(
 }
 
 /**
- * Persist e-way bill fields typed in the LR strip (number, valid-till, doc no).
+ * Persist e-way bill fields typed in the strip (one or more numbers).
  * Reuses an existing e-way file row when present; otherwise stores a metadata-only row.
  */
 export async function upsertEwayBillFields(input: {
   tripId: string;
   uploadedBy: string;
-  values: EwayFieldValues;
+  values: EwayFieldValues[];
 }): Promise<{ error: Error | null }> {
-  const serialized = serializeEwayFieldValues(input.values);
+  const serialized = serializeEwayFieldEntries(input.values);
   const { data, error: listError } = await supabase()
     .from("trip_documents")
     .select("id, storage_path, file_name")

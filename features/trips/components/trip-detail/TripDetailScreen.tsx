@@ -2006,7 +2006,7 @@ export default function TripDetailScreen({
   );
 
   const saveEwayBillFields = useCallback(
-    async (values: EwayFieldValues) => {
+    async (values: EwayFieldValues[]) => {
       const tripIdForSave = detail.trip?.id;
       if (!tripIdForSave) return false;
       const uploadedBy = detail.currentUserId;

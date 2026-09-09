@@ -60,7 +60,7 @@ type Props = {
   ewayStripRows?: EwayBillStripRow[];
   onViewEwayBill?: (rowId: string) => void;
   canEditEwayBill?: boolean;
-  onSaveEwayBill?: (values: EwayFieldValues) => Promise<boolean>;
+  onSaveEwayBill?: (values: EwayFieldValues[]) => Promise<boolean>;
 };
 
 export function TripAssetVaultPanel({
