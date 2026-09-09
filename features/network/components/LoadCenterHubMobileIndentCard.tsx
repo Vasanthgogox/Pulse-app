@@ -13,7 +13,7 @@ import type {
   LoadCenterTicketCommerce,
 } from "@/features/network/utils/loadCenter.model";
 import {
-  formatStoryDate,
+  formatStoryDateTimeWithFallback,
   splitLocationParts,
 } from "@/features/network/utils/storyDisplay";
 import type { LoadCenterTripAllocation } from "@/features/network/utils/loadCenterTripAllocation.util";
@@ -300,12 +300,13 @@ export function LoadCenterHubMobileIndentCard({
   const channelLabel = resolveChannelLabel(sourceTag, statusLabel);
   const isGetLoadCard = sourceTag != null;
   /** Meta date: bid/posted date for Get Load; pickup for Give Load. */
+  const clockIso = indent.shared_at ?? indent.created_at;
   const metaDateIso = isGetLoadCard
     ? indent.created_at ?? pickupIso ?? indent.pickup_date
     : pickupIso ?? indent.pickup_date ?? indent.created_at;
-  const metaDateLabel = metaDateIso ? formatStoryDate(metaDateIso) : "";
+  const metaDateLabel = formatStoryDateTimeWithFallback(metaDateIso, clockIso);
   const loadDateIso = pickupIso ?? indent.pickup_date;
-  const loadDateLabel = loadDateIso ? formatStoryDate(loadDateIso) : "";
+  const loadDateLabel = formatStoryDateTimeWithFallback(loadDateIso, clockIso);
 
   const vehicle =
     (indent.vehicle_type || leftFooterLabel || "").trim() || null;
