@@ -341,6 +341,67 @@ describe("Ground Ops — hydration does not auto-add sibling surfaces", () => {
     // But the explicit false should be preserved (defensive measure)
     expect(hydrated["tripops.trips.detail"]).toBe(false);
   });
+
+  it("Ground Ops without dispatch capability derives correct domains (not all-false)", () => {
+    // When org lacks dispatch, defaultSurfacesForRole returns empty surfaces.
+    // buildTeamInvitePermissions must NOT persist all-false domains; must fall back to platformRole.
+    const { buildTeamInvitePermissions } = require("@/features/organization/utils/teamInviteRoles.util");
+
+    // Org has no dispatch capability (e.g., restricted org model)
+    const noDispatchCaps: Capability[] = [];
+
+    const perms = buildTeamInvitePermissions("ground_ops", undefined, noDispatchCaps);
+
+    // Domains must come from domainsFromPlatformRole("ground_ops"), not domainsFromSurfaces({})
+    expect(perms.domains.tripops).toBe(true);
+    expect(perms.domains.finance).toBe(false);
+    expect(perms.domains.sales).toBe(false);
+  });
+
+  it("Ground Ops with dispatch capability derives domains from surfaces", () => {
+    // When org has dispatch, defaultSurfacesForRole returns tripops surfaces.
+    // buildTeamInvitePermissions should derive domains from non-empty surfaces.
+    const { buildTeamInvitePermissions } = require("@/features/organization/utils/teamInviteRoles.util");
+
+    const dispatchCaps: Capability[] = ["dispatch"];
+
+    const perms = buildTeamInvitePermissions("ground_ops", undefined, dispatchCaps);
+
+    // Domains derived from non-empty surfaces
+    expect(perms.domains.tripops).toBe(true);
+    expect(perms.domains.finance).toBe(false);
+    expect(perms.domains.sales).toBe(false);
+
+    // Surfaces should be populated
+    expect(Object.keys(perms.surfaces || {}).length).toBeGreaterThan(0);
+  });
+
+  it("Explicit domains override both surfaces and platformRole", () => {
+    // If caller explicitly provides domains, they must be respected regardless of surfaces.
+    const { buildTeamInvitePermissions } = require("@/features/organization/utils/teamInviteRoles.util");
+
+    const explicitDomains: MemberDomainFlags = {
+      tripops: false,
+      finance: true,
+      sales: false,
+    };
+
+    const perms = buildTeamInvitePermissions("ground_ops", explicitDomains, ["dispatch"]);
+
+    // Explicit domains must be preserved
+    expect(perms.domains).toEqual(explicitDomains);
+  });
+
+  it("Restricted role still derives to all-false (intentional)", () => {
+    // Restricted is intentionally all-false. Must remain all-false even after fix.
+    const { buildTeamInvitePermissions } = require("@/features/organization/utils/teamInviteRoles.util");
+
+    const perms = buildTeamInvitePermissions("restricted", undefined, []);
+
+    expect(perms.domains.tripops).toBe(false);
+    expect(perms.domains.finance).toBe(false);
+    expect(perms.domains.sales).toBe(false);
+  });
 });
 
 // ══════════════════════════════════════════════════════════════════════════

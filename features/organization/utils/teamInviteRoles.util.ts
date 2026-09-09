@@ -285,7 +285,7 @@ export function buildTeamInvitePermissions(
     : undefined;
   const resolvedDomains =
     domains ??
-    (resolvedSurfaces
+    (resolvedSurfaces && Object.keys(resolvedSurfaces).length > 0
       ? domainsFromSurfaces(resolvedSurfaces)
       : domainsFromPlatformRole(platformRole));
   return {
