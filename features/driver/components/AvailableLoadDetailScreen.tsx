@@ -145,6 +145,12 @@ export default function AvailableLoadDetailScreen() {
     keyId: string;
   } | null>(null);
   const [isCreatingTrip, setIsCreatingTrip] = useState(false);
+  // A11.2 — surfaces a createMarketTripAfterFeePayment() failure instead of
+  // leaving the card stuck on "Connecting your awarded job..." forever.
+  // retryNonce exists purely to re-trigger the effect below on demand; it
+  // carries no data of its own.
+  const [tripCreationError, setTripCreationError] = useState<string | null>(null);
+  const [retryNonce, setRetryNonce] = useState(0);
 
   // A10.2 — PILOT/TEST ONLY payment methods, alongside real Razorpay.
   // Gated server-side (MARKETPLACE_TEST_PAYMENTS_ENABLED); this UI only
@@ -257,18 +263,26 @@ export default function AvailableLoadDetailScreen() {
     if (awardedTrip) return; // trip already exists
     if (isCreatingTrip) return;
     setIsCreatingTrip(true);
+    setTripCreationError(null);
     void createMarketTripAfterFeePayment(myBid.id)
       .then(({ error }) => {
         if (error) {
           console.warn('[AvailableLoadDetailScreen] createMarketTripAfterFeePayment failed:', error.message);
+          setTripCreationError(formatMarketBidSubmitError(error.message));
           return;
         }
+        setTripCreationError(null);
         invalidateAwards();
         invalidateMyBid();
       })
       .finally(() => setIsCreatingTrip(false));
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [myBid?.id, myBid?.status, myBid?.fee_payment_status, awardedTrip]);
+  }, [myBid?.id, myBid?.status, myBid?.fee_payment_status, awardedTrip, retryNonce]);
+
+  const handleRetryTripCreation = useCallback(() => {
+    setTripCreationError(null);
+    setRetryNonce((n) => n + 1);
+  }, []);
   const compatible = useMemo(
     () =>
       load
@@ -398,6 +412,8 @@ export default function AvailableLoadDetailScreen() {
             }}
             onPay={() => setMethodSheetOpen(true)}
             isStartingPayment={isStartingPayment}
+            tripCreationError={tripCreationError}
+            onRetryTripCreation={handleRetryTripCreation}
           />
           {checkoutOrder ? (
             <RazorpayCheckoutSheet
@@ -625,6 +641,8 @@ function AwardedMarketJobCard({
   onOpenJob,
   onPay,
   isStartingPayment,
+  tripCreationError,
+  onRetryTripCreation,
 }: {
   trip: DriverTripRow | null;
   bidAmount: number | null | undefined;
@@ -640,6 +658,9 @@ function AwardedMarketJobCard({
   onOpenJob: () => void;
   onPay?: () => void;
   isStartingPayment?: boolean;
+  /** A11.2 — set only when createMarketTripAfterFeePayment() has failed after a paid fee. */
+  tripCreationError?: string | null;
+  onRetryTripCreation?: () => void;
 }) {
   const pickup = trip?.pickup_location?.trim() || 'Pickup';
   const drop = trip?.dropoff_location?.trim() || 'Drop';
@@ -647,10 +668,13 @@ function AwardedMarketJobCard({
     ? awardedEarningsLabel(trip, bidAmount)
     : formatMarketBidAmount(bidAmount) || 'Rate on request';
   const feePending = feePaymentStatus !== 'paid' && feePaymentStatus !== 'not_required';
+  const tripCreationFailed = !trip && !feePending && Boolean(tripCreationError);
   const statusHint = !trip
     ? feePending
       ? feePendingHint(feePaymentStatus, platformFeeAmount)
-      : 'Connecting your awarded job…'
+      : tripCreationFailed
+        ? (tripCreationError as string)
+        : 'Connecting your awarded job…'
     : isAssignedNotStarted(trip.status)
       ? 'Opening on Dashboard…'
       : isActiveMission(trip.status)
@@ -694,17 +718,23 @@ function AwardedMarketJobCard({
               hint: feePendingHint(feePaymentStatus, platformFeeAmount),
               onPress: onPay!,
             }
-          : awaitingPayment
+          : tripCreationFailed
             ? {
-                title: 'Awaiting payment',
-                variant: 'info',
-                onPress: onOpenJob,
+                title: 'Retry',
+                hint: 'We could not confirm your job after payment.',
+                onPress: onRetryTripCreation ?? onOpenJob,
               }
-            : {
-                title: 'Open job',
-                hint: 'Continue on Dashboard',
-                onPress: onOpenJob,
-              }
+            : awaitingPayment
+              ? {
+                  title: 'Awaiting payment',
+                  variant: 'info',
+                  onPress: onOpenJob,
+                }
+              : {
+                  title: 'Open job',
+                  hint: 'Continue on Dashboard',
+                  onPress: onOpenJob,
+                }
       }
     />
   );
