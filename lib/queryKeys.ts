@@ -129,6 +129,14 @@ export const queryKeys = {
       ["q", "drivers", orgId, driverId] as const,
   },
 
+  financeAggregation: {
+    driver: (orgId: string) => ["q", "finance-aggregation", "driver", orgId] as const,
+    supplier: (orgId: string, applyAdjustments: boolean) =>
+      ["q", "finance-aggregation", "supplier", orgId, applyAdjustments] as const,
+    customer: (orgId: string, applyAdjustments: boolean) =>
+      ["q", "finance-aggregation", "customer", orgId, applyAdjustments] as const,
+  },
+
   vehicles: {
     all: (orgId: string) => ["q", "vehicles", orgId] as const,
     finite: (orgId: string) => ["q", "vehicles", orgId, "finite"] as const,

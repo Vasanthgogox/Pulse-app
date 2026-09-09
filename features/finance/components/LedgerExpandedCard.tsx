@@ -128,10 +128,6 @@ export interface LedgerExpandedCardProps {
   counterpartyIntegrated?: boolean | null;
   /** Optional: called when user taps "Bridge Variances" / "Open Compare & Verify". */
   onOpenCompareVerify?: () => void;
-  /** When an open dispute exists for this trip+partner, shown as a status chip in the hero. */
-  disputeStatus?: "OPEN" | "RESOLVED" | null;
-  /** Who raised the dispute — affects chip wording. */
-  disputeDirection?: "RAISED_BY_US" | "RECEIVED" | null;
 }
 
 const defaultFormatNum = (n: number) =>
@@ -995,31 +991,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: Theme.textPrimaryDark,
     letterSpacing: 1.3,
-  },
-  reconDisputeChip: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "rgba(239,68,68,0.14)",
-    borderColor: "rgba(239,68,68,0.28)",
-    borderWidth: 1,
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-  },
-  reconDisputeChipResolved: {
-    backgroundColor: "rgba(16,185,129,0.14)",
-    borderColor: "rgba(16,185,129,0.28)",
-  },
-  reconDisputeChipText: {
-    flex: 1,
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#FCA5A5",
-    letterSpacing: 0.8,
-  },
-  reconDisputeChipTextResolved: {
-    color: Theme.driverEmerald,
   },
   reconHeroDot: {
     width: 6,

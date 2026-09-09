@@ -1,0 +1,45 @@
+/**
+ * TanStack Query hooks for the server-side ledger aggregation RPCs. See
+ * features/finance/services/ledgerAggregationRpc.service.ts.
+ */
+import { useQuery } from '@tanstack/react-query';
+import {
+  getDriverLedgerAggregation,
+  getSupplierLedgerAggregation,
+  getCustomerLedgerInputs,
+} from '@/features/finance/services/ledgerAggregationRpc.service';
+import { queryKeys } from '@/lib/queryKeys';
+import { STALE } from '@/lib/queryClient';
+
+export function useDriverLedgerAggregationQuery(orgId: string | null) {
+  return useQuery({
+    queryKey: queryKeys.financeAggregation.driver(orgId ?? ''),
+    queryFn: () => getDriverLedgerAggregation(orgId!),
+    enabled: !!orgId,
+    staleTime: STALE.realtime,
+  });
+}
+
+export function useSupplierLedgerAggregationQuery(
+  orgId: string | null,
+  applyAdjustments: boolean,
+) {
+  return useQuery({
+    queryKey: queryKeys.financeAggregation.supplier(orgId ?? '', applyAdjustments),
+    queryFn: () => getSupplierLedgerAggregation(orgId!, applyAdjustments),
+    enabled: !!orgId,
+    staleTime: STALE.realtime,
+  });
+}
+
+export function useCustomerLedgerInputsQuery(
+  orgId: string | null,
+  applyAdjustments: boolean,
+) {
+  return useQuery({
+    queryKey: queryKeys.financeAggregation.customer(orgId ?? '', applyAdjustments),
+    queryFn: () => getCustomerLedgerInputs(orgId!, applyAdjustments),
+    enabled: !!orgId,
+    staleTime: STALE.realtime,
+  });
+}

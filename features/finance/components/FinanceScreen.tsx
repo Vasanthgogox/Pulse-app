@@ -22,10 +22,18 @@ import {
 } from "@/features/drivers/services/drivers.service";
 import {
     aggregateCustomers,
+    aggregateCustomersFromRpc,
     aggregateDrivers,
+    aggregateDriversFromRpc,
     aggregateSuppliers,
+    aggregateSuppliersFromRpc,
     type DriverOfferForAggregation,
 } from "@/features/finance/aggregation";
+import {
+    useCustomerLedgerInputsQuery,
+    useDriverLedgerAggregationQuery,
+    useSupplierLedgerAggregationQuery,
+} from "@/lib/queries/useLedgerAggregationQuery";
 import { ledgerDayMatchesPeriod } from "@/features/finance/lib/filterLedgerByPeriod";
 import type {
     SupplierRow,
@@ -702,36 +710,30 @@ export function FinanceScreen() {
     [],
   );
 
+  const cardMetricsOrgId = currentOrganization?.id ?? null;
+  const cardMetricsApplyAdjustments = tripFinanceAdjustmentsByTripId !== undefined;
+  const { data: cardDriverLedgerRpcRows = [] } = useDriverLedgerAggregationQuery(cardMetricsOrgId);
+  const { data: cardSupplierLedgerRpcRows = [] } = useSupplierLedgerAggregationQuery(
+    cardMetricsOrgId,
+    cardMetricsApplyAdjustments,
+  );
+  const { data: cardCustomerLedgerInputs } = useCustomerLedgerInputsQuery(
+    cardMetricsOrgId,
+    false,
+  );
+
   const desktopCardMetrics = useMemo(() => {
-    const customersAgg = aggregateCustomers(
+    const customersAgg = aggregateCustomersFromRpc(
       clientRows,
-      allTripsForLedger,
-      ledgerTransactions ?? [],
-      tripPartyMap,
+      cardCustomerLedgerInputs ?? {
+        trip_inputs: [],
+        unlinked_payments: [],
+        ledger_only_parties: [],
+        client_ledger_totals: [],
+      },
     );
-    const suppliersAgg = aggregateSuppliers(
-      supplierRows,
-      allTripsForLedger,
-      ledgerTransactions ?? [],
-      tripsWhereOrgIsClient,
-      tripPartyMap,
-      tripFinanceAdjustmentsByTripId,
-    );
-    const offersForAggregation: Record<string, DriverOfferForAggregation> = {};
-    Object.entries(driverOffers).forEach(([driverId, offer]) => {
-      offersForAggregation[driverId] = {
-        payableAmount: offer.payableAmount ?? null,
-        commissionPercent: offer.commissionPercent ?? null,
-        commissionPerKm: offer.commissionPerKm ?? null,
-      };
-    });
-    const driversAgg = aggregateDrivers(
-      driverRows,
-      tripRows,
-      ledgerTransactions ?? [],
-      offersForAggregation,
-      tripPartyMap,
-    );
+    const suppliersAgg = aggregateSuppliersFromRpc(supplierRows, cardSupplierLedgerRpcRows);
+    const driversAgg = aggregateDriversFromRpc(driverRows, cardDriverLedgerRpcRows);
 
     const customersOutstanding = customersAgg.rows.reduce(
       (sum, row) => sum + Number(row.pending ?? 0),
@@ -818,20 +820,15 @@ export function FinanceScreen() {
       },
     } as const;
   }, [
-    tripFinanceAdjustmentsByTripId,
-    allTripsForLedger,
+    cardCustomerLedgerInputs,
+    cardSupplierLedgerRpcRows,
+    cardDriverLedgerRpcRows,
     clientRows,
-    currentOrganization?.id,
-    driverOffers,
     driverRows,
     ledgerTotalsData.totalIn,
     ledgerTotalsData.totalOut,
     ledgerTransactions,
     supplierRows,
-    tripPartyMap,
-    tripRows,
-    tripsWhereOrgIsClient,
-    tripsWhereOrgIsSupplier,
     formatCompactRupee,
   ]);
   const reportTitle = useMemo(() => {

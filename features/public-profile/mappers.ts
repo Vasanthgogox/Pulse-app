@@ -104,16 +104,14 @@ export function clientToPublicEntity(c: ClientRow): PublicProfileEntity {
     subtitle: c.contact_person ?? null,
     bio:
       c.address
-        ? `Operating out of ${c.address.split(",")[0]}. Connected via the Pulse network for real-time shared-ledger reconciliation.`
+        ? `Operating out of ${c.address.split(",")[0]}. Connected via the Pulse network.`
         : null,
     metrics,
     facts,
     fullDetailHref: `/client/${c.id}`,
-    primaryCtaLabel: "Enter Shared Hub",
-    synergyHeadline: isIntegrated ? "Live Shared Ledger" : "Invite to Shared Ledger",
-    synergyBody: isIntegrated
-      ? "Audit records sync both ways. Review variances, confirm payments, and close disputes in one place."
-      : "Connect this client on Pulse to unlock Compare & Verify and real-time shared ledger.",
+    primaryCtaLabel: "View Client Details",
+    synergyHeadline: null,
+    synergyBody: null,
   };
 }
 
@@ -187,11 +185,9 @@ export function supplierToPublicEntity(s: SupplierRow): PublicProfileEntity {
     metrics,
     facts,
     fullDetailHref: `/supplier/${s.id}`,
-    primaryCtaLabel: "Enter Shared Hub",
-    synergyHeadline: isIntegrated ? "Live Shared Ledger" : "Invite to Shared Ledger",
-    synergyBody: isIntegrated
-      ? "Every invoice and payment is mirrored across both books. Resolve variances with a tap."
-      : "Connect this supplier on Pulse so payments, freight adjustments, and proofs stay in sync automatically.",
+    primaryCtaLabel: "View Supplier Details",
+    synergyHeadline: null,
+    synergyBody: null,
   };
 }
 

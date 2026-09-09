@@ -41,15 +41,20 @@ export default function DriverIndexRoute() {
       setMemberships(null);
       return;
     }
-    void getDriverFleetMemberships().then(({ memberships: m }) => {
-      if (!cancelled) setMemberships(m);
-    });
+    void getDriverFleetMemberships()
+      .then(({ memberships: m }) => {
+        if (!cancelled) setMemberships(m);
+      })
+      .catch(() => {
+        if (!cancelled) setMemberships([]);
+      });
     return () => {
       cancelled = true;
     };
   }, [uid]);
 
-  const { available, isLoading: availabilityLoading } = useDriverAvailabilityQuery(uid);
+  const { available, isLoading: availabilityLoading, isError: availabilityError } =
+    useDriverAvailabilityQuery(uid);
 
   const participationKnown = memberships !== null;
   const isDcoEligible = participationKnown
@@ -57,7 +62,11 @@ export default function DriverIndexRoute() {
     : false;
 
   const showAvailableSurface =
-    participationKnown && !availabilityLoading && isDcoEligible && available === true;
+    participationKnown &&
+    !availabilityLoading &&
+    !availabilityError &&
+    isDcoEligible &&
+    available === true;
 
   return showAvailableSurface ? <DriverAvailableScreen /> : <DriverHomeScreen />;
 }

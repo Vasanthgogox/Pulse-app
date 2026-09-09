@@ -285,6 +285,9 @@ LogBox.ignoreLogs([
   'Lock "lock:sb-',
   'was not released within',
   'Lock was stolen by another request',
+  // whatwg-fetch AbortController timeout (Expo Go) — handled in lib/supabase.ts.
+  'AbortError: Aborted',
+  'Aborted',
 ]);
 
 export default function RootLayout() {

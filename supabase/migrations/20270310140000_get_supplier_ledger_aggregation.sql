@@ -7,14 +7,27 @@
 -- indents), not to any per-trip allocation mechanism.
 --
 -- Anti-fan-out: trip_supplier_resolution collapses every trip to AT MOST ONE
--- resolved supplier_id (id-match first, else a name-match against a
--- pre-deduplicated supplier_name_index) before either due-total CTE or the
--- payment-fallback CTE ever groups by it. Without this, an org with two
--- suppliers sharing a name would multiply that trip's row via the OR-based
--- name join a first draft of this migration used directly against
--- `suppliers` -- caught during review, fixed here by resolving the name
--- match through a DISTINCT-ON index first, the same pattern already used
--- for duplicate client names in get_customer_ledger_inputs.
+-- resolved supplier_id before either due-total CTE or the payment-fallback
+-- CTE ever groups by it.
+--
+-- Supplier name fallback intentionally omitted: aggregateSuppliers.ts has a
+-- "match trip to supplier by name when supplier_id is absent" branch
+-- (its own test at aggregateSuppliers.test.ts:18), but tracing both real
+-- callers (SuppliersTab.tsx and FinanceScreen.tsx) shows they both source
+-- trips via useTripsQuery -> get_trips_for_org, whose result never contains
+-- supplier_name -- confirmed both statically (that RPC's body never
+-- references supplier_name or joins suppliers) and empirically (this
+-- migration's first draft referenced trips.supplier_name directly and
+-- failed to apply with `column t.supplier_name does not exist` -- the
+-- underlying table has no such column at all; the only place a real
+-- supplier_name value exists is view v_active_trips, computed as
+-- suppliers.company_name, which neither caller queries). The JS branch is
+-- therefore not reachable through either production caller today. Do NOT
+-- reintroduce a join here to "restore" it -- if the trips query these
+-- callers use ever changes to expose supplier_name, this SQL needs a
+-- matching update then, not preemptively. The JS branch and its test are
+-- deliberately left untouched in aggregateSuppliers.ts; this is a SQL-
+-- equivalence decision, not a source-code cleanup.
 --
 -- The "as-client" branch replicates get_trips_where_org_is_client's exact
 -- filter (traced from the live function: clients.linked_organization_id =
@@ -49,14 +62,7 @@ STABLE
 SECURITY DEFINER
 SET search_path TO 'public'
 AS $function$
-  WITH supplier_name_index AS (
-    SELECT DISTINCT ON (lower(trim(coalesce(name, ''))))
-      lower(trim(coalesce(name, ''))) AS name_key, id AS supplier_id
-    FROM public.suppliers
-    WHERE organization_id = p_org_id AND trim(coalesce(name, '')) <> ''
-    ORDER BY lower(trim(coalesce(name, ''))), id ASC
-  ),
-  supplier_linked_org_index AS (
+  WITH supplier_linked_org_index AS (
     -- Mirrors buildUniqueLinkedOrgIdMap (features/trips/visibility/tripVisibility.ts),
     -- whose name states the invariant this CTE enforces explicitly: at most
     -- one supplier per linked_organization_id. Without this, two suppliers
@@ -68,20 +74,16 @@ AS $function$
     ORDER BY linked_organization_id, id ASC
   ),
   trip_supplier_resolution AS (
-    -- Exactly one row per trip, resolved to at most one supplier_id:
-    -- id-match first, else a deduplicated name-match fallback -- mirrors
-    -- the JS's `if (!sid && t.supplier_name)` fallback-only-when-unmatched.
+    -- Exactly one row per trip, resolved via supplier_id only -- see the
+    -- "Supplier name fallback intentionally omitted" note above.
     SELECT
       t.id AS trip_id,
       t.trip_number,
       t.supplier_rate,
-      coalesce(s_id.id, sni.supplier_id) AS supplier_id
+      s_id.id AS supplier_id
     FROM public.trips t
     LEFT JOIN public.suppliers s_id
       ON s_id.id = t.supplier_id AND s_id.organization_id = p_org_id
-    LEFT JOIN supplier_name_index sni
-      ON s_id.id IS NULL AND t.supplier_name IS NOT NULL
-     AND sni.name_key = lower(trim(t.supplier_name))
     WHERE t.organization_id = p_org_id
   ),
   own_trip_cost AS (
