@@ -1,13 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { Alert, Pressable, StyleSheet, Text, View } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
-import { useExecuteInvoiceMutation, useInvoicingExecuteTripsQuery } from '@/lib/queries/useInvoicingExecuteQueries';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { useInvoicingExecuteTripsQuery } from '@/lib/queries/useInvoicingExecuteQueries';
 import { useActiveWorkspace } from '@/contexts/ActiveWorkspaceContext';
 import type { AdditionalCharge, InvoiceConfig, InvoicingTripView } from '@/features/invoicing/services/invoicing.service';
 import { getInvoiceBrandingSettings } from '@/features/invoicing/services/invoiceBranding.service';
@@ -15,14 +14,18 @@ import {
   resolveInvoiceIssuerIdentity,
   type InvoiceIssuerIdentity,
 } from '@/features/invoicing/services/invoiceIssuerIdentity.service';
-import { useInvoiceCalc } from '@/features/invoicing/hooks/useInvoiceCalc';
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import { useAuth } from '@/contexts/AuthContext';
-import { useCapabilities } from "@/lib/useCapabilities";
-import { useMemberAccess } from "@/lib/useMemberAccess";
-import type { InvoicePdfData } from '@/components/InvoicePdf.types';
-
+import { useCapabilities } from '@/lib/useCapabilities';
+import { useMemberAccess } from '@/lib/useMemberAccess';
 import InvoicePdf from '@/components/InvoicePdf';
+import { useInvoiceDraftClientsQuery } from '@/features/invoicing/hooks/useInvoiceDraftClients';
+import {
+  buildInvoiceDraftModel,
+  formatInvoicePreviewDate,
+  mapInvoiceDraftModelToPdfData,
+  uniqueTripClientIds,
+} from '@/features/invoicing/services/invoicePreviewModel.service';
 
 interface InvoicePreviewParams extends Record<string, string | undefined> {
   activeClient: string;
@@ -34,6 +37,7 @@ interface InvoicePreviewParams extends Record<string, string | undefined> {
   includeFuel: string;
   fuelRate: string;
   additionalCharges: string;
+  previewDate: string;
 }
 
 function canAccessInvoicing(
@@ -59,30 +63,6 @@ function safeJsonArray<T>(value: unknown): T[] {
   }
 }
 
-function formatDate(value: string | Date): string {
-  const d = value instanceof Date ? value : new Date(value);
-  if (Number.isNaN(d.getTime())) return 'N/A';
-  return d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
-}
-
-function addDays(base: Date, days: number): Date {
-  const next = new Date(base);
-  next.setDate(next.getDate() + days);
-  return next;
-}
-
-function parseNetDays(paymentTerms: string): number {
-  const m = paymentTerms.match(/(\d+)/);
-  return m ? Number(m[1]) : 30;
-}
-
-function buildInvoiceNo(selectedTrips: InvoicingTripView[]): string {
-  const d = new Date();
-  const datePart = d.getFullYear() + String(d.getMonth() + 1).padStart(2, '0') + String(d.getDate()).padStart(2, '0');
-  const seed = (selectedTrips[0]?.id || '0000').replace(/[^A-Za-z0-9]/g, '').slice(-4).toUpperCase();
-  return 'INV-' + datePart + '-' + (seed || 'DRAFT');
-}
-
 export default function InvoicePdfPreviewScreen() {
   const insets = useSafeAreaInsets();
   const router = useRouter();
@@ -90,20 +70,20 @@ export default function InvoicePdfPreviewScreen() {
   const { profile } = useAuth();
   const caps = useCapabilities();
   const { can: canSurface } = useMemberAccess();
-  const { currentOrganization, isLoading: orgLoading } = useOrganization();
   const { activeWorkspace } = useActiveWorkspace();
-  const orgId = currentOrganization?.id ?? null;
   const workspaceId = activeWorkspace?.id ?? null;
 
-  const [isFinalizing, setIsFinalizing] = useState(false);
   const [brandingOverlay, setBrandingOverlay] = useState<{
     companyName: string | null;
     logoUrl: string | null;
   }>({ companyName: null, logoUrl: null });
 
   const activeClient = params.activeClient || '';
-  const paymentTerms = params.paymentTerms || 'Net 30';
+  const paymentTerms = params.paymentTerms || '';
   const notes = params.notes || '';
+  const previewDate = params.previewDate
+    ? formatInvoicePreviewDate(params.previewDate)
+    : formatInvoicePreviewDate(new Date());
 
   const parsedIncludeGst = params.includeGst === 'true';
   const parsedGstRate = Number.parseFloat(params.gstRate || '0') || 0;
@@ -112,12 +92,15 @@ export default function InvoicePdfPreviewScreen() {
   const parsedAdditionalCharges = safeJsonArray<AdditionalCharge>(params.additionalCharges);
   const parsedSelectedTripIds = safeJsonArray<string>(params.selectedTripIds);
 
-  const { data: allTrips = [], isLoading: isLoadingTrips, isError: isErrorTrips, error: errorTrips } = useInvoicingExecuteTripsQuery(orgId);
-  const executeMutation = useExecuteInvoiceMutation(orgId);
+  const { data: allTrips = [], isLoading: isLoadingTrips, isError: isErrorTrips, error: errorTrips } =
+    useInvoicingExecuteTripsQuery(workspaceId);
 
   const tripsById = useMemo(() => {
     const map = new Map<string, InvoicingTripView>();
-    for (const t of allTrips) map.set(t.id, t);
+    for (const t of allTrips) {
+      map.set(t.internal_id, t);
+      map.set(t.id, t);
+    }
     return map;
   }, [allTrips]);
 
@@ -125,19 +108,26 @@ export default function InvoicePdfPreviewScreen() {
     () => parsedSelectedTripIds.map((id) => tripsById.get(id)).filter(Boolean) as InvoicingTripView[],
     [parsedSelectedTripIds, tripsById],
   );
-  const previewInvoiceNo = useMemo(() => buildInvoiceNo(selectedTrips), [selectedTrips]);
 
-  const invoiceConfig: InvoiceConfig = {
-    includeGst: parsedIncludeGst,
-    gstRate: parsedGstRate,
-    includeFuel: parsedIncludeFuel,
-    fuelRate: parsedFuelRate,
-    additionalCharges: parsedAdditionalCharges,
-  };
+  const clientIds = useMemo(() => uniqueTripClientIds(selectedTrips), [selectedTrips]);
+  const { data: fetchedClients = [], isLoading: isLoadingClients } = useInvoiceDraftClientsQuery(
+    workspaceId,
+    clientIds,
+  );
 
-  const calculations = useInvoiceCalc(selectedTrips, invoiceConfig);
+  const invoiceConfig: InvoiceConfig = useMemo(
+    () => ({
+      includeGst: parsedIncludeGst,
+      gstRate: parsedGstRate,
+      includeFuel: parsedIncludeFuel,
+      fuelRate: parsedFuelRate,
+      additionalCharges: parsedAdditionalCharges,
+    }),
+    [parsedAdditionalCharges, parsedFuelRate, parsedGstRate, parsedIncludeFuel, parsedIncludeGst],
+  );
+
   const allowed =
-    canAccessInvoicing(profile, caps) && canSurface("finance.invoicing");
+    canAccessInvoicing(profile, caps) && canSurface('finance.invoicing');
 
   const issuer: InvoiceIssuerIdentity | null = useMemo(
     () =>
@@ -164,86 +154,24 @@ export default function InvoicePdfPreviewScreen() {
     };
   }, [workspaceId]);
 
-  const invoiceData: InvoicePdfData = useMemo(() => {
-    const issued = new Date();
-    const due = addDays(issued, parseNetDays(paymentTerms));
-    const lrScope = selectedTrips.slice(0, 6).map((t) => t.id).join(', ') || 'N/A';
+  const draftModel = useMemo(() => {
+    if (!issuer || selectedTrips.length === 0) return null;
+    return buildInvoiceDraftModel({
+      issuer,
+      trips: selectedTrips,
+      config: invoiceConfig,
+      previewDate,
+      paymentTerms: paymentTerms || null,
+      notes: notes || null,
+      fetchedClients,
+      displayNameFallback: activeClient || null,
+    });
+  }, [activeClient, fetchedClients, invoiceConfig, issuer, notes, paymentTerms, previewDate, selectedTrips]);
 
-    return {
-      brandingCompanyName: issuer?.businessName ?? '',
-      brandingLogoUrl: issuer?.logoUrl ?? null,
-      invoiceNo: previewInvoiceNo,
-      clientName: activeClient || 'Unknown Client',
-      issuedOn: formatDate(issued),
-      dueOn: formatDate(due),
-      issuerAddressLines: issuer?.addressLines ?? [],
-      issuerPan: issuer?.pan ?? null,
-      issuerGstin: issuer?.gstin ?? null,
-      issuerGstNotApplicable: issuer?.gstNotApplicable ?? false,
-      billingAddressLines: activeClient ? [activeClient] : [],
-      shipmentTargetLines: [],
-      paymentTerms,
-      notes,
-      lrScope,
-      assetFleet: Array.from(new Set(selectedTrips.map((t) => t.details || 'N/A'))).join(', '),
-      bankDetailsLines: [],
-      items: selectedTrips.map((trip) => ({
-        tripId: trip.id,
-        route: trip.route,
-        context: trip.details || 'Vehicle Context N/A',
-        date: formatDate(trip.date),
-        amount: trip.amount,
-      })),
-      additionalCharges: parsedAdditionalCharges.map((c) => ({
-        description: c.description || 'Additional charge',
-        amount: Number(c.amount || 0),
-      })),
-      subtotal: calculations.subtotal,
-      taxLabel: parsedIncludeGst ? 'Tax (GST ' + parsedGstRate + '%)' : 'Tax (GST 0%)',
-      taxAmount: calculations.sgst + calculations.cgst,
-      grandTotal: calculations.totalAmount,
-    };
-  }, [activeClient, calculations.cgst, calculations.sgst, calculations.subtotal, calculations.totalAmount, issuer, notes, parsedAdditionalCharges, parsedGstRate, parsedIncludeGst, paymentTerms, previewInvoiceNo, selectedTrips]);
-
-  const handleFinalizeAndSend = useCallback(async () => {
-    setIsFinalizing(true);
-    try {
-      if (!orgId) {
-        Alert.alert('Error', 'Organization not loaded. Cannot finalize invoice.');
-        return;
-      }
-      const nonApproved = selectedTrips.filter((t) => t.status !== 'approved');
-      if (nonApproved.length > 0) {
-        Alert.alert(
-          'Only approved trips allowed',
-          `These trips are not approved and cannot be invoiced: ${nonApproved.map((t) => t.id).join(', ')}`,
-        );
-        return;
-      }
-      const internalIds = selectedTrips.map((t) => t.internal_id);
-      await executeMutation.mutateAsync({
-        internalIds,
-        payload: {
-          notes,
-          paymentTerms,
-          includeGst: parsedIncludeGst,
-          gstRate: parsedGstRate,
-          includeFuel: parsedIncludeFuel,
-          fuelRate: parsedFuelRate,
-          additionalCharges: parsedAdditionalCharges,
-          calculations,
-          createdBy: profile?.uid ?? null,
-          clientName: activeClient,
-        },
-      });
-      Alert.alert('Success', 'Invoice issued successfully.');
-      router.back();
-    } catch (error) {
-      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to issue invoice.');
-    } finally {
-      setIsFinalizing(false);
-    }
-  }, [orgId, selectedTrips, executeMutation, notes, paymentTerms, parsedIncludeGst, parsedGstRate, parsedIncludeFuel, parsedFuelRate, parsedAdditionalCharges, calculations, router, profile?.uid, activeClient]);
+  const invoiceData = useMemo(
+    () => (draftModel ? mapInvoiceDraftModelToPdfData(draftModel) : null),
+    [draftModel],
+  );
 
   if (!allowed) {
     return (
@@ -257,8 +185,12 @@ export default function InvoicePdfPreviewScreen() {
     );
   }
 
-  if (orgLoading || isLoadingTrips || !orgId) {
-    return <CenteredLoadingView message={orgLoading ? 'Loading organization...' : (isLoadingTrips ? 'Loading trips...' : 'Initializing...')} />;
+  if (!workspaceId || isLoadingTrips || (clientIds.length > 0 && isLoadingClients)) {
+    return (
+      <CenteredLoadingView
+        message={!workspaceId ? 'Loading workspace...' : isLoadingTrips ? 'Loading trips...' : 'Loading client...'}
+      />
+    );
   }
 
   if (isErrorTrips) {
@@ -273,7 +205,7 @@ export default function InvoicePdfPreviewScreen() {
     );
   }
 
-  if (selectedTrips.length === 0) {
+  if (selectedTrips.length === 0 || !invoiceData) {
     return (
       <View style={[styles.blocked, { paddingTop: insets.top + 24, paddingBottom: insets.bottom }]}>
         <Text style={styles.blockedTitle}>No trips selected</Text>
@@ -287,14 +219,14 @@ export default function InvoicePdfPreviewScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}> 
+      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
         <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <FontAwesome name='arrow-left' size={16} color={Theme.textPrimaryDark} />
-          <Text style={styles.backButtonText}>Invoice Preview</Text>
+          <FontAwesome name="arrow-left" size={16} color={Theme.textPrimaryDark} />
+          <Text style={styles.backButtonText}>Invoice draft</Text>
         </Pressable>
       </View>
 
-      <InvoicePdf invoiceData={invoiceData} onFinalize={handleFinalizeAndSend} isFinalizing={isFinalizing} />
+      <InvoicePdf invoiceData={invoiceData} />
     </View>
   );
 }

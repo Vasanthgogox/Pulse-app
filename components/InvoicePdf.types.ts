@@ -1,33 +1,37 @@
 export interface InvoicePdfItem {
+  key: string;
   tripId: string;
   route: string;
-  context: string;
   date: string;
   amount: number;
+  lineType: 'freight' | 'fuel' | 'additional';
+}
+
+export interface InvoicePdfTaxRow {
+  label: string;
+  value: string;
 }
 
 export interface InvoicePdfData {
+  documentKind: 'draft';
   brandingCompanyName: string;
   brandingLogoUrl: string | null;
-  invoiceNo: string;
+  invoiceNo: 'DRAFT';
+  invoiceNumberCaption: string;
   clientName: string;
-  issuedOn: string;
-  dueOn: string;
+  previewDate: string;
+  indicativeDueDate: string | null;
   issuerAddressLines: string[];
   issuerPan: string | null;
   issuerGstin: string | null;
   issuerGstNotApplicable: boolean;
-  billingAddressLines: string[];
-  shipmentTargetLines: string[];
-  paymentTerms: string;
-  notes: string;
-  lrScope: string;
-  assetFleet: string;
+  billingLines: string[];
+  paymentTerms: string | null;
+  notes: string | null;
   bankDetailsLines: string[];
   items: InvoicePdfItem[];
-  additionalCharges: { description: string; amount: number }[];
-  subtotal: number;
-  taxLabel: string;
-  taxAmount: number;
+  taxableBase: number;
+  taxRows: InvoicePdfTaxRow[];
+  taxWarning: string | null;
   grandTotal: number;
 }

@@ -11,11 +11,9 @@ import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { InvoicePreviewPanel } from "@/features/invoicing/components/InvoicePreviewPanel";
 import { resolveInvoiceIssuerIdentity } from "@/features/invoicing/services/invoiceIssuerIdentity.service";
 import type { InvoicingTripView } from "@/features/invoicing/services/invoicing.service";
+import { invoicingClientGroupKey } from "@/features/invoicing/services/invoicePreviewModel.service";
 import { useCapabilities } from "@/lib/useCapabilities";
-import {
-    useExecuteInvoiceMutation,
-    useInvoicingExecuteTripsQuery,
-} from "@/lib/queries/useInvoicingExecuteQueries";
+import { useInvoicingExecuteTripsQuery } from "@/lib/queries/useInvoicingExecuteQueries";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useRouter, usePathname } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
@@ -63,6 +61,8 @@ export function InvoicingExecuteScreen() {
   const { currentOrganization, isLoading: orgLoading } = useOrganization();
   const { activeWorkspace } = useActiveWorkspace();
   const orgId = currentOrganization?.id ?? null;
+  const workspaceId = activeWorkspace?.id ?? null;
+  const tripScopeId = workspaceId ?? orgId;
   const issuer = useMemo(
     () => resolveInvoiceIssuerIdentity({ workspace: activeWorkspace }),
     [activeWorkspace],
@@ -75,8 +75,7 @@ export function InvoicingExecuteScreen() {
     error,
     refetch,
     isRefetching,
-  } = useInvoicingExecuteTripsQuery(orgId);
-  const executeMutation = useExecuteInvoiceMutation(orgId);
+  } = useInvoicingExecuteTripsQuery(tripScopeId);
 
   const summaryData = useMemo(() => {
     let pod_pending_sum = 0;
@@ -116,18 +115,20 @@ export function InvoicingExecuteScreen() {
   const clientStats = useMemo(() => {
     const map = new Map<
       string,
-      { name: string; approved: number; received: number; pending: number }
+      { key: string; name: string; approved: number; received: number; pending: number }
     >();
     allTrips.forEach((t) => {
-      if (!map.has(t.client)) {
-        map.set(t.client, {
+      const key = invoicingClientGroupKey(t);
+      if (!map.has(key)) {
+        map.set(key, {
+          key,
           name: t.client,
           approved: 0,
           received: 0,
           pending: 0,
         });
       }
-      const c = map.get(t.client)!;
+      const c = map.get(key)!;
       if (t.status === "approved") c.approved++;
       else if (t.status === "received") c.received++;
       else if (t.status === "pending") c.pending++;
@@ -142,6 +143,15 @@ export function InvoicingExecuteScreen() {
       (a, b) => b.approved - a.approved || b.received - a.received,
     );
   }, [allTrips, clientSearch]);
+
+  const activeClientLabel = useMemo(() => {
+    if (!activeClient) return null;
+    const fromStats = clientStats.find((c) => c.key === activeClient);
+    if (fromStats?.name) return fromStats.name;
+    if (activeClient.startsWith("name:")) return activeClient.slice(5);
+    return allTrips.find((t) => invoicingClientGroupKey(t) === activeClient)
+      ?.client ?? null;
+  }, [activeClient, allTrips, clientStats]);
 
   const clientTrips = useMemo(() => {
     if (!activeClient) return [];
@@ -166,7 +176,7 @@ export function InvoicingExecuteScreen() {
 
     return allTrips
       .filter((t) => {
-        if (t.client !== activeClient) return false;
+        if (invoicingClientGroupKey(t) !== activeClient) return false;
 
         const supplier = (t.supplier_name || "").toLowerCase();
         if (
@@ -238,7 +248,21 @@ export function InvoicingExecuteScreen() {
           step?: 0 | 1 | 2;
         };
 
-        if (parsed.activeClient) setActiveClient(parsed.activeClient);
+        if (parsed.activeClient) {
+          const saved = parsed.activeClient;
+          const uuidRe =
+            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+          if (uuidRe.test(saved) || saved.startsWith("name:")) {
+            setActiveClient(saved);
+          } else {
+            const matching = allTrips.filter((t) => t.client === saved);
+            const ids = Array.from(
+              new Set(matching.map((t) => t.client_id).filter(Boolean)),
+            );
+            if (ids.length === 1) setActiveClient(ids[0] ?? null);
+            else setActiveClient(`name:${saved}`);
+          }
+        }
         if (Array.isArray(parsed.selectedTripIds)) {
           const approvedIds = new Set(
             allTrips.filter((t) => t.status === "approved").map((t) => t.id),
@@ -497,7 +521,7 @@ export function InvoicingExecuteScreen() {
   const renderPartnerList = () => (
     <FlatList
       data={clientStats}
-      keyExtractor={(item) => item.name}
+      keyExtractor={(item) => item.key}
       {...tabBarScrollProps}
       contentContainerStyle={{
         paddingBottom: isLargeScreen ? 0 : mobileBottomPad,
@@ -506,11 +530,11 @@ export function InvoicingExecuteScreen() {
         <Pressable
           style={[
             styles.clientRow,
-            activeClient === client.name && styles.clientRowActive,
+            activeClient === client.key && styles.clientRowActive,
           ]}
-          onPress={() => selectClient(client.name)}
+          onPress={() => selectClient(client.key)}
         >
-          {activeClient === client.name && (
+          {activeClient === client.key && (
             <View style={styles.clientRowIndicator} />
           )}
           <View style={{ flex: 1 }}>
@@ -518,7 +542,7 @@ export function InvoicingExecuteScreen() {
               <Text
                 style={[
                   styles.clientName,
-                  activeClient === client.name && { color: Theme.primary },
+                  activeClient === client.key && { color: Theme.primary },
                 ]}
               >
                 {client.name}
@@ -544,7 +568,7 @@ export function InvoicingExecuteScreen() {
                 name="chevron-right"
                 size={12}
                 color={
-                  activeClient === client.name
+                  activeClient === client.key
                     ? Theme.primary
                     : Theme.textMuted
                 }
@@ -751,7 +775,7 @@ export function InvoicingExecuteScreen() {
                 tabBarScrollProps={tabBarScrollProps}
                 isDesktopTripTable={isLargeScreen}
                 clientTrips={clientTrips}
-                activeClient={activeClient}
+                activeClient={activeClientLabel}
                 selectedTripIds={selectedTripIds}
                 allSelected={allClientTripsSelected}
                 onSelectAll={handleSelectAll}
@@ -773,11 +797,12 @@ export function InvoicingExecuteScreen() {
               <View style={styles.rightPanel}>
                 <InvoicePreviewPanel
                   onPreview={handlePreview}
-                  isFinalizing={executeMutation.isPending} // Still represents pending state for now
-                  activeClient={activeClient}
+                  isFinalizing={false}
+                  activeClient={activeClientLabel}
                   selectedTrips={selectedTrips}
                   isStandalone={true}
                   issuer={issuer}
+                  workspaceOrgId={workspaceId}
                 />
               </View>
             )}
@@ -832,7 +857,7 @@ export function InvoicingExecuteScreen() {
                     onPress={() => setStep(0)}
                   >
                     <Text style={styles.selectRowText} numberOfLines={1}>
-                      {activeClient || "Select a client..."}
+                      {activeClientLabel || "Select a client..."}
                     </Text>
                     <Text
                       style={{
@@ -850,7 +875,7 @@ export function InvoicingExecuteScreen() {
                     tabBarScrollProps={tabBarScrollProps}
                     isDesktopTripTable={isLargeScreen}
                     clientTrips={clientTrips}
-                    activeClient={activeClient}
+                    activeClient={activeClientLabel}
                     selectedTripIds={selectedTripIds}
                     allSelected={allClientTripsSelected}
                     onSelectAll={handleSelectAll}
@@ -894,11 +919,12 @@ export function InvoicingExecuteScreen() {
                 <View style={{ flex: 1 }}>
                   <InvoicePreviewPanel
                     onPreview={handlePreview}
-                    isFinalizing={executeMutation.isPending}
-                    activeClient={activeClient}
+                    isFinalizing={false}
+                    activeClient={activeClientLabel}
                     selectedTrips={selectedTrips}
                     isStandalone={true}
                     issuer={issuer}
+                    workspaceOrgId={workspaceId}
                   />
                 </View>
               </View>

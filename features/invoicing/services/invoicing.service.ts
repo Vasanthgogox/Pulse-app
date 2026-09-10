@@ -38,6 +38,8 @@ export interface TripChecks {
 export interface InvoicingTripView {
   id: string;
   internal_id: string;
+  organization_id: string | null;
+  client_id: string | null;
   client: string;
   supplier_name: string;
   route: string;
@@ -282,6 +284,8 @@ function mapRowToView(
   return {
     internal_id: str(row.id),
     id: getTripStringId(row),
+    organization_id: str(row.organization_id) || null,
+    client_id: str((row as { client_id?: string | null }).client_id) || null,
     client: str((row as { client_name?: string | null }).client_name) || "—",
     supplier_name: resolveSupplierName(row, supplierNameById),
     route,
@@ -310,7 +314,7 @@ export async function fetchInvoicingTrips(
       supabase()
         .from("trips")
         .select(
-          "id, organization_id, trip_operational_code, trip_code, display_trip_id, trip_number, trip_id, booking_ref, lr_no, pod_status, invoice_no, invoice_status_1, supplier_id, vendor_name, supplier_name, client_name, total_client_value, client_price, trip_status, status, trip_date, pickup_date, pp_location, pickup_area, drop_point, drop_location, remarks, notes, created_at",
+          "id, organization_id, trip_operational_code, trip_code, display_trip_id, trip_number, trip_id, booking_ref, lr_no, pod_status, invoice_no, invoice_status_1, supplier_id, vendor_name, supplier_name, client_id, client_name, total_client_value, client_price, trip_status, status, trip_date, pickup_date, pp_location, pickup_area, drop_point, drop_location, remarks, notes, created_at",
         )
         .eq("organization_id", orgId)
         .order("created_at", { ascending: false })

@@ -21,15 +21,13 @@ function pageStyle(): React.CSSProperties {
 
 interface InvoicePdfWebProps {
   invoiceData: InvoicePdfData;
-  onFinalize?: () => void;
-  isFinalizing?: boolean;
 }
 
-export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = false }: InvoicePdfWebProps) {
+export default function InvoicePdfWeb({ invoiceData }: InvoicePdfWebProps) {
   const printRef = useRef<HTMLDivElement>(null);
   const [isGenerating, setIsGenerating] = useState(false);
   const [logoFailed, setLogoFailed] = useState(false);
-  const logoUrl = logoFailed ? null : invoiceData.brandingLogoUrl;        
+  const logoUrl = logoFailed ? null : invoiceData.brandingLogoUrl;
 
   const handleDownloadPdf = async () => {
     if (!printRef.current) return;
@@ -50,14 +48,13 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
         format: 'a4',
       });
 
-      // Calculate dimensions to fit the A4 page perfectly
       const pdfWidth = pdf.internal.pageSize.getWidth();
       const pdfHeight = (canvas.height * pdfWidth) / canvas.width;
 
       pdf.addImage(imgData, 'PNG', 0, 0, pdfWidth, pdfHeight);
-      pdf.save(`invoice_${invoiceData.invoiceNo}.pdf`);
+      pdf.save('invoice_DRAFT.pdf');
     } catch (error) {
-      console.error("Failed to generate PDF", error);
+      console.error('Failed to generate PDF', error);
     } finally {
       setIsGenerating(false);
     }
@@ -65,10 +62,8 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
 
   return (
     <div style={{ flex: 1, display: 'flex', flexDirection: 'column', height: '100vh', backgroundColor: '#f5f5f5' }}>
-      
-      {/* Action Bar */}
       <div style={{ padding: '15px', backgroundColor: '#fff', textAlign: 'center', borderBottom: '1px solid #ddd', display: 'flex', justifyContent: 'center', gap: 12 }}>
-        <button 
+        <button
           onClick={handleDownloadPdf}
           disabled={isGenerating}
           style={{
@@ -79,32 +74,13 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
             borderRadius: '5px',
             cursor: isGenerating ? 'not-allowed' : 'pointer',
             fontSize: '16px',
-            fontWeight: 'bold'
+            fontWeight: 'bold',
           }}
         >
-          {isGenerating ? 'Generating PDF...' : 'Download Invoice'}
+          {isGenerating ? 'Generating PDF...' : 'Download draft'}
         </button>
-        {onFinalize ? (
-          <button
-            onClick={onFinalize}
-            disabled={isFinalizing}
-            style={{
-              backgroundColor: isFinalizing ? '#d1d5db' : '#0f766e',
-              color: '#fff',
-              padding: '10px 20px',
-              border: 'none',
-              borderRadius: '5px',
-              cursor: isFinalizing ? 'not-allowed' : 'pointer',
-              fontSize: '16px',
-              fontWeight: 'bold',
-            }}
-          >
-            {isFinalizing ? 'Issuing...' : 'Issue Invoice'}
-          </button>
-        ) : null}
       </div>
 
-      {/* PDF Preview Area (This is what gets converted to PDF) */}
       <div style={{ flex: 1, overflowY: 'auto', padding: '20px', display: 'flex', justifyContent: 'center' }}>
         <div ref={printRef} style={pageStyle()}>
           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2px solid #e5e7eb', paddingBottom: 14 }}>
@@ -138,11 +114,14 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
               ) : null}
             </div>
             <div style={{ textAlign: 'right' }}>
-              <div style={{ fontSize: 22, fontWeight: 800 }}>Commercial Invoice</div>
+              <div style={{ fontSize: 22, fontWeight: 800 }}>Draft invoice</div>
               <div style={{ marginTop: 6, color: '#2563eb', fontWeight: 700 }}>#{invoiceData.invoiceNo}</div>
+              <div style={{ marginTop: 4, fontSize: 11, color: '#6b7280' }}>{invoiceData.invoiceNumberCaption}</div>
               <div style={{ marginTop: 10, fontSize: 12, color: '#4b5563' }}>
-                <div><strong>Issued</strong> {invoiceData.issuedOn}</div>
-                <div><strong>Due</strong> {invoiceData.dueOn}</div>
+                <div><strong>Preview date</strong> {invoiceData.previewDate}</div>
+                {invoiceData.indicativeDueDate ? (
+                  <div><strong>Indicative due</strong> {invoiceData.indicativeDueDate}</div>
+                ) : null}
               </div>
             </div>
           </div>
@@ -157,65 +136,45 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
               fontWeight: 800,
               textTransform: 'uppercase',
               letterSpacing: 10,
-              color: 'rgba(15,23,42,0.05)',
+              color: 'rgba(15,23,42,0.06)',
               pointerEvents: 'none',
               whiteSpace: 'nowrap',
             }}
           >
-            {invoiceData.brandingCompanyName}
+            DRAFT
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: invoiceData.shipmentTargetLines.length > 0 ? '1fr 1fr' : '1fr', gap: 16, marginTop: 16, position: 'relative', zIndex: 1 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr', gap: 16, marginTop: 16, position: 'relative', zIndex: 1 }}>
             <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
               <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Bill to</div>
-              {invoiceData.billingAddressLines.length > 0 ? (
-                invoiceData.billingAddressLines.map((line, idx) => (
+              {invoiceData.billingLines.length > 0 ? (
+                invoiceData.billingLines.map((line, idx) => (
                   <div key={`billing-${idx}`} style={{ fontSize: 13, marginTop: idx === 0 ? 8 : 4 }}>{line}</div>
                 ))
               ) : (
                 <div style={{ fontSize: 13, marginTop: 8, color: '#6b7280' }}>{invoiceData.clientName}</div>
               )}
             </div>
-            {invoiceData.shipmentTargetLines.length > 0 ? (
-              <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
-                <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Shipment Target</div>
-                {invoiceData.shipmentTargetLines.map((line, idx) => (
-                  <div key={`target-${idx}`} style={{ fontSize: 13, marginTop: idx === 0 ? 8 : 4 }}>{line}</div>
-                ))}
-              </div>
-            ) : null}
           </div>
 
           <table style={{ width: '100%', marginTop: 18, borderCollapse: 'collapse', position: 'relative', zIndex: 1 }}>
             <thead>
               <tr style={{ backgroundColor: '#f8fafc', textAlign: 'left' }}>
                 <th style={{ padding: '10px', borderBottom: '1px solid #d1d5db', fontSize: 12 }}>Description</th>
-                <th style={{ padding: '10px', borderBottom: '1px solid #d1d5db', fontSize: 12 }}>Route / Context</th>
-                <th style={{ padding: '10px', borderBottom: '1px solid #d1d5db', fontSize: 12 }}>Reference Date</th>
+                <th style={{ padding: '10px', borderBottom: '1px solid #d1d5db', fontSize: 12 }}>Reference</th>
                 <th style={{ padding: '10px', borderBottom: '1px solid #d1d5db', textAlign: 'right', fontSize: 12 }}>Value (INR)</th>
               </tr>
             </thead>
             <tbody>
               {invoiceData.items.map((item) => (
-                <tr key={item.tripId}>
+                <tr key={item.key}>
                   <td style={{ padding: '10px', borderBottom: '1px solid #eef2f7' }}>
-                    <div style={{ fontWeight: 700 }}>{item.tripId}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>Primary Logistics</div>
+                    <div style={{ fontWeight: 700 }}>{item.route}</div>
                   </td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #eef2f7' }}>
-                    <div>{item.route}</div>
-                    <div style={{ fontSize: 12, color: '#6b7280' }}>{item.context}</div>
+                  <td style={{ padding: '10px', borderBottom: '1px solid #eef2f7', color: '#6b7280' }}>
+                    {item.lineType === 'freight' ? item.tripId : item.lineType === 'fuel' ? 'Fuel' : 'Charge'}
                   </td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #eef2f7' }}>{item.date}</td>
                   <td style={{ padding: '10px', borderBottom: '1px solid #eef2f7', textAlign: 'right' }}>{formatCurrency(item.amount)}</td>
-                </tr>
-              ))}
-              {invoiceData.additionalCharges.map((charge, index) => (
-                <tr key={`charge-${index}`}>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #eef2f7', fontWeight: 600 }}>{charge.description}</td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #eef2f7', color: '#6b7280' }}>Additional charge</td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #eef2f7' }}>-</td>
-                  <td style={{ padding: '10px', borderBottom: '1px solid #eef2f7', textAlign: 'right' }}>{formatCurrency(charge.amount)}</td>
                 </tr>
               ))}
             </tbody>
@@ -232,47 +191,36 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
                 </>
               ) : null}
               <div style={{ marginTop: invoiceData.bankDetailsLines.length > 0 ? 12 : 0, fontSize: 12, color: '#6b7280' }}>
-                This is a system generated document. All transactions are backed by proof of delivery and verified by the match engine.
+                This is a draft preview. An invoice number is assigned on issue.
               </div>
-            </div>
-            <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <span>Subtotal</span>
-                <strong>{formatCurrency(invoiceData.subtotal)}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8 }}>
-                <span>{invoiceData.taxLabel}</span>
-                <strong>{formatCurrency(invoiceData.taxAmount)}</strong>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #d1d5db', paddingTop: 10, fontSize: 16 }}>
-                <strong>Grand Total</strong>
-                <strong>{formatCurrency(invoiceData.grandTotal)}</strong>
-              </div>
-            </div>
-          </div>
-
-          <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, fontSize: 12, position: 'relative', zIndex: 1 }}>
-            <div>
-              <div><strong>Payment Terms:</strong> {invoiceData.paymentTerms}</div>
-              <div style={{ marginTop: 4 }}><strong>LR Scope:</strong> {invoiceData.lrScope}</div>
-              <div style={{ marginTop: 4 }}><strong>Asset Fleet:</strong> {invoiceData.assetFleet}</div>
-              {invoiceData.notes ? <div style={{ marginTop: 4 }}><strong>Notes:</strong> {invoiceData.notes}</div> : null}
-            </div>
-            <div style={{ textAlign: 'right' }}>
-              <div style={{ fontWeight: 700 }}>Issuer Signature</div>
-              {invoiceData.issuerPan ? (
-                <div style={{ color: '#6b7280', marginTop: 4 }}>PAN {invoiceData.issuerPan}</div>
+              {invoiceData.paymentTerms ? (
+                <div style={{ marginTop: 8, fontSize: 12 }}><strong>Payment terms:</strong> {invoiceData.paymentTerms}</div>
               ) : null}
-              {invoiceData.issuerGstNotApplicable ? (
-                <div style={{ color: '#6b7280', marginTop: 4 }}>GST not applicable</div>
-              ) : invoiceData.issuerGstin ? (
-                <div style={{ color: '#6b7280', marginTop: 4 }}>GSTIN {invoiceData.issuerGstin}</div>
+              {invoiceData.notes ? (
+                <div style={{ marginTop: 4, fontSize: 12 }}><strong>Notes:</strong> {invoiceData.notes}</div>
               ) : null}
+            </div>
+            <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12, minWidth: 0 }}>
+              {invoiceData.taxWarning ? (
+                <div style={{ marginBottom: 10, fontSize: 12, color: '#b45309', fontWeight: 700 }}>
+                  {invoiceData.taxWarning}
+                </div>
+              ) : null}
+              {invoiceData.taxRows.map((row) => (
+                <div key={row.label} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 8, gap: 8 }}>
+                  <span style={{ minWidth: 0 }}>{row.label}</span>
+                  <strong style={{ whiteSpace: 'nowrap' }}>{row.value}</strong>
+                </div>
+              ))}
+              <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #d1d5db', paddingTop: 10, fontSize: 16, gap: 8 }}>
+                <strong>Total</strong>
+                <strong style={{ whiteSpace: 'nowrap' }}>{formatCurrency(invoiceData.grandTotal)}</strong>
+              </div>
             </div>
           </div>
 
           <div style={{ marginTop: 20, borderTop: '1px solid #e5e7eb', paddingTop: 10, fontSize: 11, color: '#6b7280', display: 'flex', justifyContent: 'space-between', position: 'relative', zIndex: 1 }}>
-            <span>Sovereign Match Engine</span>
+            <span>Draft — not an issued invoice</span>
             <span>PAGE 1 OF 1</span>
           </div>
         </div>

@@ -2,14 +2,20 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
-import { useInvoiceCalc } from "@/features/invoicing/hooks/useInvoiceCalc";
+import { useInvoiceDraftClientsQuery } from "@/features/invoicing/hooks/useInvoiceDraftClients";
 import type {
   AdditionalCharge,
   InvoicingTripView,
 } from "@/features/invoicing/services/invoicing.service";
 import type { InvoiceIssuerIdentity } from "@/features/invoicing/services/invoiceIssuerIdentity.service";
+import {
+  buildInvoiceDraftModel,
+  formatInvoicePreviewDate,
+  invoiceDraftTaxDisplay,
+  uniqueTripClientIds,
+} from "@/features/invoicing/services/invoicePreviewModel.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useCallback, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
     Modal,
     Platform,
@@ -31,6 +37,7 @@ export interface InvoicePreviewPanelProps {
   selectedTrips: InvoicingTripView[];
   isStandalone?: boolean;
   issuer: InvoiceIssuerIdentity | null;
+  workspaceOrgId?: string | null;
 }
 
 const PAYMENT_TERMS_OPTIONS = [
@@ -49,6 +56,7 @@ export function InvoicePreviewPanel({
   selectedTrips,
   isStandalone = false,
   issuer,
+  workspaceOrgId = null,
 }: InvoicePreviewPanelProps) {
   const insets = useSafeAreaInsets();
   const layout = useLayoutInsets();
@@ -65,15 +73,52 @@ export function InvoicePreviewPanel({
   const [additionalCharges, setAdditionalCharges] = useState<
     AdditionalCharge[]
   >([]);
+  const [previewDate] = useState(() => formatInvoicePreviewDate(new Date()));
 
-  // Calculations are needed here for display, but will be re-calculated in the PDF screen
-  const calculations = useInvoiceCalc(selectedTrips, {
-    includeGst,
-    gstRate,
-    includeFuel,
-    fuelRate,
-    additionalCharges,
-  });
+  const clientIds = useMemo(
+    () => uniqueTripClientIds(selectedTrips),
+    [selectedTrips],
+  );
+  const { data: fetchedClients = [] } = useInvoiceDraftClientsQuery(
+    workspaceOrgId,
+    clientIds,
+  );
+
+  const invoiceConfig = useMemo(
+    () => ({
+      includeGst,
+      gstRate,
+      includeFuel,
+      fuelRate,
+      additionalCharges,
+    }),
+    [additionalCharges, fuelRate, gstRate, includeFuel, includeGst],
+  );
+
+  const draft = useMemo(() => {
+    if (!issuer || selectedTrips.length === 0) return null;
+    return buildInvoiceDraftModel({
+      issuer,
+      trips: selectedTrips,
+      config: invoiceConfig,
+      previewDate,
+      paymentTerms,
+      notes,
+      fetchedClients,
+      displayNameFallback: activeClient,
+    });
+  }, [
+    activeClient,
+    fetchedClients,
+    invoiceConfig,
+    issuer,
+    notes,
+    paymentTerms,
+    previewDate,
+    selectedTrips,
+  ]);
+
+  const taxDisplay = draft ? invoiceDraftTaxDisplay(draft.tax) : null;
 
   const handleAddCharge = useCallback((tripId?: string) => {
     setAdditionalCharges((prev) => {
@@ -118,7 +163,9 @@ export function InvoicePreviewPanel({
 
     const params = {
       activeClient: activeClient || "",
-      selectedTripIds: JSON.stringify(selectedTrips.map((t) => t.id)),
+      selectedTripIds: JSON.stringify(
+        selectedTrips.map((t) => t.internal_id || t.id),
+      ),
       paymentTerms,
       notes,
       includeGst: includeGst.toString(),
@@ -126,6 +173,7 @@ export function InvoicePreviewPanel({
       includeFuel: includeFuel.toString(),
       fuelRate: fuelRate.toString(),
       additionalCharges: JSON.stringify(additionalCharges),
+      previewDate,
     };
     onPreview(params);
   };
@@ -141,7 +189,10 @@ export function InvoicePreviewPanel({
         <View>
           <Text style={styles.headerTitle}>
             Invoice Draft{" "}
-            <Text style={{ color: Theme.textMuted }}>#INV-DRAFT</Text>
+            <Text style={{ color: Theme.textMuted }}>#DRAFT</Text>
+          </Text>
+          <Text style={styles.headerSub}>
+            Preview date {previewDate} · Invoice number assigned on issue
           </Text>
         </View>
         {onClose && (
@@ -184,8 +235,33 @@ export function InvoicePreviewPanel({
           <View style={styles.colLayout}>
             <Text style={styles.sectionLabel}>Bill to</Text>
             <View style={styles.infoCard}>
-              {activeClient ? (
-                <Text style={styles.clientName}>{activeClient}</Text>
+              {draft?.client.display_name ? (
+                <>
+                  <Text style={styles.clientName}>
+                    {draft.client.legal_name || draft.client.display_name}
+                  </Text>
+                  {draft.client.billing_address ? (
+                    <Text style={styles.clientAddress}>
+                      {draft.client.billing_address}
+                    </Text>
+                  ) : null}
+                  {draft.client.state ? (
+                    <Text style={styles.clientAddress}>{draft.client.state}</Text>
+                  ) : null}
+                  {draft.client.gstin ? (
+                    <Text style={styles.clientAddress}>
+                      GSTIN {draft.client.gstin}
+                    </Text>
+                  ) : null}
+                  {draft.client.pan ? (
+                    <Text style={styles.clientAddress}>
+                      PAN {draft.client.pan}
+                    </Text>
+                  ) : null}
+                  {draft.client.email ? (
+                    <Text style={styles.clientAddress}>{draft.client.email}</Text>
+                  ) : null}
+                </>
               ) : (
                 <Text style={styles.clientAddress}>Select a client...</Text>
               )}
@@ -648,82 +724,46 @@ export function InvoicePreviewPanel({
 
         {/* Calculations */}
         <View style={styles.calcBlock}>
-          <View style={[styles.calcRow, { marginBottom: 16 }]}>
-            <Text style={styles.calcLabelSubtotal}>Subtotal</Text>
-            <Text style={styles.calcValSubtotal}>
-              {formatCurrency(calculations.subtotal)}
-            </Text>
-          </View>
-          {calculations.fuelSurcharge > 0 && (
-            <View style={styles.calcRow}>
-              <Text style={styles.calcLabel}>Fuel Surcharge ({fuelRate}%)</Text>
-              <Text style={styles.calcVal}>
-                {formatCurrency(calculations.fuelSurcharge)}
+          {taxDisplay?.warning ? (
+            <Text style={styles.taxWarning}>{taxDisplay.warning}</Text>
+          ) : null}
+          {(taxDisplay?.rows ?? []).map((row) => (
+            <View
+              key={row.key}
+              style={[
+                styles.calcRow,
+                row.key === "taxable" ? { marginBottom: 16 } : null,
+              ]}
+            >
+              <Text
+                style={
+                  row.key === "taxable"
+                    ? styles.calcLabelSubtotal
+                    : styles.calcLabel
+                }
+              >
+                {row.label}
+              </Text>
+              <Text
+                style={
+                  row.key === "taxable" ? styles.calcValSubtotal : styles.calcVal
+                }
+              >
+                {row.value}
               </Text>
             </View>
-          )}
-          {calculations.sgst > 0 && (
-            <View style={styles.calcRow}>
-              <Text style={styles.calcLabel}>
-                SGST ({calculations.sgstRate}%)
-              </Text>
-              <Text style={styles.calcVal}>
-                {formatCurrency(calculations.sgst)}
-              </Text>
-            </View>
-          )}
-          {calculations.cgst > 0 && (
-            <View style={styles.calcRow}>
-              <Text style={styles.calcLabel}>
-                CGST ({calculations.cgstRate}%)
-              </Text>
-              <Text style={styles.calcVal}>
-                {formatCurrency(calculations.cgst)}
-              </Text>
-            </View>
-          )}
+          ))}
           <View style={styles.calcSubtotal} />
           <View style={styles.calcTotalRow}>
             <View>
               <Text style={styles.calcTotalLabel}>Total Amount</Text>
-              <Text style={styles.calcTotalSub}>
-                Inc. all taxes & surcharges
-              </Text>
+              <Text style={styles.calcTotalSub}>Draft — not issued</Text>
             </View>
             <Text style={styles.calcTotalVal}>
-              {formatCurrency(calculations.totalAmount)}
+              {formatCurrency(draft?.tax.total_amount ?? 0)}
             </Text>
           </View>
         </View>
-
-        {/* Annexure Preview */}
-        {selectedTrips.length > 0 && (
-          <View style={styles.annexureBlock}>
-            <View style={styles.annexureHeader}>
-              <FontAwesome
-                name="shield"
-                size={14}
-                color="#34d399"
-                style={{ marginRight: 6 }}
-              />
-              <Text style={styles.annexureTitle}>Annexure Intelligence</Text>
-            </View>
-            <View style={styles.annexureRow}>
-              <Text style={styles.annexureLabel}>LR Scope:</Text>
-              <Text style={styles.annexureValue} numberOfLines={1}>
-                {selectedTrips.map((t) => t.id).join(", ")}
-              </Text>
-            </View>
-            <View style={styles.annexureRow}>
-              <Text style={styles.annexureLabel}>Asset Fleet:</Text>
-              <Text style={styles.annexureValue} numberOfLines={1}>
-                {Array.from(
-                  new Set(selectedTrips.map((t) => t.details || "N/A")),
-                ).join(", ")}
-              </Text>
-            </View>
-          </View>
-        )}
       </ScrollView>
 
       <View
@@ -754,7 +794,7 @@ export function InvoicePreviewPanel({
                 color={Theme.buttonPrimaryText}
                 style={{ marginRight: 8 }}
               />
-              <Text style={styles.footerBtnPrimaryText}>Issue Invoice</Text>
+              <Text style={styles.footerBtnPrimaryText}>Preview draft</Text>
             </>
           )}
         </Pressable>
@@ -1064,6 +1104,12 @@ const styles = StyleSheet.create({
     fontWeight: "800",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     color: Theme.textPrimaryDark,
+  },
+  taxWarning: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.warning,
+    marginBottom: 12,
   },
   calcTotalRow: {
     flexDirection: "row",
