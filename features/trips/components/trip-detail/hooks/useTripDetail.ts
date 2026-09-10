@@ -49,7 +49,7 @@ import {
     useTransactionsQuery,
     useTripSubcontractsQuery,
 } from "@/lib/queries";
-import { isBundleEnabled, useTripDetailBundleQuery } from "@/lib/queries/useTripDetailBundleQuery";
+import { isBundleEnabled, useTripDetailBundleQuery, type TripDetailBundle } from "@/lib/queries/useTripDetailBundleQuery";
 import { queryKeys } from "@/lib/queryKeys";
 import * as driverLocationService from "@/features/driver/services/driverLocation.service";
 import { getMoverAssetClientPaid } from "@/features/trips/services/moverAssetPayment.service";
@@ -1090,6 +1090,16 @@ export function useTripDetail({
           if (!prev || prev.id !== tripId) return prev;
           return { ...prev, ...(payload.new as Partial<TripRow>) } as TripRow;
         });
+        // Keep the cached bundle's trip fields aligned with the realtime state so a
+        // remount within staleTime (60s) doesn't re-seed `trip` from stale cache and
+        // revert this merge — see queryKeys.trips.bundle usage in useTripDetailBundleQuery.
+        queryClient.setQueryData(
+          queryKeys.trips.bundle(tripId),
+          (old: TripDetailBundle | null | undefined) => {
+            if (!old || old.trip.id !== tripId) return old;
+            return { ...old, trip: { ...old.trip, ...(payload.new as Partial<typeof old.trip>) } };
+          },
+        );
         return;
       }
       isRefreshingRef.current = true;

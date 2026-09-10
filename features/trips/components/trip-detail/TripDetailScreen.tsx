@@ -648,7 +648,7 @@ export default function TripDetailScreen({
   ]);
 
   useEffect(() => {
-    if (!detail.trip || isAggregateTrip(detail.trip)) return;
+    if (!detail.trip || !isAssetExecutionTrip(detail.trip)) return;
     if (expenseTabAutoSelectedRef.current) return;
     if (activeTab !== "trip") return;
     if (expensePendingCount > 0) {
@@ -3859,7 +3859,7 @@ export default function TripDetailScreen({
                 }
               />
             </PersistentTabPanel>
-            {!isAggregate ? (
+            {showExpenseHub && canTripExpensesTab ? (
               <PersistentTabPanel active={activeTab === "expenses"}>
               <View style={[styles.refFinanceWrap, styles.mobileOrderTabPad]}>
                 {odometerPreviewEl}
