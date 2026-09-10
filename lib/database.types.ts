@@ -4489,6 +4489,11 @@ export type Database = {
           invoice_number: string
           notes: string | null
           org_id: string
+          issuer_snapshot: Json | null
+          client_snapshot: Json | null
+          line_items: Json | null
+          tax_snapshot: Json | null
+          payment_terms: string | null
           pdf_storage_path: string | null
           sgst_amount: number
           status: string
@@ -4512,6 +4517,11 @@ export type Database = {
           invoice_number: string
           notes?: string | null
           org_id: string
+          issuer_snapshot?: Json | null
+          client_snapshot?: Json | null
+          line_items?: Json | null
+          tax_snapshot?: Json | null
+          payment_terms?: string | null
           pdf_storage_path?: string | null
           sgst_amount?: number
           status?: string
@@ -4535,6 +4545,11 @@ export type Database = {
           invoice_number?: string
           notes?: string | null
           org_id?: string
+          issuer_snapshot?: Json | null
+          client_snapshot?: Json | null
+          line_items?: Json | null
+          tax_snapshot?: Json | null
+          payment_terms?: string | null
           pdf_storage_path?: string | null
           sgst_amount?: number
           status?: string
