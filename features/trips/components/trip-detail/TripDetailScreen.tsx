@@ -8,7 +8,7 @@ import { PersistentTabPanel } from "@/components/PersistentTabPanel";
 import { EntityAvatar as PartyAvatar } from '@/components/EntityAvatar';
 import { ThemedAlertModal } from "@/components/ThemedAlertModal";
 import { Theme } from "@/constants/Theme";
-import { canAddMoreTripDocs, canMutateTripVaultDoc, formatLrVaultDateLabel, formatLrVaultNumberLabel, formatVaultDocDate, isEwayBillVaultDoc, isLrVaultDoc, isPdfTripDoc, VAULT_DOC_LIMIT_HINT, VAULT_DOC_MAX_BYTES, VAULT_DOC_MAX_MB, VAULT_DOC_PICKER_TYPES, vaultDocDateToIso, vaultDocHasPreviewableFile, vaultPickerRejectionMessage } from "@/features/trips/components/trip-detail/tripDocTypes";
+import { canAddMoreTripDocs, canMutateTripVaultDoc, formatLrVaultDateLabel, formatLrVaultNumberLabel, formatVaultDocDate, isEwayBillVaultDoc, isLrVaultDoc, isPdfTripDoc, type TripDocItem, VAULT_DOC_LIMIT_HINT, VAULT_DOC_MAX_BYTES, VAULT_DOC_MAX_MB, VAULT_DOC_PICKER_TYPES, vaultDocDateToIso, vaultDocHasPreviewableFile, vaultPickerRejectionMessage } from "@/features/trips/components/trip-detail/tripDocTypes";
 import { CompactValidTillCalendar, EwayBillLrStrip, buildEwayBillStripRows } from "@/features/trips/components/trip-detail/EwayBillVaultTab";
 import {
   ewayDocHasPreviewableFile,
@@ -20,6 +20,9 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { useOptionalActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { getGroundOpsDocUploadEnabled } from "@/features/organization/services/organization.service";
 import { TripChatRoomSheet } from "@/features/chat/components/TripChatRoomSheet";
+import { useDocumentPreview } from "@/features/chat/components/DocumentPreviewModal";
+import { ChatDocumentThreadPreview } from "@/features/chat/components/ChatDocumentThreadPreview";
+import { resolveChatDocumentStorageUrl } from "@/features/chat/utils/resolveChatDocumentUrl.util";
 import {
   pushTripLedgerQuickEntry,
 } from "@/features/finance/ledger/tripLedgerEntryChooser";
@@ -50,6 +53,7 @@ import {
 import {
   deleteVehicleDocument,
   deleteVehicleExtraDocument,
+  getVehicleDocumentViewUrl,
   uploadAndSaveVehicleDocument,
   uploadAndSaveVehicleExtraDocuments,
 } from "@/features/vehicles/services/vehicleDocuments.service";
@@ -110,6 +114,27 @@ import { TripAssignmentBlock } from "../TripAssignmentBlock";
 import { ReassignSheet } from "../reassign/ReassignSheet";
 import { WaitingForDriverLocationOverlay } from "../reassign/WaitingForDriverLocationOverlay";
 import { useReassignMigrationGate } from "@/features/trips/hooks/useReassignMigrationGate";
+
+function vaultPreviewStoragePath(doc: TripDocItem): string | null {
+  const primary = doc.storagePath?.trim();
+  if (primary) return primary;
+  const nested = doc.files?.find((file) => file.storagePath?.trim())?.storagePath?.trim();
+  return nested || null;
+}
+
+function vaultDocPreviewMime(doc: TripDocItem): string | null {
+  if (isPdfTripDoc(doc)) return "application/pdf";
+  const type = (doc.type ?? "").toUpperCase();
+  if (type === "PNG") return "image/png";
+  if (type === "WEBP") return "image/webp";
+  if (type === "JPG" || type === "JPEG") return "image/jpeg";
+  const path = (doc.storagePath ?? "").toLowerCase();
+  if (path.endsWith(".png")) return "image/png";
+  if (path.endsWith(".webp")) return "image/webp";
+  if (/\.jpe?g$/.test(path)) return "image/jpeg";
+  return "image/jpeg";
+}
+
 // ── Lazy-loaded modals: only imported when first rendered (not on page load) ──
 const ProvisionAdjustmentModal = lazy(() =>
   import("@/features/trips/components/trip-detail/adjustment/ProvisionAdjustmentModal").then(
@@ -2031,6 +2056,32 @@ export default function TripDetailScreen({
     [detail.trip, manifestHeroPartyContext],
   );
 
+  const { open: openVaultChatPreview, node: vaultChatPreviewNode } =
+    useDocumentPreview();
+
+  const openVaultDocLikeChat = useCallback(
+    async (doc: TripDocItem, storagePath: string) => {
+      const url =
+        doc.docSource === "vehicle"
+          ? await getVehicleDocumentViewUrl(storagePath)
+          : await resolveChatDocumentStorageUrl(storagePath);
+      if (!url) {
+        Alert.alert(
+          "Preview unavailable",
+          "We could not open this file. Try again in a moment.",
+        );
+        return false;
+      }
+      await openVaultChatPreview(
+        url,
+        vaultDocPreviewMime(doc),
+        doc.label,
+      );
+      return true;
+    },
+    [openVaultChatPreview],
+  );
+
   if (detail.loading && !detail.trip) {
     return <CenteredLoadingView message="Loading trip…" />;
   }
@@ -3168,6 +3219,16 @@ export default function TripDetailScreen({
   const handleDocOpen = (doc: (typeof detail.computedTripDocs)[number]) => {
     const isUploaded = doc.status !== "Pending" || !!doc.storagePath;
     if (isUploaded) {
+      const nestedFiles = (doc.files ?? []).filter((file) => file.storagePath?.trim());
+      if (nestedFiles.length > 1 || doc.id === "vehicle-documents") {
+        detail.setSelectedDoc(doc);
+        return;
+      }
+      const path = vaultPreviewStoragePath(doc);
+      if (path) {
+        void openVaultDocLikeChat(doc, path);
+        return;
+      }
       detail.setSelectedDoc(doc);
       return;
     }
@@ -3197,6 +3258,16 @@ export default function TripDetailScreen({
       return;
     }
     if (isUploaded) {
+      const nestedFiles = (doc.files ?? []).filter((file) => file.storagePath?.trim());
+      if (nestedFiles.length > 1) {
+        detail.setSelectedDoc(doc);
+        return;
+      }
+      const path = vaultPreviewStoragePath(doc);
+      if (path) {
+        void openVaultDocLikeChat(doc, path);
+        return;
+      }
       detail.setSelectedDoc(doc);
       return;
     }
@@ -5151,6 +5222,12 @@ export default function TripDetailScreen({
                         isPending && canUploadThis && !isVehicleDoc;
                       const previewDisabled =
                         isVehicleDoc && !vaultDocHasPreviewableFile(doc);
+                      const uploadedPreviewPath = vaultPreviewStoragePath(doc);
+                      const showUploadedThumb =
+                        !isPending &&
+                        !!uploadedPreviewPath &&
+                        !isPdfTripDoc(doc) &&
+                        doc.docSource !== "vehicle";
                       const primaryDisabled = previewDisabled;
                       const btnLabel = isVehicleDoc
                         ? "Preview"
@@ -5186,17 +5263,27 @@ export default function TripDetailScreen({
                               ) : null}
                             </View>
                           ) : null}
-                          <Feather
-                            name={
-                              isPending && !isVehicleDoc
-                                ? "upload-cloud"
-                                : "file-text"
-                            }
-                            size={34}
-                            color={
-                              isPending && !isVehicleDoc ? "#cbd5e1" : "#94a3b8"
-                            }
-                          />
+                          {showUploadedThumb && uploadedPreviewPath ? (
+                            <View style={neoStyles.vaultThumb}>
+                              <ChatDocumentThreadPreview
+                                storagePath={uploadedPreviewPath}
+                                maxWidth={168}
+                                maxHeight={96}
+                              />
+                            </View>
+                          ) : (
+                            <Feather
+                              name={
+                                isPending && !isVehicleDoc
+                                  ? "upload-cloud"
+                                  : "file-text"
+                              }
+                              size={34}
+                              color={
+                                isPending && !isVehicleDoc ? "#cbd5e1" : "#94a3b8"
+                              }
+                            />
+                          )}
                           <Text style={neoStyles.vaultTitle} numberOfLines={2}>
                             {doc.label}
                           </Text>
@@ -6317,6 +6404,8 @@ export default function TripDetailScreen({
         tripLedgerEntries={detail.tripLedgerEntries}
         driverDisplayName={detail.driverName}
       />
+
+      {vaultChatPreviewNode}
 
       <Modal
         visible={!!detail.selectedDoc}

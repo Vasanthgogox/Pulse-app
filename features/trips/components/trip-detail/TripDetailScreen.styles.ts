@@ -2911,6 +2911,15 @@ export const neoStyles = StyleSheet.create({
     shadowRadius: 8,
     position: "relative",
   },
+  vaultThumb: {
+    width: "100%",
+    maxHeight: 96,
+    borderRadius: 10,
+    overflow: "hidden",
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#f8fafc",
+  },
   vaultLrCorner: {
     position: "absolute",
     top: 8,
