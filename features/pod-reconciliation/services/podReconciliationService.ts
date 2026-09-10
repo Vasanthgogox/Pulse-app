@@ -6,10 +6,15 @@
  * so list counts match metrics (plain `from('trips')` + RLS can include other orgs).
  */
 import { supabase } from '@/lib/supabase';
-import { expandLR } from '@/lib/utils/lr';
 import { syncDomainRows } from '@/lib/cache/domainSync';
 import { mergeDeltaRows } from '@/lib/cache/mergeDelta';
 import { getTripOperationalDisplay } from "@/features/operations/display";
+import {
+  loadLrPodIndexByTripIds,
+  receivedLrNumbersForTrip,
+  tripPodIsReceived,
+  type TripLrPodIndex,
+} from "@/features/trips/services/tripDocumentLrPod.service";
 
 type TripRow = Record<string, unknown>;
 
@@ -83,6 +88,10 @@ export function tripMatchesPodTab(trip: TripRow, activeTab: PodTab): boolean {
   const inv1 = str(trip.invoice_status_1).toLowerCase();
   const inv2 = str(trip.invoice_status_2).toLowerCase();
   const podS = str(trip.pod_status).toLowerCase();
+  const podReceived = tripPodIsReceived({
+    pod_received_at: (trip.pod_received_at as string | null | undefined) ?? null,
+    pod_status: trip.pod_status,
+  });
   const hasInvoiceNo = Boolean(trip.invoice_no && str(trip.invoice_no).trim() !== '');
   const isNoInvoice = !hasInvoiceNo && !inv1.includes('raised');
   const isApproved = inv1.includes('pending') || inv1.includes('data shared');
@@ -91,19 +100,21 @@ export function tripMatchesPodTab(trip: TripRow, activeTab: PodTab): boolean {
     return hasInvoiceNo || inv1.includes('raised');
   }
   if (activeTab === 'approved') {
-    return isNoInvoice && podS === 'received' && isApproved;
+    return isNoInvoice && podReceived && isApproved;
   }
   if (activeTab === 'received') {
-    return isNoInvoice && podS === 'received' && !isApproved;
+    return isNoInvoice && podReceived && !isApproved;
   }
   if (activeTab === 'pod_pending') {
     if (inv2.includes('unbilled')) return true;
+    if (podReceived) return false;
     return (
       isNoInvoice &&
       (podS.includes('pending') ||
         podS.includes('i-bond') ||
         podS === '' ||
-        podS === 'partial')
+        podS === 'partial' ||
+        !podS)
     );
   }
   return true;
@@ -188,7 +199,7 @@ export async function fetchReconciliationTrips(
     const internalIds = filtered.map(t => str(t.id)).filter(Boolean);
     const supplierIds = Array.from(new Set(filtered.map(t => str(t.supplier_id)).filter(Boolean)));
 
-    let lrByTripId = new Map<string, Record<string, unknown>[]>();
+    let lrByTripId = new Map<string, TripLrPodIndex>();
     let supplierNameById = new Map<string, string>();
 
     if (supplierIds.length > 0) {
@@ -203,46 +214,30 @@ export async function fetchReconciliationTrips(
     }
 
     if (internalIds.length > 0) {
-      const { data: lrData } = await supabase()
-        .from('trip_lrs')
-        .select('*')
-        .in('trip_id', internalIds);
-      
-      (lrData || []).forEach(lr => {
-        const tid = str(lr.trip_id);
-        const list = lrByTripId.get(tid) ?? [];
-        list.push(lr);
-        lrByTripId.set(tid, list);
-      });
+      lrByTripId = await loadLrPodIndexByTripIds(internalIds);
     }
 
     const mapped = filtered.map(trip => {
       let invoice_status_display = 'Invoice Pending';
       const inv1 = str(trip.invoice_status_1).toLowerCase();
-      const podS = str(trip.pod_status).toLowerCase();
+      const podReceived = tripPodIsReceived({
+        pod_received_at: (trip.pod_received_at as string | null | undefined) ?? null,
+        pod_status: trip.pod_status,
+      });
       const isRaised = inv1.includes('raised') || trip.invoice_no;
-      const isApproved = (inv1.includes('pending') || inv1.includes('data shared')) && podS === 'received';
-      const isReceived = podS === 'received' && !isApproved && !isRaised;
+      const isApproved = (inv1.includes('pending') || inv1.includes('data shared')) && podReceived;
+      const isReceived = podReceived && !isApproved && !isRaised;
       
       if (isRaised) invoice_status_display = 'Invoiced';
       else if (isApproved) invoice_status_display = 'Ready for Invoice';
       else if (isReceived) invoice_status_display = 'Received';
 
-      const lrs = lrByTripId.get(str(trip.id)) || [];
-      const allLrNumbers = lrs.length > 0 
-        ? Array.from(new Set(lrs.flatMap(lr => expandLR(str(lr.lr_number)))))
-        : (trip.lr_no ? expandLR(str(trip.lr_no)) : []);
-      
-      const receivedLRs = Array.from(new Set(
-        lrs
-          .filter(lr => lr.pod_received === true || str(lr.pod_status).toLowerCase() === 'received')
-          .flatMap(lr => expandLR(str(lr.lr_number)))
-      ));
-
-      let finalReceivedLRs = receivedLRs;
-      if (lrs.length === 0 && podS === 'received' && allLrNumbers.length > 0) {
-        finalReceivedLRs = allLrNumbers;
-      }
+      const docs = lrByTripId.get(str(trip.id));
+      const allLrNumbers = docs?.lrNumbers ?? [];
+      const finalReceivedLRs = receivedLrNumbersForTrip(allLrNumbers, {
+        tripReceived: podReceived,
+        hasPodDocument: docs?.hasPodDocument ?? false,
+      });
 
       const operationalRef = getTripOperationalDisplay({
         trip_operational_code: (trip as { trip_operational_code?: string | null }).trip_operational_code ?? null,
@@ -256,6 +251,7 @@ export async function fetchReconciliationTrips(
           : (trip as { trip_id?: string | null }).trip_id || trip.id,
       );
       const tripDate = str(trip.pickup_date || trip.trip_date || trip.created_at);
+      const podReceivedAt = str(trip.pod_received_at);
 
       return {
         ...trip,
@@ -268,6 +264,8 @@ export async function fetchReconciliationTrips(
         amount: num(trip.client_price || trip.total_client_value),
         date: tripDate,
         trip_date: tripDate,
+        pod_status: podReceived ? 'Received' : str(trip.pod_status) || 'Pending',
+        pod_received_date: podReceivedAt ? podReceivedAt.slice(0, 10) : null,
         invoice_status_display,
         lr_numbers: allLrNumbers,
         trip_pods: finalReceivedLRs

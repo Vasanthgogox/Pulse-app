@@ -13,10 +13,15 @@ import { getTripOperationalDisplay } from "@/features/operations/display";
 import { syncDomainRows } from "@/lib/cache/domainSync";
 import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import { supabase } from "@/lib/supabase";
-import { expandLR } from "@/lib/utils/lr";
+import {
+  loadLrPodIndexByTripIds,
+  receivedLrNumbersForTrip,
+  tripPodIsReceived,
+  type TripLrPodIndex,
+} from "@/features/trips/services/tripDocumentLrPod.service";
 
 export interface LogPodsTripView {
-  /** User-facing trip id (trip_lrs.trip_id). */
+  /** User-facing trip id. */
   id: string;
   internal_id: string;
   client: string;
@@ -58,18 +63,9 @@ type TripRecord = Pick<
   | "created_at"
   | "booking_ref"
 > & {
-  // DB columns not in TripRow (accessed via dynamic cast in mapping functions)
-  trip_id?: string | null;
-  lr_no?: string | null;
-  pod_status?: string | null;
-  invoice_no?: string | null;
-  invoice_status_2?: string | null;
-  vendor_name?: string | null;
-  total_client_value?: number | null;
-  trip_status?: string | null;
-  trip_date?: string | null;
-  pp_location?: string | null;
-  drop_point?: string | null;
+  // Live trips columns used for POD list (cashflow lr_no / pod_status are retired).
+  pod_received_at?: string | null;
+  pod_required?: boolean | null;
 };
 
 function num(v: unknown): number | null {
@@ -82,7 +78,7 @@ function str(v: unknown): string {
   return v == null ? "" : String(v);
 }
 
-/** Public trip id for trip_lrs and trip_pods (cashflow uses trips.trip_id). */
+/** Public trip id for list rows (operational code, else uuid). */
 export function getTripStringId(row: TripRecord): string {
   const r = row as {
     trip_operational_code?: string;
@@ -111,70 +107,31 @@ function mergeTripsById(lists: TripRecord[][]): TripRecord[] {
   return [...map.values()];
 }
 
-function passesPodPendingFilter(podStatus: string): boolean {
-  const p = podStatus.toLowerCase();
-  return (
-    p.includes("pending") ||
-    p.includes("i-bond") ||
-    p.includes("partial") ||
-    p === ""
-  );
-}
-
 function passesLogPodsRow(t: TripRecord): boolean {
-  const invoiceNo = (t as { invoice_no?: string | null }).invoice_no;
-  if (invoiceNo != null && String(invoiceNo).trim() !== "") return false;
-
-  const inv2 = str(
-    (t as { invoice_status_2?: string | null }).invoice_status_2,
-  ).toLowerCase();
-  const hasInv2 =
-    (t as { invoice_status_2?: string | null }).invoice_status_2 != null;
-  if (hasInv2 && !inv2.includes("unbilled")) return false;
-
-  const podStatus = str((t as { pod_status?: string | null }).pod_status);
-  return passesPodPendingFilter(podStatus);
+  return !tripPodIsReceived({
+    pod_received_at: t.pod_received_at ?? null,
+    pod_status: (t as { pod_status?: string | null }).pod_status,
+  });
 }
 
 function mapRowToView(
   t: TripRecord,
-  lrByTripId: Map<string, TripLrRow[]>,
+  lrByTripId: Map<string, TripLrPodIndex>,
   shipperNameByTripId: Record<string, string>,
   supplierNameById: Map<string, string>,
 ): LogPodsTripView {
   const tripKey = getTripStringId(t);
   const internalId = str(t.id);
-  const lrs = lrByTripId.get(internalId) ?? [];
-
-  const lrNo = str((t as { lr_no?: string | null }).lr_no);
-  const allLrNumbers =
-    lrs.length > 0
-      ? Array.from(new Set(lrs.flatMap((lr) => expandLR(str(lr.lr_number)))))
-      : lrNo
-        ? expandLR(lrNo)
-        : [];
-
-  const receivedLRs = Array.from(
-    new Set(
-      lrs
-        .filter(
-          (lr) =>
-            lr.pod_received === true ||
-            str(lr.pod_status).toLowerCase() === "received",
-        )
-        .flatMap((lr) => expandLR(str(lr.lr_number))),
-    ),
-  );
-
-  let finalReceived = receivedLRs;
-  if (
-    lrs.length === 0 &&
-    str((t as { pod_status?: string | null }).pod_status).toLowerCase() ===
-      "received" &&
-    allLrNumbers.length > 0
-  ) {
-    finalReceived = allLrNumbers;
-  }
+  const docs = lrByTripId.get(internalId);
+  const allLrNumbers = docs?.lrNumbers ?? [];
+  const tripReceived = tripPodIsReceived({
+    pod_received_at: t.pod_received_at ?? null,
+    pod_status: (t as { pod_status?: string | null }).pod_status,
+  });
+  const finalReceived = receivedLrNumbersForTrip(allLrNumbers, {
+    tripReceived,
+    hasPodDocument: docs?.hasPodDocument ?? false,
+  });
 
   const tripDate =
     (t as { trip_date?: string | null }).trip_date ??
@@ -220,13 +177,6 @@ function mapRowToView(
   };
 }
 
-type TripLrRow = {
-  trip_id: string;
-  lr_number: string;
-  pod_received?: boolean | null;
-  pod_status?: string | null;
-};
-
 export async function fetchTripsForLogPods(
   orgId: string,
 ): Promise<{ error: Error | null; trips: LogPodsTripView[] }> {
@@ -235,7 +185,7 @@ export async function fetchTripsForLogPods(
       supabase()
         .from("trips")
         .select(
-          "id, organization_id, trip_operational_code, trip_code, display_trip_id, trip_number, trip_id, lr_no, pod_status, invoice_no, invoice_status_2, supplier_id, vendor_name, supplier_name, client_name, total_client_value, client_price, trip_status, status, trip_date, pickup_date, pp_location, pickup_area, drop_point, drop_location, created_at",
+          "id, organization_id, trip_operational_code, trip_code, display_trip_id, trip_number, supplier_id, supplier_name, client_name, client_price, status, pickup_date, pickup_area, drop_location, created_at, pod_received_at, pod_required, notes, booking_ref",
         )
         .eq("organization_id", orgId)
         .order("created_at", { ascending: false })
@@ -262,7 +212,7 @@ export async function fetchTripsForLogPods(
     const internalIds = merged.map(t => str(t.id)).filter(Boolean);
     const supplierIds = Array.from(new Set(merged.map(t => str((t as {supplier_id?: string | null}).supplier_id)).filter(Boolean)));
 
-    let lrByTripId = new Map<string, TripLrRow[]>();
+    let lrByTripId = new Map<string, TripLrPodIndex>();
     let supplierNameById = new Map<string, string>();
 
     if (supplierIds.length > 0) {
@@ -283,23 +233,7 @@ export async function fetchTripsForLogPods(
     }
 
     if (internalIds.length > 0) {
-      const { data: lrData, error: lrErr } = await supabase()
-        .from("trip_lrs")
-        .select("trip_id, lr_number, pod_received, pod_status")
-        .in("trip_id", internalIds);
-
-      if (lrErr) {
-        console.warn("[logPods] trip_lrs fetch:", lrErr.message);
-      } else {
-        lrByTripId = new Map();
-        for (const row of lrData ?? []) {
-          const tid = str((row as TripLrRow).trip_id);
-          if (!tid) continue;
-          const list = lrByTripId.get(tid) ?? [];
-          list.push(row as TripLrRow);
-          lrByTripId.set(tid, list);
-        }
-      }
+      lrByTripId = await loadLrPodIndexByTripIds(internalIds);
     }
 
     const views = merged.map((t) => mapRowToView(t, lrByTripId, shipperNameByTripId, supplierNameById));
@@ -420,14 +354,13 @@ function resolveCourierName(
   return selected?.label || courierValue;
 }
 
-/** Executes POD logging (trip_pods, trip_lrs, trips, pod_attachments) and activity RPC. */
+/** Executes POD logging: trip_documents already hold files; trips.pod_received_at is trip-level state. */
 export async function executeLogIncomingPods(payload: LogPodsPayload): Promise<{
   error: Error | null;
   attachmentWarning?: string;
 }> {
   const {
     selectedLRs,
-    allTrips,
     courierValue,
     customCourierName,
     trackingId,
@@ -447,105 +380,28 @@ export async function executeLogIncomingPods(payload: LogPodsPayload): Promise<{
   );
   if (customErr.error) return { error: customErr.error };
 
-  const podInserts: {
-    trip_id: string;
-    lr_number: string | null;
-    courier_name: string;
-    tracking_id: string;
-  }[] = [];
+  const receivedAt = new Date().toISOString();
+  const tripIds = Object.entries(selectedLRs)
+    .filter(([, lrs]) => lrs.length > 0)
+    .map(([tripInternalId]) => tripInternalId);
 
-  const lrUpdates: { trip_id: string; lr_number: string }[] = [];
-
-  for (const [tripInternalId, lrs] of Object.entries(selectedLRs)) {
-    if (lrs.length === 0) continue;
-    const trip = allTrips.find((t) => t.internal_id === tripInternalId);
-    const internalId = trip?.internal_id;
-    // Note: trip_lrs.trip_id is the internal UUID (not the string sequence)
-    // we need to use trip.internal_id for these updates!
-
-    for (const lr of lrs) {
-      podInserts.push({
-        trip_id: internalId as string,
-        lr_number: lr === "N/A" ? null : lr,
-        courier_name: finalCourierName,
-        tracking_id: trackingId,
-      });
-      if (lr !== "N/A") {
-        lrUpdates.push({ trip_id: internalId as string, lr_number: lr });
-      }
-    }
-
-    if (internalId) {
-      const { data: allLrsForTrip } = await supabase()
-        .from("trip_lrs")
-        .select("pod_received, lr_number")
-        .eq("trip_id", internalId);
-
-      const totalLrs = allLrsForTrip?.length ?? 0;
-      const currentlyReceived =
-        allLrsForTrip?.filter((l) => l.pod_received).length ?? 0;
-      const newlyReceived = lrs.filter((lr) => lr !== "N/A").length;
-      const finalReceivedCount = currentlyReceived + newlyReceived;
-      const newStatus =
-        totalLrs === 0 || finalReceivedCount >= totalLrs
-          ? "Received"
-          : "Partial";
-
-      await supabase()
-        .from("trips")
-        .update({
-          pod_status: newStatus,
-          pod_received_date: new Date().toISOString().split("T")[0],
-          invoice_status_1: "Received-Awaiting Validation",
-        })
-        .eq("id", internalId);
-    }
-  }
-
-  const attachmentInserts = mappedAttachments.map(
-    (att) => {
-      return {
-        trip_id: att.trip_id,
-        lr_number: att.lr_number === "N/A" ? null : att.lr_number,
-        file_path: att.file_path,
-        file_name: att.file_name,
-        file_size: att.file_size,
-        file_type: att.file_type,
-      };
-    },
-  );
-
-  if (podInserts.length > 0) {
-    const { error } = await supabase().from("trip_pods").insert(podInserts);
-    if (error) console.error("[logPods] trip_pods insert:", error);
-  }
-
-  let attachmentWarning: string | undefined;
-  if (attachmentInserts.length > 0) {
-    const { error } = await supabase()
-      .from("pod_attachments")
-      .insert(attachmentInserts);
-    if (error) {
-      console.error("[logPods] pod_attachments insert:", error);
-      attachmentWarning = "POD logged, but attachment records failed to save.";
-    }
-  }
-
-  await Promise.all(
-    lrUpdates.map(async (update) => {
+  const tripResults = await Promise.all(
+    tripIds.map(async (internalId) => {
       const { error } = await supabase()
-        .from("trip_lrs")
-        .update({
-          status: "delivered",
-          pod_received: true,
-          pod_status: "Received",
-          invoice_status: "Received-Awaiting Validation",
-        })
-        .eq("trip_id", update.trip_id)
-        .eq("lr_number", update.lr_number);
-      if (error) console.error("[logPods] trip_lrs update:", error);
+        .from("trips")
+        .update({ pod_received_at: receivedAt })
+        .eq("id", internalId);
+      if (error) {
+        console.error("[logPods] trips.pod_received_at update:", error);
+        return error;
+      }
+      return null;
     }),
   );
+  const tripUpdateError = tripResults.find((err) => err != null);
+  if (tripUpdateError) {
+    return { error: new Error(tripUpdateError.message) };
+  }
 
   await Promise.all(
     Object.entries(selectedLRs)
@@ -569,7 +425,5 @@ export async function executeLogIncomingPods(payload: LogPodsPayload): Promise<{
       }),
   );
 
-  return attachmentWarning
-    ? { error: null, attachmentWarning }
-    : { error: null };
+  return { error: null };
 }

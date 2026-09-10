@@ -24,6 +24,7 @@ import { chatWithDocument } from '@/lib/pod/chat';
 import { compressImage } from '@/lib/pod/imageCompression';
 import type { PodReconciliationTripView } from '../services/podReconciliationService';
 import type { PODExtraction, ConfidenceField} from '@/types/pod';
+import { getDocumentViewUrl } from '@/features/trips/services/tripDocuments.service';
 
 interface PodValidationViewProps {
   trip: PodReconciliationTripView | null;
@@ -73,30 +74,36 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
     queryFn: async () => {
       if (!trip?.internal_id) return [];
       const { data, error } = await supabase()
-        .from('pod_attachments')
-        .select('*')
-        .eq('trip_id', trip.internal_id);
+        .from('trip_documents')
+        .select('id, trip_id, storage_path, file_name, mime_type, size_bytes')
+        .eq('trip_id', trip.internal_id)
+        .eq('document_type', 'pod');
       
       if (error) throw error;
-      return data;
+      return (data ?? []).map((row) => ({
+        id: row.id,
+        trip_id: row.trip_id,
+        file_path: row.storage_path,
+        file_name: row.file_name,
+        file_type: row.mime_type,
+        file_size: row.size_bytes,
+        extracted_data: null,
+      }));
     },
     enabled: !!trip?.internal_id
   });
 
-  const STORAGE_BUCKET_CANDIDATES = ['trip-documents', 'pod-documents'] as const;
+  const STORAGE_BUCKET = 'trip-documents' as const;
 
   function sanitizeStoragePath(p: string): string {
     let out = (p || '').trim();
-    // Sometimes callers accidentally store `bucket/path` or `/bucket/path`
     out = out.replace(/^\/+/, '');
-    for (const b of STORAGE_BUCKET_CANDIDATES) {
-      if (out.startsWith(`${b}/`)) out = out.slice(b.length + 1);
-    }
+    if (out.startsWith(`${STORAGE_BUCKET}/`)) out = out.slice(STORAGE_BUCKET.length + 1);
     return out;
   }
 
-  const getFileUrl = (bucket: string, path: string) => {
-    return supabase().storage.from(bucket).getPublicUrl(path).data.publicUrl;
+  const getFileUrl = (path: string) => {
+    return supabase().storage.from(STORAGE_BUCKET).getPublicUrl(path).data.publicUrl;
   };
 
   const updateExtractedField = (
@@ -138,10 +145,7 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
       if (tripMetaError) throw tripMetaError;
       if (!tripMeta?.organization_id) throw new Error('Trip organization not found');
 
-      const url = getFileUrl(
-        STORAGE_BUCKET_CANDIDATES[0],
-        sanitizeStoragePath(doc.file_path),
-      );
+      const url = await getDocumentViewUrl(sanitizeStoragePath(doc.file_path));
       const response = await fetch(url);
       const blob = await response.blob();
 
@@ -216,10 +220,7 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
 
     try {
       const doc = attachments[selectedDocIndex] || attachments[0];
-      const url = getFileUrl(
-        STORAGE_BUCKET_CANDIDATES[0],
-        sanitizeStoragePath(doc.file_path),
-      );
+      const url = await getDocumentViewUrl(sanitizeStoragePath(doc.file_path));
       const response = await fetch(url);
       const blob = await response.blob();
       const finalFile = await compressImage(blob, 1200);
@@ -260,10 +261,9 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
       const { error: tripError } = await supabase()
         .from("trips")
         .update({
-          // pulse Supabase schema uses `client_price` as the persisted amount.
-          pod_status: 'Received',
-          invoice_status_1: 'Pending',
-          pod_received_date: trip.pod_received_date || new Date().toISOString().split('T')[0],
+          pod_received_at: trip.pod_received_date
+            ? new Date(`${trip.pod_received_date}T00:00:00.000Z`).toISOString()
+            : new Date().toISOString(),
           client_price: finalAmount,
         })
         .eq("id", trip.internal_id);
@@ -284,27 +284,6 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
           final_amount: finalAmount
         },
       });
-
-      const { error: lrError } = await supabase()
-        .from("trip_lrs")
-        .update({ 
-          invoice_status: 'Ready for Invoice',
-          pod_status: 'Received',
-          pod_received: true,
-          status: 'delivered'
-        })
-        .eq("trip_id", trip.internal_id);
-
-      if (lrError) console.error("Error syncing LRs:", lrError);
-
-      // Persist extraction payload for the currently selected attachment when available.
-      if (extractedData && currentDoc?.id) {
-        const { error: attErr } = await supabase()
-          .from('pod_attachments')
-          .update({ extracted_data: extractedData as unknown as Record<string, unknown> })
-          .eq('id', currentDoc.id);
-        if (attErr) console.error('Error saving extracted data:', attErr);
-      }
 
       Alert.alert('Success', 'POD validated successfully.');
       queryClient.invalidateQueries({ queryKey: ['q', 'trips', 'reconciliation'] });
@@ -359,7 +338,7 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
   const currentDocUrl = useMemo(
     () =>
       storagePath != null
-        ? getFileUrl(STORAGE_BUCKET_CANDIDATES[0], storagePath)
+        ? getFileUrl(storagePath)
         : null,
     [storagePath],
   );
@@ -378,10 +357,7 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
   const attachmentPreviewItems = useMemo(
     () =>
       attachments.map((att) => {
-        const docUrl = getFileUrl(
-          STORAGE_BUCKET_CANDIDATES[0],
-          sanitizeStoragePath(att.file_path),
-        );
+        const docUrl = getFileUrl(sanitizeStoragePath(att.file_path));
         return {
           ...att,
           docUrl,
@@ -411,22 +387,10 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
       // Prefer signed URL: works for both public & private buckets.
       // If bucket is missing/misnamed, we'll surface a clear error.
       try {
-        let lastErr: { message?: string } | null = null;
-        for (const bucket of STORAGE_BUCKET_CANDIDATES) {
-          const { data, error } = await supabase()
-            .storage
-            .from(bucket)
-            .createSignedUrl(storagePath, 60 * 60);
-          if (cancelled) return;
-          if (!error && data?.signedUrl) {
-            setRenderableDocUrl((prev) =>
-              prev === data.signedUrl ? prev : data.signedUrl,
-            );
-            return;
-          }
-          lastErr = error ?? lastErr;
-        }
-        throw lastErr ?? new Error('Object not found');
+        const signedUrl = await getDocumentViewUrl(storagePath);
+        if (cancelled) return;
+        if (!signedUrl) throw new Error('Object not found');
+        setRenderableDocUrl((prev) => (prev === signedUrl ? prev : signedUrl));
       } catch (e: unknown) {
         if (cancelled) return;
         setDocLoadError(
