@@ -60,7 +60,6 @@ export const PULSE_PRODUCTS: readonly PulseProduct[] = [
 
 export const PULSE_PRODUCTS_COMING_SOON: readonly PulseProductPreview[] = [
   { id: 'pod', name: 'Pulse Pod' },
-  { id: 'invoice', name: 'Pulse Invoice' },
 ] as const;
 
 export const WORKSPACE_ACCESS_ACTIONS: readonly WorkspaceAccessAction[] = [

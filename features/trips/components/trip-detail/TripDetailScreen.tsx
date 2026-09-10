@@ -2356,6 +2356,8 @@ export default function TripDetailScreen({
   const ledgerEntries = Array.isArray(detail.tripLedgerEntries)
     ? detail.tripLedgerEntries
     : [];
+  const ledgerEntriesLoading = detail.tripLedgerEntriesLoading;
+  const ledgerEntriesError = detail.tripLedgerEntriesError;
   const received = ledgerEntries.reduce(
     (s, tx) => s + Number(tx.amount_in ?? 0),
     0,
@@ -3867,7 +3869,15 @@ export default function TripDetailScreen({
                 captureSlot={undefined}
                 summarySlot={financeAdjustmentSummaryWrappedEl}
                 transactionsSlot={
-                  filteredFinanceRows.length === 0 ? (
+                  ledgerEntries.length === 0 && ledgerEntriesLoading ? (
+                    <Text style={styles.mobileOrderEmptyTxn}>
+                      Loading ledger…
+                    </Text>
+                  ) : ledgerEntries.length === 0 && ledgerEntriesError ? (
+                    <Text style={styles.mobileOrderEmptyTxn}>
+                      Couldn’t load ledger
+                    </Text>
+                  ) : filteredFinanceRows.length === 0 ? (
                     <Text style={styles.mobileOrderEmptyTxn}>
                       No transactions yet
                     </Text>
@@ -4810,7 +4820,11 @@ export default function TripDetailScreen({
                                   isDesktop && neoStyles.financeLedgerPreviewSubDesktop,
                                 ]}
                               >
-                                {financeHistoryRows.length === 0
+                                {ledgerEntries.length === 0 && ledgerEntriesLoading
+                                  ? "Loading ledger…"
+                                  : ledgerEntries.length === 0 && ledgerEntriesError
+                                  ? "Couldn’t load ledger"
+                                  : financeHistoryRows.length === 0
                                   ? "No cash movements on this trip yet"
                                   : `${financeHistoryRows.length} movement${
                                       financeHistoryRows.length === 1 ? "" : "s"
@@ -4824,7 +4838,19 @@ export default function TripDetailScreen({
                                 nestedScrollEnabled
                                 showsVerticalScrollIndicator={false}
                               >
-                                {financeHistoryRows.length === 0 ? (
+                                {ledgerEntries.length === 0 && ledgerEntriesLoading ? (
+                                  <Text
+                                    style={neoStyles.financeLedgerPreviewEmpty}
+                                  >
+                                    Loading ledger…
+                                  </Text>
+                                ) : ledgerEntries.length === 0 && ledgerEntriesError ? (
+                                  <Text
+                                    style={neoStyles.financeLedgerPreviewEmpty}
+                                  >
+                                    Couldn’t load ledger
+                                  </Text>
+                                ) : financeHistoryRows.length === 0 ? (
                                   <Text
                                     style={neoStyles.financeLedgerPreviewEmpty}
                                   >
@@ -5068,7 +5094,15 @@ export default function TripDetailScreen({
                       </>
                     ) : (
                       <View style={neoStyles.txnList}>
-                        {filteredFinanceRows.length === 0 ? (
+                        {ledgerEntries.length === 0 && ledgerEntriesLoading ? (
+                          <Text style={neoStyles.emptyText}>
+                            Loading ledger…
+                          </Text>
+                        ) : ledgerEntries.length === 0 && ledgerEntriesError ? (
+                          <Text style={neoStyles.emptyText}>
+                            Couldn’t load ledger
+                          </Text>
+                        ) : filteredFinanceRows.length === 0 ? (
                           <Text style={neoStyles.emptyText}>
                             No transaction rows found
                           </Text>

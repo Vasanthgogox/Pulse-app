@@ -766,10 +766,22 @@ export function useTripDetail({
     tripOwnerOrgIdForTransactions !== orgIdForTransactions
       ? tripOwnerOrgIdForTransactions
       : null;
-  const { data: primaryTransactionsData = [], refetch: refetchPrimaryTransactions } =
-    useTransactionsQuery(orgIdForTransactions);
-  const { data: secondaryTransactionsData = [], refetch: refetchSecondaryTransactions } =
-    useTransactionsQuery(secondaryOrgIdForTransactions);
+  const {
+    data: primaryTransactionsData = [],
+    refetch: refetchPrimaryTransactions,
+    isPending: primaryTxPending,
+    isLoading: primaryTxLoading,
+    isError: primaryTxError,
+    isSuccess: primaryTxSuccess,
+  } = useTransactionsQuery(orgIdForTransactions);
+  const {
+    data: secondaryTransactionsData = [],
+    refetch: refetchSecondaryTransactions,
+    isPending: secondaryTxPending,
+    isLoading: secondaryTxLoading,
+    isError: secondaryTxError,
+    isSuccess: secondaryTxSuccess,
+  } = useTransactionsQuery(secondaryOrgIdForTransactions);
   refetchTransactionsRef.current = () => {
     void refetchPrimaryTransactions();
     if (secondaryOrgIdForTransactions) void refetchSecondaryTransactions();
@@ -796,6 +808,24 @@ export function useTripDetail({
       ),
     [transactions, trip],
   );
+
+  // First-result only: required queries still pending, and nothing to show.
+  // Disabled secondary (no owner-org mismatch) is not required. Cached rows
+  // keep the list visible during background refetch (isFetching with data).
+  const primaryTxRequired = !!orgIdForTransactions;
+  const secondaryTxRequired = !!secondaryOrgIdForTransactions;
+  const primaryTxAwaiting =
+    primaryTxRequired &&
+    (primaryTxLoading || (primaryTxPending && !primaryTxSuccess && !primaryTxError));
+  const secondaryTxAwaiting =
+    secondaryTxRequired &&
+    (secondaryTxLoading || (secondaryTxPending && !secondaryTxSuccess && !secondaryTxError));
+  const tripLedgerEntriesLoading =
+    tripLedgerEntries.length === 0 && (primaryTxAwaiting || secondaryTxAwaiting);
+  const tripLedgerEntriesError =
+    tripLedgerEntries.length === 0 &&
+    !tripLedgerEntriesLoading &&
+    ((primaryTxRequired && primaryTxError) || (secondaryTxRequired && secondaryTxError));
 
   /** Prefer linked supplier name; fall back to supplier ledger party_name. */
   const resolvedPartnerName = useMemo(
@@ -2587,6 +2617,8 @@ export function useTripDetail({
 
     // Finance
     tripLedgerEntries,
+    tripLedgerEntriesLoading,
+    tripLedgerEntriesError,
     adjustments,
     subcontractRate,
     moverClientPaid,

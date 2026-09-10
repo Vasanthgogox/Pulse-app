@@ -74,7 +74,11 @@ export function buildSuiteSignInHref(options: {
   returnTo?: string;
 }): string {
   const product = resolveSuiteProduct(options.productId);
-  const returnTo = options.returnTo ?? `${product.appBasePath}/dashboard`;
+  const returnTo =
+    options.returnTo ??
+    (product.expoProductShell
+      ? product.appBasePath
+      : `${product.appBasePath}/dashboard`);
   const params = new URLSearchParams();
   if (options.productId && options.productId !== 'core') {
     params.set('product', options.productId);
@@ -100,6 +104,7 @@ export function buildSuiteSignUpHref(options: {
 
 export {
   buildPulseCommerceUrl,
+  buildPulseInvoiceUrl,
   isSuiteExternalAppPath,
   normalizeSuiteReturnTo,
   openSuiteProductApp,

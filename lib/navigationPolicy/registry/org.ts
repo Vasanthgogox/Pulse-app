@@ -517,6 +517,13 @@ export const ORG_POLICIES: readonly PolicyRecord[] = [
     onDeny: { type: 'sign_in' },
   },
   {
+    id: 'org.pulse-invoice',
+    pattern: '/pulse-invoice',
+    experience: 'org',
+    priority: 100,
+    onDeny: { type: 'sign_in' },
+  },
+  {
     id: 'org.log-incoming-pods',
     pattern: '/log-incoming-pods',
     experience: 'org',

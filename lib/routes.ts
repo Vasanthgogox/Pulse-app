@@ -132,6 +132,12 @@ export const ROUTES = {
   WORKSPACE_SETTINGS: '/workspace?panel=settings' as const,
   /** Pulse Scan usage (org OCR quota and quality). */
   WORKSPACE_OCR_USAGE: '/workspace?panel=ocr-usage' as const,
+  /** Existing org POD module (reconciliation). */
+  POD_RECONCILIATION: '/pod-reconciliation' as const,
+  /** Pulse Invoice product landing (suite open contract; Core/Expo route). */
+  PULSE_INVOICE: '/pulse-invoice' as const,
+  /** Invoice execution module (existing live-schema execute flow). */
+  INVOICING_EXECUTE: '/invoicing-execute' as const,
   /** Members & access inside the workspace flex-card (not `MODALS.TEAM`). */
   WORKSPACE_TEAM:    '/workspace?panel=team' as const,
   /** Step-through business verification wizard (Sprint 1). */

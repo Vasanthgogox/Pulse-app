@@ -29,6 +29,7 @@ import {
     type ViewStyle,
 } from "react-native";
 import { useLayoutInsets } from "@/lib/layoutInsets";
+import { usePulseProductShell } from "@/features/product-shell/PulseProductShell";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { LogIncomingPodsScreen } from "../log-pods/LogIncomingPodsScreen";
 import { PodValidationView } from "./components/PodValidationView";
@@ -56,6 +57,7 @@ function canAccessPodManagement(
 
 export function PodReconciliationScreen() {
   const insets = useSafeAreaInsets();
+  const inProductShell = usePulseProductShell() === "pod";
   const caps = useCapabilities();
   const layout = useLayoutInsets();
   const { t: tr } = useLanguage();
@@ -298,7 +300,7 @@ export function PodReconciliationScreen() {
       <View
         style={[
           styles.blocked,
-          { paddingTop: insets.top + 24, paddingBottom: insets.bottom },
+          { paddingTop: (inProductShell ? 24 : insets.top + 24), paddingBottom: insets.bottom },
         ]}
       >
         <Text style={styles.blockedTitle}>Not available</Text>
@@ -324,7 +326,7 @@ export function PodReconciliationScreen() {
       style={[
         styles.root,
         {
-          paddingTop: insets.top,
+          paddingTop: inProductShell ? 0 : insets.top,
           flexDirection: "column",
         },
       ]}

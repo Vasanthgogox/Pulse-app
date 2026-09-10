@@ -7,12 +7,16 @@ export const PULSE_BRAND_MARK_WORD = 'pulse';
 export const PULSE_CORE_BRAND_WORD = 'pulsecore';
 export const PULSE_PILOT_BRAND_WORD = 'pulsepilot';
 export const PULSE_COMMERCE_BRAND_WORD = 'pulsecommerce';
+export const PULSE_INVOICE_BRAND_WORD = 'pulseinvoice';
+export const PULSE_POD_BRAND_WORD = 'pulsepod';
 
-export type PulseProductBrandId = 'core' | 'pilot' | 'commerce';
+export type PulseProductBrandId = 'core' | 'pilot' | 'commerce' | 'invoice' | 'pod';
 
 export function pulseProductBrandWord(productId: PulseProductBrandId): string {
   if (productId === 'pilot') return PULSE_PILOT_BRAND_WORD;
   if (productId === 'commerce') return PULSE_COMMERCE_BRAND_WORD;
+  if (productId === 'invoice') return PULSE_INVOICE_BRAND_WORD;
+  if (productId === 'pod') return PULSE_POD_BRAND_WORD;
   return PULSE_CORE_BRAND_WORD;
 }
 

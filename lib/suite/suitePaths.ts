@@ -43,3 +43,20 @@ export function buildPulseCommerceUrl(path = '/dashboard'): string {
   if (normalized === '/' || normalized === '/dashboard') return '/oms/dashboard';
   return `/oms${normalized}`;
 }
+
+/**
+ * Pulse Invoice product home (Core/Expo route, same origin).
+ * Not an OMS-style external SPA — do not prefix /oms.
+ */
+export function buildPulseInvoiceUrl(path = '/pulse-invoice'): string {
+  const normalized = path.startsWith('/') ? path : `/${path}`;
+  if (
+    normalized === '/' ||
+    normalized === '/pulse-invoice' ||
+    normalized === '/dashboard'
+  ) {
+    return '/pulse-invoice';
+  }
+  if (normalized.startsWith('/pulse-invoice')) return normalized;
+  return `/pulse-invoice${normalized}`;
+}
