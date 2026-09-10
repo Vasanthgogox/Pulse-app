@@ -1,5 +1,5 @@
 /**
- * Evidence upload for POD logging — maps files to LRs and uploads to pod-documents bucket.
+ * Evidence upload for POD logging — maps files to LRs and uploads to trip-documents.
  * Logic aligned with cashflow PodAttachmentModal.
  */
 import { LoadingIndicator } from "@/components/LoadingIndicator";

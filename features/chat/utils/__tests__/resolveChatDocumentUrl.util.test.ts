@@ -1,15 +1,19 @@
 const mockCreateSignedUrl = jest.fn();
 const mockGetPublicUrl = jest.fn();
 const mockDownload = jest.fn();
+const mockStorageFrom = jest.fn();
 
 jest.mock('@/lib/supabase', () => ({
   supabase: () => ({
     storage: {
-      from: () => ({
-        createSignedUrl: (...args: unknown[]) => mockCreateSignedUrl(...args),
-        getPublicUrl: (...args: unknown[]) => mockGetPublicUrl(...args),
-        download: (...args: unknown[]) => mockDownload(...args),
-      }),
+      from: (bucket: string) => {
+        mockStorageFrom(bucket);
+        return {
+          createSignedUrl: (...args: unknown[]) => mockCreateSignedUrl(...args),
+          getPublicUrl: (...args: unknown[]) => mockGetPublicUrl(...args),
+          download: (...args: unknown[]) => mockDownload(...args),
+        };
+      },
     },
   }),
 }));
@@ -153,5 +157,20 @@ describe('in-flight request dedup — concurrent calls for the same path share o
     if (originalCreateObjectURL) {
       (URL as unknown as { createObjectURL: unknown }).createObjectURL = originalCreateObjectURL;
     }
+  });
+
+  it('signs trip-documents exactly once for a POD path and never probes documents or pod-documents', async () => {
+    mockCreateSignedUrl.mockResolvedValue({
+      data: { signedUrl: 'https://signed.example/pod.jpg' },
+      error: null,
+    });
+
+    const url = await resolveChatDocumentStorageUrl('trip-uuid/pod/file.jpg');
+
+    expect(url).toBe('https://signed.example/pod.jpg');
+    expect(mockCreateSignedUrl).toHaveBeenCalledTimes(1);
+    expect(mockStorageFrom.mock.calls.map((call) => call[0])).toEqual([
+      'trip-documents',
+    ]);
   });
 });

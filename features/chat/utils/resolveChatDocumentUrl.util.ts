@@ -1,11 +1,10 @@
 /**
  * Resolves a Supabase storage path to a time-limited HTTPS URL for chat document_share messages.
- * Driver POD/trip photos live in `trip-documents`; dispatcher-shared org docs may use `documents`.
  *
- * Uses race-first bucket tries (first success wins) + 50-min in-memory TTL cache.
+ * Canonical bucket: `trip-documents` (same as tripDocuments.service / POD photos).
+ * Current objects are signed exactly once — no `documents` / `pod-documents` probing.
+ *
  * Signed URLs are valid for 60 min; caching at 50 min avoids serving an about-to-expire URL.
- *
- * Chat uploads (`trip_chat/…`) only hit `trip-documents` — never waste round-trips on other buckets.
  *
  * ONLY plain `/object/sign/` URLs are produced. Two endpoints are unusable here:
  *   • `/render/image/sign/…` (imgproxy transforms) → 403 FeatureNotEnabled,
@@ -21,24 +20,7 @@ import { supabase } from '@/lib/supabase';
 const SIGNED_EXPIRY_SEC = 3600;
 const CACHE_TTL_MS = 50 * 60 * 1000;
 
-const BUCKET_TRY_ORDER = ['trip-documents', 'documents', 'pod-documents'] as const;
-
-type StorageBucketName = (typeof BUCKET_TRY_ORDER)[number];
-
-/** After a successful resolve for `path`, try that bucket first (avoids 2–3 failed createSignedUrl calls per open). */
-const preferredBucketByPath = new Map<string, StorageBucketName>();
-
-function bucketsToTry(path: string): StorageBucketName[] {
-  const hit = preferredBucketByPath.get(path);
-  if (hit) return [hit, ...BUCKET_TRY_ORDER.filter((b) => b !== hit)];
-  // Chat camera / image messages always land in trip-documents.
-  if (path.startsWith('trip_chat/')) return ['trip-documents'];
-  return [...BUCKET_TRY_ORDER];
-}
-
-function rememberPreferredBucket(path: string, bucket: StorageBucketName) {
-  preferredBucketByPath.set(path, bucket);
-}
+const CANONICAL_BUCKET = 'trip-documents' as const;
 
 const signedUrlCache = new Map<string, { url: string; expiresAt: number }>();
 
@@ -62,51 +44,17 @@ const inFlightBlobUrl = new Map<string, Promise<{ url: string; revoke: () => voi
 
 type ImageTransformResize = "cover" | "contain";
 
-/**
- * Race createSignedUrl across candidate buckets — first success wins.
- * Avoids serial 200–800ms waits on missing buckets (was the main chat-thumb stall).
- */
-function raceCreateSignedUrl(
+function signCanonicalBucket(
   path: string,
-): Promise<{ url: string; bucket: StorageBucketName } | null> {
-  const buckets = bucketsToTry(path);
-  if (buckets.length === 0) return Promise.resolve(null);
-  if (buckets.length === 1) {
-    const bucket = buckets[0]!;
-    return supabase()
-      .storage.from(bucket)
-      .createSignedUrl(path, SIGNED_EXPIRY_SEC)
-      .then(({ data, error }) => {
-        if (!error && data?.signedUrl) return { url: data.signedUrl, bucket };
-        return null;
-      })
-      .catch(() => null);
-  }
-
-  return new Promise((resolve) => {
-    let remaining = buckets.length;
-    let settled = false;
-    for (const bucket of buckets) {
-      void supabase()
-        .storage.from(bucket)
-        .createSignedUrl(path, SIGNED_EXPIRY_SEC)
-        .then(({ data, error }) => {
-          if (settled) return;
-          if (!error && data?.signedUrl) {
-            settled = true;
-            resolve({ url: data.signedUrl, bucket });
-            return;
-          }
-          remaining -= 1;
-          if (remaining === 0) resolve(null);
-        })
-        .catch(() => {
-          if (settled) return;
-          remaining -= 1;
-          if (remaining === 0) resolve(null);
-        });
-    }
-  });
+): Promise<{ url: string } | null> {
+  return supabase()
+    .storage.from(CANONICAL_BUCKET)
+    .createSignedUrl(path, SIGNED_EXPIRY_SEC)
+    .then(({ data, error }) => {
+      if (!error && data?.signedUrl) return { url: data.signedUrl };
+      return null;
+    })
+    .catch(() => null);
 }
 
 /** Strip accidental bucket prefix so createSignedUrl targets the object key inside the bucket. */
@@ -139,7 +87,6 @@ export function warmChatDocumentSignedUrlCache(storagePath: string, signedUrl: s
   const url = String(signedUrl ?? "").trim();
   if (!path || !/^https?:\/\//i.test(url)) return;
   signedUrlCache.set(path, { url, expiresAt: Date.now() + CACHE_TTL_MS });
-  rememberPreferredBucket(path, "trip-documents");
 }
 
 /**
@@ -152,11 +99,10 @@ export function warmChatImageThumbnailCache(storagePath: string, signedUrl: stri
 }
 
 async function fetchChatDocumentStorageUrl(path: string): Promise<string | null> {
-  const raced = await raceCreateSignedUrl(path);
-  if (raced) {
-    rememberPreferredBucket(path, raced.bucket);
-    signedUrlCache.set(path, { url: raced.url, expiresAt: Date.now() + CACHE_TTL_MS });
-    return raced.url;
+  const signed = await signCanonicalBucket(path);
+  if (signed) {
+    signedUrlCache.set(path, { url: signed.url, expiresAt: Date.now() + CACHE_TTL_MS });
+    return signed.url;
   }
 
   // No getPublicUrl fallback — every bucket here is private, so a public URL is a
@@ -193,19 +139,17 @@ export async function resolveChatDocumentStorageUrl(storagePath: string): Promis
 async function fetchChatDocumentBlobObjectUrl(
   path: string,
 ): Promise<{ url: string; revoke: () => void } | null> {
-  // Prefer known/chat bucket first — do not download from three buckets in parallel.
-  for (const bucket of bucketsToTry(path)) {
-    try {
-      const { data, error } = await supabase().storage.from(bucket).download(path);
-      if (!error && data) {
-        rememberPreferredBucket(path, bucket);
-        const url = URL.createObjectURL(data);
-        blobUrlCache.set(path, url);
-        return { url, revoke: () => {} };
-      }
-    } catch {
-      // try next
+  try {
+    const { data, error } = await supabase()
+      .storage.from(CANONICAL_BUCKET)
+      .download(path);
+    if (!error && data) {
+      const url = URL.createObjectURL(data);
+      blobUrlCache.set(path, url);
+      return { url, revoke: () => {} };
     }
+  } catch {
+    return null;
   }
   return null;
 }
@@ -301,7 +245,6 @@ export function invalidateChatDocumentUrlCaches(storagePath: string): void {
   signedUrlCache.delete(path);
   inFlightSignedUrl.delete(path);
   inFlightBlobUrl.delete(path);
-  preferredBucketByPath.delete(path);
   const blob = blobUrlCache.get(path);
   if (blob) {
     blobUrlCache.delete(path);
