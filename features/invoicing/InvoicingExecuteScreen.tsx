@@ -7,16 +7,17 @@ import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
+import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { InvoicePreviewPanel } from "@/features/invoicing/components/InvoicePreviewPanel";
+import { resolveInvoiceIssuerIdentity } from "@/features/invoicing/services/invoiceIssuerIdentity.service";
 import type { InvoicingTripView } from "@/features/invoicing/services/invoicing.service";
 import { useCapabilities } from "@/lib/useCapabilities";
 import {
     useExecuteInvoiceMutation,
     useInvoicingExecuteTripsQuery,
-    usePodReconciliationSummaryQuery,
 } from "@/lib/queries/useInvoicingExecuteQueries";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { useRouter } from "expo-router";
+import { useRouter, usePathname } from "expo-router";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
     Alert,
@@ -53,10 +54,19 @@ export function InvoicingExecuteScreen() {
   const layout = useLayoutInsets();
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
+  const pathname = usePathname();
+  const inProductShell =
+    pathname === "/invoicing-execute" ||
+    pathname.startsWith("/invoicing-execute/");
   const { profile } = useAuth();
   const caps = useCapabilities();
   const { currentOrganization, isLoading: orgLoading } = useOrganization();
+  const { activeWorkspace } = useActiveWorkspace();
   const orgId = currentOrganization?.id ?? null;
+  const issuer = useMemo(
+    () => resolveInvoiceIssuerIdentity({ workspace: activeWorkspace }),
+    [activeWorkspace],
+  );
 
   const {
     data: allTrips = [],
@@ -66,8 +76,19 @@ export function InvoicingExecuteScreen() {
     refetch,
     isRefetching,
   } = useInvoicingExecuteTripsQuery(orgId);
-  const { data: summaryData } = usePodReconciliationSummaryQuery(orgId);
   const executeMutation = useExecuteInvoiceMutation(orgId);
+
+  const summaryData = useMemo(() => {
+    let pod_pending_sum = 0;
+    let received_sum = 0;
+    let approved_sum = 0;
+    for (const t of allTrips) {
+      if (t.status === "approved") approved_sum += t.amount;
+      else if (t.status === "received") received_sum += t.amount;
+      else pod_pending_sum += t.amount;
+    }
+    return { pod_pending_sum, received_sum, approved_sum };
+  }, [allTrips]);
 
   const [activeClient, setActiveClient] = useState<string | null>(null);
   const [selectedTripIds, setSelectedTripIds] = useState<string[]>([]);
@@ -561,7 +582,8 @@ export function InvoicingExecuteScreen() {
   );
 
   return (
-    <View style={[styles.root, { paddingTop: insets.top }]}>
+    <View style={[styles.root, !inProductShell && { paddingTop: insets.top }]}>
+      {!inProductShell ? (
       <View style={styles.financeHeader}>
         <View style={styles.financeHeaderInner}>
           <View style={[styles.heroRow, !isLargeScreen && styles.heroRowMobile]}>
@@ -710,6 +732,7 @@ export function InvoicingExecuteScreen() {
           ) : null}
         </View>
       </View>
+      ) : null}
 
       <View style={styles.contentArea}>
         {isLargeScreen ? (
@@ -754,6 +777,7 @@ export function InvoicingExecuteScreen() {
                   activeClient={activeClient}
                   selectedTrips={selectedTrips}
                   isStandalone={true}
+                  issuer={issuer}
                 />
               </View>
             )}
@@ -874,6 +898,7 @@ export function InvoicingExecuteScreen() {
                     activeClient={activeClient}
                     selectedTrips={selectedTrips}
                     isStandalone={true}
+                    issuer={issuer}
                   />
                 </View>
               </View>
@@ -1467,13 +1492,24 @@ const styles = StyleSheet.create({
   contentArea: { flex: 1, backgroundColor: Theme.surfaceGray },
   splitLayout: { flex: 1, flexDirection: "row" },
   sidebar: {
-    width: 280,
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: 280,
+    minWidth: 220,
+    maxWidth: 320,
     borderRightWidth: 1,
     borderRightColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
   },
-  mainArea: { flex: 1, backgroundColor: Theme.surfaceGray },
-  rightPanel: { width: 360, backgroundColor: Theme.screenBackground },
+  mainArea: { flex: 1, minWidth: 0, backgroundColor: Theme.surfaceGray },
+  rightPanel: {
+    flexGrow: 0,
+    flexShrink: 1,
+    flexBasis: 360,
+    minWidth: 280,
+    maxWidth: 440,
+    backgroundColor: Theme.screenBackground,
+  },
 
   sidebarHeader: {
     padding: 16,

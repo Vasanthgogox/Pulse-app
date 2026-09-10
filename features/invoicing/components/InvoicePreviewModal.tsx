@@ -3,6 +3,7 @@
  */
 import Theme from '@/constants/Theme';
 import { InvoicePreviewPanel } from '@/features/invoicing/components/InvoicePreviewPanel';
+import type { InvoiceIssuerIdentity } from '@/features/invoicing/services/invoiceIssuerIdentity.service';
 import type { InvoicingTripView, InvoicePayload } from '@/features/invoicing/services/invoicing.service';
 import { Modal, StyleSheet, View } from 'react-native';
 
@@ -13,6 +14,7 @@ export interface InvoicePreviewModalProps {
   isFinalizing: boolean;
   activeClient: string | null;
   selectedTrips: InvoicingTripView[];
+  issuer: InvoiceIssuerIdentity | null;
 }
 
 export function InvoicePreviewModal({
@@ -22,6 +24,7 @@ export function InvoicePreviewModal({
   isFinalizing,
   activeClient,
   selectedTrips,
+  issuer,
 }: InvoicePreviewModalProps) {
   return (
     <Modal visible={visible} animationType="slide" transparent>
@@ -34,6 +37,7 @@ export function InvoicePreviewModal({
             activeClient={activeClient}
             selectedTrips={selectedTrips}
             isStandalone={false}
+            issuer={issuer}
           />
         </View>
       </View>

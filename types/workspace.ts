@@ -33,6 +33,7 @@ export interface Workspace {
   // KYC
   business_pan: string | null;
   gstin: string | null;
+  gst_not_applicable: boolean;
   cin: string | null;
   verification_status: KycStatus;
   verified_at: string | null;

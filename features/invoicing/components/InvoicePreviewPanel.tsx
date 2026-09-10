@@ -4,9 +4,10 @@ import Theme from "@/constants/Theme";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useInvoiceCalc } from "@/features/invoicing/hooks/useInvoiceCalc";
 import type {
-    AdditionalCharge,
-    InvoicingTripView,
+  AdditionalCharge,
+  InvoicingTripView,
 } from "@/features/invoicing/services/invoicing.service";
+import type { InvoiceIssuerIdentity } from "@/features/invoicing/services/invoiceIssuerIdentity.service";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useState } from "react";
 import {
@@ -29,6 +30,7 @@ export interface InvoicePreviewPanelProps {
   activeClient: string | null;
   selectedTrips: InvoicingTripView[];
   isStandalone?: boolean;
+  issuer: InvoiceIssuerIdentity | null;
 }
 
 const PAYMENT_TERMS_OPTIONS = [
@@ -46,6 +48,7 @@ export function InvoicePreviewPanel({
   activeClient,
   selectedTrips,
   isStandalone = false,
+  issuer,
 }: InvoicePreviewPanelProps) {
   const insets = useSafeAreaInsets();
   const layout = useLayoutInsets();
@@ -157,36 +160,64 @@ export function InvoicePreviewPanel({
         contentContainerStyle={styles.bodyContent}
         {...tabBarScrollProps}
       >
-        {/* Header Info */}
+        {/* Header Info — issuer from active workspace; client name only (no fabricated address). */}
         <View style={styles.rowLayout}>
           <View style={styles.colLayout}>
-            <Text style={styles.sectionLabel}>Billing Address</Text>
+            <Text style={styles.sectionLabel}>Issuer</Text>
+            <View style={styles.infoCard}>
+              {issuer ? (
+                <>
+                  <Text style={styles.clientName}>{issuer.businessName}</Text>
+                  {issuer.addressLines.map((line) => (
+                    <Text key={line} style={styles.clientAddress}>
+                      {line}
+                    </Text>
+                  ))}
+                </>
+              ) : (
+                <Text style={styles.clientAddress}>
+                  Workspace identity unavailable
+                </Text>
+              )}
+            </View>
+          </View>
+          <View style={styles.colLayout}>
+            <Text style={styles.sectionLabel}>Bill to</Text>
             <View style={styles.infoCard}>
               {activeClient ? (
-                <>
-                  <Text style={styles.clientName}>{activeClient}</Text>
-                  <Text style={styles.clientAddress}>Corporate House, HQ</Text>
-                  <Text style={styles.clientAddress}>
-                    City Center, State - 000000
-                  </Text>
-                </>
+                <Text style={styles.clientName}>{activeClient}</Text>
               ) : (
                 <Text style={styles.clientAddress}>Select a client...</Text>
               )}
             </View>
           </View>
+        </View>
+        <View style={styles.rowLayout}>
           <View style={styles.colLayout}>
-            <Text style={styles.sectionLabel}>Tax Details</Text>
+            <Text style={styles.sectionLabel}>Issuer tax details</Text>
             <View style={styles.infoCard}>
-              <Text style={styles.taxText}>
-                <Text style={styles.taxLabel}>GSTIN</Text> 24AAA CA000 1Z1
-              </Text>
-              <Text style={styles.taxText}>
-                <Text style={styles.taxLabel}>PAN</Text> AAAC0000A
-              </Text>
-              <Text style={styles.taxText}>
-                <Text style={styles.taxLabel}>State</Text> 24
-              </Text>
+              {issuer?.pan ? (
+                <Text style={styles.taxText}>
+                  <Text style={styles.taxLabel}>PAN</Text> {issuer.pan}
+                </Text>
+              ) : null}
+              {issuer?.gstNotApplicable ? (
+                <Text style={styles.taxText}>
+                  <Text style={styles.taxLabel}>GST</Text> Not applicable
+                </Text>
+              ) : issuer?.gstin ? (
+                <Text style={styles.taxText}>
+                  <Text style={styles.taxLabel}>GSTIN</Text> {issuer.gstin}
+                </Text>
+              ) : null}
+              {issuer?.state ? (
+                <Text style={styles.taxText}>
+                  <Text style={styles.taxLabel}>State</Text> {issuer.state}
+                </Text>
+              ) : null}
+              {!issuer?.pan && !issuer?.gstin && !issuer?.gstNotApplicable && !issuer?.state ? (
+                <Text style={styles.clientAddress}>No tax identifiers on file</Text>
+              ) : null}
             </View>
           </View>
         </View>

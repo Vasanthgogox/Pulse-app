@@ -8,8 +8,13 @@ import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
 import { useExecuteInvoiceMutation, useInvoicingExecuteTripsQuery } from '@/lib/queries/useInvoicingExecuteQueries';
 import { useOrganization } from '@/contexts/OrganizationContext';
+import { useActiveWorkspace } from '@/contexts/ActiveWorkspaceContext';
 import type { AdditionalCharge, InvoiceConfig, InvoicingTripView } from '@/features/invoicing/services/invoicing.service';
 import { getInvoiceBrandingSettings } from '@/features/invoicing/services/invoiceBranding.service';
+import {
+  resolveInvoiceIssuerIdentity,
+  type InvoiceIssuerIdentity,
+} from '@/features/invoicing/services/invoiceIssuerIdentity.service';
 import { useInvoiceCalc } from '@/features/invoicing/hooks/useInvoiceCalc';
 import { CenteredLoadingView } from '@/components/CenteredLoadingView';
 import { useAuth } from '@/contexts/AuthContext';
@@ -86,11 +91,15 @@ export default function InvoicePdfPreviewScreen() {
   const caps = useCapabilities();
   const { can: canSurface } = useMemberAccess();
   const { currentOrganization, isLoading: orgLoading } = useOrganization();
+  const { activeWorkspace } = useActiveWorkspace();
   const orgId = currentOrganization?.id ?? null;
+  const workspaceId = activeWorkspace?.id ?? null;
 
   const [isFinalizing, setIsFinalizing] = useState(false);
-  const [brandingName, setBrandingName] = useState('GOGOX');
-  const [brandingLogoUrl, setBrandingLogoUrl] = useState<string | null>(null);
+  const [brandingOverlay, setBrandingOverlay] = useState<{
+    companyName: string | null;
+    logoUrl: string | null;
+  }>({ companyName: null, logoUrl: null });
 
   const activeClient = params.activeClient || '';
   const paymentTerms = params.paymentTerms || 'Net 30';
@@ -130,18 +139,30 @@ export default function InvoicePdfPreviewScreen() {
   const allowed =
     canAccessInvoicing(profile, caps) && canSurface("finance.invoicing");
 
+  const issuer: InvoiceIssuerIdentity | null = useMemo(
+    () =>
+      resolveInvoiceIssuerIdentity({
+        workspace: activeWorkspace,
+        branding: brandingOverlay,
+      }),
+    [activeWorkspace, brandingOverlay],
+  );
+
   useEffect(() => {
     let mounted = true;
+    if (!workspaceId) {
+      setBrandingOverlay({ companyName: null, logoUrl: null });
+      return;
+    }
     (async () => {
-      const { settings } = await getInvoiceBrandingSettings();
+      const { settings } = await getInvoiceBrandingSettings(workspaceId);
       if (!mounted) return;
-      setBrandingName(settings.companyName);
-      setBrandingLogoUrl(settings.logoUrl);
+      setBrandingOverlay(settings);
     })();
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [workspaceId]);
 
   const invoiceData: InvoicePdfData = useMemo(() => {
     const issued = new Date();
@@ -149,30 +170,23 @@ export default function InvoicePdfPreviewScreen() {
     const lrScope = selectedTrips.slice(0, 6).map((t) => t.id).join(', ') || 'N/A';
 
     return {
-      brandingCompanyName: brandingName,
-      brandingLogoUrl,
+      brandingCompanyName: issuer?.businessName ?? '',
+      brandingLogoUrl: issuer?.logoUrl ?? null,
       invoiceNo: previewInvoiceNo,
       clientName: activeClient || 'Unknown Client',
       issuedOn: formatDate(issued),
       dueOn: formatDate(due),
-      billingAddressLines: [
-        activeClient || 'Client Accounts',
-        'Central Processing Tower',
-        'Business District, Area 51',
-      ],
-      shipmentTargetLines: [
-        'Main Production Facility',
-        'Industrial Hub, Block 4',
-        'Manufacturing Zone',
-      ],
+      issuerAddressLines: issuer?.addressLines ?? [],
+      issuerPan: issuer?.pan ?? null,
+      issuerGstin: issuer?.gstin ?? null,
+      issuerGstNotApplicable: issuer?.gstNotApplicable ?? false,
+      billingAddressLines: activeClient ? [activeClient] : [],
+      shipmentTargetLines: [],
       paymentTerms,
       notes,
       lrScope,
       assetFleet: Array.from(new Set(selectedTrips.map((t) => t.details || 'N/A'))).join(', '),
-      bankDetailsLines: [
-        'HDFC BANK | IFSC: HDFC0001234',
-        'A/C: 50200012345678 | BRANCH: CHENNAI',
-      ],
+      bankDetailsLines: [],
       items: selectedTrips.map((trip) => ({
         tripId: trip.id,
         route: trip.route,
@@ -189,7 +203,7 @@ export default function InvoicePdfPreviewScreen() {
       taxAmount: calculations.sgst + calculations.cgst,
       grandTotal: calculations.totalAmount,
     };
-  }, [activeClient, brandingLogoUrl, brandingName, calculations.cgst, calculations.sgst, calculations.subtotal, calculations.totalAmount, notes, parsedAdditionalCharges, parsedGstRate, parsedIncludeGst, paymentTerms, previewInvoiceNo, selectedTrips]);
+  }, [activeClient, calculations.cgst, calculations.sgst, calculations.subtotal, calculations.totalAmount, issuer, notes, parsedAdditionalCharges, parsedGstRate, parsedIncludeGst, paymentTerms, previewInvoiceNo, selectedTrips]);
 
   const handleFinalizeAndSend = useCallback(async () => {
     setIsFinalizing(true);
@@ -210,7 +224,6 @@ export default function InvoicePdfPreviewScreen() {
       await executeMutation.mutateAsync({
         internalIds,
         payload: {
-          invoiceNo: previewInvoiceNo,
           notes,
           paymentTerms,
           includeGst: parsedIncludeGst,
@@ -219,6 +232,8 @@ export default function InvoicePdfPreviewScreen() {
           fuelRate: parsedFuelRate,
           additionalCharges: parsedAdditionalCharges,
           calculations,
+          createdBy: profile?.uid ?? null,
+          clientName: activeClient,
         },
       });
       Alert.alert('Success', 'Invoice issued successfully.');
@@ -228,7 +243,7 @@ export default function InvoicePdfPreviewScreen() {
     } finally {
       setIsFinalizing(false);
     }
-  }, [orgId, selectedTrips, executeMutation, previewInvoiceNo, notes, paymentTerms, parsedIncludeGst, parsedGstRate, parsedIncludeFuel, parsedFuelRate, parsedAdditionalCharges, calculations, router]);
+  }, [orgId, selectedTrips, executeMutation, notes, paymentTerms, parsedIncludeGst, parsedGstRate, parsedIncludeFuel, parsedFuelRate, parsedAdditionalCharges, calculations, router, profile?.uid, activeClient]);
 
   if (!allowed) {
     return (

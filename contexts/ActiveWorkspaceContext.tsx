@@ -68,6 +68,7 @@ interface WorkspaceMemberRow {
     zone: string | null;
     business_pan: string | null;
     gstin: string | null;
+    gst_not_applicable: boolean;
     cin: string | null;
     verification_status: string | null;
     verified_at: string | null;
@@ -130,6 +131,7 @@ function mapRowToWorkspace(
       zone: o.zone ?? null,
       business_pan: o.business_pan ?? null,
       gstin: o.gstin ?? null,
+      gst_not_applicable: o.gst_not_applicable === true,
       cin: o.cin ?? null,
       verification_status: verificationStatus,
       verified_at: o.verified_at ?? null,
@@ -168,7 +170,7 @@ const ACTIVE_MEMBERSHIP_SELECT = `
   organizations (
     id, name, slug, logo_url, operating_model,
     address_line, locality, pincode, city, state, zone,
-    business_pan, gstin, cin,
+    business_pan, gstin, gst_not_applicable, cin,
     verification_status, verified_at, kyc_rejected_reason
   )
 `;

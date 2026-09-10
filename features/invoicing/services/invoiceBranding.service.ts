@@ -1,28 +1,27 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { supabase } from '@/lib/supabase';
+import {
+  isLegacyCustomerBrandName,
+  sanitizeOptionalHttpLogoUrl,
+  type InvoiceBrandingOverlay,
+} from '@/features/invoicing/services/invoiceIssuerIdentity.service';
 
-const BRANDING_CACHE_KEY = '@pulse/invoice-branding-v1';
-const DEFAULT_COMPANY_NAME = 'GOGOX';
-const MAX_COMPANY_NAME_LENGTH = 48;
+const BRANDING_CACHE_PREFIX = '@pulse/invoice-branding-v1';
 
 export interface InvoiceBrandingSettings {
-  companyName: string;
+  companyName: string | null;
   logoUrl: string | null;
 }
 
-function sanitizeCompanyName(input: string | null | undefined): string {
-  const normalized = (input ?? '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .slice(0, MAX_COMPANY_NAME_LENGTH);
-  return normalized || DEFAULT_COMPANY_NAME;
+export function invoiceBrandingCacheKey(orgId: string): string {
+  return `${BRANDING_CACHE_PREFIX}:${orgId}`;
 }
 
-function sanitizeLogoUrl(input: string | null | undefined): string | null {
-  const trimmed = (input ?? '').trim();
-  if (!trimmed) return null;
-  if (/^https?:\/\//i.test(trimmed)) return trimmed;
-  return null;
+function normalizeCompanyName(input: string | null | undefined): string | null {
+  const normalized = (input ?? '').replace(/\s+/g, ' ').trim();
+  if (!normalized) return null;
+  if (isLegacyCustomerBrandName(normalized)) return null;
+  return normalized;
 }
 
 function isMissingTableError(error: unknown): boolean {
@@ -32,25 +31,28 @@ function isMissingTableError(error: unknown): boolean {
   return code === '42P01' || /relation .*branding_settings.* does not exist/i.test(message);
 }
 
-async function readCachedBranding(): Promise<InvoiceBrandingSettings> {
+async function readCachedBranding(orgId: string): Promise<InvoiceBrandingOverlay> {
   try {
-    const cached = await AsyncStorage.getItem(BRANDING_CACHE_KEY);
+    const cached = await AsyncStorage.getItem(invoiceBrandingCacheKey(orgId));
     if (!cached) {
-      return { companyName: DEFAULT_COMPANY_NAME, logoUrl: null };
+      return { companyName: null, logoUrl: null };
     }
     const parsed = JSON.parse(cached) as Partial<InvoiceBrandingSettings>;
     return {
-      companyName: sanitizeCompanyName(parsed.companyName),
-      logoUrl: sanitizeLogoUrl(parsed.logoUrl),
+      companyName: normalizeCompanyName(parsed.companyName),
+      logoUrl: sanitizeOptionalHttpLogoUrl(parsed.logoUrl),
     };
   } catch {
-    return { companyName: DEFAULT_COMPANY_NAME, logoUrl: null };
+    return { companyName: null, logoUrl: null };
   }
 }
 
-async function writeCachedBranding(settings: InvoiceBrandingSettings): Promise<void> {
+async function writeCachedBranding(
+  orgId: string,
+  settings: InvoiceBrandingOverlay,
+): Promise<void> {
   try {
-    await AsyncStorage.setItem(BRANDING_CACHE_KEY, JSON.stringify(settings));
+    await AsyncStorage.setItem(invoiceBrandingCacheKey(orgId), JSON.stringify(settings));
   } catch {
     // Best-effort cache write; ignore failures.
   }
@@ -65,11 +67,11 @@ export async function syncBrandingFromOrg(
   orgName: string,
   orgLogoUrl: string | null,
 ): Promise<void> {
-  const settings: InvoiceBrandingSettings = {
-    companyName: sanitizeCompanyName(orgName),
-    logoUrl: sanitizeLogoUrl(orgLogoUrl),
+  const settings: InvoiceBrandingOverlay = {
+    companyName: normalizeCompanyName(orgName),
+    logoUrl: sanitizeOptionalHttpLogoUrl(orgLogoUrl),
   };
-  await writeCachedBranding(settings);
+  await writeCachedBranding(orgId, settings);
 
   try {
     const { error } = await supabase()
@@ -91,36 +93,44 @@ export async function syncBrandingFromOrg(
   }
 }
 
-export async function getInvoiceBrandingSettings(): Promise<{
+/**
+ * Org-scoped branding overlay only. Does not invent a company name.
+ * Legal identity remains activeWorkspace via resolveInvoiceIssuerIdentity.
+ */
+export async function getInvoiceBrandingSettings(
+  orgId: string,
+): Promise<{
   error: Error | null;
-  settings: InvoiceBrandingSettings;
+  settings: InvoiceBrandingOverlay;
 }> {
+  if (!orgId) {
+    return { error: new Error('Workspace is required'), settings: { companyName: null, logoUrl: null } };
+  }
+
   try {
     const { data, error } = await supabase()
       .from('branding_settings')
-      .select('company_name, logo_url, updated_at')
-      .order('updated_at', { ascending: false })
+      .select('company_name, logo_url')
+      .eq('org_id', orgId)
       .limit(1);
 
     if (error) {
-      // Table doesn't exist (old schema) — silently use cache; org sync writes there.
+      const fallback = await readCachedBranding(orgId);
       if (isMissingTableError(error)) {
-        const fallback = await readCachedBranding();
         return { error: null, settings: fallback };
       }
-      const fallback = await readCachedBranding();
       return { error: new Error(error.message), settings: fallback };
     }
 
     const row = Array.isArray(data) && data.length > 0 ? data[0] : null;
-    const settings: InvoiceBrandingSettings = {
-      companyName: sanitizeCompanyName(row?.company_name),
-      logoUrl: sanitizeLogoUrl(row?.logo_url),
+    const settings: InvoiceBrandingOverlay = {
+      companyName: normalizeCompanyName(row?.company_name),
+      logoUrl: sanitizeOptionalHttpLogoUrl(row?.logo_url),
     };
-    await writeCachedBranding(settings);
+    await writeCachedBranding(orgId, settings);
     return { error: null, settings };
   } catch (e) {
-    const fallback = await readCachedBranding();
+    const fallback = await readCachedBranding(orgId);
     return {
       error: e instanceof Error ? e : new Error(String(e)),
       settings: fallback,
@@ -128,21 +138,27 @@ export async function getInvoiceBrandingSettings(): Promise<{
   }
 }
 
-export async function updateInvoiceBrandingSettings(input: InvoiceBrandingSettings): Promise<{
+export async function updateInvoiceBrandingSettings(
+  orgId: string,
+  input: InvoiceBrandingSettings,
+): Promise<{
   error: Error | null;
-  settings: InvoiceBrandingSettings;
+  settings: InvoiceBrandingOverlay;
 }> {
-  const settings: InvoiceBrandingSettings = {
-    companyName: sanitizeCompanyName(input.companyName),
-    logoUrl: sanitizeLogoUrl(input.logoUrl),
+  const settings: InvoiceBrandingOverlay = {
+    companyName: normalizeCompanyName(input.companyName),
+    logoUrl: sanitizeOptionalHttpLogoUrl(input.logoUrl),
   };
-  await writeCachedBranding(settings);
+  if (!orgId) {
+    return { error: new Error('Workspace is required'), settings };
+  }
+  await writeCachedBranding(orgId, settings);
 
   try {
     const { data: currentRows, error: readError } = await supabase()
       .from('branding_settings')
       .select('id')
-      .order('updated_at', { ascending: false })
+      .eq('org_id', orgId)
       .limit(1);
 
     if (readError) {
@@ -163,7 +179,8 @@ export async function updateInvoiceBrandingSettings(input: InvoiceBrandingSettin
           logo_url: settings.logoUrl,
           updated_at: new Date().toISOString(),
         })
-        .eq('id', currentId);
+        .eq('id', currentId)
+        .eq('org_id', orgId);
 
       if (updateError) {
         if (isMissingTableError(updateError)) {
@@ -175,6 +192,7 @@ export async function updateInvoiceBrandingSettings(input: InvoiceBrandingSettin
     }
 
     const { error: insertError } = await supabase().from('branding_settings').insert({
+      org_id: orgId,
       company_name: settings.companyName,
       logo_url: settings.logoUrl,
       updated_at: new Date().toISOString(),

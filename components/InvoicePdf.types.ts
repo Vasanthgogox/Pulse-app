@@ -13,6 +13,10 @@ export interface InvoicePdfData {
   clientName: string;
   issuedOn: string;
   dueOn: string;
+  issuerAddressLines: string[];
+  issuerPan: string | null;
+  issuerGstin: string | null;
+  issuerGstNotApplicable: boolean;
   billingAddressLines: string[];
   shipmentTargetLines: string[];
   paymentTerms: string;

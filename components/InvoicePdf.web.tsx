@@ -116,13 +116,26 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
                   style={{ height: 34, objectFit: 'contain', maxWidth: 180 }}
                   onError={() => setLogoFailed(true)}
                 />
-              ) : (
+              ) : invoiceData.brandingCompanyName ? (
                 <div style={{ fontSize: 28, fontWeight: 800, letterSpacing: 0.6 }}>
                   {invoiceData.brandingCompanyName}
                 </div>
+              ) : (
+                <div style={{ fontSize: 14, color: '#6b7280' }}>Workspace identity unavailable</div>
               )}
-              <div style={{ fontSize: 12, color: '#6b7280', marginTop: 2 }}>Logistics Platform</div>
-              <div style={{ marginTop: 12, fontSize: 14, fontWeight: 700 }}>{invoiceData.clientName}</div>
+              {invoiceData.issuerAddressLines.map((line, idx) => (
+                <div key={`issuer-addr-${idx}`} style={{ fontSize: 12, color: '#4b5563', marginTop: idx === 0 ? 8 : 2 }}>
+                  {line}
+                </div>
+              ))}
+              {invoiceData.issuerPan ? (
+                <div style={{ fontSize: 12, color: '#4b5563', marginTop: 6 }}>PAN {invoiceData.issuerPan}</div>
+              ) : null}
+              {invoiceData.issuerGstNotApplicable ? (
+                <div style={{ fontSize: 12, color: '#4b5563' }}>GST not applicable</div>
+              ) : invoiceData.issuerGstin ? (
+                <div style={{ fontSize: 12, color: '#4b5563' }}>GSTIN {invoiceData.issuerGstin}</div>
+              ) : null}
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontSize: 22, fontWeight: 800 }}>Commercial Invoice</div>
@@ -152,19 +165,25 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
             {invoiceData.brandingCompanyName}
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16, marginTop: 16, position: 'relative', zIndex: 1 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: invoiceData.shipmentTargetLines.length > 0 ? '1fr 1fr' : '1fr', gap: 16, marginTop: 16, position: 'relative', zIndex: 1 }}>
             <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Billing Entity</div>
-              {invoiceData.billingAddressLines.map((line, idx) => (
-                <div key={`billing-${idx}`} style={{ fontSize: 13, marginTop: idx === 0 ? 8 : 4 }}>{line}</div>
-              ))}
+              <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Bill to</div>
+              {invoiceData.billingAddressLines.length > 0 ? (
+                invoiceData.billingAddressLines.map((line, idx) => (
+                  <div key={`billing-${idx}`} style={{ fontSize: 13, marginTop: idx === 0 ? 8 : 4 }}>{line}</div>
+                ))
+              ) : (
+                <div style={{ fontSize: 13, marginTop: 8, color: '#6b7280' }}>{invoiceData.clientName}</div>
+              )}
             </div>
-            <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
-              <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Shipment Target</div>
-              {invoiceData.shipmentTargetLines.map((line, idx) => (
-                <div key={`target-${idx}`} style={{ fontSize: 13, marginTop: idx === 0 ? 8 : 4 }}>{line}</div>
-              ))}
-            </div>
+            {invoiceData.shipmentTargetLines.length > 0 ? (
+              <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
+                <div style={{ fontSize: 11, fontWeight: 700, color: '#6b7280', textTransform: 'uppercase' }}>Shipment Target</div>
+                {invoiceData.shipmentTargetLines.map((line, idx) => (
+                  <div key={`target-${idx}`} style={{ fontSize: 13, marginTop: idx === 0 ? 8 : 4 }}>{line}</div>
+                ))}
+              </div>
+            ) : null}
           </div>
 
           <table style={{ width: '100%', marginTop: 18, borderCollapse: 'collapse', position: 'relative', zIndex: 1 }}>
@@ -204,11 +223,15 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
 
           <div style={{ marginTop: 20, display: 'grid', gridTemplateColumns: '1fr 320px', gap: 16, position: 'relative', zIndex: 1 }}>
             <div style={{ border: '1px solid #e5e7eb', borderRadius: 8, padding: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 700 }}>Bank Transfer Details</div>
-              {invoiceData.bankDetailsLines.map((line, idx) => (
-                <div key={`bank-${idx}`} style={{ fontSize: 12, color: '#4b5563', marginTop: idx === 0 ? 8 : 4 }}>{line}</div>
-              ))}
-              <div style={{ marginTop: 12, fontSize: 12, color: '#6b7280' }}>
+              {invoiceData.bankDetailsLines.length > 0 ? (
+                <>
+                  <div style={{ fontSize: 12, fontWeight: 700 }}>Bank Transfer Details</div>
+                  {invoiceData.bankDetailsLines.map((line, idx) => (
+                    <div key={`bank-${idx}`} style={{ fontSize: 12, color: '#4b5563', marginTop: idx === 0 ? 8 : 4 }}>{line}</div>
+                  ))}
+                </>
+              ) : null}
+              <div style={{ marginTop: invoiceData.bankDetailsLines.length > 0 ? 12 : 0, fontSize: 12, color: '#6b7280' }}>
                 This is a system generated document. All transactions are backed by proof of delivery and verified by the match engine.
               </div>
             </div>
@@ -237,9 +260,14 @@ export default function InvoicePdfWeb({ invoiceData, onFinalize, isFinalizing = 
             </div>
             <div style={{ textAlign: 'right' }}>
               <div style={{ fontWeight: 700 }}>Issuer Signature</div>
-              <div style={{ color: '#6b7280', marginTop: 4 }}>Autosigned Ledger</div>
-              <div style={{ color: '#6b7280', marginTop: 4 }}>PAN: AAACLS9910Q</div>
-              <div style={{ color: '#6b7280' }}>GSTIN: 27AAACLS9910Q1ZS</div>
+              {invoiceData.issuerPan ? (
+                <div style={{ color: '#6b7280', marginTop: 4 }}>PAN {invoiceData.issuerPan}</div>
+              ) : null}
+              {invoiceData.issuerGstNotApplicable ? (
+                <div style={{ color: '#6b7280', marginTop: 4 }}>GST not applicable</div>
+              ) : invoiceData.issuerGstin ? (
+                <div style={{ color: '#6b7280', marginTop: 4 }}>GSTIN {invoiceData.issuerGstin}</div>
+              ) : null}
             </div>
           </div>
 

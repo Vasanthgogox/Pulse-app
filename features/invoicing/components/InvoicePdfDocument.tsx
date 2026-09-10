@@ -12,6 +12,10 @@ interface InvoicePdfDocumentProps {
   calculations: InvoiceCalcResult;
   brandingCompanyName?: string;
   brandingLogoUrl?: string | null;
+  issuerAddressLines?: string[];
+  issuerPan?: string | null;
+  issuerGstin?: string | null;
+  issuerGstNotApplicable?: boolean;
 }
 
 export const renderInvoiceToHtml = ({ 
@@ -21,8 +25,12 @@ export const renderInvoiceToHtml = ({
   fuelRate,
   additionalCharges,
   calculations,
-  brandingCompanyName = 'GOGOX',
+  brandingCompanyName,
   brandingLogoUrl = null,
+  issuerAddressLines = [],
+  issuerPan = null,
+  issuerGstin = null,
+  issuerGstNotApplicable = false,
 }: InvoicePdfDocumentProps) => {
   const escapeHtml = (value: string) =>
     value
@@ -42,7 +50,7 @@ export const renderInvoiceToHtml = ({
     return isNaN(d.getTime()) ? trip.date : d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' });
   };
 
-  const sanitizedBrandName = escapeHtml((brandingCompanyName || 'GOGOX').trim() || 'GOGOX');
+  const sanitizedBrandName = escapeHtml((brandingCompanyName ?? '').trim());
   const sanitizedLogoUrl =
     brandingLogoUrl && /^https?:\/\//i.test(brandingLogoUrl) ? escapeHtml(brandingLogoUrl.trim()) : '';
 
@@ -307,9 +315,13 @@ export const renderInvoiceToHtml = ({
               ${
                 sanitizedLogoUrl
                   ? `<img class="logo-image" src="${sanitizedLogoUrl}" alt="${sanitizedBrandName} logo" />`
-                  : `<div class="logo">${sanitizedBrandName}</div>`
+                  : sanitizedBrandName
+                    ? `<div class="logo">${sanitizedBrandName}</div>`
+                    : `<div class="logo" style="font-size:14px;font-weight:600;color:#777;">Workspace identity unavailable</div>`
               }
-              <p style="font-size:10px; color:#777;">LOGISTICS PLATFORM</p>
+              ${issuerAddressLines.map((line) => `<p style="font-size:11px; color:#555; margin:2px 0;">${escapeHtml(line)}</p>`).join('')}
+              ${issuerPan ? `<p style="font-size:11px; color:#555; margin:4px 0 0;">PAN ${escapeHtml(issuerPan)}</p>` : ''}
+              ${issuerGstNotApplicable ? `<p style="font-size:11px; color:#555; margin:0;">GST not applicable</p>` : issuerGstin ? `<p style="font-size:11px; color:#555; margin:0;">GSTIN ${escapeHtml(issuerGstin)}</p>` : ''}
             </div>
             <div class="header-right">
               <div class="invoice-title">Invoice Preview</div>
@@ -323,23 +335,21 @@ export const renderInvoiceToHtml = ({
 
           <div class="row">
             <div class="col">
-              <p class="section-title">Billing Entity</p>
+              <p class="section-title">Bill to</p>
               <div class="card">
                 ${activeClient ? `
-                  <p class="client-name">${activeClient}</p>
-                  <p>Corporate House, HQ</p>
-                  <p>City Center, State - 000000</p>
+                  <p class="client-name">${escapeHtml(activeClient)}</p>
                 ` : `
                   <p style="color:#aaa; font-style:italic;">Select a client...</p>
                 `}
               </div>
             </div>
             <div class="col">
-              <p class="section-title">Tax Details</p>
+              <p class="section-title">Issuer tax details</p>
               <div class="card tax-details">
-                <p><span>GSTIN</span> 24AAA CA000 1Z1</p>
-                <p><span>PAN</span> AAAC0000A</p>
-                <p><span>State Code</span> 24</p>
+                ${issuerPan ? `<p><span>PAN</span> ${escapeHtml(issuerPan)}</p>` : ''}
+                ${issuerGstNotApplicable ? `<p><span>GST</span> Not applicable</p>` : issuerGstin ? `<p><span>GSTIN</span> ${escapeHtml(issuerGstin)}</p>` : ''}
+                ${!issuerPan && !issuerGstin && !issuerGstNotApplicable ? `<p style="color:#aaa; font-style:italic;">No tax identifiers on file</p>` : ''}
               </div>
             </div>
           </div>
