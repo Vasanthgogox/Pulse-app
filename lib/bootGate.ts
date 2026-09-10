@@ -74,7 +74,10 @@ const PUBLIC_AUTH_ROUTES = new Set([
   '/welcome',
   '/forgot-password',
   '/auth/reset-password',
+  '/auth/callback',
+  '/auth/loading',
   '/onboarding',
+  '/terminal-website',
 ]);
 
 export function isPublicAuthRoute(pathname: string): boolean {
@@ -95,6 +98,23 @@ export function shouldMountRootOverlayTabBar(sessionAttached: boolean): boolean 
 /** Authenticated org/GlobalSync/nav data plane — only after JS client session attach. */
 export function shouldMountAuthenticatedDataPlane(sessionAttached: boolean): boolean {
   return sessionAttached;
+}
+
+/**
+ * PublicAuthTree still mounts RootLayoutNav (shared Stack). After token
+ * failure / sign-out, the URL may still be a data-plane route (trip, tabs,
+ * driver). Those screens call useOrganization — they must not render without
+ * the provider. Index `/` stays mounted so NavigationPolicy can send anonymous
+ * users to marketing.
+ */
+export function shouldRedirectDataPlaneRouteWithoutSession(
+  sessionAttached: boolean,
+  pathname: string,
+): boolean {
+  if (sessionAttached) return false;
+  if (isPublicAuthRoute(pathname)) return false;
+  if (pathname === '/' || pathname === '') return false;
+  return true;
 }
 
 /**

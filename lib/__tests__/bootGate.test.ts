@@ -4,6 +4,7 @@ import {
   shouldShowBootOverlay,
   shouldMountAuthenticatedDataPlane,
   shouldMountRootOverlayTabBar,
+  shouldRedirectDataPlaneRouteWithoutSession,
   shouldRenderPublicAuthTree,
   type BootGateInput,
 } from '@/lib/bootGate';
@@ -168,5 +169,26 @@ describe('root overlay tab bar mount', () => {
 
   it('mounts on the authenticated data plane', () => {
     expect(shouldMountRootOverlayTabBar(true)).toBe(true);
+  });
+});
+
+describe('data-plane route without session', () => {
+  it('does not redirect while sessionAttached', () => {
+    expect(shouldRedirectDataPlaneRouteWithoutSession(true, '/trip/abc')).toBe(false);
+    expect(shouldRedirectDataPlaneRouteWithoutSession(true, '/trips')).toBe(false);
+  });
+
+  it('keeps public auth and anonymous landing on the public tree', () => {
+    expect(shouldRedirectDataPlaneRouteWithoutSession(false, '/sign-in')).toBe(false);
+    expect(shouldRedirectDataPlaneRouteWithoutSession(false, '/terminal-website')).toBe(false);
+    expect(shouldRedirectDataPlaneRouteWithoutSession(false, '/auth/callback')).toBe(false);
+    expect(shouldRedirectDataPlaneRouteWithoutSession(false, '/')).toBe(false);
+  });
+
+  it('redirects trip, tabs, and driver routes after session loss', () => {
+    expect(shouldRedirectDataPlaneRouteWithoutSession(false, '/trip/abc')).toBe(true);
+    expect(shouldRedirectDataPlaneRouteWithoutSession(false, '/trips')).toBe(true);
+    expect(shouldRedirectDataPlaneRouteWithoutSession(false, '/workspace')).toBe(true);
+    expect(shouldRedirectDataPlaneRouteWithoutSession(false, '/driver-trip/xyz')).toBe(true);
   });
 });

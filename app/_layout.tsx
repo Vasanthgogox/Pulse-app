@@ -10,6 +10,7 @@ import {
   isPublicAuthRoute,
   shouldMountAuthenticatedDataPlane,
   shouldMountRootOverlayTabBar,
+  shouldRedirectDataPlaneRouteWithoutSession,
   shouldRenderPublicAuthTree,
 } from '@/lib/bootGate';
 import { AppAlertHost } from '@/components/AppAlertHost';
@@ -72,7 +73,7 @@ import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persi
 import { QUERY_CACHE_BUSTER } from '@/lib/cache/cacheBuster';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { useFonts } from 'expo-font';
-import { Stack, usePathname, useRouter, type ErrorBoundaryProps } from 'expo-router';
+import { Redirect, Stack, usePathname, useRouter, type ErrorBoundaryProps } from 'expo-router';
 import { safePreventAutoHideAsync, safeHideSplashAsync } from '@/lib/safeSplashScreen.util';
 import { useQueryClient } from '@tanstack/react-query';
 import { installDriverInviteDeepLinkListener } from '@/lib/driverInviteDeepLink.util';
@@ -532,6 +533,15 @@ function RootLayoutNav() {
       stopRealtimeDiagnosticsLogger();
     };
   }, []);
+
+  if (
+    shouldRedirectDataPlaneRouteWithoutSession(
+      Boolean(auth?.sessionAttached),
+      pathname,
+    )
+  ) {
+    return <Redirect href={ROUTES.SIGN_IN_DIRECT} />;
+  }
 
   return (
     <NavigationPolicyShadowHost>
