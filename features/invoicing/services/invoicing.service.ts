@@ -16,6 +16,11 @@ import { syncDomainRows } from "@/lib/cache/domainSync";
 import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import { supabase } from "@/lib/supabase";
 import { recordTripWorkflowEvent } from "@/features/trips/services/tripWorkflow.service";
+import {
+  computeInvoiceTax,
+  round2,
+  type InvoiceTaxEngineInput,
+} from "@/features/invoicing/services/invoiceTax.service";
 
 export type TripStatus =
   | "approved"
@@ -56,6 +61,78 @@ export interface InvoiceConfig {
   includeFuel: boolean;
   fuelRate: number;
   additionalCharges: AdditionalCharge[];
+}
+
+export type InvoiceTaxIdentityInput = Pick<
+  InvoiceTaxEngineInput,
+  "issuer" | "clients" | "invoiceOrgId" | "tripOrgIds"
+>;
+
+export function computeInvoiceTotals(
+  tripAmounts: number[],
+  config: {
+    includeGst?: boolean;
+    gstRate?: number;
+    includeFuel?: boolean;
+    fuelRate?: number;
+    additionalCharges?: { amount?: number }[];
+  },
+  identity?: InvoiceTaxIdentityInput,
+): {
+  subtotal: number;
+  gstRate: number;
+  sgst: number;
+  cgst: number;
+  igst: number;
+  totalAmount: number;
+  tax?: ReturnType<typeof computeInvoiceTax>;
+} {
+  const includeGst = config.includeGst === true;
+  const gstRate = config.gstRate ?? 0;
+  const includeFuel = config.includeFuel === true;
+  const fuelRate = config.fuelRate ?? 0;
+  const additionalCharges = config.additionalCharges ?? [];
+
+  if (identity) {
+    const tax = computeInvoiceTax({
+      ...identity,
+      includeGst,
+      gstRate,
+      tripAmounts,
+      includeFuel,
+      fuelRate,
+      additionalCharges,
+    });
+    return {
+      subtotal: tax.taxable_base,
+      gstRate: tax.gst_rate,
+      sgst: tax.sgst_amount,
+      cgst: tax.cgst_amount,
+      igst: tax.igst_amount,
+      totalAmount: tax.total_amount,
+      tax,
+    };
+  }
+
+  const baseFreightTotal = tripAmounts.reduce((acc, n) => acc + n, 0);
+  const additionalTotal = additionalCharges.reduce(
+    (acc, c) => acc + (c.amount || 0),
+    0,
+  );
+  const fuelSurcharge = includeFuel ? baseFreightTotal * (fuelRate / 100) : 0;
+  const subtotal = round2(baseFreightTotal + additionalTotal + fuelSurcharge);
+  const appliedRate = includeGst ? gstRate : 0;
+  const half = appliedRate / 2;
+  const sgst = round2(subtotal * (half / 100));
+  const cgst = round2(subtotal * (half / 100));
+  return {
+    subtotal,
+    gstRate: appliedRate,
+    sgst,
+    cgst,
+    igst: 0,
+    totalAmount: round2(subtotal + sgst + cgst),
+  };
 }
 
 export interface PodReconciliationSummary {

@@ -51,13 +51,22 @@ export type InvoiceLineSnapshot = {
 
 /**
  * Stored on public.invoices.tax_snapshot.
- * Determination values are not computed in Phase 2A-1.
+ * 2A-2 widens metadata; amounts stay on invoices numeric columns.
  */
 export type InvoiceTaxSnapshot = {
   supply_type: string | null;
   place_of_supply: string | null;
   hsn_sac: string | null;
   determination: string | null;
+  issuer_gstin?: string | null;
+  client_gstin?: string | null;
+  issuer_gst_not_applicable?: boolean;
+  issuer_gstin_state_code?: string | null;
+  client_gstin_state_code?: string | null;
+  issuer_state?: string | null;
+  client_state?: string | null;
+  gst_rate?: number;
+  include_gst?: boolean;
 };
 
 /** Nullable document payload matching additive invoices columns. */
@@ -202,18 +211,24 @@ export function omitNonInvoiceLineFields(
   return out;
 }
 
-export function buildInvoiceTaxSnapshot(input?: {
-  supply_type?: string | null;
-  place_of_supply?: string | null;
-  hsn_sac?: string | null;
-  determination?: string | null;
-}): InvoiceTaxSnapshot {
-  return {
+export function buildInvoiceTaxSnapshot(input?: Partial<InvoiceTaxSnapshot>): InvoiceTaxSnapshot {
+  const snapshot: InvoiceTaxSnapshot = {
     supply_type: trimOrNull(input?.supply_type),
     place_of_supply: trimOrNull(input?.place_of_supply),
     hsn_sac: trimOrNull(input?.hsn_sac),
     determination: trimOrNull(input?.determination),
   };
+  if (!input) return snapshot;
+  snapshot.issuer_gstin = trimOrNull(input.issuer_gstin);
+  snapshot.client_gstin = trimOrNull(input.client_gstin);
+  snapshot.issuer_gst_not_applicable = input.issuer_gst_not_applicable === true;
+  snapshot.issuer_gstin_state_code = trimOrNull(input.issuer_gstin_state_code);
+  snapshot.client_gstin_state_code = trimOrNull(input.client_gstin_state_code);
+  snapshot.issuer_state = trimOrNull(input.issuer_state);
+  snapshot.client_state = trimOrNull(input.client_state);
+  if (input.gst_rate !== undefined) snapshot.gst_rate = input.gst_rate;
+  if (input.include_gst !== undefined) snapshot.include_gst = input.include_gst;
+  return snapshot;
 }
 
 export function emptyInvoiceDocumentSnapshots(): InvoiceDocumentSnapshots {
