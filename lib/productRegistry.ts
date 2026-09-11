@@ -329,7 +329,7 @@ export const PRODUCT_REGISTRY: Record<ProductId, ProductDefinition> = {
       unit: 'per organisation/month',
       freeTrialDays: 30,
     },
-    dependencies: ['pulse_core', 'pulse_invoice_pro'],
+    dependencies: ['pulse_core'],
     capabilities: ['finance_manage', 'accounting', 'gst_filing'],
     modules: [
       { name: 'Double-Entry Ledger',    description: 'Complete accounting with debit/credit postings',      icon: 'BookOpen' },
@@ -340,7 +340,7 @@ export const PRODUCT_REGISTRY: Record<ProductId, ProductDefinition> = {
       { name: 'Working Capital',        description: 'Cash flow forecasting and receivable insights',        icon: 'Wallet' },
     ],
     vision: 'Replace Tally for logistics. Every rupee tracked, every GST return ready, every branch profitable.',
-    upgradeFrom: 'pulse_invoice_pro',
+    upgradeFrom: 'pulse_core',
   },
 
   pulse_fleet_pro: {
@@ -539,6 +539,11 @@ export function getAllProducts(): ProductDefinition[] {
   return Object.values(PRODUCT_REGISTRY);
 }
 
+const HIDDEN_SUITE_PRODUCT_IDS: ReadonlySet<ProductId> = new Set([
+  'pulse_pod_pro',
+  'pulse_invoice_pro',
+]);
+
 const DISPLAY_PRIORITY: ProductId[] = [...BUNDLED_ACTIVE_PRODUCT_IDS];
 
 /** Returns products in display order (Core trio first, then by status priority) */
@@ -546,7 +551,9 @@ export function getProductsInDisplayOrder(): ProductDefinition[] {
   const statusOrder: Record<ProductStatus, number> = {
     active: 0, early_access: 1, private_beta: 2, coming_soon: 3, planned: 4,
   };
-  return getAllProducts().sort((a, b) => {
+  return getAllProducts()
+    .filter((product) => !HIDDEN_SUITE_PRODUCT_IDS.has(product.id))
+    .sort((a, b) => {
     const ai = DISPLAY_PRIORITY.indexOf(a.id);
     const bi = DISPLAY_PRIORITY.indexOf(b.id);
     if (ai !== -1 || bi !== -1) {

@@ -79,6 +79,8 @@ export const queryKeys = {
       ["q", "transactions", orgId, "contact", contactId] as const,
     byDriver: (orgId: string, driverId: string) =>
       ["q", "transactions", orgId, "driver", driverId] as const,
+    byId: (orgId: string, transactionId: string) =>
+      ["q", "transactions", orgId, "row", transactionId] as const,
   },
 
   clients: {
@@ -92,6 +94,8 @@ export const queryKeys = {
         : (["q", "clients", orgId] as const),
     detail: (orgId: string, clientId: string) =>
       ["q", "clients", orgId, clientId] as const,
+    invoicePodPolicy: (orgId: string, clientId: string) =>
+      ["q", "clients", orgId, clientId, "invoice-pod-policy"] as const,
     managementBundle: (orgId: string, clientId: string) =>
       ["q", "clients", orgId, clientId, "management-bundle"] as const,
     warehouses: (orgId: string, clientId: string) =>
@@ -254,12 +258,23 @@ export const queryKeys = {
 
   logPods: {
     trips: (orgId: string) => ["q", "log-pods", "trips", orgId] as const,
+    tripsIncludingReceived: (orgId: string) =>
+      ["q", "log-pods", "trips", orgId, "including-received"] as const,
+    suppliers: (orgId: string) => ["q", "log-pods", "suppliers", orgId] as const,
+    drivers: (orgId: string) => ["q", "log-pods", "drivers", orgId] as const,
     courierPartners: () => ["q", "log-pods", "courier-partners"] as const,
   },
 
   invoicing: {
     trips: (orgId: string) => ["q", "invoicing", "trips", orgId] as const,
     summary: (orgId: string) => ["q", "invoicing", "summary", orgId] as const,
+    draftClientsRoot: ["q", "invoicing", "draft-clients"] as const,
+    /** Existing public.invoices rows for the Invoice product history surface. */
+    issued: (orgId: string) => ["q", "invoicing", "issued", orgId] as const,
+    clientPodPolicies: (orgId: string, idsKey: string) =>
+      ["q", "invoicing", "client-pod-policies", orgId, idsKey] as const,
+    digitalPods: (orgId: string, idsKey: string) =>
+      ["q", "invoicing", "digital-pods", orgId, idsKey] as const,
   },
 
   posts: {

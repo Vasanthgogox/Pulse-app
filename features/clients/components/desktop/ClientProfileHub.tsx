@@ -39,6 +39,8 @@ import {
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import { EditClientModal } from "@/features/clients/components/EditClientModal";
 import { getLinkedOrgProfile, updateClient } from "@/features/clients/services/clients.service";
+import { queryKeys } from "@/lib/queryKeys";
+import { useQueryClient } from "@tanstack/react-query";
 import { ChevronLeft } from "lucide-react-native";
 import { useEffect, useMemo, useState } from "react";
 import { Alert, Linking, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
@@ -87,6 +89,7 @@ export function ClientProfileHub({
 }: Props) {
   const compact = useProfileHubCompact();
   const layoutInsets = useLayoutInsets();
+  const queryClient = useQueryClient();
   const [tab, setTab] = useState<ClientProfileTab>(initialTab);
   const [chatOpen, setChatOpen] = useState(false);
   const [editOpen, setEditOpen] = useState(false);
@@ -373,6 +376,12 @@ export function ClientProfileHub({
         onSave={async (patch) => {
           await updateClient(orgId, clientId, patch);
           setEditOpen(false);
+          await queryClient.invalidateQueries({
+            queryKey: queryKeys.clients.all(orgId),
+          });
+          await queryClient.invalidateQueries({
+            queryKey: queryKeys.invoicing.draftClientsRoot,
+          });
           onRefresh?.();
         }}
         onSyncLatest={isIntegrated && client.linked_organization_id ? async () => {

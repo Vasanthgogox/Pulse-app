@@ -138,8 +138,10 @@ export function OnboardingPersonaHub() {
     </Pressable>
   );
 
-  const renderComingSoonStrip = () => (
-    <View style={styles.comingSoonStrip}>
+  const renderComingSoonStrip = () => {
+    if (PULSE_PRODUCTS_COMING_SOON.length === 0) return null;
+    return (
+      <View style={styles.comingSoonStrip}>
       <View style={styles.comingSoonHeader}>
         <Text style={[styles.sectionLabel, !isDesktop && styles.sectionLabelMobile]}>
           {WORKSPACE_SETUP_COPY.sectionMoreProducts}
@@ -159,7 +161,8 @@ export function OnboardingPersonaHub() {
         ))}
       </ScrollView>
     </View>
-  );
+    );
+  };
 
   const renderHubFooter = (bottomInset = 0) => (
     <View style={[styles.hubFooter, { paddingBottom: Math.max(bottomInset, 12) }]}>

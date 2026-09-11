@@ -11,7 +11,8 @@ import { getPlatformEventBus } from "@/lib/platform/events/InProcessEventBus";
 import { recordTripWorkflowEvent } from "@/features/trips/services/tripWorkflow.service";
 import { createStorageSignedUrlCache } from "@/lib/storageSignedUrlCache";
 import { listOcrJobsForTripDocuments } from "@/features/ocr/services/ocrJob.service";
-import { parseLrFieldsFromOcrJob, parseLrFieldValues, preferredLrDocumentNumber, serializeLrFieldValues } from "@/features/trips/services/lrDocumentOcr.util";
+import { parseLrFieldsFromOcrJob, parseLrFieldValues, preferredLrDocumentNumber, serializeLrFieldValues, LR_FIELDS_FILE_NAME, lrFieldsStoragePath, isLrFieldsMetaPath } from "@/features/trips/services/lrDocumentOcr.util";
+import { expandLR } from "@/lib/utils/lr";
 import {
   EWAY_BILL_FIELDS_FILE_NAME,
   ewayBillFieldsStoragePath,
@@ -649,4 +650,119 @@ export async function upsertEwayBillFields(input: {
     return { error: updateError ? new Error(updateError.message) : null };
   }
   return { error: new Error(insertError.message) };
+}
+
+function uniqueExpandedLrNumbers(raw: string): string[] {
+  return Array.from(
+    new Set(
+      expandLR(raw)
+        .map((value) => value.trim())
+        .filter(Boolean),
+    ),
+  );
+}
+
+/**
+ * Persist LR numbers typed in POD Overview (one or more, comma/range).
+ * Reuses an existing LR file row when present; otherwise stores a metadata-only row.
+ */
+export async function upsertTripLrNumbers(input: {
+  tripId: string;
+  uploadedBy: string;
+  lrInput: string;
+}): Promise<{ error: Error | null; lrNumbers: string[] }> {
+  const lrNumbers = uniqueExpandedLrNumbers(input.lrInput);
+  const { data, error: listError } = await supabase()
+    .from("trip_documents")
+    .select("id, storage_path, file_name, document_number")
+    .eq("trip_id", input.tripId)
+    .eq("document_type", "lr");
+
+  if (listError) {
+    if (isTripDocumentsRestEndpointMissing(listError)) {
+      return {
+        error: new Error(
+          "LR numbers cannot be saved until trip documents are available.",
+        ),
+        lrNumbers: [],
+      };
+    }
+    return { error: new Error(listError.message), lrNumbers: [] };
+  }
+
+  const rows = (data ?? []) as {
+    id: string;
+    storage_path: string;
+    file_name: string;
+    document_number: string | null;
+  }[];
+  const persisted = rows.filter((row) => !row.id.startsWith("storage-"));
+  const target =
+    persisted.find(
+      (row) => !isLrFieldsMetaPath(row.storage_path, row.file_name),
+    ) ??
+    persisted.find((row) =>
+      isLrFieldsMetaPath(row.storage_path, row.file_name),
+    ) ??
+    persisted[0];
+
+  const existingFields = parseLrFieldValues(target?.document_number);
+  const serialized = serializeLrFieldValues({
+    lrNumber: lrNumbers.join(", "),
+    date: existingFields.date,
+    invoice: existingFields.invoice,
+  });
+
+  const applyOnRow = async (documentId: string): Promise<Error | null> => {
+    const { error } = await supabase()
+      .from("trip_documents")
+      .update({ document_number: serialized || null })
+      .eq("id", documentId);
+    return error ? new Error(error.message) : null;
+  };
+
+  if (target) {
+    const updateError = await applyOnRow(target.id);
+    if (updateError) return { error: updateError, lrNumbers: [] };
+    const siblings = persisted.filter((row) => row.id !== target.id);
+    for (const sibling of siblings) {
+      const { error: clearError } = await supabase()
+        .from("trip_documents")
+        .update({ document_number: null })
+        .eq("id", sibling.id);
+      if (clearError) return { error: new Error(clearError.message), lrNumbers: [] };
+    }
+    return { error: null, lrNumbers };
+  }
+
+  if (lrNumbers.length === 0) {
+    return { error: null, lrNumbers: [] };
+  }
+
+  const path = lrFieldsStoragePath(input.tripId);
+  const { error: insertError } = await supabase()
+    .from("trip_documents")
+    .insert({
+      trip_id: input.tripId,
+      file_name: LR_FIELDS_FILE_NAME,
+      storage_path: path,
+      mime_type: "application/json",
+      size_bytes: 0,
+      uploaded_by: input.uploadedBy,
+      document_type: "lr",
+      document_number: serialized,
+    });
+
+  if (!insertError) return { error: null, lrNumbers };
+  if (insertError.code === "23505") {
+    const { error: updateError } = await supabase()
+      .from("trip_documents")
+      .update({ document_number: serialized })
+      .eq("storage_path", path);
+    return {
+      error: updateError ? new Error(updateError.message) : null,
+      lrNumbers,
+    };
+  }
+  return { error: new Error(insertError.message), lrNumbers: [] };
 }

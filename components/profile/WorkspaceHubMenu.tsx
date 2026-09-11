@@ -30,31 +30,32 @@ import type {
   WorkspacePanelId,
 } from "@/features/organization/components/workspace/workspacePanelTypes";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
-import { ROUTES } from "@/lib/routes";
+import { DEFAULT_DISPATCHER_ROUTE, ROUTES } from "@/lib/routes";
 import { canAccessPartyKind } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
 import type { MemberSurfaceId } from "@/lib/memberSurfaces";
 import { useMemberAccess } from "@/lib/useMemberAccess";
 import { buildPulseCommerceUrl, openSuiteProductApp, openSuiteProductAppInNewTab } from "@/lib/suite/suiteAuth";
+import { useActiveExpoProductShell } from "@/features/product-shell/PulseProductShell";
 import { useRouter } from "expo-router";
 import {
   Building2,
   Car,
   ChevronRight,
   HelpCircle,
+  Landmark,
   LogOut,
   Settings,
   Shield,
   ShieldCheck,
   Sparkles,
   Store,
-  FileCheck,
-  Receipt,
   ScanLine,
   Truck,
   User,
   Users,
   X,
+  Zap,
 } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
@@ -194,9 +195,14 @@ export function WorkspaceHubMenu({
   }, []);
 
   /** In-app stack push — do not use window.location / new-tab (remounts the data plane). */
-  const openInvoice = useCallback(() => {
+  const openFinancePro = useCallback(() => {
     onExit?.();
-    router.push(ROUTES.PULSE_INVOICE as Parameters<typeof router.push>[0]);
+    router.push(ROUTES.FINANCE_PRO as Parameters<typeof router.push>[0]);
+  }, [onExit, router]);
+
+  const openPulseCore = useCallback(() => {
+    onExit?.();
+    router.replace(DEFAULT_DISPATCHER_ROUTE as Parameters<typeof router.replace>[0]);
   }, [onExit, router]);
 
   const confirmCommerceSwitch = useCallback(() => {
@@ -257,6 +263,8 @@ export function WorkspaceHubMenu({
     ];
   }, [canSurface]);
 
+  const activeShell = useActiveExpoProductShell();
+
   const productRows: HubRow[] = useMemo(() => {
     if (!canSurface("workspace.products")) return [];
     return [
@@ -268,22 +276,23 @@ export function WorkspaceHubMenu({
         accessibilityLabel:
           "Pulse Scan. Scan documents and track your organization's scan usage.",
       },
-      {
-        id: "ws-pod",
-        label: "Pulse POD",
-        icon: hubLucideIcon(FileCheck),
-        route: ROUTES.POD_RECONCILIATION,
-        accessibilityLabel:
-          "Pulse POD. Proof of delivery capture and reconciliation for this workspace.",
-      },
-      {
-        id: "ws-invoice",
-        label: "Pulse Invoice",
-        icon: hubLucideIcon(Receipt),
-        onPress: openInvoice,
-        accessibilityLabel:
-          "Pulse Invoice. Billing product for this workspace.",
-      },
+      activeShell
+        ? {
+            id: "ws-core",
+            label: "Pulse Core",
+            icon: hubLucideIcon(Zap),
+            onPress: openPulseCore,
+            accessibilityLabel:
+              "Pulse Core. Return to trips, customers, and day-to-day operations.",
+          }
+        : {
+            id: "ws-finance-pro",
+            label: "Pulse Finance Pro",
+            icon: hubLucideIcon(Landmark),
+            onPress: openFinancePro,
+            accessibilityLabel:
+              "Pulse Finance Pro. Billing, collections, and trip-linked receivables for this workspace.",
+          },
       {
         id: "ws-products",
         label: "Open Pulse products",
@@ -297,7 +306,7 @@ export function WorkspaceHubMenu({
         onPress: openCommerce,
       },
     ];
-  }, [openCommerce, openInvoice, canSurface]);
+  }, [activeShell, openCommerce, openFinancePro, openPulseCore, canSurface]);
 
   const partyRows: HubRow[] = useMemo(() => {
     const all: {

@@ -5,6 +5,10 @@ export interface InvoicePdfItem {
   date: string;
   amount: number;
   lineType: 'freight' | 'fuel' | 'additional';
+  /** UUID of the parent trip when this line belongs under freight. */
+  tripKey?: string | null;
+  nested?: boolean;
+  splitKind?: 'cn' | 'dn' | null;
 }
 
 export interface InvoicePdfTaxRow {

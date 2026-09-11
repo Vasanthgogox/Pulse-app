@@ -1047,12 +1047,7 @@ function NetworkScreenInner() {
               isWideNetwork && styles.networkMergedPanePrimary,
             ]}
           >
-            <View
-              style={[
-                styles.connectionsHubCardWrap,
-                !isWideNetwork && styles.connectionsHubCardWrapInset,
-              ]}
-            >
+            <View style={styles.connectionsHubCardWrap}>
               <View style={styles.connectionsHubCard}>
                 <View style={styles.connectionsHubCardOrb} />
                 <View
@@ -1781,16 +1776,10 @@ const styles = StyleSheet.create({
     overflow: "hidden",
   },
   connectionsHubCardWrap: {
-    width: "100%",
-    minWidth: 0,
-  },
-  connectionsHubCardWrapInset: {
-    // The wrap is `width: 100%`, so a horizontal margin would shift the box off
-    // the right edge instead of insetting it. Stretch to the parent instead so
-    // both sides sit inside the screen padding.
     width: "auto",
     alignSelf: "stretch",
-    marginHorizontal: Layout.screenPaddingHorizontal,
+    minWidth: 0,
+    marginHorizontal: NETWORK_HUB_GRID_ROW_PADDING_H,
   },
   connectionsHubCard: {
     width: "100%",

@@ -15,6 +15,6 @@ export function useInvoiceDraftClientsQuery(orgId: string | null, clientIds: str
       : (['q', 'invoicing', 'draft-clients', 'none'] as const),
     queryFn: () => fetchInvoiceDraftClients(orgId!, ids),
     enabled: Boolean(orgId) && ids.length > 0,
-    staleTime: 300_000,
+    staleTime: 30_000,
   });
 }

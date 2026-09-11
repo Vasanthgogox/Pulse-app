@@ -2,9 +2,18 @@ import { LoadingIndicator } from "@/components/LoadingIndicator";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
+import { InvoiceTripCnDnGroup } from "@/features/invoicing/components/InvoiceTripCnDnGroup";
+import { TripCompletionOrPodTags } from "@/features/trips/components/TripPodStatusTags";
+import { tripIsDeliveredStatus } from "@/features/trips/services/tripDocumentLrPod.service";
 import { useInvoiceDraftClientsQuery } from "@/features/invoicing/hooks/useInvoiceDraftClients";
+import {
+  invoiceOnlyCharges,
+  invoiceTripAdjustedAmount,
+  mergeInvoiceChargesWithTripCnDn,
+} from "@/features/invoicing/services/invoiceCnDn.service";
 import type {
   AdditionalCharge,
+  InvoicePayload,
   InvoicingTripView,
 } from "@/features/invoicing/services/invoicing.service";
 import type { InvoiceIssuerIdentity } from "@/features/invoicing/services/invoiceIssuerIdentity.service";
@@ -14,9 +23,21 @@ import {
   invoiceDraftTaxDisplay,
   uniqueTripClientIds,
 } from "@/features/invoicing/services/invoicePreviewModel.service";
+import { ProvisionAdjustmentModal } from "@/features/trips/components/trip-detail/adjustment/ProvisionAdjustmentModal";
+import {
+  addTripAdjustment,
+  updateTripAdjustment,
+  type TripAdjustment,
+} from "@/features/trips/services/tripAdjustments";
+import {
+  adjustmentsForTripId,
+  useInvalidateTripFinanceAdjustments,
+  useTripFinanceAdjustmentsMap,
+} from "@/lib/queries/useTripFinanceAdjustmentsQuery";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useMemo, useState } from "react";
 import {
+    Alert,
     Modal,
     Platform,
     Pressable,
@@ -32,12 +53,22 @@ import { useSafeAreaInsets } from "react-native-safe-area-context";
 export interface InvoicePreviewPanelProps {
   onClose?: () => void;
   onPreview: (params: Record<string, string>) => void; // Changed from onFinalize to onPreview
+  /** Parent execute screen owns persist. Preview route stays mutation-free. */
+  onIssue?: (args: { internalIds: string[]; payload: InvoicePayload }) => void;
   isFinalizing: boolean; // This will now represent the state of PDF generation/navigation
+  isIssuing?: boolean;
   activeClient: string | null;
   selectedTrips: InvoicingTripView[];
   isStandalone?: boolean;
   issuer: InvoiceIssuerIdentity | null;
   workspaceOrgId?: string | null;
+  previewExpanded?: boolean;
+  onToggleExpand?: () => void;
+  onEditClient?: (clientId: string) => void;
+  /** UI gate only — does not change executeInvoiceCreation. */
+  invoiceBuildBlockedReason?: string | null;
+  /** UI gate only — Issue still revalidates policy in executeInvoiceCreation. */
+  invoiceIssueBlockedReason?: string | null;
 }
 
 const PAYMENT_TERMS_OPTIONS = [
@@ -51,12 +82,19 @@ const PAYMENT_TERMS_OPTIONS = [
 export function InvoicePreviewPanel({
   onClose,
   onPreview, // Changed from onFinalize
+  onIssue,
   isFinalizing,
+  isIssuing = false,
   activeClient,
   selectedTrips,
   isStandalone = false,
   issuer,
   workspaceOrgId = null,
+  previewExpanded = false,
+  onToggleExpand,
+  onEditClient,
+  invoiceBuildBlockedReason = null,
+  invoiceIssueBlockedReason = null,
 }: InvoicePreviewPanelProps) {
   const insets = useSafeAreaInsets();
   const layout = useLayoutInsets();
@@ -74,6 +112,19 @@ export function InvoicePreviewPanel({
     AdditionalCharge[]
   >([]);
   const [previewDate] = useState(() => formatInvoicePreviewDate(new Date()));
+  const [cnDnTrip, setCnDnTrip] = useState<InvoicingTripView | null>(null);
+  const [cnDnEdit, setCnDnEdit] = useState<TripAdjustment | null>(null);
+  const [showSplit, setShowSplit] = useState(true);
+
+  const selectedTripInternalIds = useMemo(
+    () => selectedTrips.map((t) => t.internal_id).filter(Boolean),
+    [selectedTrips],
+  );
+  const { record: tripAdjustmentsRecord } = useTripFinanceAdjustmentsMap(
+    workspaceOrgId,
+    selectedTripInternalIds,
+  );
+  const invalidateTripAdjustments = useInvalidateTripFinanceAdjustments();
 
   const clientIds = useMemo(
     () => uniqueTripClientIds(selectedTrips),
@@ -90,9 +141,21 @@ export function InvoicePreviewPanel({
       gstRate,
       includeFuel,
       fuelRate,
-      additionalCharges,
+      additionalCharges: mergeInvoiceChargesWithTripCnDn(
+        additionalCharges,
+        selectedTrips,
+        tripAdjustmentsRecord,
+      ),
     }),
-    [additionalCharges, fuelRate, gstRate, includeFuel, includeGst],
+    [
+      additionalCharges,
+      fuelRate,
+      gstRate,
+      includeFuel,
+      includeGst,
+      selectedTrips,
+      tripAdjustmentsRecord,
+    ],
   );
 
   const draft = useMemo(() => {
@@ -148,6 +211,65 @@ export function InvoicePreviewPanel({
     setAdditionalCharges((prev) => prev.filter((c) => c.id !== id));
   }, []);
 
+  const closeCnDnModal = useCallback(() => {
+    setCnDnTrip(null);
+    setCnDnEdit(null);
+  }, []);
+
+  const handleSaveTripCnDn = useCallback(
+    async (params: {
+      type: "revenue" | "cost";
+      impact: "plus" | "minus";
+      amount: number;
+      reason: string;
+    }) => {
+      const tripId = cnDnTrip?.internal_id?.trim();
+      const orgId = workspaceOrgId?.trim();
+      if (!tripId || !orgId) {
+        Alert.alert(
+          "Credit / debit note",
+          "This trip is not linked, so the note cannot be saved to finance.",
+        );
+        return;
+      }
+      await addTripAdjustment(
+        tripId,
+        {
+          type: "revenue",
+          impact: params.impact,
+          amount: params.amount,
+          reason: params.reason,
+        },
+        { organizationId: orgId, missionKey: cnDnTrip?.id ?? null },
+      );
+      await invalidateTripAdjustments();
+    },
+    [cnDnTrip, invalidateTripAdjustments, workspaceOrgId],
+  );
+
+  const handleUpdateTripCnDn = useCallback(
+    async (
+      adjustmentId: string,
+      params: {
+        type: "revenue" | "cost";
+        impact: "plus" | "minus";
+        amount: number;
+        reason: string;
+      },
+    ) => {
+      const tripId = cnDnTrip?.internal_id?.trim();
+      if (!tripId) return;
+      await updateTripAdjustment(tripId, adjustmentId, {
+        type: "revenue",
+        impact: params.impact,
+        amount: params.amount,
+        reason: params.reason,
+      });
+      await invalidateTripAdjustments();
+    },
+    [cnDnTrip, invalidateTripAdjustments],
+  );
+
   const formatCurrency = (val: number) => {
     return (
       "₹" +
@@ -159,6 +281,7 @@ export function InvoicePreviewPanel({
   };
 
   const handleInitiatePreview = async () => {
+    if (invoiceBuildBlockedReason) return;
     if (selectedTrips.length === 0) return;
 
     const params = {
@@ -172,10 +295,48 @@ export function InvoicePreviewPanel({
       gstRate: gstRate.toString(),
       includeFuel: includeFuel.toString(),
       fuelRate: fuelRate.toString(),
-      additionalCharges: JSON.stringify(additionalCharges),
+      additionalCharges: JSON.stringify(invoiceOnlyCharges(additionalCharges)),
       previewDate,
+      showSplit: showSplit ? "true" : "false",
     };
     onPreview(params);
+  };
+
+  const issueBlocked =
+    !onIssue ||
+    isIssuing ||
+    isFinalizing ||
+    selectedTrips.length === 0 ||
+    Boolean(invoiceBuildBlockedReason) ||
+    Boolean(invoiceIssueBlockedReason) ||
+    !draft ||
+    draft.tax.status === "blocked";
+
+  const handleIssueInvoice = () => {
+    if (issueBlocked || !onIssue || !draft) return;
+    const internalIds = selectedTrips
+      .map((t) => t.internal_id || t.id)
+      .filter((id) => Boolean(id));
+    if (internalIds.length === 0) return;
+    onIssue({
+      internalIds,
+      payload: {
+        notes,
+        paymentTerms,
+        includeGst,
+        gstRate,
+        includeFuel,
+        fuelRate,
+        additionalCharges: invoiceOnlyCharges(additionalCharges),
+        clientName: activeClient ?? undefined,
+        calculations: {
+          subtotal: draft.tax.taxable_base,
+          sgst: draft.tax.sgst_amount,
+          cgst: draft.tax.cgst_amount,
+          totalAmount: draft.tax.total_amount,
+        },
+      },
+    });
   };
 
   return (
@@ -186,31 +347,62 @@ export function InvoicePreviewPanel({
       ]}
     >
       <View style={styles.header}>
-        <View>
+        <View style={styles.headerCopy}>
           <Text style={styles.headerTitle}>
-            Invoice Draft{" "}
-            <Text style={{ color: Theme.textMuted }}>#DRAFT</Text>
+            Invoice draft{" "}
+            <Text style={styles.headerDraftTag}>#Draft</Text>
           </Text>
           <Text style={styles.headerSub}>
             Preview date {previewDate} · Invoice number assigned on issue
           </Text>
         </View>
-        {onClose && (
-          <Pressable
-            style={styles.closeBtn}
-            onPress={onClose}
-            disabled={isFinalizing}
-          >
-            <FontAwesome name="times" size={20} color={Theme.textPrimaryDark} />
-          </Pressable>
-        )}
+        <View style={styles.headerActions}>
+          {onToggleExpand ? (
+            <Pressable
+              style={styles.headerIconBtn}
+              onPress={onToggleExpand}
+              accessibilityRole="button"
+              accessibilityLabel={
+                previewExpanded ? "Restore preview size" : "Expand preview"
+              }
+            >
+              <FontAwesome
+                name={previewExpanded ? "compress" : "expand"}
+                size={16}
+                color={Theme.textPrimaryDark}
+              />
+            </Pressable>
+          ) : null}
+          {onClose ? (
+            <Pressable
+              style={styles.headerIconBtn}
+              onPress={onClose}
+              disabled={isFinalizing}
+            >
+              <FontAwesome
+                name="times"
+                size={18}
+                color={Theme.textPrimaryDark}
+              />
+            </Pressable>
+          ) : null}
+        </View>
       </View>
 
       <ScrollView
         style={styles.body}
-        contentContainerStyle={styles.bodyContent}
+        contentContainerStyle={[
+          styles.bodyContent,
+          previewExpanded && styles.bodyContentExpanded,
+        ]}
         {...tabBarScrollProps}
       >
+        <View
+          style={[
+            styles.document,
+            previewExpanded && styles.documentExpanded,
+          ]}
+        >
         {/* Header Info — issuer from active workspace; client name only (no fabricated address). */}
         <View style={styles.rowLayout}>
           <View style={styles.colLayout}>
@@ -233,7 +425,21 @@ export function InvoicePreviewPanel({
             </View>
           </View>
           <View style={styles.colLayout}>
-            <Text style={styles.sectionLabel}>Bill to</Text>
+            <View style={styles.sectionHeaderRow}>
+              <Text style={styles.sectionLabel}>Bill to</Text>
+              {draft?.client.client_id && onEditClient ? (
+                <Pressable
+                  style={styles.editClientBtn}
+                  onPress={() => onEditClient(draft.client.client_id!)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Edit client details"
+                  hitSlop={Layout.touchTargetHitSlop}
+                >
+                  <FontAwesome name="pencil" size={12} color={Theme.primary} />
+                  <Text style={styles.editClientBtnText}>Edit</Text>
+                </Pressable>
+              ) : null}
+            </View>
             <View style={styles.infoCard}>
               {draft?.client.display_name ? (
                 <>
@@ -430,131 +636,92 @@ export function InvoicePreviewPanel({
               <Text style={styles.emptyTripsText}>No context selected</Text>
             </View>
           )}
+          {selectedTrips.length > 0 ? (
+            <View style={styles.splitToggleRow}>
+              <Pressable
+                style={[styles.splitToggleBtn, showSplit && styles.splitToggleBtnOn]}
+                onPress={() => setShowSplit(true)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: showSplit }}
+                accessibilityLabel="Show split"
+              >
+                <Text
+                  style={[
+                    styles.splitToggleText,
+                    showSplit && styles.splitToggleTextOn,
+                  ]}
+                >
+                  Show split
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.splitToggleBtn, !showSplit && styles.splitToggleBtnOn]}
+                onPress={() => setShowSplit(false)}
+                accessibilityRole="button"
+                accessibilityState={{ selected: !showSplit }}
+                accessibilityLabel="No split"
+              >
+                <Text
+                  style={[
+                    styles.splitToggleText,
+                    !showSplit && styles.splitToggleTextOn,
+                  ]}
+                >
+                  No split
+                </Text>
+              </Pressable>
+            </View>
+          ) : null}
           {selectedTrips.map((trip) => {
-            const tripCharges = additionalCharges.filter(
-              (c) => c.tripId === trip.id,
+            const tripNotes = adjustmentsForTripId(
+              tripAdjustmentsRecord,
+              trip.internal_id,
             );
+            const revised = invoiceTripAdjustedAmount(trip.amount, tripNotes);
+            const hasSplit = Math.abs(revised - trip.amount) >= 0.005;
             return (
               <View key={trip.id} style={styles.tripItemWrapper}>
                 <View style={styles.tripItem}>
-                  <View style={{ flex: 1 }}>
+                  <View style={styles.tripItemMeta}>
                     <Text style={styles.tripItemTitle}>
-                      <Text style={{ color: Theme.primary }}>{trip.id}</Text>{" "}
-                      <Text style={{ color: Theme.textMuted }}>•</Text>{" "}
-                      {trip.date}
+                      <Text style={styles.tripItemId}>{trip.id}</Text>
+                      <Text style={styles.tripItemDot}> · </Text>
+                      <Text style={styles.tripItemDate}>{trip.date}</Text>
                     </Text>
-                    <Text style={styles.tripItemRoute} numberOfLines={1}>
-                      {trip.route}
-                    </Text>
-                  </View>
-                  <View style={{ alignItems: "flex-end" }}>
-                    <Text style={styles.tripItemAmount}>
-                      {formatCurrency(trip.amount)}
-                    </Text>
-                    <Pressable
-                      onPress={() => handleAddCharge(trip.id)}
-                      style={{ marginTop: 4 }}
-                    >
-                      <Text style={styles.addTripChargeText}>+ Adjust</Text>
-                    </Pressable>
-                  </View>
-                </View>
-                {tripCharges.map((charge) => (
-                  <View key={charge.id} style={styles.tripChargeRow}>
-                    <View style={styles.chargeContentCol}>
-                      <TextInput
-                        style={styles.chargeInput}
-                        value={charge.description}
-                        onChangeText={(t) =>
-                          handleUpdateCharge(charge.id, "description", t)
-                        }
-                        placeholder="Trip adjustment..."
-                        placeholderTextColor={Theme.textMuted}
+                    <Text style={styles.tripItemRoute}>{trip.route}</Text>
+                    <View style={styles.tripItemPodRow}>
+                      <TripCompletionOrPodTags
+                        compact
+                        tripCompleted={tripIsDeliveredStatus(trip.tripStatus)}
+                        softCopyReceived={Boolean(trip.digitalPodPresent)}
+                        hardCopyReceived={Boolean(trip.physicalPodReceived)}
                       />
                     </View>
-                    <View style={styles.chargeActionsRow}>
-                      <View style={styles.chargeTypeToggle}>
-                        <Pressable
-                          style={[
-                            styles.chargeTypeBtn,
-                            charge.amount >= 0 ? styles.chargeTypeBtnAdd : null,
-                          ]}
-                          onPress={() =>
-                            handleUpdateCharge(
-                              charge.id,
-                              "amount",
-                              Math.abs(charge.amount),
-                            )
-                          }
-                        >
-                          <Text
-                            style={[
-                              styles.chargeTypeText,
-                              charge.amount >= 0
-                                ? styles.chargeTypeTextAdd
-                                : null,
-                            ]}
-                          >
-                            Add
-                          </Text>
-                        </Pressable>
-                        <Pressable
-                          style={[
-                            styles.chargeTypeBtn,
-                            charge.amount < 0
-                              ? styles.chargeTypeBtnMinus
-                              : null,
-                          ]}
-                          onPress={() =>
-                            handleUpdateCharge(
-                              charge.id,
-                              "amount",
-                              -Math.abs(charge.amount),
-                            )
-                          }
-                        >
-                          <Text
-                            style={[
-                              styles.chargeTypeText,
-                              charge.amount < 0
-                                ? styles.chargeTypeTextMinus
-                                : null,
-                            ]}
-                          >
-                            Minus
-                          </Text>
-                        </Pressable>
-                      </View>
-                      <View style={styles.chargeAmountWrapper}>
-                        <Text style={styles.chargeCurrencySymbol}>₹</Text>
-                        <TextInput
-                          style={styles.chargeAmountInput}
-                          value={Math.abs(charge.amount).toString()}
-                          onChangeText={(t) => {
-                            const val = parseFloat(t) || 0;
-                            const isNeg = charge.amount < 0;
-                            handleUpdateCharge(
-                              charge.id,
-                              "amount",
-                              isNeg ? -val : val,
-                            );
-                          }}
-                          keyboardType="numeric"
-                        />
-                      </View>
-                      <Pressable
-                        style={styles.removeChargeBtn}
-                        onPress={() => handleRemoveCharge(charge.id)}
-                      >
-                        <FontAwesome
-                          name="times"
-                          size={12}
-                          color={Theme.negative || "#dc2626"}
-                        />
-                      </Pressable>
-                    </View>
                   </View>
-                ))}
+                  <View style={styles.tripItemAmounts}>
+                    <Text style={styles.tripItemAmount}>
+                      {formatCurrency(revised)}
+                    </Text>
+                    {showSplit && hasSplit ? (
+                      <Text style={styles.tripItemBaseAmount}>
+                        Freight {formatCurrency(trip.amount)}
+                      </Text>
+                    ) : null}
+                  </View>
+                </View>
+                <InvoiceTripCnDnGroup
+                  trip={trip}
+                  adjustments={tripNotes}
+                  showBreakdown={showSplit}
+                  onAdd={() => {
+                    setCnDnEdit(null);
+                    setCnDnTrip(trip);
+                  }}
+                  onEdit={(adj) => {
+                    setCnDnEdit(adj);
+                    setCnDnTrip(trip);
+                  }}
+                />
               </View>
             );
           })}
@@ -764,11 +931,13 @@ export function InvoicePreviewPanel({
             </Text>
           </View>
         </View>
+        </View>
       </ScrollView>
 
       <View
         style={[
           styles.footer,
+          invoiceBuildBlockedReason ? styles.footerBlocked : null,
           {
             paddingBottom: isStandalone
               ? layout.scrollBottomPadding(12)
@@ -776,29 +945,98 @@ export function InvoicePreviewPanel({
           },
         ]}
       >
+        {invoiceBuildBlockedReason ? (
+          <Text style={styles.buildGateReason}>{invoiceBuildBlockedReason}</Text>
+        ) : invoiceIssueBlockedReason ? (
+          <Text style={styles.buildGateReason}>{invoiceIssueBlockedReason}</Text>
+        ) : null}
         <Pressable
           style={[
-            styles.footerBtnPrimary,
-            (isFinalizing || selectedTrips.length === 0) && styles.btnDisabled,
+            styles.footerBtnSecondary,
+            (isFinalizing ||
+              isIssuing ||
+              selectedTrips.length === 0 ||
+              Boolean(invoiceBuildBlockedReason)) &&
+              styles.btnDisabled,
           ]}
           onPress={handleInitiatePreview}
-          disabled={isFinalizing || selectedTrips.length === 0}
+          disabled={
+            isFinalizing ||
+            isIssuing ||
+            selectedTrips.length === 0 ||
+            Boolean(invoiceBuildBlockedReason)
+          }
+          accessibilityLabel={invoiceBuildBlockedReason ?? "Preview draft"}
         >
           {isFinalizing ? (
-            <LoadingIndicator color={Theme.buttonPrimaryText} size="small" />
+            <LoadingIndicator color={Theme.textPrimaryDark} size="small" />
           ) : (
             <>
               <FontAwesome
                 name="file-text"
                 size={14}
-                color={Theme.buttonPrimaryText}
+                color={Theme.textPrimaryDark}
                 style={{ marginRight: 8 }}
               />
-              <Text style={styles.footerBtnPrimaryText}>Preview draft</Text>
+              <Text style={styles.footerBtnSecondaryText}>Preview draft</Text>
             </>
           )}
         </Pressable>
+        <Pressable
+          style={[
+            styles.footerBtnPrimary,
+            issueBlocked && styles.btnDisabled,
+          ]}
+          onPress={handleIssueInvoice}
+          disabled={issueBlocked}
+          accessibilityLabel="Issue Invoice"
+        >
+          {isIssuing ? (
+            <LoadingIndicator color={Theme.buttonPrimaryText} size="small" />
+          ) : (
+            <Text style={styles.footerBtnPrimaryText}>Issue Invoice</Text>
+          )}
+        </Pressable>
       </View>
+      <ProvisionAdjustmentModal
+        visible={cnDnTrip != null}
+        side="client"
+        onClose={closeCnDnModal}
+        onSave={handleSaveTripCnDn}
+        onUpdate={handleUpdateTripCnDn}
+        editTarget={cnDnEdit}
+        tripCode={cnDnTrip?.id}
+        partyLabel={activeClient}
+        clientName={activeClient || cnDnTrip?.client || "Client"}
+        supplierName={cnDnTrip?.supplier_name || "Supplier"}
+        sales={cnDnTrip?.amount ?? 0}
+        adjSales={invoiceTripAdjustedAmount(
+          cnDnTrip?.amount ?? 0,
+          cnDnTrip
+            ? adjustmentsForTripId(tripAdjustmentsRecord, cnDnTrip.internal_id)
+            : [],
+        )}
+        cost={0}
+        adjCost={0}
+        revenueSideDelta={
+          cnDnTrip
+            ? invoiceTripAdjustedAmount(
+                cnDnTrip.amount,
+                adjustmentsForTripId(tripAdjustmentsRecord, cnDnTrip.internal_id),
+              ) - cnDnTrip.amount
+            : 0
+        }
+        costSideDelta={0}
+        adjustments={
+          cnDnTrip
+            ? adjustmentsForTripId(tripAdjustmentsRecord, cnDnTrip.internal_id)
+            : []
+        }
+        lineMetaLabel={(adj) =>
+          (adj.reason ?? "").trim() ||
+          (adj.impact === "minus" ? "Credit note" : "Debit note")
+        }
+      />
     </View>
   );
 }
@@ -811,69 +1049,120 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingBottom: 12,
     paddingTop: 12,
     minHeight: 68,
+    gap: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
     backgroundColor: Theme.screenBackground,
   },
+  headerCopy: { flex: 1, minWidth: 0 },
   headerTitle: {
-    fontSize: 16,
-    fontWeight: "800",
+    fontSize: 18,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
-    letterSpacing: 1,
+    letterSpacing: 0.2,
   },
-  headerSub: { fontSize: 12, color: Theme.textMuted, marginTop: 4 },
-  closeBtn: { padding: 8 },
+  headerDraftTag: {
+    color: Theme.textMuted,
+    fontWeight: "500",
+  },
+  headerSub: {
+    fontSize: 13,
+    fontWeight: "400",
+    color: Theme.textMuted,
+    marginTop: 4,
+    lineHeight: 18,
+  },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 4 },
+  headerIconBtn: {
+    width: Layout.minTouchTargetSize,
+    height: Layout.minTouchTargetSize,
+    alignItems: "center",
+    justifyContent: "center",
+  },
 
   body: { flex: 1, backgroundColor: Theme.screenBackground },
   bodyContent: {
-    padding: Layout.screenPaddingHorizontal,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingBottom: 40,
     paddingTop: 16,
+    flexGrow: 1,
+  },
+  bodyContentExpanded: {
+    paddingHorizontal: 24,
+    paddingTop: 20,
+  },
+  document: {
+    width: "100%",
+    flexGrow: 1,
+    alignSelf: "stretch",
+  },
+  documentExpanded: {
+    width: "100%",
+    maxWidth: "100%",
+    alignSelf: "stretch",
   },
 
-  rowLayout: { flexDirection: "row", gap: 16, marginBottom: 24 },
-  colLayout: { flex: 1 },
+  rowLayout: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 24,
+    marginBottom: 20,
+  },
+  colLayout: { flex: 1, minWidth: 0 },
   sectionLabel: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "600",
     color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1,
+    letterSpacing: 0.4,
     marginBottom: 8,
+  },
+  editClientBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 6,
+    minHeight: Layout.minTouchTargetSize,
+    paddingHorizontal: 4,
+    marginBottom: 8,
+  },
+  editClientBtnText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: Theme.primary,
   },
 
   infoCard: {
     backgroundColor: Theme.cardWhite,
-    padding: 12,
-    minHeight: 80,
+    paddingVertical: 4,
+    paddingRight: 8,
+    minHeight: 72,
   },
   clientName: {
-    fontSize: 12,
-    fontWeight: "800",
+    fontSize: 14,
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
     marginBottom: 4,
   },
   clientAddress: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.textMuted,
+    fontSize: 12,
+    fontWeight: "400",
+    color: Theme.textRouteCard,
     marginBottom: 2,
+    lineHeight: 17,
   },
 
   taxText: {
-    fontSize: 11,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "400",
     color: Theme.textPrimaryDark,
     marginBottom: 4,
+    lineHeight: 18,
   },
-  taxLabel: { color: Theme.textMuted, textTransform: "uppercase" },
+  taxLabel: { color: Theme.textMuted, fontWeight: "500" },
 
   configBlock: { marginBottom: 24 },
   toggleRow: {
@@ -901,16 +1190,17 @@ const styles = StyleSheet.create({
   addChargeBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
-    paddingVertical: 4,
-    paddingHorizontal: 8,
-    backgroundColor: "rgba(79,70,229,0.05)",
+    gap: 6,
+    minHeight: Layout.minTouchTargetSize,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    backgroundColor: Theme.brandBlueWashSubtle,
+    borderRadius: 8,
   },
   addChargeText: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "500",
     color: Theme.primary,
-    textTransform: "uppercase",
   },
 
   chargeRow: {
@@ -933,19 +1223,19 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 4,
     flexShrink: 0,
-    maxWidth: 170,
+    maxWidth: 220,
   },
   chargeInput: {
     width: "100%",
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "400",
     color: Theme.textPrimaryDark,
     padding: 0,
     margin: 0,
   },
   chargeHint: {
-    fontSize: 9,
-    fontWeight: "700",
+    fontSize: 11,
+    fontWeight: "400",
     color: Theme.textMuted,
     marginTop: 2,
   },
@@ -955,7 +1245,13 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.surfaceGray,
     padding: 2,
   },
-  chargeTypeBtn: { paddingHorizontal: 5, paddingVertical: 2, borderRadius: 4 },
+  chargeTypeBtn: {
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    minHeight: 32,
+    borderRadius: 4,
+    justifyContent: "center",
+  },
   chargeTypeBtnAdd: {
     backgroundColor: "#fff",
     shadowColor: "#000",
@@ -973,10 +1269,9 @@ const styles = StyleSheet.create({
     elevation: 1,
   },
   chargeTypeText: {
-    fontSize: 9,
-    fontWeight: "800",
+    fontSize: 11,
+    fontWeight: "500",
     color: Theme.textMuted,
-    textTransform: "uppercase",
   },
   chargeTypeTextAdd: { color: "#059669" },
   chargeTypeTextMinus: { color: "#dc2626" },
@@ -990,15 +1285,15 @@ const styles = StyleSheet.create({
     width: 72,
   },
   chargeCurrencySymbol: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "500",
     color: Theme.textMuted,
     marginRight: 2,
   },
   chargeAmountInput: {
     width: 44,
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "500",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     color: Theme.textPrimaryDark,
     textAlign: "right",
@@ -1006,14 +1301,49 @@ const styles = StyleSheet.create({
     margin: 0,
   },
   removeChargeBtn: {
-    width: 20,
-    height: 20,
+    width: Layout.minTouchTargetSize,
+    height: Layout.minTouchTargetSize,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: "rgba(220,38,38,0.08)",
+    borderRadius: 8,
   },
 
   tripsList: { marginBottom: 24 },
+  splitToggleRow: {
+    flexDirection: "row",
+    alignSelf: "flex-start",
+    backgroundColor: Theme.liquidPillBg,
+    borderWidth: 1,
+    borderColor: Theme.liquidPillBorder,
+    borderRadius: 999,
+    padding: 3,
+    marginBottom: 12,
+    gap: 2,
+  },
+  splitToggleBtn: {
+    minHeight: 36,
+    paddingHorizontal: 14,
+    justifyContent: "center",
+    borderRadius: 999,
+    backgroundColor: "transparent",
+  },
+  splitToggleBtnOn: {
+    backgroundColor: Theme.screenBackground,
+    shadowColor: Theme.textPrimaryDark,
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.08,
+    shadowRadius: 2,
+    elevation: 1,
+  },
+  splitToggleText: {
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.textRouteCard,
+  },
+  splitToggleTextOn: {
+    color: Theme.textPrimaryDark,
+  },
   emptyTrips: {
     padding: 24,
     alignItems: "center",
@@ -1021,43 +1351,64 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.cardWhite,
   },
   emptyTripsText: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "400",
     color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1,
   },
   tripItemWrapper: { marginBottom: 12 },
   tripItem: {
     backgroundColor: Theme.cardWhite,
-    padding: 12,
+    paddingVertical: 12,
+    paddingHorizontal: 0,
     flexDirection: "row",
     justifyContent: "space-between",
-    alignItems: "center",
+    alignItems: "flex-start",
+    gap: 16,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
   },
+  tripItemMeta: { flex: 1, minWidth: 0 },
+  tripItemAmounts: { alignItems: "flex-end", flexShrink: 0 },
   tripItemTitle: {
-    fontSize: 12,
-    fontWeight: "800",
-    textTransform: "uppercase",
-    marginBottom: 4,
+    fontSize: 13,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
+    marginBottom: 6,
+    lineHeight: 20,
   },
+  tripItemId: { color: Theme.primary, fontWeight: "600" },
+  tripItemDot: { color: Theme.textMuted, fontWeight: "400" },
+  tripItemDate: { color: Theme.textRouteCard, fontWeight: "400" },
   tripItemRoute: {
-    fontSize: 10,
-    fontWeight: "700",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
+    fontSize: 13,
+    fontWeight: "400",
+    color: Theme.textRouteCard,
+    lineHeight: 19,
+  },
+  tripItemPodRow: {
+    marginTop: 6,
   },
   tripItemAmount: {
-    fontSize: 13,
-    fontWeight: "800",
+    fontSize: 15,
+    fontWeight: "600",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     color: Theme.textPrimaryDark,
   },
+  tripItemBaseAmount: {
+    marginTop: 4,
+    fontSize: 11,
+    fontWeight: "400",
+    color: Theme.textMuted,
+  },
+  adjustBtn: {
+    marginTop: 4,
+    minHeight: 32,
+    justifyContent: "center",
+  },
   addTripChargeText: {
-    fontSize: 9,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "500",
     color: Theme.primary,
-    textTransform: "uppercase",
   },
 
   tripChargeRow: {
@@ -1072,7 +1423,7 @@ const styles = StyleSheet.create({
 
   calcBlock: {
     backgroundColor: Theme.cardWhite,
-    padding: 16,
+    paddingVertical: 8,
     marginBottom: 24,
   },
   calcRow: {
@@ -1080,10 +1431,10 @@ const styles = StyleSheet.create({
     justifyContent: "space-between",
     marginBottom: 8,
   },
-  calcLabel: { fontSize: 12, color: Theme.textSecondary, fontWeight: "600" },
+  calcLabel: { fontSize: 13, color: Theme.textRouteCard, fontWeight: "400" },
   calcVal: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "500",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     color: Theme.textPrimaryDark,
   },
@@ -1095,19 +1446,18 @@ const styles = StyleSheet.create({
   },
   calcLabelSubtotal: {
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "600",
     color: Theme.textPrimaryDark,
-    textTransform: "uppercase",
   },
   calcValSubtotal: {
     fontSize: 13,
-    fontWeight: "800",
+    fontWeight: "600",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     color: Theme.textPrimaryDark,
   },
   taxWarning: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "500",
     color: Theme.warning,
     marginBottom: 12,
   },
@@ -1119,22 +1469,19 @@ const styles = StyleSheet.create({
     paddingTop: 8,
   },
   calcTotalLabel: {
-    fontSize: 11,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "500",
     color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1,
   },
   calcTotalSub: {
-    fontSize: 9,
-    fontWeight: "700",
+    fontSize: 12,
+    fontWeight: "400",
     color: Theme.textMuted,
-    textTransform: "uppercase",
     marginTop: 2,
   },
   calcTotalVal: {
-    fontSize: 24,
-    fontWeight: "800",
+    fontSize: 22,
+    fontWeight: "600",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     color: Theme.primary,
   },
@@ -1185,7 +1532,7 @@ const styles = StyleSheet.create({
 
   settingsBlock: {
     backgroundColor: Theme.cardWhite,
-    padding: 16,
+    paddingVertical: 8,
     marginBottom: 24,
     position: "relative",
     overflow: "visible",
@@ -1205,11 +1552,9 @@ const styles = StyleSheet.create({
     zIndex: 1,
   },
   settingsLabel: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 12,
+    fontWeight: "500",
     color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1,
     marginBottom: 6,
   },
   settingsSelect: {
@@ -1219,7 +1564,11 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.screenBackground,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    width: 120,
+    minHeight: Layout.minTouchTargetSize,
+    minWidth: 140,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderMedium,
   },
   settingsSelectWrap: {
     position: "relative",
@@ -1227,20 +1576,24 @@ const styles = StyleSheet.create({
     zIndex: 1000,
   },
   settingsSelectText: {
-    fontSize: 12,
-    fontWeight: "700",
+    fontSize: 13,
+    fontWeight: "500",
     color: Theme.textPrimaryDark,
   },
   notesInput: {
     backgroundColor: Theme.screenBackground,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    fontSize: 12,
+    fontSize: 13,
+    fontWeight: "400",
     color: Theme.textPrimaryDark,
-    minHeight: 60,
+    minHeight: 72,
     textAlignVertical: "top",
     position: "relative",
     zIndex: 1,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderMedium,
   },
   settingsToggles: {
     flexDirection: "row",
@@ -1252,10 +1605,18 @@ const styles = StyleSheet.create({
     position: "relative",
     zIndex: 1,
   },
-  checkboxRow: { flexDirection: "row", alignItems: "center", gap: 8 },
+  checkboxRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minHeight: Layout.minTouchTargetSize,
+  },
   checkbox: {
-    width: 16,
-    height: 16,
+    width: 18,
+    height: 18,
+    borderRadius: 4,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1263,11 +1624,9 @@ const styles = StyleSheet.create({
     backgroundColor: Theme.buttonPrimary,
   },
   checkboxLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: Theme.textMuted,
-    textTransform: "uppercase",
-    letterSpacing: 1,
+    fontSize: 13,
+    fontWeight: "500",
+    color: Theme.textPrimary,
   },
   rateInputWrap: {
     flexDirection: "row",
@@ -1278,16 +1637,16 @@ const styles = StyleSheet.create({
   },
   rateInput: {
     width: 36,
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "500",
     color: Theme.textPrimaryDark,
     textAlign: "right",
     padding: 0,
     margin: 0,
   },
   rateSuffix: {
-    fontSize: 10,
-    fontWeight: "800",
+    fontSize: 13,
+    fontWeight: "400",
     color: Theme.textMuted,
     marginLeft: 2,
   },
@@ -1303,6 +1662,16 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: Theme.borderLight,
   },
+  footerBlocked: {
+    flexDirection: "column",
+    alignItems: "stretch",
+  },
+  buildGateReason: {
+    fontSize: 13,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+    textAlign: "center",
+  },
   footerBtnOutline: {
     flex: 1,
     paddingVertical: 14,
@@ -1313,20 +1682,39 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
+  footerBtnSecondary: {
+    flex: 1,
+    minHeight: Layout.minTouchTargetSize,
+    paddingVertical: 14,
+    backgroundColor: Theme.surface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.border,
+    borderRadius: 10,
+    alignItems: "center",
+    flexDirection: "row",
+    justifyContent: "center",
+  },
+  footerBtnSecondaryText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Theme.textPrimaryDark,
+  },
   footerBtnPrimary: {
     flex: 2,
+    minHeight: Layout.minTouchTargetSize,
     paddingVertical: 14,
     backgroundColor: Theme.buttonPrimary,
+    borderWidth: Theme.buttonPrimaryBorderWidth,
+    borderColor: Theme.buttonPrimaryBorder,
+    borderRadius: 10,
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "center",
   },
   footerBtnPrimaryText: {
-    fontSize: 14,
-    fontWeight: "800",
+    fontSize: 15,
+    fontWeight: "600",
     color: Theme.buttonPrimaryText,
-    textTransform: "uppercase",
-    letterSpacing: 1,
   },
   btnDisabled: { opacity: 0.5 },
 
@@ -1357,7 +1745,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
     color: Theme.textPrimaryDark,
   },
-  termOptionActive: { color: Theme.primary, fontWeight: "800" },
+  termOptionActive: { color: Theme.primary, fontWeight: "600" },
   webTermsDropdown: {
     position: "absolute" as const,
     top: 44,

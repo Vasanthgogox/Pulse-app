@@ -692,7 +692,7 @@ export function LogIncomingPodsScreen({ embedded = false }: LogIncomingPodsScree
             </Pressable>
           </View>
         ) : null}
-        {embedded && isMediumScreen ? (
+        {embedded ? (
           <Pressable
             style={[styles.headerLogBtn, isLogDisabled && styles.headerLogBtnDisabled]}
             onPress={openLogFlow}

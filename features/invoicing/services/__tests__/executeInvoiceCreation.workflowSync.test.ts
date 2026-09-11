@@ -1,4 +1,28 @@
+import { readFileSync } from 'fs';
+import { join } from 'path';
 import { executeInvoiceCreation } from '../invoicing.service';
+import {
+  invoiceIssueRequirePod,
+  loadWorkspaceInvoicePodRequired,
+} from '../../utils/invoicePodRequired.util';
+import {
+  INVOICE_POD_HARD_COPY_REQUIRED,
+  INVOICE_POD_MULTI_CLIENT,
+  INVOICE_POD_OPTIONS_CONFLICT,
+  INVOICE_POD_SOFT_COPY_REQUIRED,
+} from '../../utils/invoicePodEnforcement.util';
+
+jest.mock('../../utils/invoicePodRequired.util', () => {
+  const actual = jest.requireActual('../../utils/invoicePodRequired.util');
+  return {
+    ...actual,
+    loadWorkspaceInvoicePodRequired: jest.fn(async () => false),
+  };
+});
+
+const mockLoadWorkspace = loadWorkspaceInvoicePodRequired as jest.MockedFunction<
+  typeof loadWorkspaceInvoicePodRequired
+>;
 
 const mockFrom = jest.fn();
 const mockRpc = jest.fn();
@@ -19,6 +43,9 @@ const ORG = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
 const TRIP_1 = '11111111-1111-4111-8111-111111111111';
 const TRIP_2 = '22222222-2222-4222-8222-222222222222';
 const ALLOCATED = 'INV/2026-27/00001';
+
+const CLIENT = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const CLIENT_B = 'dddddddd-dddd-4ddd-8ddd-dddddddddddd';
 
 const candidateTrips = [
   {
@@ -47,6 +74,7 @@ function thenable(result: { data: unknown; error: unknown }) {
   builder.select = jest.fn(self);
   builder.in = jest.fn(self);
   builder.eq = jest.fn(self);
+  builder.maybeSingle = jest.fn(() => Promise.resolve(result));
   builder.insert = jest.fn(self);
   builder.then = (resolve: (v: unknown) => unknown, reject: (e: unknown) => unknown) =>
     Promise.resolve(result).then(resolve, reject);
@@ -57,6 +85,7 @@ const flushPromises = () => new Promise((resolve) => setImmediate(resolve));
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockLoadWorkspace.mockResolvedValue(false);
   mockRecordTripWorkflowEvent.mockResolvedValue({ error: null, event: { id: 'evt-1' }, alreadyExists: false });
   mockRpc.mockImplementation((fn: string) => {
     if (fn === 'allocate_invoice_number') return Promise.resolve({ data: ALLOCATED, error: null });
@@ -69,6 +98,8 @@ function mockHappyPath(opts?: {
   podTripIds?: string[];
   existingTripIds?: string[][];
   insertError?: unknown;
+  clientPolicy?: unknown;
+  clientMissing?: boolean;
 }) {
   const trips = opts?.trips ?? candidateTrips;
   const podTripIds = opts?.podTripIds ?? trips.map((t) => t.id);
@@ -84,6 +115,18 @@ function mockHappyPath(opts?: {
     if (table === 'trip_documents') {
       return thenable({
         data: podTripIds.map((trip_id) => ({ trip_id })),
+        error: null,
+      });
+    }
+    if (table === 'clients') {
+      if (opts?.clientMissing) {
+        return thenable({ data: null, error: null });
+      }
+      return thenable({
+        data: {
+          id: CLIENT,
+          invoice_pod_policy: opts?.clientPolicy ?? null,
+        },
         error: null,
       });
     }
@@ -142,10 +185,98 @@ describe('executeInvoiceCreation — live invoices architecture', () => {
     });
   });
 
-  it('does not allocate or insert when a selected trip is missing POD', async () => {
+  it('A: requirePod=true + digital POD present succeeds', async () => {
+    mockHappyPath({ podTripIds: [TRIP_1, TRIP_2] });
+    const { error } = await executeInvoiceCreation([TRIP_1, TRIP_2], undefined, {
+      requirePod: true,
+    });
+    expect(error).toBeNull();
+    expect(mockFrom).toHaveBeenCalledWith('trip_documents');
+    expect(mockRpc).toHaveBeenCalledWith('allocate_invoice_number', { p_org_id: ORG });
+  });
+
+  it('B: requirePod=true + digital POD absent throws and does not allocate', async () => {
     mockHappyPath({ podTripIds: [TRIP_1] });
 
-    const { error } = await executeInvoiceCreation([TRIP_1, TRIP_2]);
+    const { error } = await executeInvoiceCreation([TRIP_1, TRIP_2], undefined, {
+      requirePod: true,
+    });
+    expect(error?.message).toBe('POD is required before invoice creation.');
+    expect(mockFrom).toHaveBeenCalledWith('trip_documents');
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockRecordTripWorkflowEvent).not.toHaveBeenCalled();
+  });
+
+  it('C: requirePod=false + digital POD present skips lookup and succeeds', async () => {
+    mockHappyPath({ podTripIds: [TRIP_1, TRIP_2] });
+    const { error } = await executeInvoiceCreation([TRIP_1, TRIP_2], undefined, {
+      requirePod: false,
+    });
+    expect(error).toBeNull();
+    expect(mockFrom).not.toHaveBeenCalledWith('trip_documents');
+    expect(mockRpc).toHaveBeenCalledWith('allocate_invoice_number', { p_org_id: ORG });
+  });
+
+  it('D: requirePod=false + digital POD absent proceeds past POD gate', async () => {
+    mockHappyPath({ podTripIds: [] });
+    const { error, invoiceNumber } = await executeInvoiceCreation(
+      [TRIP_1, TRIP_2],
+      undefined,
+      { requirePod: false },
+    );
+    expect(error).toBeNull();
+    expect(invoiceNumber).toBe(ALLOCATED);
+    expect(mockFrom).not.toHaveBeenCalledWith('trip_documents');
+    expect(mockRpc).toHaveBeenCalledTimes(1);
+  });
+
+  it('E: omitted requirePod uses authoritative workspace fallback (not legacy digital default)', async () => {
+    mockLoadWorkspace.mockResolvedValue(false);
+    mockHappyPath({ podTripIds: [] });
+    const omitted = await executeInvoiceCreation([TRIP_1, TRIP_2]);
+    expect(omitted.error).toBeNull();
+    expect(mockFrom).not.toHaveBeenCalledWith('trip_documents');
+    expect(mockRpc).toHaveBeenCalled();
+
+    jest.clearAllMocks();
+    mockLoadWorkspace.mockResolvedValue(false);
+    mockHappyPath({ podTripIds: [] });
+    const explicit = await executeInvoiceCreation([TRIP_1, TRIP_2], undefined, {
+      requirePod: true,
+    });
+    expect(explicit.error?.message).toBe('POD is required before invoice creation.');
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('Pulse Invoice POD OFF maps invoiceIssueRequirePod(false) into executeInvoiceCreation', async () => {
+    mockHappyPath({ podTripIds: [] });
+    const requirePod = invoiceIssueRequirePod(false);
+    expect(requirePod).toBe(false);
+    const { error } = await executeInvoiceCreation([TRIP_1, TRIP_2], undefined, {
+      requirePod,
+    });
+    expect(error).toBeNull();
+    expect(mockFrom).not.toHaveBeenCalledWith('trip_documents');
+    expect(mockRpc).toHaveBeenCalled();
+  });
+
+  it('regression: POD ON still rejects missing digital POD before allocate (hard POD is not a persist substitute)', async () => {
+    mockHappyPath({ podTripIds: [] });
+    const requirePod = invoiceIssueRequirePod(true);
+    const { error } = await executeInvoiceCreation([TRIP_1, TRIP_2], undefined, {
+      requirePod,
+    });
+    expect(error?.message).toBe('POD is required before invoice creation.');
+    expect(mockFrom).toHaveBeenCalledWith('trip_documents');
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('does not allocate or insert when a selected trip is missing digital POD (legacy requirePod)', async () => {
+    mockHappyPath({ podTripIds: [TRIP_1] });
+
+    const { error } = await executeInvoiceCreation([TRIP_1, TRIP_2], undefined, {
+      requirePod: true,
+    });
     expect(error?.message).toBe('POD is required before invoice creation.');
     expect(mockRpc).not.toHaveBeenCalled();
     expect(mockRecordTripWorkflowEvent).not.toHaveBeenCalled();
@@ -177,9 +308,166 @@ describe('executeInvoiceCreation — live invoices architecture', () => {
   it('does not write workflow events when invoice insert fails', async () => {
     mockHappyPath({ insertError: { message: 'insert failed' } });
 
-    const { error } = await executeInvoiceCreation([TRIP_1]);
+    const { error } = await executeInvoiceCreation([TRIP_1, TRIP_2]);
     expect(error).not.toBeNull();
     expect(mockRpc).toHaveBeenCalledTimes(1);
     expect(mockRecordTripWorkflowEvent).not.toHaveBeenCalled();
+  });
+});
+
+function tripsForClient(clientId: string, physicalAt: string | null) {
+  return candidateTrips.map((trip) => ({
+    ...trip,
+    client_id: clientId,
+    pod_received_at: physicalAt,
+  }));
+}
+
+describe('P2.2 authoritative Issue revalidation', () => {
+  it('24-26. failed HARD_COPY gate does not allocate, insert, or write workflow', async () => {
+    const { mockInsert } = mockHappyPath({
+      trips: tripsForClient(CLIENT, null),
+      podTripIds: [TRIP_1, TRIP_2],
+      clientPolicy: 'hard_copy',
+    });
+    const { error } = await executeInvoiceCreation([TRIP_1, TRIP_2]);
+    expect(error?.message).toBe(INVOICE_POD_HARD_COPY_REQUIRED);
+    expect(mockFrom).not.toHaveBeenCalledWith('trip_documents');
+    expect(mockRpc).not.toHaveBeenCalled();
+    expect(mockInsert).not.toHaveBeenCalled();
+    expect(mockRecordTripWorkflowEvent).not.toHaveBeenCalled();
+  });
+
+  it('27-28. successful HARD_COPY gate allocates and inserts', async () => {
+    const { mockInsert } = mockHappyPath({
+      trips: tripsForClient(CLIENT, '2026-09-11T12:00:00.000Z'),
+      podTripIds: [],
+      clientPolicy: 'hard_copy',
+    });
+    const { error } = await executeInvoiceCreation([TRIP_1, TRIP_2]);
+    expect(error).toBeNull();
+    expect(mockFrom).not.toHaveBeenCalledWith('trip_documents');
+    expect(mockRpc).toHaveBeenCalledWith('allocate_invoice_number', { p_org_id: ORG });
+    expect(mockInsert).toHaveBeenCalledTimes(1);
+  });
+
+  it('29. NONE performs no digital POD lookup', async () => {
+    mockHappyPath({
+      trips: tripsForClient(CLIENT, null),
+      podTripIds: [],
+      clientPolicy: 'none',
+    });
+    const { error } = await executeInvoiceCreation([TRIP_1, TRIP_2]);
+    expect(error).toBeNull();
+    expect(mockFrom).not.toHaveBeenCalledWith('trip_documents');
+  });
+
+  it('30. HARD_COPY performs no digital POD lookup', async () => {
+    mockHappyPath({
+      trips: tripsForClient(CLIENT, '2026-09-11T12:00:00.000Z'),
+      clientPolicy: 'hard_copy',
+    });
+    await executeInvoiceCreation([TRIP_1, TRIP_2]);
+    expect(mockFrom).not.toHaveBeenCalledWith('trip_documents');
+  });
+
+  it('31. SOFT_COPY uses batched digital POD lookup', async () => {
+    mockHappyPath({
+      trips: tripsForClient(CLIENT, null),
+      podTripIds: [TRIP_1, TRIP_2],
+      clientPolicy: 'soft_copy',
+    });
+    const { error } = await executeInvoiceCreation([TRIP_1, TRIP_2]);
+    expect(error).toBeNull();
+    expect(mockFrom).toHaveBeenCalledWith('trip_documents');
+  });
+
+  it('SOFT_COPY + physical POD only is rejected before allocator', async () => {
+    mockHappyPath({
+      trips: tripsForClient(CLIENT, '2026-09-11T12:00:00.000Z'),
+      podTripIds: [],
+      clientPolicy: 'soft_copy',
+    });
+    const { error } = await executeInvoiceCreation([TRIP_1, TRIP_2]);
+    expect(error?.message).toBe(INVOICE_POD_SOFT_COPY_REQUIRED);
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('stale UI SOFT_COPY vs authoritative HARD_COPY rejects digital-only evidence', async () => {
+    mockHappyPath({
+      trips: tripsForClient(CLIENT, null),
+      podTripIds: [TRIP_1, TRIP_2],
+      clientPolicy: 'hard_copy',
+    });
+    const { error } = await executeInvoiceCreation([TRIP_1, TRIP_2]);
+    expect(error?.message).toBe(INVOICE_POD_HARD_COPY_REQUIRED);
+    expect(mockFrom).not.toHaveBeenCalledWith('trip_documents');
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('stale UI NONE vs authoritative HARD_COPY rejects missing physical POD', async () => {
+    mockHappyPath({
+      trips: tripsForClient(CLIENT, null),
+      clientPolicy: 'hard_copy',
+    });
+    const authoritative = await executeInvoiceCreation([TRIP_1, TRIP_2]);
+    expect(authoritative.error?.message).toBe(INVOICE_POD_HARD_COPY_REQUIRED);
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('multiple client_ids block before allocator', async () => {
+    mockHappyPath({
+      trips: [
+        { ...candidateTrips[0], client_id: CLIENT, pod_received_at: null },
+        { ...candidateTrips[1], client_id: CLIENT_B, pod_received_at: null },
+      ],
+      clientPolicy: 'none',
+    });
+    const { error } = await executeInvoiceCreation([TRIP_1, TRIP_2]);
+    expect(error?.message).toBe(INVOICE_POD_MULTI_CLIENT);
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+
+  it('conflicting podPolicy + requirePod is rejected', async () => {
+    mockHappyPath();
+    const { error } = await executeInvoiceCreation([TRIP_1, TRIP_2], undefined, {
+      requirePod: true,
+      podPolicy: 'hard_copy',
+    });
+    expect(error?.message).toBe(INVOICE_POD_OPTIONS_CONFLICT);
+    expect(mockRpc).not.toHaveBeenCalled();
+  });
+});
+
+describe('requirePod plumbing contract', () => {
+  const serviceSrc = readFileSync(join(__dirname, '../invoicing.service.ts'), 'utf8');
+  const queriesSrc = readFileSync(
+    join(__dirname, '../../../../lib/queries/useInvoicingExecuteQueries.ts'),
+    'utf8',
+  );
+  const screenSrc = readFileSync(
+    join(__dirname, '../../InvoicingExecuteScreen.tsx'),
+    'utf8',
+  );
+
+  it('loads workspace fallback from the existing helper, not inline AsyncStorage', () => {
+    expect(serviceSrc).not.toMatch(/AsyncStorage/);
+    expect(serviceSrc).toMatch(/loadWorkspaceInvoicePodRequired/);
+    expect(serviceSrc).toMatch(/enforceInvoicePodGate/);
+  });
+
+  it('mutation omits requirePod so Issue revalidates authoritatively', () => {
+    expect(queriesSrc).toMatch(
+      /requirePod === undefined \? undefined : \{ requirePod \}/,
+    );
+  });
+
+  it('Pulse Invoice Issue does not pass invoiceIssueRequirePod into the mutation', () => {
+    expect(screenSrc).toMatch(/restoreInvoiceDraftTripIds/);
+    expect(screenSrc).toMatch(/issueMutation\.mutate\(/);
+    expect(screenSrc).not.toMatch(/invoiceIssueRequirePod\(podRequired\)/);
+    expect(screenSrc).not.toMatch(
+      /allTrips\.filter\(\(t\) => t\.status === "approved"\)\.map\(\(t\) => t\.id\)/,
+    );
   });
 });

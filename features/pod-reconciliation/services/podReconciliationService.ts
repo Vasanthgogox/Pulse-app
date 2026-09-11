@@ -15,6 +15,16 @@ import {
   tripPodIsReceived,
   type TripLrPodIndex,
 } from "@/features/trips/services/tripDocumentLrPod.service";
+import { fetchIssuedInvoicesForOrg } from "@/features/invoicing/services/invoiceList.service";
+import {
+  invoiceNumbersByTripId,
+  overlayIssuedInvoiceOnTrip,
+  tripHardPodStamp,
+} from "../utils/podIssuedInvoiceOverlay.util";
+import {
+  podOperatorDisplayName,
+  podTripLane,
+} from "../utils/podOperatorDisplay.util";
 
 type TripRow = Record<string, unknown>;
 
@@ -36,6 +46,8 @@ export interface PodReconciliationTripView {
   internal_id: string; // uuid
   client_name: string;
   vendor_name: string;
+  driver_name: string;
+  lane: "asset" | "market";
   trip_date: string;
   pp_location: string;
   drop_point: string;
@@ -50,6 +62,10 @@ export interface PodReconciliationTripView {
   trip_pods: string[];
   amount: number;
   date: string;
+  /** Digital POD in trip_documents (document_type=pod). */
+  soft_pod_received: boolean;
+  /** Physical POD via trips.pod_received_at. */
+  hard_pod_received: boolean;
 }
 
 function str(v: unknown): string {
@@ -143,6 +159,17 @@ export function computePodReconciliationSummaryFromTrips(
   };
 }
 
+/** Pulse Invoice writes invoices.trip_ids; overlay so tabs and metrics match issued docs. */
+export async function withIssuedInvoiceOverlay(
+  orgId: string,
+  trips: TripRow[],
+): Promise<TripRow[]> {
+  const issued = await fetchIssuedInvoicesForOrg(orgId);
+  const numbersByTripId = invoiceNumbersByTripId(issued.invoices);
+  if (numbersByTripId.size === 0) return trips;
+  return trips.map((trip) => overlayIssuedInvoiceOnTrip(trip, numbersByTripId));
+}
+
 export async function fetchReconciliationTrips(
   orgId: string,
   activeTab: PodTab,
@@ -173,8 +200,9 @@ export async function fetchReconciliationTrips(
             : (trip as { trip_id?: string | null }).trip_id ?? trip.id,
         ).toLowerCase();
         const client = str(trip.client_name).toLowerCase();
+        const driver = str(trip.driver_display_name).toLowerCase();
         const lr = str(trip.lr_no).toLowerCase();
-        return tid.includes(q) || client.includes(q) || lr.includes(q);
+        return tid.includes(q) || client.includes(q) || driver.includes(q) || lr.includes(q);
       });
     }
 
@@ -192,15 +220,20 @@ export async function fetchReconciliationTrips(
       return cb.localeCompare(ca);
     });
 
+    const issuedOverlay = await withIssuedInvoiceOverlay(orgId, pool);
+    pool = issuedOverlay;
+
     const filtered = pool
       .filter((trip) => tripMatchesPodTab(trip, activeTab))
       .slice(0, 1000);
 
     const internalIds = filtered.map(t => str(t.id)).filter(Boolean);
     const supplierIds = Array.from(new Set(filtered.map(t => str(t.supplier_id)).filter(Boolean)));
+    const driverIds = Array.from(new Set(filtered.map(t => str(t.driver_id)).filter(Boolean)));
 
     let lrByTripId = new Map<string, TripLrPodIndex>();
     let supplierNameById = new Map<string, string>();
+    let driverNameById = new Map<string, string>();
 
     if (supplierIds.length > 0) {
       const { data: supData } = await supabase()
@@ -213,6 +246,16 @@ export async function fetchReconciliationTrips(
       });
     }
 
+    if (driverIds.length > 0) {
+      const { data: driverData } = await supabase()
+        .from("drivers")
+        .select("id, name")
+        .in("id", driverIds);
+      (driverData || []).forEach((d) => {
+        if (d.id) driverNameById.set(d.id, str(d.name));
+      });
+    }
+
     if (internalIds.length > 0) {
       lrByTripId = await loadLrPodIndexByTripIds(internalIds);
     }
@@ -220,8 +263,9 @@ export async function fetchReconciliationTrips(
     const mapped = filtered.map(trip => {
       let invoice_status_display = 'Invoice Pending';
       const inv1 = str(trip.invoice_status_1).toLowerCase();
+      const podReceivedAt = tripHardPodStamp(trip);
       const podReceived = tripPodIsReceived({
-        pod_received_at: (trip.pod_received_at as string | null | undefined) ?? null,
+        pod_received_at: podReceivedAt,
         pod_status: trip.pod_status,
       });
       const isRaised = inv1.includes('raised') || trip.invoice_no;
@@ -251,14 +295,31 @@ export async function fetchReconciliationTrips(
           : (trip as { trip_id?: string | null }).trip_id || trip.id,
       );
       const tripDate = str(trip.pickup_date || trip.trip_date || trip.created_at);
-      const podReceivedAt = str(trip.pod_received_at);
+
+      const supplierName = str(
+        supplierNameById.get(str(trip.supplier_id)) || trip.vendor_name || trip.supplier_name,
+      );
+      const driverName = str(
+        driverNameById.get(str(trip.driver_id)) || trip.driver_display_name,
+      );
+      const lane = podTripLane({
+        supplier_id: trip.supplier_id,
+        trip_payout_mode: trip.trip_payout_mode,
+      });
+      const operatorName = podOperatorDisplayName({
+        lane,
+        supplierName,
+        driverName,
+      });
 
       return {
         ...trip,
         id: tripDisplayId,
         internal_id: str(trip.id),
         client_name: str(trip.client_name),
-        vendor_name: str(supplierNameById.get(str(trip.supplier_id)) || trip.vendor_name || trip.supplier_name),
+        vendor_name: operatorName,
+        driver_name: driverName,
+        lane,
         pp_location: str(trip.pickup_area || trip.pp_location),
         drop_point: str(trip.drop_location || trip.drop_point),
         amount: num(trip.client_price || trip.total_client_value),
@@ -266,9 +327,16 @@ export async function fetchReconciliationTrips(
         trip_date: tripDate,
         pod_status: podReceived ? 'Received' : str(trip.pod_status) || 'Pending',
         pod_received_date: podReceivedAt ? podReceivedAt.slice(0, 10) : null,
+        invoice_status_1: isRaised
+          ? "Raised"
+          : str(trip.invoice_status_1) || "Pending",
+        invoice_no: str(trip.invoice_no) || null,
         invoice_status_display,
         lr_numbers: allLrNumbers,
-        trip_pods: finalReceivedLRs
+        trip_pods: finalReceivedLRs,
+        trip_status: str(trip.status || trip.trip_status),
+        soft_pod_received: docs?.hasPodDocument ?? false,
+        hard_pod_received: podReceived,
       } as PodReconciliationTripView;
     });
 
@@ -287,7 +355,7 @@ export async function syncPodReconciliationTripsWithCache(
     const trips = await syncDomainRows<PodReconciliationTripView>({
       domain: 'pod-reconciliation',
       orgId,
-      schemaVersion: '1',
+      schemaVersion: '3',
       policy: { maxDeltaLagMs: 2 * 60_000, fullSyncEveryMs: 60 * 60_000 },
       currentRows,
       getFull: async () => {

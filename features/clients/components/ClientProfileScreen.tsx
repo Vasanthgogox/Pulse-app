@@ -10,6 +10,7 @@ import {
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { ContentErrorState } from "@/components/ContentErrorState";
 import Theme from "@/constants/Theme";
+import { ClientInvoicePodPolicySection } from "@/features/clients/components/ClientInvoicePodPolicySection";
 import { useClientManagementBundleQuery } from "@/features/clients/hooks/useClientManagementBundle";
 import type { ClientManagementBundle } from "@/features/clients/types/clientManagement.types";
 import { KYC_DOC_LABELS } from "@/features/clients/types/clientManagement.types";
@@ -162,36 +163,43 @@ export function ClientProfileScreen({ clientId, onBack }: Props) {
         paddingBottom: insets.bottom,
       }}
     >
-      <CounterpartyProfileSystemCard
-        visible
-        presentation="page"
-        profileTitle="Customer Profile"
-        type="client"
-        organizationName={displayName}
-        adminName={client.contact_person}
-        email={client.email}
-        phone={client.phone}
-        gstNumber={client.gstin}
-        panNumber={client.pan_number}
-        billingAddress={client.address}
-        gridVolumeLabel={projectedVolumeLabel(client)}
-        networkTrustLabel={networkTrustLabel}
-        isIntegrated={isIntegrated}
-        entityDisplayId={client.display_id ?? client.id?.slice(0, 8) ?? null}
-        warehouses={warehouses}
-        contracts={contracts}
-        kycDocs={kycDocs}
-        organizationId={orgId}
+      <ClientInvoicePodPolicySection
+        orgId={orgId}
         clientId={clientId}
-        editableWarehouses={bundle.warehouses}
-        editableLaneRates={bundle.lane_rates}
-        onProfileEntitiesChange={() => {
-          void bundleQ.refetch();
-          void loadLegacy();
-        }}
-        onClose={onBack}
-        onEditPress={() => {}}
+        rawPolicy={bundle.client?.invoice_pod_policy}
       />
+      <View style={{ flex: 1, minHeight: 0 }}>
+        <CounterpartyProfileSystemCard
+          visible
+          presentation="page"
+          profileTitle="Customer Profile"
+          type="client"
+          organizationName={displayName}
+          adminName={client.contact_person}
+          email={client.email}
+          phone={client.phone}
+          gstNumber={client.gstin}
+          panNumber={client.pan_number}
+          billingAddress={client.address}
+          gridVolumeLabel={projectedVolumeLabel(client)}
+          networkTrustLabel={networkTrustLabel}
+          isIntegrated={isIntegrated}
+          entityDisplayId={client.display_id ?? client.id?.slice(0, 8) ?? null}
+          warehouses={warehouses}
+          contracts={contracts}
+          kycDocs={kycDocs}
+          organizationId={orgId}
+          clientId={clientId}
+          editableWarehouses={bundle.warehouses}
+          editableLaneRates={bundle.lane_rates}
+          onProfileEntitiesChange={() => {
+            void bundleQ.refetch();
+            void loadLegacy();
+          }}
+          onClose={onBack}
+          onEditPress={() => {}}
+        />
+      </View>
     </View>
   );
 }

@@ -4,6 +4,7 @@ import { LinearGradient } from "expo-linear-gradient";
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   ActivityIndicator,
+  Alert,
   PanResponder,
   Platform,
   ScrollView,
@@ -27,6 +28,7 @@ import { ClientProfileLanesEditSection } from "@/features/clients/components/Cli
 import { ClientProfileFinanceStatementSection } from "@/features/clients/components/ClientProfileFinanceStatementSection";
 import { ClientProfileMarginAnalysisSection } from "@/features/clients/components/ClientProfileMarginAnalysisSection";
 import { ClientProfilePerformanceSection } from "@/features/clients/components/ClientProfilePerformanceSection";
+import { updateClient } from "@/features/clients/services/clients.service";
 import type {
   ClientLaneRate,
   ClientWarehouseExtended,
@@ -389,6 +391,10 @@ export function CounterpartyProfileSystemCard({
   const [draftGst, setDraftGst] = useState((gstNumber ?? "").trim());
   const [draftPan, setDraftPan] = useState((panNumber ?? "").trim());
   const [draftBilling, setDraftBilling] = useState((billingAddress ?? "").trim());
+  const [draftAdmin, setDraftAdmin] = useState((adminName ?? "").trim());
+  const [draftEmail, setDraftEmail] = useState((email ?? "").trim());
+  const [draftPhone, setDraftPhone] = useState((phone ?? "").trim());
+  const [savingIdentity, setSavingIdentity] = useState(false);
   const [contractWarehouseFilter, setContractWarehouseFilter] = useState<string>("all");
   const [contractPage, setContractPage] = useState(0);
   const [kycUploadingId, setKycUploadingId] = useState<string | null>(null);
@@ -408,7 +414,10 @@ export function CounterpartyProfileSystemCard({
     setDraftGst((gstNumber ?? "").trim());
     setDraftPan((panNumber ?? "").trim());
     setDraftBilling((billingAddress ?? "").trim());
-  }, [organizationName, gstNumber, panNumber, billingAddress]);
+    setDraftAdmin((adminName ?? "").trim());
+    setDraftEmail((email ?? "").trim());
+    setDraftPhone((phone ?? "").trim());
+  }, [organizationName, gstNumber, panNumber, billingAddress, adminName, email, phone]);
 
   const completion = useMemo(
     () =>
@@ -498,8 +507,30 @@ export function CounterpartyProfileSystemCard({
     setContractPage(0);
   }, [contractWarehouseFilter, contracts.length]);
 
-  const handleSynchronize = () => {
+  const handleSynchronize = async () => {
+    if (type === "client" && organizationId && clientId) {
+      setSavingIdentity(true);
+      try {
+        const { error } = await updateClient(organizationId, clientId, {
+          organization_name: draftName.trim(),
+          contact_person: draftAdmin.trim(),
+          email: draftEmail.trim(),
+          phone: draftPhone.trim(),
+          gstin: draftGst.trim(),
+          pan_number: draftPan.trim(),
+          address: draftBilling.trim(),
+        });
+        if (error) {
+          Alert.alert("Could not save profile", error.message);
+          return;
+        }
+        onProfileEntitiesChange?.();
+      } finally {
+        setSavingIdentity(false);
+      }
+    }
     onEditPress?.();
+    setMode("view");
   };
 
   const canUploadSupplierKyc =
@@ -602,9 +633,14 @@ export function CounterpartyProfileSystemCard({
             </TouchableOpacity>
             <TouchableOpacity
               style={[styles.syncBtn, isPage && styles.syncBtnPage]}
-              onPress={handleSynchronize}
+              onPress={() => {
+                void handleSynchronize();
+              }}
+              disabled={savingIdentity}
             >
-              <Text style={[styles.syncBtnText, isPage && styles.syncBtnTextPage]}>Synchronize Hub</Text>
+              <Text style={[styles.syncBtnText, isPage && styles.syncBtnTextPage]}>
+                {savingIdentity ? "Saving…" : "Synchronize Hub"}
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -709,16 +745,16 @@ export function CounterpartyProfileSystemCard({
                   <View style={styles.accentNavy} />
                   <View style={{ flex: 1, minWidth: 0 }}>
                     <Text style={[styles.editSectionTitle, isPage && styles.editSectionTitlePage]}>
-                      Core Identity
+                      Admin Registry
                     </Text>
                     <Text style={[styles.editSectionHint, isPage && styles.editSectionHintPage]}>
-                      Official business and tax records
+                      Contact used on invoices and the customer profile
                     </Text>
                   </View>
                 </View>
                 <View style={[styles.editFormCard, isPage && styles.editFormCardPage]}>
                   <Text style={[styles.fieldLabel, isPage && styles.fieldLabelPage]}>
-                    Legal Organization Name
+                    Legal organization name
                   </Text>
                   <TextInput
                     value={draftName}
@@ -728,20 +764,67 @@ export function CounterpartyProfileSystemCard({
                     placeholderTextColor={Theme.textSection}
                   />
                   <Text style={[styles.fieldLabel, isPage && styles.fieldLabelPage]}>
+                    Admin name
+                  </Text>
+                  <TextInput
+                    value={draftAdmin}
+                    onChangeText={setDraftAdmin}
+                    style={[styles.fieldInputLarge, isPage && styles.fieldInputPage]}
+                    placeholder="Contact person"
+                    placeholderTextColor={Theme.textSection}
+                  />
+                  <Text style={[styles.fieldLabel, isPage && styles.fieldLabelPage]}>
+                    Email link
+                  </Text>
+                  <TextInput
+                    value={draftEmail}
+                    onChangeText={setDraftEmail}
+                    style={[styles.fieldInputLarge, isPage && styles.fieldInputPage]}
+                    placeholder="billing@company.com"
+                    placeholderTextColor={Theme.textSection}
+                    keyboardType="email-address"
+                    autoCapitalize="none"
+                  />
+                  <Text style={[styles.fieldLabel, isPage && styles.fieldLabelPage]}>
+                    Phone registry
+                  </Text>
+                  <TextInput
+                    value={draftPhone}
+                    onChangeText={setDraftPhone}
+                    style={[styles.fieldInputLarge, isPage && styles.fieldInputPage]}
+                    placeholder="Phone"
+                    placeholderTextColor={Theme.textSection}
+                    keyboardType="phone-pad"
+                  />
+                </View>
+
+                <View style={[styles.editSectionHeadingRow, { marginTop: 20 }]}>
+                  <View style={styles.accentNavy} />
+                  <View style={{ flex: 1, minWidth: 0 }}>
+                    <Text style={[styles.editSectionTitle, isPage && styles.editSectionTitlePage]}>
+                      Tax Identity
+                    </Text>
+                    <Text style={[styles.editSectionHint, isPage && styles.editSectionHintPage]}>
+                      GSTIN, PAN, and billing address printed on the invoice
+                    </Text>
+                  </View>
+                </View>
+                <View style={[styles.editFormCard, isPage && styles.editFormCardPage]}>
+                  <Text style={[styles.fieldLabel, isPage && styles.fieldLabelPage]}>
                     Registered GSTIN
                   </Text>
                   <TextInput
                     value={draftGst}
                     onChangeText={setDraftGst}
                     style={[styles.fieldInputLarge, isPage && styles.fieldInputPage]}
-                    placeholder="33XXXXX..."
+                    placeholder="15-character GSTIN"
                     placeholderTextColor={Theme.textSection}
                     autoCapitalize="characters"
                   />
                   {type === "client" ? (
                     <>
                       <Text style={[styles.fieldLabel, isPage && styles.fieldLabelPage]}>
-                        PAN Registry
+                        PAN registry
                       </Text>
                       <TextInput
                         value={draftPan}
@@ -754,7 +837,7 @@ export function CounterpartyProfileSystemCard({
                     </>
                   ) : null}
                   <Text style={[styles.fieldLabel, isPage && styles.fieldLabelPage]}>
-                    Billing Headquarters Address
+                    Billing address
                   </Text>
                   <TextInput
                     value={draftBilling}
@@ -764,7 +847,7 @@ export function CounterpartyProfileSystemCard({
                       isPage && styles.fieldInputAreaPage,
                       isPage && styles.fieldInputPageLast,
                     ]}
-                    placeholder="Registered billing address"
+                    placeholder="Street, city, state, PIN"
                     placeholderTextColor={Theme.textSection}
                     multiline
                   />

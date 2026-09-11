@@ -2,25 +2,69 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   executeLogIncomingPods,
   fetchCourierPartners,
+  fetchOrgDriversForLogPods,
+  fetchOrgSuppliersForLogPods,
   fetchTripsForLogPods,
   ensureCustomCourierPartner,
+  markSelectedTripsHardCopyPodReceived,
   type CourierPartnerRow,
   type LogPodsPayload,
   type LogPodsTripView,
+  type MarkHardCopyPodsReceivedInput,
 } from '@/features/log-pods/services/logPods.service';
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
 
-export function useLogIncomingPodsTripsQuery(orgId: string | null) {
+export function useLogIncomingPodsTripsQuery(
+  orgId: string | null,
+  options?: { includeReceived?: boolean },
+) {
+  const includeReceived = Boolean(options?.includeReceived);
   return useQuery({
-    queryKey: orgId ? queryKeys.logPods.trips(orgId) : ['q', 'log-pods', 'trips', 'none'],
+    queryKey: orgId
+      ? includeReceived
+        ? queryKeys.logPods.tripsIncludingReceived(orgId)
+        : queryKeys.logPods.trips(orgId)
+      : ['q', 'log-pods', 'trips', 'none'],
     queryFn: async () => {
-      const { error, trips } = await fetchTripsForLogPods(orgId!);
+      const { error, trips } = await fetchTripsForLogPods(orgId!, {
+        includeReceived,
+      });
       if (error) throw error;
       return trips;
     },
     enabled: !!orgId,
     staleTime: STALE.moderate,
+  });
+}
+
+export function useLogIncomingPodsSuppliersQuery(orgId: string | null) {
+  return useQuery({
+    queryKey: orgId
+      ? queryKeys.logPods.suppliers(orgId)
+      : ['q', 'log-pods', 'suppliers', 'none'],
+    queryFn: async () => {
+      const { error, suppliers } = await fetchOrgSuppliersForLogPods(orgId!);
+      if (error) throw error;
+      return suppliers;
+    },
+    enabled: !!orgId,
+    staleTime: STALE.slow,
+  });
+}
+
+export function useLogIncomingPodsDriversQuery(orgId: string | null) {
+  return useQuery({
+    queryKey: orgId
+      ? queryKeys.logPods.drivers(orgId)
+      : ['q', 'log-pods', 'drivers', 'none'],
+    queryFn: async () => {
+      const { error, drivers } = await fetchOrgDriversForLogPods(orgId!);
+      if (error) throw error;
+      return drivers;
+    },
+    enabled: !!orgId,
+    staleTime: STALE.slow,
   });
 }
 
@@ -78,10 +122,43 @@ export function useLogIncomingPodsMutation(orgId: string | null) {
         queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) });
         queryClient.invalidateQueries({ queryKey: queryKeys.trips.bundle(tripId) });
       }
+      queryClient.invalidateQueries({ queryKey: ["q", "trips"] });
       if (orgId) {
         queryClient.invalidateQueries({ queryKey: queryKeys.logPods.trips(orgId) });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.logPods.tripsIncludingReceived(orgId),
+        });
+        queryClient.invalidateQueries({ queryKey: queryKeys.invoicing.trips(orgId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.invoicing.summary(orgId) });
       }
       queryClient.invalidateQueries({ queryKey: queryKeys.logPods.courierPartners() });
+    },
+  });
+}
+
+export function useMarkHardCopyPodsReceivedMutation(orgId: string | null) {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async (input: MarkHardCopyPodsReceivedInput) => {
+      const result = await markSelectedTripsHardCopyPodReceived(input);
+      if (result.error) throw result.error;
+      return result;
+    },
+    onSuccess: (_result, input) => {
+      for (const tripId of input.tripInternalIds) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.trips.detail(tripId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.trips.bundle(tripId) });
+      }
+      queryClient.invalidateQueries({ queryKey: ["q", "trips"] });
+      if (orgId) {
+        queryClient.invalidateQueries({ queryKey: queryKeys.logPods.trips(orgId) });
+        queryClient.invalidateQueries({
+          queryKey: queryKeys.logPods.tripsIncludingReceived(orgId),
+        });
+        queryClient.invalidateQueries({ queryKey: queryKeys.invoicing.trips(orgId) });
+        queryClient.invalidateQueries({ queryKey: queryKeys.invoicing.summary(orgId) });
+      }
     },
   });
 }

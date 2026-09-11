@@ -1,2 +1,11 @@
-import RouteSegmentLayout from '@/components/RouteSegmentLayout';
-export default RouteSegmentLayout;
+import { PulseProductShell } from "@/features/product-shell/PulseProductShell";
+import { routeStackScreenOptions } from "@/lib/routeStackOptions";
+import { Stack } from "expo-router";
+
+export default function LogIncomingPodsLayout() {
+  return (
+    <PulseProductShell productId="pod">
+      <Stack screenOptions={routeStackScreenOptions} />
+    </PulseProductShell>
+  );
+}

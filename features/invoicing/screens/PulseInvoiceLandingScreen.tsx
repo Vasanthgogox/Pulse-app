@@ -8,11 +8,13 @@ import { PulsePillButton } from "@/components/PulsePillButton";
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
 import { ROUTES } from "@/lib/routes";
-import { useRouter } from "expo-router";
+import { parseSafeReturnTo, withReturnTo } from "@/features/finance-pro/components/financeProReturnTo";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { StyleSheet, Text, View } from "react-native";
 
 export function PulseInvoiceLandingScreen() {
   const router = useRouter();
+  const returnTo = parseSafeReturnTo(useLocalSearchParams().returnTo);
 
   return (
     <View style={styles.wrap}>
@@ -26,7 +28,13 @@ export function PulseInvoiceLandingScreen() {
           label="Create Invoice"
           accessibilityLabel="Create Invoice"
           fullWidth
-          onPress={() => router.push(ROUTES.INVOICING_EXECUTE)}
+          onPress={() =>
+            router.push(
+              returnTo
+                ? withReturnTo(ROUTES.INVOICING_EXECUTE, returnTo)
+                : ROUTES.INVOICING_EXECUTE,
+            )
+          }
           style={styles.cta}
         />
       </View>

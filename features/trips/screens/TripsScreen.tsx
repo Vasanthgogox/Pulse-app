@@ -57,6 +57,7 @@ import {
 import { computeTripSettlementDues } from "@/features/finance/utils/tripSettlement.util";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import type { TripRow } from "@/features/trips/services/trips.service";
+import { loadLrPodIndexByTripIds } from "@/features/trips/services/tripDocumentLrPod.service";
 import {
   classifyTripMetric,
   countTripsByMetric,
@@ -492,28 +493,32 @@ export default function TripsScreen() {
     return ids.join(",");
   }, [showCompletedList, tripsByStatus]);
 
+  const podDocumentTripIdsSorted = useMemo(() => {
+    const ids = trips.map((t) => t.id).filter(Boolean).sort();
+    return [...new Set(ids)].join(",");
+  }, [trips]);
+
   /** Persisted React Query cache is JSON — `Set` breaks after hydrate (`.has` missing). Store IDs as array, derive Set in memo. */
   const { data: tripIdsWithDocumentsRaw } = useQuery({
     queryKey: [
       "q",
       "trips",
       "doc-trip-ids",
-      "v2",
+      "v3",
       orgId ?? "",
-      activeOpsTripIdsSorted,
+      podDocumentTripIdsSorted,
     ],
-    enabled: !!orgId && activeOpsTripIdsSorted.length > 0,
+    enabled: !!orgId && podDocumentTripIdsSorted.length > 0,
     staleTime: 60_000,
     queryFn: async (): Promise<string[]> => {
-      const ids = activeOpsTripIdsSorted.split(",").filter(Boolean);
+      const ids = podDocumentTripIdsSorted.split(",").filter(Boolean);
       if (ids.length === 0) return [];
-      const { data, error } = await supabase()
-        .from("trip_documents")
-        .select("trip_id")
-        .eq("document_type", "pod")
-        .in("trip_id", ids);
-      if (error) throw error;
-      return (data ?? []).map((r) => (r as { trip_id: string }).trip_id);
+      const index = await loadLrPodIndexByTripIds(ids);
+      const out: string[] = [];
+      for (const [tripId, docs] of index) {
+        if (docs.hasPodDocument) out.push(tripId);
+      }
+      return out;
     },
   });
   const tripIdsWithDocuments = useMemo(() => {
@@ -2072,6 +2077,7 @@ export default function TripsScreen() {
                   clientNameByTripId={shipperNameByTripId}
                   linkedOrgByOrganizationId={linkedOrgByOrganizationId}
                   partyMetaByTripId={tripHubPartyMetaByTripId}
+                  softPodTripIds={tripIdsWithDocuments}
                 />
                 {filtered.length === 0 ? (
                   <View style={emptyBannerStageStyle}>
@@ -2122,6 +2128,7 @@ export default function TripsScreen() {
                 clientNameByTripId={shipperNameByTripId}
                 linkedOrgByOrganizationId={linkedOrgByOrganizationId}
                 partyMetaByTripId={tripHubPartyMetaByTripId}
+                softPodTripIds={tripIdsWithDocuments}
                 renderBody={(rows) =>
                   rows.length === 0 ? (
                     <View style={emptyBannerStageStyle}>
@@ -2156,6 +2163,7 @@ export default function TripsScreen() {
                           <TripsHubTripCard
                             hubGrid
                             trip={t}
+                            softPodReceived={tripIdsWithDocuments.has(t.id)}
                             currentOrganizationId={
                               currentOrganization?.id ?? null
                             }
@@ -2253,6 +2261,7 @@ export default function TripsScreen() {
                         <TripsHubTripCard
                           key={t.id}
                           trip={t}
+                          softPodReceived={tripIdsWithDocuments.has(t.id)}
                           currentOrganizationId={
                             currentOrganization?.id ?? null
                           }

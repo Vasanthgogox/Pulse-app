@@ -55,6 +55,9 @@ export default function EditClientScreen() {
     await queryClient.refetchQueries({
       queryKey: queryKeys.clients.all(currentOrganization.id),
     });
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.invoicing.draftClientsRoot,
+    });
     closeModal(router);
   };
 

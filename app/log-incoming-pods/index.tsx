@@ -1,5 +1,7 @@
-import { LogIncomingPodsScreen } from '@/features/log-pods/LogIncomingPodsScreen';
+import { LogIncomingPodsScreen } from "@/features/log-pods/LogIncomingPodsScreen";
+import { usePulseProductShell } from "@/features/product-shell/PulseProductShell";
 
 export default function LogIncomingPodsRoute() {
-  return <LogIncomingPodsScreen />;
+  const inProductShell = usePulseProductShell() != null;
+  return <LogIncomingPodsScreen embedded={inProductShell} />;
 }

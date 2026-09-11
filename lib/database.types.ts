@@ -2095,6 +2095,7 @@ export type Database = {
           iec_number: string | null
           industry: string | null
           invoice_frequency_label: string | null
+          invoice_pod_policy: string | null
           is_integrated: boolean | null
           kam_email: string | null
           kam_name: string | null
@@ -2150,6 +2151,7 @@ export type Database = {
           iec_number?: string | null
           industry?: string | null
           invoice_frequency_label?: string | null
+          invoice_pod_policy?: string | null
           is_integrated?: boolean | null
           kam_email?: string | null
           kam_name?: string | null
@@ -2205,6 +2207,7 @@ export type Database = {
           iec_number?: string | null
           industry?: string | null
           invoice_frequency_label?: string | null
+          invoice_pod_policy?: string | null
           is_integrated?: boolean | null
           kam_email?: string | null
           kam_name?: string | null
@@ -4495,6 +4498,7 @@ export type Database = {
           tax_snapshot: Json | null
           payment_terms: string | null
           pdf_storage_path: string | null
+          pod_annexure_snapshot: Json | null
           sgst_amount: number
           status: string
           subtotal: number
@@ -4523,6 +4527,7 @@ export type Database = {
           tax_snapshot?: Json | null
           payment_terms?: string | null
           pdf_storage_path?: string | null
+          pod_annexure_snapshot?: Json | null
           sgst_amount?: number
           status?: string
           subtotal?: number
@@ -4551,6 +4556,7 @@ export type Database = {
           tax_snapshot?: Json | null
           payment_terms?: string | null
           pdf_storage_path?: string | null
+          pod_annexure_snapshot?: Json | null
           sgst_amount?: number
           status?: string
           subtotal?: number
@@ -11826,6 +11832,10 @@ export type Database = {
       }
       can_access_trip_location: {
         Args: { p_trip_id: string }
+        Returns: boolean
+      }
+      can_manage_client_invoice_pod_policy: {
+        Args: { p_org_id: string }
         Returns: boolean
       }
       cancel_pending_sent_connections_to_partner_owner: {

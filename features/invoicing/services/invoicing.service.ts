@@ -11,7 +11,9 @@ import { getTripOperationalDisplay } from "@/features/operations/display";
 import {
   computePodReconciliationSummaryFromTrips,
   mergeTripsForPodOrg,
+  withIssuedInvoiceOverlay,
 } from "@/features/pod-reconciliation/services/podReconciliationService";
+import { tripPodIsReceived } from "@/features/trips/services/tripDocumentLrPod.service";
 import { syncDomainRows } from "@/lib/cache/domainSync";
 import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import { supabase } from "@/lib/supabase";
@@ -21,6 +23,18 @@ import {
   round2,
   type InvoiceTaxEngineInput,
 } from "@/features/invoicing/services/invoiceTax.service";
+import {
+  INVOICE_POD_HARD_COPY_REQUIRED,
+  INVOICE_POD_LEGACY_REQUIRED,
+  INVOICE_POD_SOFT_COPY_REQUIRED,
+  conflictingInvoicePodOptions,
+  effectiveInvoicePodPolicyFromClientRaw,
+  invoiceNeedsDigitalPodLookup,
+  invoiceSelectionClientIdentityError,
+  isTripEligibleForInvoicePodPolicy,
+} from "@/features/invoicing/utils/invoicePodEnforcement.util";
+import type { InvoicePodPolicy } from "@/features/invoicing/utils/invoicePodPolicy.util";
+import { loadWorkspaceInvoicePodRequired } from "@/features/invoicing/utils/invoicePodRequired.util";
 
 export type TripStatus =
   | "approved"
@@ -48,6 +62,12 @@ export interface InvoicingTripView {
   status: TripStatus;
   details: string;
   checks: TripChecks;
+  /** trips.pod_received_at — physical/hard-copy receipt, not a digital POD file. */
+  physicalPodReceived: boolean;
+  /** trip_documents document_type=pod. Independent of physicalPodReceived. */
+  digitalPodPresent: boolean;
+  /** Operational trips.status — not invoice Approved/Pending. */
+  tripStatus: string;
 }
 
 export interface AdditionalCharge {
@@ -77,7 +97,7 @@ export interface PodReconciliationSummary {
 }
 
 const LIVE_TRIP_SELECT =
-  "id, organization_id, trip_operational_code, trip_code, display_trip_id, trip_number, booking_ref, supplier_id, client_id, client_name, client_price, status, pickup_date, pickup_area, drop_location, notes, created_at";
+  "id, organization_id, trip_operational_code, trip_code, display_trip_id, trip_number, booking_ref, supplier_id, client_id, client_name, client_price, status, pickup_date, pickup_area, drop_location, notes, created_at, pod_received_at";
 
 const POD_IN_CHUNK = 200;
 const UUID_RE =
@@ -103,6 +123,7 @@ type TripRecord = Pick<
   | "booking_ref"
 > & {
   client_id?: string | null;
+  pod_received_at?: string | null;
 };
 
 function str(v: unknown): string {
@@ -244,7 +265,34 @@ function toAppError(e: unknown): Error {
   return e instanceof Error ? e : new Error(msg);
 }
 
-async function fetchPodTripIds(tripIds: string[]): Promise<Set<string>> {
+/** Batched physical-POD stamps for trips missing pod_received_at on the owner select. */
+async function fetchPhysicalPodReceivedAtByIds(
+  tripIds: string[],
+): Promise<Map<string, string | null>> {
+  const found = new Map<string, string | null>();
+  if (tripIds.length === 0) return found;
+  for (let i = 0; i < tripIds.length; i += POD_IN_CHUNK) {
+    const chunk = tripIds.slice(i, i + POD_IN_CHUNK);
+    const { data, error } = await supabase()
+      .from("trips")
+      .select("id, pod_received_at")
+      .in("id", chunk);
+    if (error) throw toAppError(error);
+    for (const row of data ?? []) {
+      const id = str((row as { id?: string | null }).id);
+      if (!id) continue;
+      found.set(
+        id,
+        (row as { pod_received_at?: string | null }).pod_received_at ?? null,
+      );
+    }
+  }
+  return found;
+}
+
+export async function fetchDigitalPodTripIdsForInvoice(
+  tripIds: string[],
+): Promise<Set<string>> {
   const found = new Set<string>();
   if (tripIds.length === 0) return found;
   for (let i = 0; i < tripIds.length; i += POD_IN_CHUNK) {
@@ -303,6 +351,7 @@ function mapRowToView(
   row: TripRecord,
   supplierNameById: Map<string, string> | undefined,
   hasPod: boolean,
+  physicalPodReceived: boolean,
 ): InvoicingTripView {
   const tripDate = str((row as { pickup_date?: string | null }).pickup_date);
   const ppLocation = str((row as { pickup_area?: string | null }).pickup_area);
@@ -326,13 +375,16 @@ function mapRowToView(
       num((row as { total_client_value?: unknown }).total_client_value) ||
       num((row as { client_price?: unknown }).client_price) ||
       0,
-    status: hasPod ? "approved" : "pending",
+    status: hasPod ? "approved" : physicalPodReceived ? "received" : "pending",
     details: str((row as { notes?: string | null }).notes),
     checks: {
       poMatch: true,
       idConfirmed: true,
       podReceived: hasPod,
     },
+    physicalPodReceived,
+    digitalPodPresent: hasPod,
+    tripStatus: str((row as { status?: string | null }).status),
   };
 }
 
@@ -362,9 +414,13 @@ export async function fetchInvoicingTrips(
     }
     const merged = Array.from(map.values());
     const mergedIds = merged.map((t) => str(t.id)).filter(Boolean);
-    const [podTripIds, invoicedTripIds] = await Promise.all([
-      fetchPodTripIds(mergedIds),
+    const missingPhysicalStampIds = mergedIds.filter((id) => {
+      const row = map.get(id);
+      return row != null && !("pod_received_at" in row);
+    });
+    const [invoicedTripIds, physicalStampById] = await Promise.all([
       fetchInvoicedTripIdsForOrg(orgId),
+      fetchPhysicalPodReceivedAtByIds(missingPhysicalStampIds),
     ]);
     const eligible = merged.filter((t) => !invoicedTripIds.has(str(t.id)));
 
@@ -395,9 +451,19 @@ export async function fetchInvoicingTrips(
       }
     }
 
-    const views = eligible.map((row) =>
-      mapRowToView(row, supplierNameById, podTripIds.has(str(row.id))),
-    );
+    const views = eligible.map((row) => {
+      const id = str(row.id);
+      const stamp =
+        row.pod_received_at !== undefined
+          ? row.pod_received_at
+          : (physicalStampById.get(id) ?? null);
+      return mapRowToView(
+        row,
+        supplierNameById,
+        false,
+        tripPodIsReceived({ pod_received_at: stamp }),
+      );
+    });
     return { error: null, trips: views };
   } catch (e) {
     return { error: toAppError(e), trips: [] };
@@ -412,7 +478,7 @@ export async function syncInvoicingTripsWithCache(
     const trips = await syncDomainRows<InvoicingTripView>({
       domain: "invoicing",
       orgId,
-      schemaVersion: "1",
+      schemaVersion: "2",
       policy: { maxDeltaLagMs: 2 * 60_000, fullSyncEveryMs: 60 * 60_000 },
       currentRows,
       getFull: async () => {
@@ -455,7 +521,8 @@ export async function fetchPodReconciliationSummary(
     }
     const { error, trips } = await mergeTripsForPodOrg(organizationId);
     if (error) throw error;
-    const s = computePodReconciliationSummaryFromTrips(trips);
+    const overlaid = await withIssuedInvoiceOverlay(organizationId, trips);
+    const s = computePodReconciliationSummaryFromTrips(overlaid);
     return {
       error: null,
       summary: {
@@ -495,9 +562,143 @@ export interface InvoicePayload {
   };
 }
 
+/**
+ * Legacy `requirePod` remains for existing callers (true = digital POD, false = skip).
+ * Omitted requirePod + omitted podPolicy = authoritative client/workspace revalidation.
+ * Do not pass both inconsistently.
+ */
+export type ExecuteInvoiceOptions = {
+  requirePod?: boolean;
+  podPolicy?: InvoicePodPolicy;
+};
+
+async function fetchAuthoritativeClientInvoicePodPolicy(
+  orgId: string,
+  clientId: string,
+): Promise<unknown> {
+  const { data, error } = await supabase()
+    .from("clients")
+    .select("id, invoice_pod_policy")
+    .eq("organization_id", orgId)
+    .eq("id", clientId)
+    .maybeSingle();
+  if (error) throw toAppError(error);
+  if (!data) {
+    throw new Error("Client not found or you cannot view this client.");
+  }
+  return (data as { invoice_pod_policy?: unknown }).invoice_pod_policy;
+}
+
+async function enforceInvoicePodGate(args: {
+  rows: TripRecord[];
+  sanitizedIds: string[];
+  orgId: string;
+  options?: ExecuteInvoiceOptions;
+}): Promise<void> {
+  const requirePodSupplied = args.options != null && "requirePod" in args.options;
+  const podPolicySupplied =
+    args.options != null &&
+    "podPolicy" in args.options &&
+    args.options.podPolicy != null;
+  const conflict = conflictingInvoicePodOptions({
+    requirePodSupplied,
+    podPolicySupplied,
+    requirePod: args.options?.requirePod,
+    podPolicy: args.options?.podPolicy,
+  });
+  if (conflict) throw new Error(conflict);
+
+  if (requirePodSupplied && !podPolicySupplied) {
+    if (args.options?.requirePod === false) return;
+    const podTripIds = await fetchDigitalPodTripIdsForInvoice(args.sanitizedIds);
+    const missingPod = args.sanitizedIds.filter((id) => !podTripIds.has(id));
+    if (missingPod.length > 0) {
+      throw new Error(INVOICE_POD_LEGACY_REQUIRED);
+    }
+    return;
+  }
+
+  const identityError = invoiceSelectionClientIdentityError(args.rows);
+  if (identityError) throw new Error(identityError);
+
+  const clientIds = Array.from(
+    new Set(
+      args.rows
+        .map((row) => str((row as { client_id?: string | null }).client_id))
+        .filter((id) => isUuid(id)),
+    ),
+  );
+
+  let clientPolicyRaw: unknown = null;
+  if (clientIds.length === 1) {
+    clientPolicyRaw = await fetchAuthoritativeClientInvoicePodPolicy(
+      args.orgId,
+      clientIds[0],
+    );
+  }
+
+  const parsedProbe = effectiveInvoicePodPolicyFromClientRaw({
+    clientPolicyRaw,
+    workspacePodRequired: false,
+  });
+  if (!parsedProbe.ok) throw new Error(parsedProbe.error);
+
+  let workspacePodRequired = false;
+  if (parsedProbe.source === "workspace") {
+    workspacePodRequired = await loadWorkspaceInvoicePodRequired(args.orgId);
+  }
+  const resolved = effectiveInvoicePodPolicyFromClientRaw({
+    clientPolicyRaw,
+    workspacePodRequired,
+  });
+  if (!resolved.ok) throw new Error(resolved.error);
+  const policy = resolved.policy;
+
+  if (policy === "none") return;
+
+  if (invoiceNeedsDigitalPodLookup(policy)) {
+    const podTripIds = await fetchDigitalPodTripIdsForInvoice(args.sanitizedIds);
+    const missing = args.sanitizedIds.some((id) => !podTripIds.has(id));
+    if (missing) throw new Error(INVOICE_POD_SOFT_COPY_REQUIRED);
+    return;
+  }
+
+  const physicalById = new Map<string, boolean>();
+  const missingStampIds: string[] = [];
+  for (const row of args.rows) {
+    const id = str(row.id);
+    if (row.pod_received_at !== undefined) {
+      physicalById.set(
+        id,
+        tripPodIsReceived({ pod_received_at: row.pod_received_at }),
+      );
+    } else {
+      missingStampIds.push(id);
+    }
+  }
+  if (missingStampIds.length > 0) {
+    const stamps = await fetchPhysicalPodReceivedAtByIds(missingStampIds);
+    for (const id of missingStampIds) {
+      physicalById.set(
+        id,
+        tripPodIsReceived({ pod_received_at: stamps.get(id) ?? null }),
+      );
+    }
+  }
+  const missingPhysical = args.sanitizedIds.some(
+    (id) =>
+      !isTripEligibleForInvoicePodPolicy("hard_copy", {
+        digitalPodPresent: false,
+        physicalPodReceived: physicalById.get(id) === true,
+      }),
+  );
+  if (missingPhysical) throw new Error(INVOICE_POD_HARD_COPY_REQUIRED);
+}
+
 export async function executeInvoiceCreation(
   internalIds: string[],
   payload?: InvoicePayload,
+  options?: ExecuteInvoiceOptions,
 ): Promise<{ error: Error | null; invoiceNumber?: string }> {
   try {
     const sanitizedIds = Array.from(
@@ -510,7 +711,7 @@ export async function executeInvoiceCreation(
     const { data: candidates, error: candidateError } = await supabase()
       .from("trips")
       .select(
-        "id, organization_id, trip_number, display_trip_id, booking_ref, trip_operational_code, trip_code, client_id, client_name, client_price, pickup_date, pickup_area, drop_location, notes",
+        "id, organization_id, trip_number, display_trip_id, booking_ref, trip_operational_code, trip_code, client_id, client_name, client_price, pickup_date, pickup_area, drop_location, notes, pod_received_at",
       )
       .in("id", sanitizedIds);
 
@@ -535,11 +736,12 @@ export async function executeInvoiceCreation(
     }
     const orgId = orgIds[0];
 
-    const podTripIds = await fetchPodTripIds(sanitizedIds);
-    const missingPod = sanitizedIds.filter((id) => !podTripIds.has(id));
-    if (missingPod.length > 0) {
-      throw new Error("POD is required before invoice creation.");
-    }
+    await enforceInvoicePodGate({
+      rows,
+      sanitizedIds,
+      orgId,
+      options,
+    });
 
     const invoicedTripIds = await fetchInvoicedTripIdsForOrg(orgId);
     if (sanitizedIds.some((id) => invoicedTripIds.has(id))) {

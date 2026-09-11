@@ -18,6 +18,7 @@ import type { DeltaResponse } from '@/lib/cache/deltaTypes';
 import type { RatingRow } from '@/features/ratings';
 import type { ClientWarehouse } from '@/features/clients/services/clientWarehouses.service';
 import type { ClientContract } from '@/features/clients/services/clientContracts.service';
+import type { InvoicePodPolicy } from '@/features/invoicing/utils/invoicePodPolicy.util';
 
 export interface ClientRow {
   id: string;
@@ -46,6 +47,8 @@ export interface ClientRow {
   avatar_url?: string | null;
   avatar_seed?: string | null;
   owner_full_name?: string | null;
+  /** DB `string | null`. Parse with `parseInvoicePodPolicy` before use. */
+  invoice_pod_policy?: string | null;
 }
 
 function asClientRow(record: Record<string, unknown> | null): ClientRow | null {
@@ -531,6 +534,102 @@ export async function updateClient(
   } catch (e) {
     return { error: e instanceof Error ? e : new Error(String(e)), client: null };
   }
+}
+
+function mapInvoicePodPolicyWriteError(e: { message?: string; code?: string }): Error {
+  const message = e.message ?? "";
+  if (e.code === "42501" || message.includes("invoice_pod_policy_forbidden")) {
+    return new Error("You do not have permission to change this client's invoicing POD policy.");
+  }
+  if (e.code === "23514" || message.includes("clients_invoice_pod_policy_check")) {
+    return new Error("That POD policy is not valid.");
+  }
+  return new Error(message || "Failed to update invoicing POD policy");
+}
+
+/** Live DB helper — same OR as trg_clients_protect_invoice_pod_policy. */
+export async function canManageClientInvoicePodPolicy(
+  orgId: string,
+): Promise<{ error: Error | null; allowed: boolean }> {
+  const { data, error } = await supabase().rpc("can_manage_client_invoice_pod_policy", {
+    p_org_id: orgId,
+  });
+  if (error) return { error: new Error(error.message), allowed: false };
+  return { error: null, allowed: data === true };
+}
+
+/** Batched `id, invoice_pod_policy` for invoice eligibility. One query (chunked). */
+export async function fetchClientInvoicePodPolicies(
+  orgId: string,
+  clientIds: string[],
+): Promise<{ error: Error | null; policies: Record<string, unknown> }> {
+  const ids = Array.from(new Set(clientIds.map((id) => id.trim()).filter(Boolean)));
+  const policies: Record<string, unknown> = {};
+  if (!orgId || ids.length === 0) return { error: null, policies };
+  try {
+    const chunkSize = 200;
+    for (let i = 0; i < ids.length; i += chunkSize) {
+      const chunk = ids.slice(i, i + chunkSize);
+      const { data, error } = await supabase()
+        .from("clients")
+        .select("id, invoice_pod_policy")
+        .eq("organization_id", orgId)
+        .in("id", chunk);
+      if (error) return { error: new Error(error.message), policies: {} };
+      for (const row of data ?? []) {
+        const id = String((row as { id?: string }).id ?? "");
+        if (!id) continue;
+        policies[id] = (row as { invoice_pod_policy?: unknown }).invoice_pod_policy;
+      }
+    }
+    return { error: null, policies };
+  } catch (e) {
+    return {
+      error: e instanceof Error ? e : new Error(String(e)),
+      policies: {},
+    };
+  }
+}
+
+/** Single-column read. Does not load trips, invoices, or the management bundle. */
+export async function getClientInvoicePodPolicy(
+  orgId: string,
+  clientId: string,
+): Promise<{ error: Error | null; raw: unknown }> {
+  const { data, error } = await supabase()
+    .from("clients")
+    .select("invoice_pod_policy")
+    .eq("organization_id", orgId)
+    .eq("id", clientId)
+    .maybeSingle();
+  if (error) return { error: new Error(error.message), raw: null };
+  if (!data) {
+    return { error: new Error("Client not found or you cannot view this client."), raw: null };
+  }
+  return { error: null, raw: data.invoice_pod_policy };
+}
+
+/** Single-column patch. Does not touch identity, trips, invoices, or workspace POD. */
+export async function updateClientInvoicePodPolicy(
+  orgId: string,
+  clientId: string,
+  policy: InvoicePodPolicy | null,
+): Promise<{ error: Error | null; raw: unknown }> {
+  const { data, error } = await supabase()
+    .from("clients")
+    .update({ invoice_pod_policy: policy })
+    .eq("organization_id", orgId)
+    .eq("id", clientId)
+    .select("invoice_pod_policy")
+    .maybeSingle();
+  if (error) return { error: mapInvoicePodPolicyWriteError(error), raw: null };
+  if (!data) {
+    return {
+      error: new Error("Client not found or you cannot update this client."),
+      raw: null,
+    };
+  }
+  return { error: null, raw: data.invoice_pod_policy };
 }
 
 /** Single round-trip bundle for ClientDetailScreen — replaces 4 parallel calls. */

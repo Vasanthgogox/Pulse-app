@@ -115,3 +115,22 @@ export function serializeLrFieldValues(values: LrFieldValues): string {
   if (!date && !invoice) return lrNumber;
   return JSON.stringify({ lrNumber, date, invoice });
 }
+
+export const LR_FIELDS_FILE_NAME = "lr-fields.json";
+
+export function lrFieldsStoragePath(tripId: string): string {
+  return `${tripId}/lr/fields.json`;
+}
+
+export function isLrFieldsMetaPath(
+  storagePath?: string | null,
+  fileName?: string | null,
+): boolean {
+  const path = (storagePath ?? "").toLowerCase().split("?")[0];
+  const name = (fileName ?? "").toLowerCase();
+  return (
+    path.endsWith("/lr/fields.json") ||
+    path.endsWith("lr-fields.json") ||
+    name === LR_FIELDS_FILE_NAME
+  );
+}

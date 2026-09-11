@@ -57,6 +57,100 @@ export function tripPodIsReceived(trip: {
   return String(trip.pod_status ?? "").toLowerCase() === "received";
 }
 
+/** Digital/soft-copy POD: at least one trip_documents row with document_type = pod. */
+export function tripHasSoftCopyPod(hasPodDocument: boolean | null | undefined): boolean {
+  return Boolean(hasPodDocument);
+}
+
+/** Physical/hard-copy POD: trips.pod_received_at (same as {@link tripPodIsReceived}). */
+export function tripHasHardCopyPod(trip: {
+  pod_received_at?: string | null;
+  pod_status?: unknown;
+}): boolean {
+  return tripPodIsReceived(trip);
+}
+
+/** POD chips belong on delivered/completed trips only, not in-transit. */
+export function tripIsDeliveredStatus(
+  status?: string | null,
+  stageLabel?: string | null,
+): boolean {
+  const s = String(status ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[\s-]+/g, "_");
+  if (s === "completed" || s === "delivered" || s === "done") return true;
+  const stage = String(stageLabel ?? "").trim().toUpperCase();
+  return stage === "COMPLETED" || stage === "DELIVERED" || stage === "DONE";
+}
+
+export type TripCompletionListFilter = "all" | "completed" | "not_completed";
+
+export function tripMatchesCompletionFilter(
+  filter: TripCompletionListFilter,
+  status?: string | null,
+  stageLabel?: string | null,
+): boolean {
+  if (filter === "all") return true;
+  const completed = tripIsDeliveredStatus(status, stageLabel);
+  return filter === "completed" ? completed : !completed;
+}
+
+export function countTripsByCompletion<T>(
+  trips: T[],
+  statusOf: (trip: T) => string | null | undefined,
+): { completed: number; notCompleted: number } {
+  let completed = 0;
+  let notCompleted = 0;
+  for (const trip of trips) {
+    if (tripIsDeliveredStatus(statusOf(trip))) completed += 1;
+    else notCompleted += 1;
+  }
+  return { completed, notCompleted };
+}
+
+export function tripPodStatusFlags(args: {
+  hasPodDocument?: boolean | null;
+  pod_received_at?: string | null;
+  pod_status?: unknown;
+}): { softCopyReceived: boolean; hardCopyReceived: boolean } {
+  return {
+    softCopyReceived: tripHasSoftCopyPod(args.hasPodDocument),
+    hardCopyReceived: tripHasHardCopyPod({
+      pod_received_at: args.pod_received_at,
+      pod_status: args.pod_status,
+    }),
+  };
+}
+
+/**
+ * Mark physical POD received — same write as the Log Incoming POD flow.
+ * Timestamp is ISO now unless a received-at is supplied (preserve caller semantics).
+ */
+export async function markTripHardCopyPodReceived(
+  tripInternalId: string,
+  receivedAt: string = new Date().toISOString(),
+): Promise<{ error: Error | null }> {
+  const id = String(tripInternalId ?? "").trim();
+  if (!id) return { error: new Error("Trip is not linked.") };
+  const { data, error } = await supabase()
+    .from("trips")
+    .update({ pod_received_at: receivedAt })
+    .eq("id", id)
+    .select("id, pod_received_at")
+    .maybeSingle();
+  if (error) {
+    console.error("[tripDocumentLrPod] pod_received_at update:", error);
+    return { error: new Error(error.message) };
+  }
+  if (!data?.id) {
+    return {
+      error: new Error("Could not stamp hard-copy POD on this trip."),
+    };
+  }
+  return { error: null };
+}
+
 export function receivedLrNumbersForTrip(
   lrNumbers: string[],
   opts: { tripReceived: boolean; hasPodDocument: boolean },

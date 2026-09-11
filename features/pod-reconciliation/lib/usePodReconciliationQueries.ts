@@ -40,6 +40,6 @@ export function usePodReconciliationSummaryQuery(orgId: string | null) {
       return summary;
     },
     enabled: !!orgId,
-    staleTime: 300_000,
+    staleTime: 60_000,
   });
 }

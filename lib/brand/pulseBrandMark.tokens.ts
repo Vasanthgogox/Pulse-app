@@ -9,14 +9,16 @@ export const PULSE_PILOT_BRAND_WORD = 'pulsepilot';
 export const PULSE_COMMERCE_BRAND_WORD = 'pulsecommerce';
 export const PULSE_INVOICE_BRAND_WORD = 'pulseinvoice';
 export const PULSE_POD_BRAND_WORD = 'pulsepod';
+export const PULSE_FINANCE_PRO_BRAND_WORD = 'pulsefinancepro';
 
-export type PulseProductBrandId = 'core' | 'pilot' | 'commerce' | 'invoice' | 'pod';
+export type PulseProductBrandId = 'core' | 'pilot' | 'commerce' | 'invoice' | 'pod' | 'finance-pro';
 
 export function pulseProductBrandWord(productId: PulseProductBrandId): string {
   if (productId === 'pilot') return PULSE_PILOT_BRAND_WORD;
   if (productId === 'commerce') return PULSE_COMMERCE_BRAND_WORD;
   if (productId === 'invoice') return PULSE_INVOICE_BRAND_WORD;
   if (productId === 'pod') return PULSE_POD_BRAND_WORD;
+  if (productId === 'finance-pro') return PULSE_FINANCE_PRO_BRAND_WORD;
   return PULSE_CORE_BRAND_WORD;
 }
 

@@ -22,6 +22,8 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { enqueueAndProcessOcrJob, getOcrJobForPodAttachment } from '@/features/ocr';
 import { chatWithDocument } from '@/lib/pod/chat';
 import { compressImage } from '@/lib/pod/imageCompression';
+import { TripCompletionOrPodTags } from "@/features/trips/components/TripPodStatusTags";
+import { tripIsDeliveredStatus } from "@/features/trips/services/tripDocumentLrPod.service";
 import type { PodReconciliationTripView } from '../services/podReconciliationService';
 import type { PODExtraction, ConfidenceField} from '@/types/pod';
 import { getDocumentViewUrl } from '@/features/trips/services/tripDocuments.service';
@@ -421,6 +423,15 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
   // is identical whether or not `trip` is set (React error #310 / GX-PULSE-T).
   if (!trip) return null;
 
+  const tripPodTags = (
+    <TripCompletionOrPodTags
+      compact
+      tripCompleted={tripIsDeliveredStatus(trip.trip_status)}
+      softCopyReceived={trip.soft_pod_received}
+      hardCopyReceived={trip.hard_pod_received}
+    />
+  );
+
   const renderAuditForm = () => (
     <>
       <View style={styles.section}>
@@ -433,7 +444,14 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
             <InfoItem label="Client" value={trip.client_name || '—'} />
             <InfoItem label="Dispatch Date" value={dispatchDate} />
           </View>
-          <InfoItem label="Vendor / Supplier" value={trip.vendor_name || 'N/A'} />
+          <InfoItem
+            label={trip.lane === "asset" ? "Driver" : "Vendor / Supplier"}
+            value={
+              trip.lane === "asset"
+                ? trip.driver_name || trip.vendor_name || "N/A"
+                : trip.vendor_name || "N/A"
+            }
+          />
           <InfoItem
             label="Route Vector"
             value={`${trip.pp_location || 'Unknown'} → ${trip.drop_point || 'Unknown'}`}
@@ -801,9 +819,10 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
             </Pressable>
             <View style={styles.tabletHeaderDivider} />
             <View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
                 <Text style={styles.verificationModeText}>VERIFICATION MODE</Text>
                 <Text style={styles.tabletHeaderTitle}>VALIDATE POD: {trip.id}</Text>
+                {tripPodTags}
               </View>
               <Text style={styles.tabletHeaderSub}>DIGITAL AUDIT & LIQUIDITY CLEARANCE TERMINAL</Text>
             </View>
@@ -907,8 +926,9 @@ export function PodValidationView({ trip, onClose, isTablet }: PodValidationView
       <View style={styles.overlay}>
         <View style={styles.sheet}>
           <View style={styles.header}>
-            <View>
+            <View style={{ flex: 1, minWidth: 0, gap: 8 }}>
               <Text style={styles.headerTitle}>VALIDATE POD: {trip.id}</Text>
+              {tripPodTags}
               <Text style={styles.headerSub}>DIGITAL AUDIT & LIQUIDITY CLEARANCE TERMINAL</Text>
             </View>
             <Pressable onPress={onClose} hitSlop={12}>

@@ -3,6 +3,7 @@
  */
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { TripHubDriverPresenceBadge } from "@/features/trips/components/TripHubDriverPresenceBadge";
+import { TripPodStatusTags } from "@/features/trips/components/TripPodStatusTags";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Theme from "@/constants/Theme";
 import type { TripHubInTransitPingMeta } from "@/features/trips/hooks/useTripHubInTransitPings";
@@ -10,6 +11,7 @@ import {
   getTripDisplayNumber,
   type TripRow,
 } from "@/features/trips/services/trips.service";
+import { tripIsDeliveredStatus } from "@/features/trips/services/tripDocumentLrPod.service";
 import {
   HUB_GRID_CARD_MIN_HEIGHT,
   HUB_GRID_DIVIDER_MARGIN_BOTTOM,
@@ -329,6 +331,8 @@ export type TripsHubMobileTripCardProps = {
   secondaryLabel?: string | null;
   /** Last ping time / offline for in-transit trips (no location line). */
   inTransitPing?: TripHubInTransitPingMeta | null;
+  softPodReceived?: boolean;
+  hardPodReceived?: boolean;
 };
 
 export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
@@ -365,6 +369,8 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
   viewerOrgId,
   secondaryLabel = null,
   inTransitPing,
+  softPodReceived = false,
+  hardPodReceived = false,
 }: TripsHubMobileTripCardProps) {
   const tripNo = asLabel(getTripDisplayNumber(trip, viewerOrgId));
   const schedule = formatMobileTripSchedule(
@@ -489,6 +495,13 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
                   {originTagUpper}
                 </Text>
               </View>
+              {tripIsDeliveredStatus(trip.status, stageLabel) ? (
+                <TripPodStatusTags
+                  compact
+                  softCopyReceived={softPodReceived}
+                  hardCopyReceived={hardPodReceived}
+                />
+              ) : null}
             </View>
           </View>
 

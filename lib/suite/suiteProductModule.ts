@@ -6,7 +6,7 @@
  */
 
 /** Suite products — shared Pulse Identity, separate apps (Zoho-style). */
-export type SuiteProductId = 'core' | 'pilot' | 'commerce' | 'invoice' | 'pod';
+export type SuiteProductId = 'core' | 'pilot' | 'commerce' | 'invoice' | 'pod' | 'finance-pro';
 
 export type ProductReadiness = {
   accessible: boolean;

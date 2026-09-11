@@ -58,9 +58,7 @@ export const PULSE_PRODUCTS: readonly PulseProduct[] = [
   },
 ] as const;
 
-export const PULSE_PRODUCTS_COMING_SOON: readonly PulseProductPreview[] = [
-  { id: 'pod', name: 'Pulse Pod' },
-] as const;
+export const PULSE_PRODUCTS_COMING_SOON: readonly PulseProductPreview[] = [] as const;
 
 export const WORKSPACE_ACCESS_ACTIONS: readonly WorkspaceAccessAction[] = [
   {

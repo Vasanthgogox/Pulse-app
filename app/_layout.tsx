@@ -591,6 +591,7 @@ function RootLayoutNav() {
               <Stack.Screen name="log-incoming-pods" options={{ presentation: 'card', animation: 'slide_from_right' }} />
               <Stack.Screen name="invoicing-execute" options={{ presentation: 'card', animation: 'slide_from_right' }} />
               <Stack.Screen name="pulse-invoice" options={{ presentation: 'card', animation: 'slide_from_right', headerShown: false }} />
+              <Stack.Screen name="finance-pro" options={{ presentation: 'card', animation: 'slide_from_right', headerShown: false }} />
               <Stack.Screen name="business-pulse" options={{ presentation: 'card', animation: 'slide_from_right', headerShown: false }} />
               <Stack.Screen name="modal" options={{ presentation: 'modal' }} />
               <Stack.Screen name="(modals)" options={{ presentation: 'modal' }} />

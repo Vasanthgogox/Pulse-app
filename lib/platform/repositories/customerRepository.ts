@@ -183,6 +183,7 @@ export const customerRepository = {
     if (input.address !== undefined) {
       patch.address = input.address;
       patch.registered_address = input.address;
+      patch.billing_address = input.address;
     }
     if (input.tradeName !== undefined) patch.trade_name = input.tradeName;
     if (input.legalName !== undefined) patch.legal_name = input.legalName;
@@ -211,7 +212,11 @@ export const customerRepository = {
     if (input.phone !== undefined) patch.phone = input.phone;
     if (input.email !== undefined) patch.email = input.email;
     if (input.gstin !== undefined) patch.gstin = input.gstin;
-    if (input.address !== undefined) patch.address = input.address;
+    if (input.address !== undefined) {
+      patch.address = input.address;
+      // Keep invoice Bill To (billing_address) aligned with the shared Edit Client form.
+      patch.billing_address = input.address;
+    }
     if (input.contactPerson !== undefined) patch.contact_person = input.contactPerson;
     if (input.panNumber !== undefined) patch.pan_number = input.panNumber;
     if (Object.keys(patch).length === 0) return null;

@@ -81,6 +81,11 @@ import {
 import { TripHubInTransitPingLines } from "./TripHubInTransitPingLines";
 import type { TripHubInTransitPingMeta } from "../hooks/useTripHubInTransitPings";
 import type { TripHubPartyMeta } from "../utils/tripHubPartyMeta";
+import { TripPodStatusTags } from "./TripPodStatusTags";
+import {
+  tripIsDeliveredStatus,
+  tripPodIsReceived,
+} from "../services/tripDocumentLrPod.service";
 
 if (
   Platform.OS === "android" &&
@@ -412,6 +417,8 @@ export type TripsHubTripCardProps = {
   hubGrid?: boolean;
   /** Last ping time / offline for in-transit hub cards. */
   inTransitPing?: TripHubInTransitPingMeta | null;
+  /** Digital POD present (trip_documents document_type=pod). */
+  softPodReceived?: boolean;
 };
 
 function tripsHubTripCardAreEqual(
@@ -426,6 +433,8 @@ function tripsHubTripCardAreEqual(
   if (prev.displaySupplierName !== next.displaySupplierName) return false;
   if (prev.displayDriverName !== next.displayDriverName) return false;
   if (prev.inTransitPing !== next.inTransitPing) return false;
+  if (prev.softPodReceived !== next.softPodReceived) return false;
+  if (prev.trip.pod_received_at !== next.trip.pod_received_at) return false;
   if (prev.financeAdjustments !== next.financeAdjustments) return false;
   if (prev.ledgerReceivedTotal !== next.ledgerReceivedTotal) return false;
   if (prev.ledgerPaidTotal !== next.ledgerPaidTotal) return false;
@@ -484,6 +493,7 @@ function TripsHubTripCardInner({
   /** Desktop 4-column grid — hub ticket card + finance toolbar (matches Load Center indents). */
   hubGrid = false,
   inTransitPing = null,
+  softPodReceived = false,
 }: TripsHubTripCardProps) {
   const handlePress = useCallback(() => {
     if (onPress) onPress();
@@ -602,6 +612,8 @@ function TripsHubTripCardInner({
     viewerOrgId: currentOrganizationId,
     inTransitPing,
     secondaryLabel: tripSecondaryLabel,
+    softPodReceived,
+    hardPodReceived: tripPodIsReceived(trip),
   };
 
   const receivedForReceivable =
@@ -1016,6 +1028,8 @@ export type TripsHubTableViewProps = {
   pagination?: { page: number; pageSize: number };
   /** Fired with count of trips matching toolbar search/sort (full unpaginated length). */
   onDisplayedTripsLengthChange?: (n: number) => void;
+  /** Trip ids with a digital POD document (batched). */
+  softPodTripIds?: Set<string>;
 };
 
 function txnAmount(row: LedgerRow): number {
@@ -1078,6 +1092,7 @@ export function TripsHubTableView({
   addTripLabel,
   pagination,
   onDisplayedTripsLengthChange,
+  softPodTripIds,
 }: TripsHubTableViewProps) {
   const insets = useSafeAreaInsets();
   const { width: layoutWidth } = useWindowDimensions();
@@ -1889,6 +1904,13 @@ export function TripsHubTableView({
                                 {typeLabel}
                               </Text>
                             </View>
+                            {tripIsDeliveredStatus(t.status) ? (
+                              <TripPodStatusTags
+                                compact
+                                softCopyReceived={Boolean(softPodTripIds?.has(t.id))}
+                                hardCopyReceived={tripPodIsReceived(t)}
+                              />
+                            ) : null}
                             {tableSecondaryLabel ? (
                               <Text
                                 style={styles.manifestSecondaryLabel}

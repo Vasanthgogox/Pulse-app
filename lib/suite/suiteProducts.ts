@@ -4,6 +4,7 @@ import { ROUTES } from '@/lib/routes';
 import {
   PULSE_COMMERCE_BRAND_WORD,
   PULSE_CORE_BRAND_WORD,
+  PULSE_FINANCE_PRO_BRAND_WORD,
   PULSE_INVOICE_BRAND_WORD,
   PULSE_PILOT_BRAND_WORD,
   PULSE_POD_BRAND_WORD,
@@ -12,7 +13,7 @@ import {
 export type { SuiteProductId } from './suiteProductModule';
 
 /** Products that currently render the shared Expo PulseProductShell. */
-export type ExpoProductShellId = Extract<SuiteProductId, 'invoice' | 'pod'>;
+export type ExpoProductShellId = Extract<SuiteProductId, 'invoice' | 'pod' | 'finance-pro'>;
 
 export type SuiteProductDefinition = {
   id: SuiteProductId;
@@ -86,6 +87,17 @@ export const SUITE_PRODUCTS: Record<SuiteProductId, SuiteProductDefinition> = {
     activationPath: ROUTES.POD_RECONCILIATION,
     signUpRoute: `${ROUTES.SIGN_UP}?product=pod`,
     expoProductShell: true,
+    expoProductShellPaths: [ROUTES.LOG_INCOMING_PODS],
+  },
+  'finance-pro': {
+    id: 'finance-pro',
+    brandWord: PULSE_FINANCE_PRO_BRAND_WORD,
+    name: 'Pulse Finance Pro',
+    tagline: 'Financial intelligence over trip-ledger truth',
+    appBasePath: ROUTES.FINANCE_PRO,
+    activationPath: ROUTES.FINANCE_PRO,
+    signUpRoute: `${ROUTES.SIGN_UP}?product=finance-pro`,
+    expoProductShell: true,
   },
 };
 
@@ -105,7 +117,7 @@ function pathMatchesPrefix(pathname: string, route: string): boolean {
   return pathname === route || pathname.startsWith(`${route}/`);
 }
 
-/** Expo product-shell path prefixes (Invoice, POD). Commerce `/oms` is not included. */
+/** Expo product-shell path prefixes (Invoice, POD, Finance Pro). Commerce `/oms` is not included. */
 export function collectExpoProductShellPrefixes(): string[] {
   const prefixes: string[] = [];
   for (const product of Object.values(SUITE_PRODUCTS)) {
@@ -119,8 +131,53 @@ export function collectExpoProductShellPrefixes(): string[] {
 }
 
 export function pathnameUsesExpoProductShell(pathname: string): boolean {
-  if (!pathname) return false;
-  return collectExpoProductShellPrefixes().some((route) =>
-    pathMatchesPrefix(pathname, route),
-  );
+  return expoProductShellIdFromPathname(pathname) != null;
+}
+
+export function expoProductShellIdFromPathname(
+  pathname: string,
+): ExpoProductShellId | null {
+  if (!pathname) return null;
+  const path = pathname.startsWith("/") ? pathname : `/${pathname}`;
+  for (const product of Object.values(SUITE_PRODUCTS)) {
+    if (!product.expoProductShell) continue;
+    if (pathMatchesPrefix(path, product.appBasePath)) {
+      return product.id as ExpoProductShellId;
+    }
+    for (const extra of product.expoProductShellPaths ?? []) {
+      if (pathMatchesPrefix(path, extra)) {
+        return product.id as ExpoProductShellId;
+      }
+    }
+  }
+  return null;
+}
+
+/** Last matching Expo product-shell route in a flattened navigation name list. */
+export function expoProductShellIdFromRouteNames(
+  names: readonly string[],
+): ExpoProductShellId | null {
+  let found: ExpoProductShellId | null = null;
+  for (const name of names) {
+    const id = expoProductShellIdFromPathname(name);
+    if (id) found = id;
+  }
+  return found;
+}
+
+type NavStateLike = {
+  routes?: Array<{ name?: string; state?: NavStateLike }>;
+};
+
+export function flattenNavigationRouteNames(state: NavStateLike | undefined): string[] {
+  const names: string[] = [];
+  const walk = (next?: NavStateLike) => {
+    if (!next?.routes) return;
+    for (const route of next.routes) {
+      if (route.name) names.push(route.name);
+      walk(route.state);
+    }
+  };
+  walk(state);
+  return names;
 }

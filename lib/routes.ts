@@ -132,10 +132,29 @@ export const ROUTES = {
   WORKSPACE_SETTINGS: '/workspace?panel=settings' as const,
   /** Pulse Scan usage (org OCR quota and quality). */
   WORKSPACE_OCR_USAGE: '/workspace?panel=ocr-usage' as const,
-  /** Existing org POD module (reconciliation). */
+  /** Pulse POD product — operational POD workflow. */
   POD_RECONCILIATION: '/pod-reconciliation' as const,
-  /** Pulse Invoice product landing (suite open contract; Core/Expo route). */
+  /** Incoming POD logging (Pulse POD / Finance Pro shell). */
+  LOG_INCOMING_PODS: '/log-incoming-pods' as const,
+  /** Pulse Finance Pro intelligence layer (launches Invoice / POD / Core Finance). */
+  FINANCE_PRO: '/finance-pro' as const,
+  FINANCE_PRO_RECEIVABLES: '/finance-pro/receivables' as const,
+  FINANCE_PRO_TRIPS_POD: '/finance-pro/trips-pod' as const,
+  FINANCE_PRO_INVOICES: '/finance-pro/invoices' as const,
+  FINANCE_PRO_PAYMENTS: '/finance-pro/payments' as const,
+  FINANCE_PRO_ANALYTICS: '/finance-pro/analytics' as const,
+  financeProClient: (clientId: string) =>
+    `/finance-pro/client/${encodeURIComponent(clientId)}` as const,
+  financeProTrip: (tripId: string) =>
+    `/finance-pro/trip/${encodeURIComponent(tripId)}` as const,
+  financeProInvoice: (invoiceId: string) =>
+    `/finance-pro/invoice/${encodeURIComponent(invoiceId)}` as const,
+  financeProCash: (transactionId: string) =>
+    `/finance-pro/cash/${encodeURIComponent(transactionId)}` as const,
+  /** Pulse Invoice product landing. */
   PULSE_INVOICE: '/pulse-invoice' as const,
+  /** Invoice-shell POD tab — hands off to Pulse POD. */
+  PULSE_INVOICE_POD: '/pulse-invoice/pod' as const,
   /** Invoice execution module (existing live-schema execute flow). */
   INVOICING_EXECUTE: '/invoicing-execute' as const,
   /** Members & access inside the workspace flex-card (not `MODALS.TEAM`). */

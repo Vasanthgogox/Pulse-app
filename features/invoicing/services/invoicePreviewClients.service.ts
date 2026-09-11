@@ -33,7 +33,7 @@ export async function fetchInvoiceDraftClients(
   const { data, error } = await supabase()
     .from('clients')
     .select(
-      'id, organization_id, name, legal_name, gstin, pan_number, billing_address, registered_address, state, email',
+      'id, organization_id, name, legal_name, gstin, pan_number, billing_address, registered_address, address, state, email',
     )
     .eq('organization_id', orgId)
     .in('id', ids);
@@ -47,7 +47,10 @@ export async function fetchInvoiceDraftClients(
     legal_name: trimOrNull(row.legal_name),
     gstin: trimOrNull(row.gstin),
     pan: trimOrNull(row.pan_number),
-    billing_address: trimOrNull(row.billing_address) ?? trimOrNull(row.registered_address),
+    billing_address:
+      trimOrNull(row.billing_address) ??
+      trimOrNull(row.registered_address) ??
+      trimOrNull((row as { address?: string | null }).address),
     state: trimOrNull(row.state),
     email: trimOrNull(row.email),
   }));

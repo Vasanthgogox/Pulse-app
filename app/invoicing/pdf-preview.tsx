@@ -2,7 +2,6 @@ import React, { useEffect, useMemo, useState } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import FontAwesome from '@expo/vector-icons/FontAwesome';
 
 import Theme from '@/constants/Theme';
 import Layout from '@/constants/Layout';
@@ -20,12 +19,16 @@ import { useCapabilities } from '@/lib/useCapabilities';
 import { useMemberAccess } from '@/lib/useMemberAccess';
 import InvoicePdf from '@/components/InvoicePdf';
 import { useInvoiceDraftClientsQuery } from '@/features/invoicing/hooks/useInvoiceDraftClients';
+import { mergeInvoiceChargesWithTripCnDn } from '@/features/invoicing/services/invoiceCnDn.service';
 import {
   buildInvoiceDraftModel,
   formatInvoicePreviewDate,
   mapInvoiceDraftModelToPdfData,
   uniqueTripClientIds,
 } from '@/features/invoicing/services/invoicePreviewModel.service';
+import {
+  useTripFinanceAdjustmentsMap,
+} from '@/lib/queries/useTripFinanceAdjustmentsQuery';
 
 interface InvoicePreviewParams extends Record<string, string | undefined> {
   activeClient: string;
@@ -38,6 +41,7 @@ interface InvoicePreviewParams extends Record<string, string | undefined> {
   fuelRate: string;
   additionalCharges: string;
   previewDate: string;
+  showSplit?: string;
 }
 
 function canAccessInvoicing(
@@ -115,15 +119,32 @@ export default function InvoicePdfPreviewScreen() {
     clientIds,
   );
 
+  const { record: tripAdjustmentsRecord } = useTripFinanceAdjustmentsMap(
+    workspaceId,
+    selectedTrips.map((t) => t.internal_id).filter(Boolean),
+  );
+
   const invoiceConfig: InvoiceConfig = useMemo(
     () => ({
       includeGst: parsedIncludeGst,
       gstRate: parsedGstRate,
       includeFuel: parsedIncludeFuel,
       fuelRate: parsedFuelRate,
-      additionalCharges: parsedAdditionalCharges,
+      additionalCharges: mergeInvoiceChargesWithTripCnDn(
+        parsedAdditionalCharges,
+        selectedTrips,
+        tripAdjustmentsRecord,
+      ),
     }),
-    [parsedAdditionalCharges, parsedFuelRate, parsedGstRate, parsedIncludeFuel, parsedIncludeGst],
+    [
+      parsedAdditionalCharges,
+      parsedFuelRate,
+      parsedGstRate,
+      parsedIncludeFuel,
+      parsedIncludeGst,
+      selectedTrips,
+      tripAdjustmentsRecord,
+    ],
   );
 
   const allowed =
@@ -218,15 +239,12 @@ export default function InvoicePdfPreviewScreen() {
   }
 
   return (
-    <View style={{ flex: 1 }}>
-      <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
-        <Pressable style={styles.backButton} onPress={() => router.back()}>
-          <FontAwesome name="arrow-left" size={16} color={Theme.textPrimaryDark} />
-          <Text style={styles.backButtonText}>Invoice draft</Text>
-        </Pressable>
-      </View>
-
-      <InvoicePdf invoiceData={invoiceData} />
+    <View style={[styles.studio, { paddingTop: insets.top }]}>
+      <InvoicePdf
+        invoiceData={invoiceData}
+        initialShowSplit={params.showSplit !== 'false'}
+        onBack={() => router.back()}
+      />
     </View>
   );
 }
@@ -262,21 +280,9 @@ const styles = StyleSheet.create({
     color: Theme.buttonPrimaryText,
     fontWeight: '700',
   },
-  header: {
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
-    backgroundColor: Theme.surface,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingBottom: 8,
-  },
-  backButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  backButtonText: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: Theme.textPrimaryDark,
-    marginLeft: 8,
+  studio: {
+    flex: 1,
+    minHeight: 0,
+    backgroundColor: Theme.analyticsCanvas,
   },
 });

@@ -621,6 +621,12 @@ export function FinanceScreen() {
     if (!error) {
       setEntitiesRefreshKey((k) => k + 1);
       setEditingClient(null);
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.invoicing.draftClientsRoot,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.clients.all(currentOrganization.id),
+      });
     }
   };
 

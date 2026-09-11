@@ -9,6 +9,7 @@ import {
   invoicingClientGroupKey,
   mapInvoiceDraftModelToPdfData,
 } from '../invoicePreviewModel.service';
+import { buildInvoicePdfTableRows, mergeInvoiceChargesWithTripCnDn } from '../invoiceCnDn.service';
 import type { InvoicingTripView } from '../invoicing.service';
 
 const ORG_A = '5b471ecb-fbfb-470e-95cf-525d789c761a';
@@ -46,6 +47,9 @@ function trip(overrides: Partial<InvoicingTripView> = {}): InvoicingTripView {
     status: 'approved',
     details: 'tracking-should-not-appear',
     checks: { poMatch: true, idConfirmed: true, podReceived: true },
+    physicalPodReceived: true,
+    digitalPodPresent: true,
+    tripStatus: "completed",
     ...overrides,
   };
 }
@@ -304,6 +308,43 @@ describe('buildInvoiceDraftModel', () => {
     expect(extra?.description).toBe('Detention');
     expect(extra?.taxable_value).toBe(500);
     expect(mapInvoiceDraftModelToPdfData(model).grandTotal).toBe(model.tax.total_amount);
+  });
+
+  it('applies finance credit notes as negative additional lines on taxable base', () => {
+    const t = trip();
+    const charges = mergeInvoiceChargesWithTripCnDn([], [t], {
+      [t.internal_id]: [
+        {
+          id: 'cn-1',
+          trip_id: t.internal_id,
+          type: 'revenue',
+          impact: 'minus',
+          amount: 1000,
+          reason: 'Late Delivery',
+        },
+      ],
+    });
+    const model = buildInvoiceDraftModel({
+      issuer: issuer(),
+      trips: [t],
+      config: { ...gstOnConfig, additionalCharges: charges },
+      previewDate: PREVIEW_DATE,
+      paymentTerms: null,
+      notes: null,
+      fetchedClients: [clientRow()],
+    });
+    expect(model.tax.taxable_base).toBe(9000);
+    expect(model.lines[0].line_type).toBe('freight');
+    expect(model.lines[0].taxable_value).toBe(10000);
+    expect(model.lines[1].line_type).toBe('additional');
+    expect(model.lines[1].trip_id).toBe(t.internal_id);
+    expect(model.lines[1].trip_ref).toBe(t.id);
+    expect(model.lines[1].description).toContain('Credit note');
+    const pdf = mapInvoiceDraftModelToPdfData(model);
+    const rows = buildInvoicePdfTableRows(pdf.items);
+    expect(rows.map((r) => r.rowRole)).toEqual(['freight', 'split', 'revised']);
+    expect(rows[2].amount).toBe(9000);
+    expect(rows[2].tripId).toBe('Invoiced');
   });
 
   it('does not invent HSN/SAC 996511', () => {

@@ -4,6 +4,8 @@ import type { InvoicePdfData } from '@/components/InvoicePdf.types';
 
 interface InvoicePdfNativeProps {
   invoiceData: InvoicePdfData;
+  initialShowSplit?: boolean;
+  onBack?: () => void;
 }
 
 export default function InvoicePdfNative({ invoiceData }: InvoicePdfNativeProps) {

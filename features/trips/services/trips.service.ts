@@ -145,6 +145,11 @@ export interface TripRow {
   booking_ref?: string | null;
   /** Per-supplier-org sequence for indent-awarded trips (Job #N in supplier UI). */
   supplier_trip_sequence?: number | null;
+  /**
+   * Physical / hard-copy POD received timestamp.
+   * Independent of digital `trip_documents` with document_type = pod.
+   */
+  pod_received_at?: string | null;
 }
 
 type TripIndentJoin = {

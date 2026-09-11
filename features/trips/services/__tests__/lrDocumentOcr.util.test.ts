@@ -3,6 +3,7 @@ import {
   parseLrFieldsFromOcrResult,
   preferredLrDocumentNumber,
   serializeLrFieldValues,
+  isLrFieldsMetaPath,
 } from "../lrDocumentOcr.util";
 
 describe("parseLrFieldsFromOcrResult", () => {
@@ -89,5 +90,13 @@ describe("parseLrFieldValues / serializeLrFieldValues", () => {
     expect(
       serializeLrFieldValues({ lrNumber: "AI3583", date: "", invoice: "" }),
     ).toBe("AI3583");
+  });
+});
+
+describe("lr fields metadata path", () => {
+  it("detects the typed-number fields file", () => {
+    expect(isLrFieldsMetaPath("trip-1/lr/fields.json")).toBe(true);
+    expect(isLrFieldsMetaPath("trip-1/lr/scan.pdf")).toBe(false);
+    expect(isLrFieldsMetaPath(undefined, "lr-fields.json")).toBe(true);
   });
 });

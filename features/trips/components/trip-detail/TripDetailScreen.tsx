@@ -30,6 +30,7 @@ import { TripPayableReceivableSummaryCard } from "@/features/trips/components/tr
 import { TripMarginHero } from "@/features/trips/components/trip-detail/TripMarginHero";
 import { TripLedgerTransactionPreviewModal } from "@/features/trips/components/trip-detail/TripLedgerTransactionPreviewModal";
 import { TripAuditLogPanel } from "@/features/trips/components/trip-detail/TripAuditLogPanel";
+import { TripPodStatusSection } from "@/features/trips/components/trip-detail/TripPodStatusSection";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import type { LedgerEntryReceiptPartyAvatar } from "@/components/ledger/LedgerEntryReceiptCard";
 import { latestTripSettlementLedgerEntry } from "@/features/trips/utils/tripSettlementLedgerEntries.util";
@@ -217,6 +218,7 @@ const TripExpensesScreen = lazy(() =>
 );
 import { isAssetExecutionTrip } from "@/features/trips/domain/tripExecutionModel";
 import { getMoverAssetTripIdForIndent } from "@/features/trips/services/trips.service";
+import { tripIsDeliveredStatus } from "@/features/trips/services/tripDocumentLrPod.service";
 import { FeedbackPlaceholder } from "./parts/FeedbackPlaceholder";
 import { ManifestPulseStepIcon } from "./parts/ManifestPulseStepIcon";
 import { ExpenseListCard } from "./parts/ExpenseListCard";
@@ -5696,6 +5698,25 @@ export default function TripDetailScreen({
                 </Text>
               </View>
             ) : null}
+
+            <View style={{ marginBottom: 16 }}>
+              <TripPodStatusSection
+                tripId={trip.id}
+                organizationId={trip.organization_id}
+                podReceivedAt={trip.pod_received_at}
+                tripCompleted={tripIsDeliveredStatus(trip.status)}
+                softCopyReceived={detail.tripDocuments.some(
+                  (d) => d.document_type === "pod",
+                )}
+                canMutate={canUploadTripDocs}
+                onSoftCopyUpload={() => chooseAddDocumentType("pod")}
+                onUpdated={() => {
+                  void detail.load();
+                  void detail.loadTripDocuments();
+                }}
+              />
+            </View>
+
             <View style={dStyles.row}>
               <View style={dStyles.bottomLeft}>
                 <View style={dStyles.card}>

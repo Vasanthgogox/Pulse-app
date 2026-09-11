@@ -13,8 +13,9 @@ import {
   type InvoiceTaxClientInput,
   type InvoiceTaxResult,
 } from '@/features/invoicing/services/invoiceTax.service';
-import type { InvoiceConfig, InvoicingTripView } from '@/features/invoicing/services/invoicing.service';
+import type { AdditionalCharge, InvoiceConfig, InvoicingTripView } from '@/features/invoicing/services/invoicing.service';
 import type { InvoiceDraftClientRow } from '@/features/invoicing/services/invoicePreviewClients.service';
+import { splitChargesForInvoiceTrips } from '@/features/invoicing/services/invoiceCnDn.service';
 
 export const INVOICE_DRAFT_NUMBER_LABEL = 'DRAFT' as const;
 export const INVOICE_DRAFT_NUMBER_CAPTION = 'Invoice number assigned on issue';
@@ -199,6 +200,33 @@ function buildDraftLines(
 ): InvoiceLineSnapshot[] {
   const lines: InvoiceLineSnapshot[] = [];
   const freightTotal = trips.reduce((acc, t) => acc + (Number.isFinite(t.amount) ? t.amount : 0), 0);
+  const { byTripKey, unassigned } = splitChargesForInvoiceTrips(
+    config.additionalCharges ?? [],
+    trips,
+  );
+
+  const pushCharge = (
+    charge: AdditionalCharge,
+    trip: InvoicingTripView | null,
+  ) => {
+    const amount = Number(charge.amount) || 0;
+    const description = trimOrNull(charge.description);
+    if (!description && amount === 0) return;
+    lines.push(
+      buildInvoiceLineSnapshot({
+        trip_id: trip ? trimOrNull(trip.internal_id) : trimOrNull(charge.tripId),
+        trip_ref: trip ? trimOrNull(trip.id) : null,
+        description: description || 'Additional charge',
+        qty: 1,
+        unit: 'charge',
+        rate: amount,
+        taxable_value: amount,
+        line_type: 'additional',
+        hsn_sac: null,
+        tax_rate: gstRateForLines,
+      }),
+    );
+  };
 
   for (const trip of trips) {
     const amount = Number.isFinite(trip.amount) ? trip.amount : 0;
@@ -216,6 +244,10 @@ function buildDraftLines(
         tax_rate: gstRateForLines,
       }),
     );
+    const tripCharges = byTripKey.get(trip.internal_id || trip.id) ?? [];
+    for (const charge of tripCharges) {
+      pushCharge(charge, trip);
+    }
   }
 
   if (config.includeFuel) {
@@ -236,24 +268,8 @@ function buildDraftLines(
     );
   }
 
-  for (const charge of config.additionalCharges) {
-    const amount = Number(charge.amount) || 0;
-    const description = trimOrNull(charge.description);
-    if (!description && amount === 0) continue;
-    lines.push(
-      buildInvoiceLineSnapshot({
-        trip_id: trimOrNull(charge.tripId) ?? null,
-        trip_ref: null,
-        description: description || 'Additional charge',
-        qty: 1,
-        unit: 'charge',
-        rate: amount,
-        taxable_value: amount,
-        line_type: 'additional',
-        hsn_sac: null,
-        tax_rate: gstRateForLines,
-      }),
-    );
+  for (const charge of unassigned) {
+    pushCharge(charge, null);
   }
 
   return lines;
@@ -415,14 +431,28 @@ export function mapInvoiceDraftModelToPdfData(model: InvoiceDraftModel): Invoice
     label: row.label,
     value: row.value,
   }));
-  const items: InvoicePdfItem[] = model.lines.map((line, index) => ({
-    key: `${line.line_type}-${line.trip_id ?? line.trip_ref ?? index}`,
-    tripId: line.trip_ref || line.description,
-    route: line.description,
-    date: '',
-    amount: line.taxable_value,
-    lineType: line.line_type,
-  }));
+  const items: InvoicePdfItem[] = model.lines.map((line, index) => {
+    const nested = line.line_type === 'additional' && Boolean(line.trip_id);
+    const desc = line.description ?? '';
+    const splitKind: InvoicePdfItem['splitKind'] = nested
+      ? desc.toLowerCase().includes('credit note')
+        ? 'cn'
+        : desc.toLowerCase().includes('debit note')
+          ? 'dn'
+          : null
+      : null;
+    return {
+      key: `${line.line_type}-${line.trip_id ?? line.trip_ref ?? index}-${index}`,
+      tripId: line.trip_ref || line.description,
+      route: line.description,
+      date: '',
+      amount: line.taxable_value,
+      lineType: line.line_type,
+      tripKey: line.trip_id,
+      nested,
+      splitKind,
+    };
+  });
 
   return {
     brandingCompanyName: model.issuer.businessName,

@@ -15,17 +15,29 @@ import { mergeDeltaRows } from "@/lib/cache/mergeDelta";
 import { supabase } from "@/lib/supabase";
 import {
   loadLrPodIndexByTripIds,
+  markTripHardCopyPodReceived,
   receivedLrNumbersForTrip,
   tripPodIsReceived,
   type TripLrPodIndex,
 } from "@/features/trips/services/tripDocumentLrPod.service";
+import type {
+  LogIncomingPodsListTab,
+  LogPodsPartyOption,
+  LogPodsSupplierOption,
+} from "@/features/log-pods/utils/logPodsListFilter.util";
+
+export type { LogIncomingPodsListTab, LogPodsPartyOption, LogPodsSupplierOption };
 
 export interface LogPodsTripView {
   /** User-facing trip id. */
   id: string;
   internal_id: string;
   client: string;
+  supplier_id: string;
   supplier_name: string;
+  driver_id: string;
+  driver_name: string;
+  lane: "asset" | "market";
   from: string;
   to: string;
   amount: number | null;
@@ -33,6 +45,7 @@ export interface LogPodsTripView {
   lrNumbers: string[];
   receivedLRs: string[];
   date: string;
+  hardCopyReceived: boolean;
 }
 
 export type CourierPartnerRow = {
@@ -54,7 +67,7 @@ type TripRecord = Pick<
   | "client_name"
   | "client_price"
   | "supplier_id"
-  | "supplier_name"
+  | "driver_id"
   | "status"
   | "pickup_date"
   | "pickup_area"
@@ -66,6 +79,8 @@ type TripRecord = Pick<
   // Live trips columns used for POD list (cashflow lr_no / pod_status are retired).
   pod_received_at?: string | null;
   pod_required?: boolean | null;
+  driver_display_name?: string | null;
+  trip_payout_mode?: string | null;
 };
 
 function num(v: unknown): number | null {
@@ -114,11 +129,18 @@ function passesLogPodsRow(t: TripRecord): boolean {
   });
 }
 
+function tripLane(t: TripRecord): "asset" | "market" {
+  const raw = str((t as { trip_payout_mode?: string | null }).trip_payout_mode).toLowerCase();
+  if (raw === "market" || raw === "asset") return raw;
+  return str((t as { supplier_id?: string | null }).supplier_id) ? "market" : "asset";
+}
+
 function mapRowToView(
   t: TripRecord,
   lrByTripId: Map<string, TripLrPodIndex>,
   shipperNameByTripId: Record<string, string>,
   supplierNameById: Map<string, string>,
+  driverNameById: Map<string, string>,
 ): LogPodsTripView {
   const tripKey = getTripStringId(t);
   const internalId = str(t.id);
@@ -157,11 +179,18 @@ function mapRowToView(
     id: tripKey,
     internal_id: str(t.id),
     client: shipperNameByTripId[internalId] || str((t as { client_name?: string | null }).client_name) || "—",
+    supplier_id: str((t as { supplier_id?: string | null }).supplier_id),
     supplier_name:
       supplierNameById.get(str((t as { supplier_id?: string | null }).supplier_id)) ||
       str((t as { vendor_name?: string | null }).vendor_name) ||
       str((t as { supplier_name?: string | null }).supplier_name) ||
       "Unknown Supplier",
+    driver_id: str((t as { driver_id?: string | null }).driver_id),
+    driver_name:
+      driverNameById.get(str((t as { driver_id?: string | null }).driver_id)) ||
+      str((t as { driver_display_name?: string | null }).driver_display_name) ||
+      "Unknown Driver",
+    lane: tripLane(t),
     from,
     to,
     amount:
@@ -174,18 +203,114 @@ function mapRowToView(
     lrNumbers: Array.from(new Set(allLrNumbers)),
     receivedLRs: finalReceived,
     date: dateLabel,
+    hardCopyReceived: tripReceived,
   };
+}
+
+export async function fetchOrgSuppliersForLogPods(
+  orgId: string,
+): Promise<{ error: Error | null; suppliers: LogPodsSupplierOption[] }> {
+  try {
+    const { data, error } = await supabase()
+      .from("suppliers")
+      .select("id, name, company_name")
+      .eq("organization_id", orgId)
+      .order("name", { ascending: true });
+    if (error) return { error: new Error(error.message), suppliers: [] };
+    const suppliers = (data ?? [])
+      .map((row) => ({
+        id: str(row.id),
+        name: str(row.name || row.company_name).trim() || "Supplier",
+      }))
+      .filter((row) => row.id);
+    suppliers.sort((a, b) => a.name.localeCompare(b.name));
+    return { error: null, suppliers };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), suppliers: [] };
+  }
+}
+
+export async function fetchOrgDriversForLogPods(
+  orgId: string,
+): Promise<{ error: Error | null; drivers: LogPodsPartyOption[] }> {
+  try {
+    const { data, error } = await supabase()
+      .from("drivers")
+      .select("id, name")
+      .eq("organization_id", orgId)
+      .order("name", { ascending: true });
+    if (error) return { error: new Error(error.message), drivers: [] };
+    const drivers = (data ?? [])
+      .map((row) => ({
+        id: str(row.id),
+        name: str(row.name).trim() || "Driver",
+      }))
+      .filter((row) => row.id);
+    drivers.sort((a, b) => a.name.localeCompare(b.name));
+    return { error: null, drivers };
+  } catch (e) {
+    return { error: e instanceof Error ? e : new Error(String(e)), drivers: [] };
+  }
+}
+
+export type MarkHardCopyPodsReceivedInput = {
+  tripInternalIds: string[];
+  receivedAt: string;
+  method: "courier" | "in_hand";
+  courierName?: string | null;
+  trackingId?: string | null;
+};
+
+export async function markSelectedTripsHardCopyPodReceived(
+  input: MarkHardCopyPodsReceivedInput,
+): Promise<{ error: Error | null; updatedCount: number }> {
+  const ids = Array.from(
+    new Set(input.tripInternalIds.map((id) => str(id)).filter(Boolean)),
+  );
+  if (ids.length === 0) {
+    return { error: new Error("Select at least one pending trip."), updatedCount: 0 };
+  }
+  const receivedAt = str(input.receivedAt) || new Date().toISOString();
+  const results = await Promise.all(
+    ids.map((id) => markTripHardCopyPodReceived(id, receivedAt)),
+  );
+  const firstError = results.find((r) => r.error != null)?.error;
+  if (firstError) return { error: firstError, updatedCount: 0 };
+
+  const courierName =
+    input.method === "courier" ? str(input.courierName).trim() : "In hand";
+  const trackingId =
+    input.method === "courier" ? str(input.trackingId).trim() || null : null;
+  await Promise.all(
+    ids.map(async (tripInternalId) => {
+      const { error } = await supabase().rpc("log_activity", {
+        p_action: "POD_LOGGED",
+        p_entity_type: "trip",
+        p_entity_id: tripInternalId,
+        p_details: {
+          method: input.method,
+          courier_name: courierName || null,
+          tracking_id: trackingId,
+          received_at: receivedAt,
+        },
+      });
+      if (error) console.warn("[logPods] log_activity:", error.message);
+    }),
+  );
+
+  return { error: null, updatedCount: ids.length };
 }
 
 export async function fetchTripsForLogPods(
   orgId: string,
+  options?: { includeReceived?: boolean },
 ): Promise<{ error: Error | null; trips: LogPodsTripView[] }> {
   try {
     const [ownerRes, supRes, cliRes, shipperNamesRes] = await Promise.all([
       supabase()
         .from("trips")
         .select(
-          "id, organization_id, trip_operational_code, trip_code, display_trip_id, trip_number, supplier_id, supplier_name, client_name, client_price, status, pickup_date, pickup_area, drop_location, created_at, pod_received_at, pod_required, notes, booking_ref",
+          "id, organization_id, trip_operational_code, trip_code, display_trip_id, trip_number, supplier_id, driver_id, driver_display_name, trip_payout_mode, client_name, client_price, status, pickup_date, pickup_area, drop_location, created_at, pod_received_at, pod_required, notes, booking_ref",
         )
         .eq("organization_id", orgId)
         .order("created_at", { ascending: false })
@@ -205,15 +330,18 @@ export async function fetchTripsForLogPods(
     const cliRows = (cliRes.trips ?? []) as TripRecord[];
     const shipperNameByTripId = shipperNamesRes.shipperNameByTripId ?? {};
 
-    const merged = mergeTripsById([ownerRows, supRows, cliRows]).filter(
-      passesLogPodsRow,
-    );
+    const mergedAll = mergeTripsById([ownerRows, supRows, cliRows]);
+    const merged = options?.includeReceived
+      ? mergedAll
+      : mergedAll.filter(passesLogPodsRow);
 
     const internalIds = merged.map(t => str(t.id)).filter(Boolean);
     const supplierIds = Array.from(new Set(merged.map(t => str((t as {supplier_id?: string | null}).supplier_id)).filter(Boolean)));
+    const driverIds = Array.from(new Set(merged.map(t => str((t as {driver_id?: string | null}).driver_id)).filter(Boolean)));
 
     let lrByTripId = new Map<string, TripLrPodIndex>();
     let supplierNameById = new Map<string, string>();
+    let driverNameById = new Map<string, string>();
 
     if (supplierIds.length > 0) {
       const { data: supData, error: supErr } = await supabase()
@@ -232,11 +360,27 @@ export async function fetchTripsForLogPods(
       }
     }
 
+    if (driverIds.length > 0) {
+      const { data: driverData, error: driverErr } = await supabase()
+        .from("drivers")
+        .select("id, name")
+        .in("id", driverIds);
+      if (driverErr) {
+        console.warn("[logPods] drivers fetch:", driverErr.message);
+      } else {
+        for (const row of driverData ?? []) {
+          if (row.id) driverNameById.set(row.id, str(row.name));
+        }
+      }
+    }
+
     if (internalIds.length > 0) {
       lrByTripId = await loadLrPodIndexByTripIds(internalIds);
     }
 
-    const views = merged.map((t) => mapRowToView(t, lrByTripId, shipperNameByTripId, supplierNameById));
+    const views = merged.map((t) =>
+      mapRowToView(t, lrByTripId, shipperNameByTripId, supplierNameById, driverNameById),
+    );
     return { error: null, trips: views };
   } catch (e) {
     return { error: e instanceof Error ? e : new Error(String(e)), trips: [] };
@@ -282,17 +426,49 @@ export async function syncLogPodsTripsWithCache(
   }
 }
 
+let courierPartnersTableUnavailable = false;
+
+function isCourierPartnersTableMissing(
+  err: { message?: string; code?: string; status?: number } | null | undefined,
+): boolean {
+  if (!err) return false;
+  const code = String(err.code ?? "").toUpperCase();
+  if (code === "42P01" || code === "PGRST205") return true;
+  if (err.status === 404) return true;
+  const m = String(err.message ?? "").toLowerCase();
+  if (m.includes("schema cache")) return true;
+  if (m.includes("could not find the table") && m.includes("courier_partners")) {
+    return true;
+  }
+  if (m.includes("relation") && m.includes("courier_partners") && m.includes("does not exist")) {
+    return true;
+  }
+  if (m.includes("courier_partners") && (m.includes("404") || m.includes("not found"))) {
+    return true;
+  }
+  return false;
+}
+
 export async function fetchCourierPartners(): Promise<{
   error: Error | null;
   partners: CourierPartnerRow[];
 }> {
+  if (courierPartnersTableUnavailable) {
+    return { error: null, partners: [] };
+  }
   const { data, error } = await supabase()
     .from("courier_partners")
     .select("label, value, category, active, is_custom")
     .eq("active", true)
     .order("label", { ascending: true });
 
-  if (error) return { error: new Error(error.message), partners: [] };
+  if (error) {
+    if (isCourierPartnersTableMissing(error)) {
+      courierPartnersTableUnavailable = true;
+      return { error: null, partners: [] };
+    }
+    return { error: new Error(error.message), partners: [] };
+  }
   return { error: null, partners: (data ?? []) as CourierPartnerRow[] };
 }
 
@@ -313,6 +489,7 @@ export interface LogPodsPayload {
   trackingId: string;
   dbCourierPartners: CourierPartnerRow[];
   mappedAttachments: MappedPodAttachment[];
+  receivedAt?: string;
 }
 
 export async function ensureCustomCourierPartner(
@@ -328,7 +505,13 @@ export async function ensureCustomCourierPartner(
     .eq("value", value)
     .maybeSingle();
 
-  if (existingErr) return { error: new Error(existingErr.message), partner: null };
+  if (existingErr) {
+    if (isCourierPartnersTableMissing(existingErr)) {
+      courierPartnersTableUnavailable = true;
+      return { error: null, partner: null };
+    }
+    return { error: new Error(existingErr.message), partner: null };
+  }
   if (existing) return { error: null, partner: existing as CourierPartnerRow };
 
   const partnerData = {
@@ -340,7 +523,13 @@ export async function ensureCustomCourierPartner(
 
   const { error } = await supabase().from("courier_partners").insert(partnerData);
 
-  if (error) return { error: new Error(error.message), partner: null };
+  if (error) {
+    if (isCourierPartnersTableMissing(error)) {
+      courierPartnersTableUnavailable = true;
+      return { error: null, partner: null };
+    }
+    return { error: new Error(error.message), partner: null };
+  }
   return { error: null, partner: partnerData as CourierPartnerRow };
 }
 
@@ -366,6 +555,7 @@ export async function executeLogIncomingPods(payload: LogPodsPayload): Promise<{
     trackingId,
     dbCourierPartners,
     mappedAttachments,
+    receivedAt: receivedAtRaw,
   } = payload;
 
   const finalCourierName = resolveCourierName(
@@ -380,27 +570,17 @@ export async function executeLogIncomingPods(payload: LogPodsPayload): Promise<{
   );
   if (customErr.error) return { error: customErr.error };
 
-  const receivedAt = new Date().toISOString();
+  const receivedAt = str(receivedAtRaw) || new Date().toISOString();
   const tripIds = Object.entries(selectedLRs)
     .filter(([, lrs]) => lrs.length > 0)
     .map(([tripInternalId]) => tripInternalId);
 
   const tripResults = await Promise.all(
-    tripIds.map(async (internalId) => {
-      const { error } = await supabase()
-        .from("trips")
-        .update({ pod_received_at: receivedAt })
-        .eq("id", internalId);
-      if (error) {
-        console.error("[logPods] trips.pod_received_at update:", error);
-        return error;
-      }
-      return null;
-    }),
+    tripIds.map((internalId) => markTripHardCopyPodReceived(internalId, receivedAt)),
   );
-  const tripUpdateError = tripResults.find((err) => err != null);
+  const tripUpdateError = tripResults.find((r) => r.error != null)?.error;
   if (tripUpdateError) {
-    return { error: new Error(tripUpdateError.message) };
+    return { error: tripUpdateError };
   }
 
   await Promise.all(

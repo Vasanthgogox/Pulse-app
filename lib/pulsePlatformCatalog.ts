@@ -75,11 +75,6 @@ export const PULSE_PLATFORM_CATALOG: PlatformSuite[] = [
         label: "Driver",
         productId: "pulse_driver",
       },
-      {
-        id: "execution_pod",
-        label: "POD",
-        productId: "pulse_pod_pro",
-      },
     ],
   },
   {
@@ -147,11 +142,6 @@ export const PULSE_PLATFORM_CATALOG: PlatformSuite[] = [
         id: "finance_hub",
         label: "Finance",
         productId: "pulse_finance_pro",
-      },
-      {
-        id: "finance_invoice",
-        label: "Invoice",
-        productId: "pulse_invoice_pro",
       },
     ],
   },
