@@ -6,6 +6,8 @@ import { PulsePillButton } from "@/components/PulsePillButton";
 import { ContentErrorState } from '@/components/ContentErrorState';
 import { HUB_GRID_MIN_WIDTH } from "@/components/hub/hubGridCardLayout";
 import { HubScreenShell } from "@/components/hub/HubScreenShell";
+import { hubMobileChromeStyles as hubChrome } from "@/components/hub";
+import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import {
   ClaimedIndentCardActions,
   GetLoadIndentCardActions,
@@ -177,6 +179,7 @@ export function LoadCenterView({
   const insets = useSafeAreaInsets();
   const layout = useLayoutInsets();
   const { width, height: windowHeight } = useWindowDimensions();
+  const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const { currentOrganization } = useOrganization();
   const { can: canSurface } = useMemberAccess();
@@ -1807,89 +1810,6 @@ export function LoadCenterView({
         { paddingTop: contentTopPadding },
       ]}
     >
-      {isMobileView ? (
-        <LoadCenterHubMobileShell
-          searchQuery={searchQuery}
-          onSearchChange={setSearchQuery}
-          mainTabs={[
-            {
-              key: "GIVE_LOAD",
-              label: "My load",
-              count: hirePartnerLoads.length,
-            },
-            {
-              key: "GET_LOAD",
-              label: "Get load",
-              count: findWorkLoads.length,
-            },
-            {
-              key: "AWARDED",
-              label: "Action required",
-              count: claimedTabCount,
-            },
-          ]}
-          activeMainTab={loadSubTab}
-          onMainTabChange={setLoadSubTab}
-          statusTabs={mobileStatusTabs}
-          activeStatusTab={statusFilterTab}
-          onStatusTabChange={(id) => setStatusFilterTab(id as StatusFilterTab)}
-          showStatusTabs={!isClaimedTab}
-          showDoneSubTabs={statusFilterTab === "DONE" && !isClaimedTab}
-          doneSubTabs={mobileDoneSubTabs}
-          activeDoneSubTab={doneSubTab}
-          onDoneSubTabChange={(id) => setDoneSubTab(id as DoneSubTab)}
-          onCreateIndentPress={onCreateIndentPress}
-          findLoadsAction={renderFindLoadsButton("compact")}
-        />
-      ) : null}
-
-      {isMobileView &&
-      (loadSubTab === "GIVE_LOAD" || loadSubTab === "GET_LOAD") ? (
-        <View style={styles.mobileNetworkToolbarRow}>
-          <View style={styles.mobileNetworkToolbarInner}>
-            {(loadSubTab === "GIVE_LOAD"
-              ? integratedSuppliers
-              : integratedClients
-            ).length > 0 ? (
-              <View style={styles.mobileNetworkPartiesFlex}>
-                <LoadCenterIntegratedPartiesRow
-                  mode={loadSubTab === "GIVE_LOAD" ? "supplier" : "client"}
-                  parties={
-                    loadSubTab === "GIVE_LOAD"
-                      ? integratedSuppliers
-                      : integratedClients
-                  }
-                  onAddToNetwork={openNetworkForParties}
-                  onPartyPress={openIntegratedParty}
-                />
-              </View>
-            ) : (
-              <View style={styles.mobileNetworkPartiesFlex} />
-            )}
-            <Pressable
-              style={({ pressed }) => [
-                styles.mobileFindOppsBtn,
-                pressed && styles.mobileFindOppsBtnPressed,
-              ]}
-              onPress={() =>
-                setFindMarketplaceMode(
-                  loadSubTab === "GET_LOAD" ? "get" : "give",
-                )
-              }
-              accessibilityRole="button"
-              accessibilityLabel={
-                loadSubTab === "GET_LOAD"
-                  ? "Search open opportunities"
-                  : "Search idle capacity"
-              }
-              hitSlop={8}
-            >
-              <Search size={16} color={Theme.textPrimaryDark} strokeWidth={2.2} />
-            </Pressable>
-          </View>
-        </View>
-      ) : null}
-
       {/* Content area — gray hub canvas (matches Trips page) */}
       <View
         style={[
@@ -1912,6 +1832,8 @@ export function LoadCenterView({
             { paddingBottom },
           ]}
           showsVerticalScrollIndicator={false}
+          nestedScrollEnabled
+          {...(isMobileView ? tabBarScrollProps : {})}
           refreshControl={
             loadSubTab === "GET_LOAD" ? (
               <RefreshControl
@@ -1922,6 +1844,95 @@ export function LoadCenterView({
             ) : undefined
           }
         >
+          {isMobileView ? (
+            <View style={hubChrome.bodyFiltersMobileInLayout}>
+              <LoadCenterHubMobileShell
+                embedInPageScroll
+                searchQuery={searchQuery}
+                onSearchChange={setSearchQuery}
+                mainTabs={[
+                  {
+                    key: "GIVE_LOAD",
+                    label: "My load",
+                    count: hirePartnerLoads.length,
+                  },
+                  {
+                    key: "GET_LOAD",
+                    label: "Get load",
+                    count: findWorkLoads.length,
+                  },
+                  {
+                    key: "AWARDED",
+                    label: "Action required",
+                    count: claimedTabCount,
+                  },
+                ]}
+                activeMainTab={loadSubTab}
+                onMainTabChange={setLoadSubTab}
+                statusTabs={mobileStatusTabs}
+                activeStatusTab={statusFilterTab}
+                onStatusTabChange={(id) =>
+                  setStatusFilterTab(id as StatusFilterTab)
+                }
+                showStatusTabs={!isClaimedTab}
+                showDoneSubTabs={statusFilterTab === "DONE" && !isClaimedTab}
+                doneSubTabs={mobileDoneSubTabs}
+                activeDoneSubTab={doneSubTab}
+                onDoneSubTabChange={(id) => setDoneSubTab(id as DoneSubTab)}
+                onCreateIndentPress={onCreateIndentPress}
+                findLoadsAction={renderFindLoadsButton("compact")}
+              />
+              {loadSubTab === "GIVE_LOAD" || loadSubTab === "GET_LOAD" ? (
+                <View style={styles.mobileNetworkToolbarRowInScroll}>
+                  <View style={styles.mobileNetworkToolbarInner}>
+                    {(loadSubTab === "GIVE_LOAD"
+                      ? integratedSuppliers
+                      : integratedClients
+                    ).length > 0 ? (
+                      <View style={styles.mobileNetworkPartiesFlex}>
+                        <LoadCenterIntegratedPartiesRow
+                          mode={loadSubTab === "GIVE_LOAD" ? "supplier" : "client"}
+                          parties={
+                            loadSubTab === "GIVE_LOAD"
+                              ? integratedSuppliers
+                              : integratedClients
+                          }
+                          onAddToNetwork={openNetworkForParties}
+                          onPartyPress={openIntegratedParty}
+                        />
+                      </View>
+                    ) : (
+                      <View style={styles.mobileNetworkPartiesFlex} />
+                    )}
+                    <Pressable
+                      style={({ pressed }) => [
+                        styles.mobileFindOppsBtn,
+                        pressed && styles.mobileFindOppsBtnPressed,
+                      ]}
+                      onPress={() =>
+                        setFindMarketplaceMode(
+                          loadSubTab === "GET_LOAD" ? "get" : "give",
+                        )
+                      }
+                      accessibilityRole="button"
+                      accessibilityLabel={
+                        loadSubTab === "GET_LOAD"
+                          ? "Search open opportunities"
+                          : "Search idle capacity"
+                      }
+                      hitSlop={8}
+                    >
+                      <Search
+                        size={16}
+                        color={Theme.textPrimaryDark}
+                        strokeWidth={2.2}
+                      />
+                    </Pressable>
+                  </View>
+                </View>
+              ) : null}
+            </View>
+          ) : null}
           {!isMobileView ? renderDesktopFilterPanel() : null}
           {isGiveGetTab ? (
             <View
@@ -2524,6 +2535,13 @@ const styles = StyleSheet.create({
   },
   mobileNetworkToolbarRow: {
     paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 6,
+    paddingBottom: 6,
+    backgroundColor: Theme.screenBackground,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomColor: Theme.borderLight,
+  },
+  mobileNetworkToolbarRowInScroll: {
     paddingTop: 6,
     paddingBottom: 6,
     backgroundColor: Theme.screenBackground,

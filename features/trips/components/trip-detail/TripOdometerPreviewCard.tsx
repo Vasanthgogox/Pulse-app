@@ -116,7 +116,7 @@ export const TripOdometerPreviewCard = memo(function TripOdometerPreviewCard({
           >
             <Feather
               name="navigation"
-              size={comfortable ? 16 : compact ? 10 : 12}
+              size={comfortable ? 15 : compact ? 9 : 12}
               color={Theme.primary}
             />
           </View>
@@ -132,7 +132,7 @@ export const TripOdometerPreviewCard = memo(function TripOdometerPreviewCard({
         </View>
         <VerificationStatusChip
           state={metrics.state}
-          compact={compact && !comfortable}
+          compact={!comfortable}
         />
       </View>
 
@@ -178,23 +178,30 @@ export const TripOdometerPreviewCard = memo(function TripOdometerPreviewCard({
           >
             {odometerReading(metrics.startKm)}
           </Text>
-          {compact && metrics.startKm == null ? (
+          {(compact || comfortable) && metrics.startKm == null ? (
             <Text style={[styles.tapHint, comfortable && styles.tapHintComfortable]}>
               Tap to set
             </Text>
           ) : null}
         </Pressable>
         <View style={styles.readingSep} />
-        {compact ? (
-          <View style={[styles.readingMid, comfortable && styles.readingMidComfortable]}>
-            <Feather
-              name="chevrons-right"
-              size={comfortable ? 16 : 10}
-              color={Theme.textMuted}
-            />
+        {comfortable ? (
+          <View style={[styles.readingCell, styles.readingMidComfortable]}>
+            <Text style={[styles.readingLabel, styles.readingLabelComfortable]}>
+              Distance
+            </Text>
+            <Text style={[styles.readingValue, styles.readingValueComfortable]}>
+              {metrics.odometerDistanceKm != null
+                ? formatKm(metrics.odometerDistanceKm)
+                : "—"}
+            </Text>
+          </View>
+        ) : compact ? (
+          <View style={styles.readingMid}>
+            <Feather name="chevrons-right" size={10} color={Theme.textMuted} />
           </View>
         ) : null}
-        {compact ? <View style={styles.readingSep} /> : null}
+        {compact || comfortable ? <View style={styles.readingSep} /> : null}
         <Pressable
           style={({ pressed }) => [
             styles.readingCell,
@@ -224,7 +231,7 @@ export const TripOdometerPreviewCard = memo(function TripOdometerPreviewCard({
           >
             {odometerReading(metrics.endKm)}
           </Text>
-          {compact && metrics.endKm == null ? (
+          {(compact || comfortable) && metrics.endKm == null ? (
             <Text style={[styles.tapHint, comfortable && styles.tapHintComfortable]}>
               Tap to set
             </Text>
@@ -281,17 +288,17 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   cardCompact: {
-    marginBottom: 8,
+    marginBottom: 0,
     borderColor: "#e6edf5",
-    borderRadius: 14,
+    borderRadius: 12,
     padding: 0,
     gap: 0,
     overflow: "hidden",
   },
   headerCompact: {
     paddingHorizontal: 10,
-    paddingTop: 8,
-    paddingBottom: 6,
+    paddingTop: 6,
+    paddingBottom: 5,
     backgroundColor: Theme.pulseIndigoWash,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: "#e6edf5",
@@ -305,7 +312,7 @@ const styles = StyleSheet.create({
   headerLeft: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 8,
+    gap: 6,
   },
   iconWrap: {
     width: 24,
@@ -328,9 +335,9 @@ const styles = StyleSheet.create({
     color: "#64748b",
   },
   iconWrapCompact: {
-    width: 22,
-    height: 22,
-    borderRadius: 6,
+    width: 18,
+    height: 18,
+    borderRadius: 5,
   },
   readingsRow: {
     flexDirection: "row",
@@ -342,16 +349,16 @@ const styles = StyleSheet.create({
   },
   readingsRowCompact: {
     marginHorizontal: 8,
-    marginTop: 8,
+    marginTop: 6,
     backgroundColor: Theme.cardWhite,
     borderWidth: 1,
     borderColor: "#e6edf5",
-    borderRadius: 10,
+    borderRadius: 8,
   },
   compactBody: {
     paddingHorizontal: 0,
-    paddingBottom: 8,
-    gap: 6,
+    paddingBottom: 6,
+    gap: 4,
   },
   readingMid: {
     width: 22,
@@ -378,8 +385,8 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   readingCellCompact: {
-    minHeight: 32,
-    paddingVertical: 5,
+    minHeight: 36,
+    paddingVertical: 4,
   },
   readingSep: {
     width: StyleSheet.hairlineWidth,
@@ -446,61 +453,82 @@ const styles = StyleSheet.create({
     fontWeight: "500",
   },
   cardComfortable: {
-    marginBottom: 12,
+    marginBottom: 0,
     borderRadius: 16,
     width: "100%",
+    padding: 16,
+    gap: 12,
+    borderColor: "#e2e8f0",
+    backgroundColor: Theme.cardWhite,
   },
   headerComfortable: {
-    paddingHorizontal: 18,
-    paddingTop: 14,
-    paddingBottom: 12,
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 0,
+    backgroundColor: "transparent",
+    borderBottomWidth: 0,
   },
   iconWrapComfortable: {
-    width: 36,
-    height: 36,
+    width: 32,
+    height: 32,
     borderRadius: 10,
+    backgroundColor: Theme.pulseIndigoWash,
   },
   titleComfortable: {
-    fontSize: 13,
-    letterSpacing: 0.9,
+    fontSize: 15,
+    fontWeight: "700",
+    letterSpacing: -0.2,
+    textTransform: "none",
+    color: Theme.textPrimaryDark,
   },
   compactBodyComfortable: {
-    paddingBottom: 14,
+    paddingBottom: 0,
     gap: 10,
   },
   readingsRowComfortable: {
-    marginHorizontal: 14,
-    marginTop: 12,
+    marginHorizontal: 0,
+    marginTop: 0,
     borderRadius: 12,
+    borderColor: "#e2e8f0",
+    backgroundColor: Theme.surface,
   },
   readingCellComfortable: {
     minHeight: 72,
-    paddingVertical: 14,
+    paddingVertical: 12,
     paddingHorizontal: 12,
     gap: 4,
   },
   readingLabelComfortable: {
     fontSize: 11,
+    fontWeight: "700",
     letterSpacing: 0.8,
     lineHeight: 14,
+    color: Theme.textMuted,
   },
   readingValueComfortable: {
     fontSize: 22,
-    lineHeight: 28,
-    letterSpacing: -0.3,
+    fontWeight: "700",
+    lineHeight: 26,
+    letterSpacing: -0.4,
+    color: Theme.textPrimaryDark,
   },
   tapHintComfortable: {
-    fontSize: 12,
+    fontSize: 11,
+    fontWeight: "600",
     marginTop: 2,
   },
   readingMidComfortable: {
-    width: 36,
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    backgroundColor: "transparent",
   },
   footerComfortable: {
     gap: 8,
-    paddingHorizontal: 18,
-    paddingTop: 4,
-    paddingBottom: 4,
+    paddingHorizontal: 2,
+    paddingTop: 2,
+    paddingBottom: 0,
   },
   footerIconComfortable: {
     width: 24,
@@ -510,5 +538,6 @@ const styles = StyleSheet.create({
   metaComfortable: {
     fontSize: 13,
     lineHeight: 18,
+    fontWeight: "500",
   },
 });

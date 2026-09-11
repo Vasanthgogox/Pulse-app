@@ -830,8 +830,8 @@ export function TripExpensesScreen({
   }, [actionNeededEvents, events, listFilter]);
 
   const iconSm = comfortable ? 14 : embedded ? 10 : 12;
-  const iconMd = comfortable ? 18 : embedded ? 11 : 14;
-  const iconLg = comfortable ? 20 : embedded ? 14 : 16;
+  const iconMd = comfortable ? 16 : embedded ? 11 : 14;
+  const iconLg = comfortable ? 18 : embedded ? 14 : 16;
   const iconEmpty = comfortable ? 28 : embedded ? 18 : 22;
 
   const quickActions = [
@@ -904,22 +904,74 @@ export function TripExpensesScreen({
                     />
                   </View>
                   <View style={styles.summaryLeft}>
-                    <Text
+                    <View
                       style={[
-                        styles.summaryLabel,
-                        comfortable && styles.summaryLabelComfortable,
+                        styles.summaryTitleRow,
+                        comfortable && styles.summaryTitleRowComfortable,
                       ]}
                     >
-                      Posted to ledger
-                    </Text>
-                    <Text
-                      style={[
-                        styles.summaryValue,
-                        comfortable && styles.summaryValueComfortable,
-                      ]}
-                    >
-                      {inr(postedCostInr)}
-                    </Text>
+                      <View style={comfortable ? styles.summaryCopyComfortable : undefined}>
+                        <Text
+                          style={[
+                            styles.summaryLabel,
+                            comfortable && styles.summaryLabelComfortable,
+                          ]}
+                        >
+                          Posted to ledger
+                        </Text>
+                        <Text
+                          style={[
+                            styles.summaryValue,
+                            comfortable && styles.summaryValueComfortable,
+                          ]}
+                        >
+                          {inr(postedCostInr)}
+                        </Text>
+                      </View>
+                      {comfortable && hasSummaryAlerts ? (
+                        <View style={styles.summaryAlertsComfortable}>
+                          {pendingPostCount > 0 ? (
+                            <View
+                              style={[styles.alertPill, styles.alertPillComfortable]}
+                            >
+                              <Feather name="clock" size={iconSm} color={Theme.warning} />
+                              <Text
+                                style={[
+                                  styles.alertPillText,
+                                  styles.alertPillTextComfortable,
+                                ]}
+                              >
+                                {pendingPostCount} awaiting post
+                              </Text>
+                            </View>
+                          ) : null}
+                          {reimbursementDueInr > 0 ? (
+                            <View
+                              style={[
+                                styles.alertPill,
+                                styles.alertPillDue,
+                                styles.alertPillComfortable,
+                              ]}
+                            >
+                              <Feather
+                                name="credit-card"
+                                size={iconSm}
+                                color="#7c3aed"
+                              />
+                              <Text
+                                style={[
+                                  styles.alertPillText,
+                                  styles.alertPillDueText,
+                                  styles.alertPillTextComfortable,
+                                ]}
+                              >
+                                {inr(reimbursementDueInr)} to reimburse
+                              </Text>
+                            </View>
+                          ) : null}
+                        </View>
+                      ) : null}
+                    </View>
                   </View>
                 </View>
                 {vehicleLabel ? (
@@ -936,42 +988,20 @@ export function TripExpensesScreen({
                     </Text>
                   </View>
                 ) : null}
-                {hasSummaryAlerts ? (
+                {!comfortable && hasSummaryAlerts ? (
                   <View style={styles.summaryAlerts}>
                     {pendingPostCount > 0 ? (
-                      <View
-                        style={[
-                          styles.alertPill,
-                          comfortable && styles.alertPillComfortable,
-                        ]}
-                      >
+                      <View style={styles.alertPill}>
                         <Feather name="clock" size={iconSm} color={Theme.warning} />
-                        <Text
-                          style={[
-                            styles.alertPillText,
-                            comfortable && styles.alertPillTextComfortable,
-                          ]}
-                        >
+                        <Text style={styles.alertPillText}>
                           {pendingPostCount} awaiting post
                         </Text>
                       </View>
                     ) : null}
                     {reimbursementDueInr > 0 ? (
-                      <View
-                        style={[
-                          styles.alertPill,
-                          styles.alertPillDue,
-                          comfortable && styles.alertPillComfortable,
-                        ]}
-                      >
+                      <View style={[styles.alertPill, styles.alertPillDue]}>
                         <Feather name="credit-card" size={iconSm} color="#7c3aed" />
-                        <Text
-                          style={[
-                            styles.alertPillText,
-                            styles.alertPillDueText,
-                            comfortable && styles.alertPillTextComfortable,
-                          ]}
-                        >
+                        <Text style={[styles.alertPillText, styles.alertPillDueText]}>
                           {inr(reimbursementDueInr)} to reimburse
                         </Text>
                       </View>
@@ -1005,22 +1035,33 @@ export function TripExpensesScreen({
                       />
                     </View>
                     <View style={styles.summaryLeft}>
-                      <Text
+                      <View
                         style={[
-                          styles.summaryLabel,
-                          comfortable && styles.summaryLabelComfortable,
+                          styles.summaryTitleRow,
+                          comfortable && styles.summaryTitleRowComfortable,
                         ]}
                       >
-                        Expenses
-                      </Text>
-                      <Text
-                        style={[
-                          styles.summaryValue,
-                          comfortable && styles.summaryValueComfortable,
-                        ]}
-                      >
-                        {inr(driverExpensesInr)}
-                      </Text>
+                        <View
+                          style={comfortable ? styles.summaryCopyComfortable : undefined}
+                        >
+                          <Text
+                            style={[
+                              styles.summaryLabel,
+                              comfortable && styles.summaryLabelComfortable,
+                            ]}
+                          >
+                            Expenses
+                          </Text>
+                          <Text
+                            style={[
+                              styles.summaryValue,
+                              comfortable && styles.summaryValueComfortable,
+                            ]}
+                          >
+                            {inr(driverExpensesInr)}
+                          </Text>
+                        </View>
+                      </View>
                     </View>
                   </View>
                   <Text
@@ -1056,7 +1097,7 @@ export function TripExpensesScreen({
                     comfortable && styles.addExpenseBtnIconComfortable,
                   ]}
                 >
-                  <Feather name="plus" size={comfortable ? 18 : 14} color="#fff" />
+                  <Feather name="plus" size={comfortable ? 16 : 12} color="#fff" />
                 </View>
                 <View style={styles.addExpenseBtnCopy}>
                   <Text
@@ -1079,7 +1120,7 @@ export function TripExpensesScreen({
                 </View>
                 <Feather
                   name="chevron-right"
-                  size={comfortable ? 20 : 16}
+                  size={comfortable ? 16 : 16}
                   color={Theme.textMuted}
                 />
               </Pressable>
@@ -1119,7 +1160,7 @@ export function TripExpensesScreen({
                       >
                         <Feather
                           name={action.icon}
-                          size={comfortable ? 20 : 14}
+                          size={comfortable ? 18 : 14}
                           color={accent.fg}
                         />
                       </View>
@@ -1283,7 +1324,7 @@ export function TripExpensesScreen({
         contentContainerStyle={[
           styles.listContent,
           comfortable && styles.listContentComfortable,
-          { paddingBottom: embedded ? (comfortable ? 28 : 16) : insets.bottom + 24 },
+          { paddingBottom: embedded ? 12 : insets.bottom + 24 },
         ]}
         showsVerticalScrollIndicator={false}
         nestedScrollEnabled
@@ -1400,30 +1441,78 @@ export function TripExpensesScreen({
               />
             ))}
             {!isDriverViewer && hasReimbursableExpenses ? (
-              <View style={styles.payoutSection}>
-                <Text style={styles.payoutSectionTitle}>Driver cash payouts</Text>
-                <Text style={styles.payoutSectionHint}>
+              <View
+                style={[
+                  styles.payoutSection,
+                  comfortable && styles.payoutSectionComfortable,
+                ]}
+              >
+                <Text
+                  style={[
+                    styles.payoutSectionTitle,
+                    comfortable && styles.payoutSectionTitleComfortable,
+                  ]}
+                >
+                  Driver cash payouts
+                </Text>
+                <Text
+                  style={[
+                    styles.payoutSectionHint,
+                    comfortable && styles.payoutSectionHintComfortable,
+                  ]}
+                >
                   Cash paid to driver posts in Finance (separate from expense approve
                   & post).
                 </Text>
                 {driverCashPayouts.length === 0 ? (
-                  <Text style={styles.payoutEmpty}>
+                  <Text
+                    style={[
+                      styles.payoutEmpty,
+                      comfortable && styles.payoutEmptyComfortable,
+                    ]}
+                  >
                     No driver payment on this trip yet — tap the banner above to record
                     one.
                   </Text>
                 ) : (
                   driverCashPayouts.map((payout) => (
-                    <View key={payout.id} style={styles.payoutRow}>
+                    <View
+                      key={payout.id}
+                      style={[
+                        styles.payoutRow,
+                        comfortable && styles.payoutRowComfortable,
+                      ]}
+                    >
                       <View style={styles.payoutRowLeft}>
                         <Feather name="user" size={iconMd} color="#0f766e" />
                         <View style={styles.payoutRowText}>
-                          <Text style={styles.payoutRowTitle} numberOfLines={1}>
+                          <Text
+                            style={[
+                              styles.payoutRowTitle,
+                              comfortable && styles.payoutRowTitleComfortable,
+                            ]}
+                            numberOfLines={1}
+                          >
                             {payout.description?.trim() || "Driver payment"}
                           </Text>
-                          <Text style={styles.payoutRowDate}>{payout.dateLabel}</Text>
+                          <Text
+                            style={[
+                              styles.payoutRowDate,
+                              comfortable && styles.payoutRowDateComfortable,
+                            ]}
+                          >
+                            {payout.dateLabel}
+                          </Text>
                         </View>
                       </View>
-                      <Text style={styles.payoutRowAmount}>{inr(payout.amount)}</Text>
+                      <Text
+                        style={[
+                          styles.payoutRowAmount,
+                          comfortable && styles.payoutRowAmountComfortable,
+                        ]}
+                      >
+                        {inr(payout.amount)}
+                      </Text>
                     </View>
                   ))
                 )}
@@ -1478,12 +1567,12 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   toolbar: {
-    gap: 8,
-    marginBottom: 8,
+    gap: 6,
+    marginBottom: 6,
   },
   toolbarEmbedded: {
-    gap: 8,
-    marginBottom: 6,
+    gap: 6,
+    marginBottom: 4,
   },
   hubShell: {
     backgroundColor: Theme.cardWhite,
@@ -1531,22 +1620,21 @@ const styles = StyleSheet.create({
   },
   ledgerHeroBody: {
     paddingHorizontal: 10,
-    paddingVertical: 10,
+    paddingVertical: 8,
     paddingLeft: 12,
-    gap: 6,
+    gap: 4,
   },
   ledgerHeroTop: {
     flexDirection: "row",
-    alignItems: "flex-start",
+    alignItems: "center",
     gap: 8,
   },
   ledgerHeroIcon: {
-    width: 24,
-    height: 24,
+    width: 22,
+    height: 22,
     backgroundColor: Theme.cardWhite,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 2,
   },
   controlDeck: {
     gap: 8,
@@ -1574,20 +1662,27 @@ const styles = StyleSheet.create({
     minWidth: 0,
     gap: 2,
   },
+  summaryTitleRow: {
+    flexDirection: "row",
+    alignItems: "baseline",
+    justifyContent: "space-between",
+    gap: 10,
+  },
   summaryLabel: {
     fontSize: 8,
     fontWeight: "800",
     color: "#94a3b8",
     textTransform: "uppercase",
     letterSpacing: 0.8,
+    flexShrink: 1,
   },
   summaryValue: {
-    fontSize: 18,
+    fontSize: 16,
     fontWeight: "800",
     color: Theme.textPrimaryDark,
     fontVariant: ["tabular-nums"],
     letterSpacing: -0.3,
-    lineHeight: 22,
+    lineHeight: 20,
   },
   vehicleRow: {
     flexDirection: "row",
@@ -1646,14 +1741,14 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    padding: 10,
+    padding: 8,
     paddingLeft: 12,
     backgroundColor: "#faf5ff",
     overflow: "hidden",
   },
   driverPayBannerEmbedded: {
-    gap: 8,
-    paddingVertical: 9,
+    gap: 6,
+    paddingVertical: 7,
     backgroundColor: Theme.cardWhite,
   },
   driverPayBannerPressed: {
@@ -1761,25 +1856,25 @@ const styles = StyleSheet.create({
   addExpenseBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 10,
+    gap: 8,
     marginHorizontal: 8,
-    marginTop: 8,
-    marginBottom: 2,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
-    borderRadius: 12,
+    marginTop: 6,
+    marginBottom: 0,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    borderRadius: 10,
     borderWidth: 1,
     borderColor: Theme.borderLight,
     backgroundColor: Theme.cardWhite,
-    minHeight: 48,
+    minHeight: 40,
   },
   addExpenseBtnPressed: {
     opacity: 0.88,
   },
   addExpenseBtnIcon: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+    width: 22,
+    height: 22,
+    borderRadius: 6,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.primary,
@@ -1787,15 +1882,15 @@ const styles = StyleSheet.create({
   addExpenseBtnCopy: {
     flex: 1,
     minWidth: 0,
-    gap: 1,
+    gap: 0,
   },
   addExpenseBtnTitle: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
   addExpenseBtnSub: {
-    fontSize: 11,
+    fontSize: 10,
     fontWeight: "500",
     color: Theme.textMuted,
   },
@@ -1818,9 +1913,10 @@ const styles = StyleSheet.create({
   },
   quickActionsRow: {
     flexDirection: "row",
+    alignItems: "stretch",
     gap: 6,
     paddingHorizontal: 8,
-    paddingVertical: 8,
+    paddingVertical: 6,
     backgroundColor: Theme.surface,
     borderTopWidth: StyleSheet.hairlineWidth,
     borderTopColor: "#e6edf5",
@@ -1829,18 +1925,18 @@ const styles = StyleSheet.create({
     flex: 1,
     alignItems: "center",
     justifyContent: "center",
-    gap: 5,
-    paddingVertical: 6,
+    gap: 3,
+    paddingVertical: 4,
     paddingHorizontal: 4,
-    minHeight: 58,
+    minHeight: 44,
   },
   quickTilePressed: {
     opacity: 0.82,
     transform: [{ scale: 0.97 }],
   },
   quickTileIcon: {
-    width: 32,
-    height: 32,
+    width: 26,
+    height: 26,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -1970,9 +2066,9 @@ const styles = StyleSheet.create({
   },
   row: {
     backgroundColor: Theme.cardWhite,
-    padding: 10,
+    padding: 8,
     paddingLeft: 8,
-    gap: 8,
+    gap: 6,
     overflow: "hidden",
   },
   rowEmbedded: {
@@ -2156,24 +2252,27 @@ const styles = StyleSheet.create({
     textAlign: "center",
     lineHeight: 12,
   },
-  // ── Desktop comfortable density ───────────────────────────────────────────
+  // ── Desktop density: editorial, readable, not oversized ───────────────────
   containerComfortable: {
     width: "100%",
   },
   toolbarComfortable: {
     gap: 12,
-    marginBottom: 12,
+    marginBottom: 4,
   },
   hubShellComfortable: {
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: "#e6edf5",
+    borderColor: "#e2e8f0",
     overflow: "hidden",
+    backgroundColor: Theme.cardWhite,
   },
   ledgerAccentComfortable: {
     width: 4,
     top: 12,
     bottom: 12,
+    borderTopRightRadius: 4,
+    borderBottomRightRadius: 4,
   },
   ledgerHeroBodyComfortable: {
     paddingHorizontal: 18,
@@ -2186,78 +2285,104 @@ const styles = StyleSheet.create({
     height: 36,
     borderRadius: 10,
   },
+  summaryTitleRowComfortable: {
+    alignItems: "flex-start",
+    gap: 16,
+  },
+  summaryCopyComfortable: {
+    flex: 1,
+    minWidth: 0,
+    gap: 4,
+  },
+  summaryAlertsComfortable: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: 8,
+    maxWidth: 320,
+  },
   summaryLabelComfortable: {
     fontSize: 12,
-    letterSpacing: 0.9,
+    fontWeight: "700",
+    letterSpacing: 0.6,
+    color: Theme.textMuted,
   },
   summaryValueComfortable: {
     fontSize: 28,
     lineHeight: 34,
-    letterSpacing: -0.5,
+    letterSpacing: -0.6,
+    fontWeight: "800",
   },
   vehicleRowTextComfortable: {
     fontSize: 13,
+    fontWeight: "600",
   },
   alertPillComfortable: {
     paddingHorizontal: 10,
     paddingVertical: 6,
-    borderRadius: 8,
+    borderRadius: 999,
     gap: 6,
   },
   alertPillTextComfortable: {
     fontSize: 12,
+    fontWeight: "700",
   },
   driverSummaryHintComfortable: {
     fontSize: 13,
     lineHeight: 18,
+    fontWeight: "500",
   },
   addExpenseBtnComfortable: {
     marginHorizontal: 14,
-    marginTop: 14,
+    marginTop: 12,
     marginBottom: 4,
-    paddingVertical: 14,
-    paddingHorizontal: 16,
-    minHeight: 64,
-    borderRadius: 14,
-    gap: 14,
+    paddingVertical: 12,
+    paddingHorizontal: 14,
+    minHeight: 56,
+    borderRadius: 12,
+    gap: 12,
   },
   addExpenseBtnIconComfortable: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 32,
+    height: 32,
+    borderRadius: 10,
   },
   addExpenseBtnTitleComfortable: {
-    fontSize: 16,
+    fontSize: 15,
+    fontWeight: "700",
   },
   addExpenseBtnSubComfortable: {
     fontSize: 13,
+    marginTop: 1,
   },
   quickActionsRowComfortable: {
-    gap: 12,
+    gap: 10,
     paddingHorizontal: 14,
-    paddingVertical: 14,
+    paddingVertical: 12,
+    backgroundColor: Theme.surface,
   },
   quickTileComfortable: {
     gap: 8,
     paddingVertical: 12,
-    minHeight: 88,
+    minHeight: 84,
     borderRadius: 12,
     backgroundColor: Theme.cardWhite,
     borderWidth: 1,
-    borderColor: "#e6edf5",
+    borderColor: "#e2e8f0",
   },
   quickTileIconComfortable: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
+    width: 40,
+    height: 40,
+    borderRadius: 12,
     borderWidth: 1,
   },
   quickTileLabelComfortable: {
-    fontSize: 12,
+    fontSize: 13,
+    fontWeight: "700",
     letterSpacing: 0.4,
   },
   controlDeckComfortable: {
-    gap: 12,
+    gap: 10,
   },
   segmentTrackComfortable: {
     padding: 4,
@@ -2272,6 +2397,7 @@ const styles = StyleSheet.create({
   },
   segmentBtnTextComfortable: {
     fontSize: 13,
+    fontWeight: "600",
   },
   segmentCountComfortable: {
     minWidth: 24,
@@ -2281,69 +2407,74 @@ const styles = StyleSheet.create({
   },
   segmentCountTextComfortable: {
     fontSize: 12,
+    fontWeight: "700",
   },
   driverPayBannerComfortable: {
     gap: 12,
-    padding: 16,
-    paddingLeft: 18,
-    borderRadius: 14,
+    padding: 14,
+    paddingLeft: 16,
+    borderRadius: 12,
     borderWidth: 1,
-    borderColor: "#ede9fe",
+    borderColor: "#ddd6fe",
   },
   driverPayIconWrapComfortable: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
+    width: 36,
+    height: 36,
+    borderRadius: 10,
   },
   driverPayBannerTitleComfortable: {
     fontSize: 15,
     lineHeight: 20,
+    fontWeight: "700",
   },
   driverPayBannerSubComfortable: {
-    fontSize: 12,
-    lineHeight: 16,
+    fontSize: 13,
+    lineHeight: 18,
   },
   listContentComfortable: {
     gap: 10,
-    paddingTop: 4,
+    paddingTop: 8,
   },
   listSectionHeadComfortable: {
     paddingTop: 8,
     paddingBottom: 4,
+    paddingHorizontal: 2,
   },
   listSectionTitleComfortable: {
     fontSize: 12,
+    letterSpacing: 0.7,
   },
   listSectionBadgeComfortable: {
-    minWidth: 28,
+    minWidth: 26,
     paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingVertical: 3,
     borderRadius: 8,
   },
   listSectionBadgeTextComfortable: {
     fontSize: 12,
   },
   rowComfortable: {
-    padding: 16,
+    padding: 14,
     paddingLeft: 14,
-    gap: 12,
+    gap: 10,
     borderRadius: 14,
     borderWidth: 1,
-    borderColor: "#e6edf5",
+    borderColor: "#e2e8f0",
   },
   rowMainComfortable: {
     gap: 12,
     minHeight: 48,
   },
   rowAvatarComfortable: {
-    width: 44,
-    height: 44,
+    width: 40,
+    height: 40,
     borderRadius: 12,
   },
   rowTitleComfortable: {
-    fontSize: 15,
-    lineHeight: 20,
-    letterSpacing: 0.3,
+    fontSize: 14,
+    lineHeight: 18,
+    letterSpacing: 0.2,
+    fontWeight: "800",
   },
   rowHintComfortable: {
     fontSize: 12,
@@ -2351,17 +2482,18 @@ const styles = StyleSheet.create({
   },
   rowRightComfortable: {
     gap: 6,
-    maxWidth: 180,
+    maxWidth: 200,
   },
   rowAmountComfortable: {
     fontSize: 16,
     lineHeight: 20,
+    fontWeight: "800",
   },
   rowEditLinkComfortable: {
-    paddingHorizontal: 4,
-    paddingBottom: 4,
+    paddingHorizontal: 2,
+    paddingBottom: 2,
     marginTop: 0,
-    minHeight: 36,
+    minHeight: 32,
   },
   rowEditLinkTextComfortable: {
     fontSize: 13,
@@ -2370,7 +2502,7 @@ const styles = StyleSheet.create({
     gap: 5,
     paddingHorizontal: 8,
     paddingVertical: 4,
-    maxWidth: 180,
+    maxWidth: 200,
     borderRadius: 8,
   },
   chipDotComfortable: {
@@ -2380,23 +2512,25 @@ const styles = StyleSheet.create({
   },
   chipTextComfortable: {
     fontSize: 11,
+    fontWeight: "700",
   },
   actionsComfortable: {
     gap: 10,
-    paddingTop: 12,
+    paddingTop: 10,
   },
   actionBtnComfortable: {
     minWidth: 140,
     paddingHorizontal: 14,
-    paddingVertical: 12,
+    paddingVertical: 10,
     minHeight: 44,
     borderRadius: 10,
   },
   actionBtnTextComfortable: {
     fontSize: 13,
+    fontWeight: "700",
   },
   emptyCardComfortable: {
-    padding: 28,
+    padding: 24,
     gap: 10,
     borderRadius: 16,
   },
@@ -2408,15 +2542,45 @@ const styles = StyleSheet.create({
     lineHeight: 18,
   },
   emptyAddBtnComfortable: {
-    marginTop: 16,
-    paddingHorizontal: 18,
-    paddingVertical: 12,
+    marginTop: 12,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     minHeight: 44,
     borderRadius: 12,
     gap: 8,
   },
   emptyAddBtnTextComfortable: {
     fontSize: 14,
+  },
+  payoutSectionComfortable: {
+    marginTop: 8,
+    padding: 16,
+    borderRadius: 14,
+    gap: 8,
+  },
+  payoutSectionTitleComfortable: {
+    fontSize: 12,
+    letterSpacing: 0.7,
+  },
+  payoutSectionHintComfortable: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  payoutEmptyComfortable: {
+    fontSize: 13,
+    lineHeight: 18,
+  },
+  payoutRowComfortable: {
+    paddingVertical: 12,
+  },
+  payoutRowTitleComfortable: {
+    fontSize: 14,
+  },
+  payoutRowDateComfortable: {
+    fontSize: 12,
+  },
+  payoutRowAmountComfortable: {
+    fontSize: 15,
   },
   backBtnTextComfortable: {
     fontSize: 15,

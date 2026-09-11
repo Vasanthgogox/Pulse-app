@@ -1503,6 +1503,15 @@ export const neoStyles = StyleSheet.create({
   financeStack: {
     gap: 14,
   },
+  expenseHubStack: {
+    gap: 6,
+  },
+  expenseHubStackDesktop: {
+    gap: 16,
+    maxWidth: 920,
+    width: "100%",
+    alignSelf: "center",
+  },
   /** Desktop finance summary: same manifest + adjustment stack as mobile, max width for readability. */
   financeManifestDesktopWrap: {
     width: "100%" as const,

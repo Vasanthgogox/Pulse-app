@@ -1,6 +1,5 @@
 import Theme from "@/constants/Theme";
 import type { TripHubInTransitPingMeta } from "@/features/trips/hooks/useTripHubInTransitPings";
-import { Feather } from "@expo/vector-icons";
 import { StyleSheet, Text, View } from "react-native";
 
 type Props = {
@@ -9,7 +8,7 @@ type Props = {
   alignEnd?: boolean;
 };
 
-/** Driver online / offline — row under the driver name (or inline). */
+/** Driver online / offline — compact status under the driver name. */
 export function TripHubDriverPresenceBadge({
   ping,
   variant = "inline",
@@ -19,22 +18,33 @@ export function TripHubDriverPresenceBadge({
 
   const online = ping.isOnline;
   const statusText = online ? "Online" : ping.offlineLabel ?? "Offline";
-  const toneColor = online ? Theme.positive : Theme.destructive;
 
   const row = (
-    <View style={[styles.row, alignEnd && styles.rowEnd]}>
-      <Feather name="user" size={8} color={toneColor} />
+    <View
+      style={[
+        styles.chip,
+        online ? styles.chipOnline : styles.chipOffline,
+        alignEnd && styles.chipEnd,
+      ]}
+    >
       <View
         style={[styles.dot, online ? styles.dotOnline : styles.dotOffline]}
       />
-      <Text style={[styles.label, { color: toneColor }]} numberOfLines={1}>
+      <Text
+        style={[styles.label, online ? styles.labelOnline : styles.labelOffline]}
+        numberOfLines={1}
+      >
         {statusText}
       </Text>
     </View>
   );
 
   if (variant === "belowName") {
-    return <View style={[styles.belowWrap, alignEnd && styles.belowWrapEnd]}>{row}</View>;
+    return (
+      <View style={[styles.belowWrap, alignEnd && styles.belowWrapEnd]}>
+        {row}
+      </View>
+    );
   }
 
   return row;
@@ -43,36 +53,52 @@ export function TripHubDriverPresenceBadge({
 const styles = StyleSheet.create({
   belowWrap: {
     alignSelf: "flex-start",
-    marginTop: 2,
+    marginTop: 3,
   },
   belowWrapEnd: {
     alignSelf: "flex-end",
   },
-  row: {
+  chip: {
     flexDirection: "row",
     alignItems: "center",
     gap: 4,
-    minWidth: 0,
+    paddingHorizontal: 5,
+    paddingVertical: 1,
+    borderRadius: 999,
+    maxWidth: "100%",
   },
-  rowEnd: {
+  chipEnd: {
     justifyContent: "flex-end",
   },
+  chipOnline: {
+    backgroundColor: Theme.positive,
+  },
+  chipOffline: {
+    backgroundColor: Theme.destructive,
+  },
   dot: {
-    width: 5,
-    height: 5,
-    borderRadius: 3,
+    width: 4,
+    height: 4,
+    borderRadius: 2,
     flexShrink: 0,
   },
   dotOnline: {
-    backgroundColor: Theme.positive,
+    backgroundColor: "#fff",
   },
   dotOffline: {
-    backgroundColor: Theme.destructive,
+    backgroundColor: "#fff",
   },
   label: {
-    fontSize: 7.5,
+    fontSize: 8,
     lineHeight: 10,
-    fontWeight: "600",
+    fontWeight: "700",
+    letterSpacing: 0.15,
     flexShrink: 1,
+  },
+  labelOnline: {
+    color: "#fff",
+  },
+  labelOffline: {
+    color: "#fff",
   },
 });

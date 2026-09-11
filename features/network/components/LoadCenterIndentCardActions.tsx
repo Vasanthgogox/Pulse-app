@@ -223,7 +223,7 @@ function MarketplaceShareButton({
   busy?: boolean;
   onPress: () => void;
 }) {
-  const color = isShared ? Theme.positive : Theme.textMuted;
+  const color = isShared ? Theme.textOnPrimary : Theme.textMuted;
   return (
     <TouchableOpacity
       style={[
@@ -243,7 +243,14 @@ function MarketplaceShareButton({
       hitSlop={TOOLBAR_HIT_SLOP}
     >
       <Package size={11} color={color} strokeWidth={2.2} />
-      <Text style={[styles.marketplaceBtnText, { color }]} numberOfLines={1}>
+      <Text
+        style={[
+          styles.marketplaceBtnText,
+          isShared && styles.marketplaceBtnTextLive,
+          !isShared && { color },
+        ]}
+        numberOfLines={1}
+      >
         {isShared ? "Marketplace · Live" : "Share to Marketplace"}
       </Text>
     </TouchableOpacity>
@@ -1192,13 +1199,17 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderMedium,
   },
   marketplaceBtnLive: {
-    backgroundColor: Theme.positiveMuted,
+    backgroundColor: Theme.positive,
     borderColor: Theme.positive,
+    borderWidth: 0,
   },
   marketplaceBtnText: {
     fontSize: 10,
     fontWeight: "700",
     letterSpacing: 0.1,
+  },
+  marketplaceBtnTextLive: {
+    color: Theme.textOnPrimary,
   },
   pulseBtn: {
     flexDirection: "row",

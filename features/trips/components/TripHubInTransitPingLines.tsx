@@ -6,7 +6,7 @@ type Props = {
   ping: TripHubInTransitPingMeta | null | undefined;
 };
 
-/** Offline row under trip status — icon + dot + label (replaces plain text). */
+/** Offline/online chip — used under the driver name on trip cards. */
 export function TripHubInTransitPingLines({ ping }: Props) {
   if (!ping?.offlineLabel?.trim()) return null;
 

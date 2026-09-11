@@ -128,6 +128,7 @@ export function LoadCenterUnderlineTabStrip({
       horizontal
       showsHorizontalScrollIndicator={false}
       keyboardShouldPersistTaps="handled"
+      nestedScrollEnabled
       style={style}
       contentContainerStyle={contentStyle}
     >

@@ -57,6 +57,7 @@ export function LoadCenterHubMobileShell({
   showDoneSubTabs = false,
   onCreateIndentPress,
   findLoadsAction,
+  embedInPageScroll = false,
 }: {
   searchQuery: string;
   onSearchChange: (q: string) => void;
@@ -73,6 +74,8 @@ export function LoadCenterHubMobileShell({
   showDoneSubTabs?: boolean;
   onCreateIndentPress: () => void;
   findLoadsAction?: ReactNode;
+  /** Horizontal padding already applied by page-scroll chrome. */
+  embedInPageScroll?: boolean;
 }) {
   const searchInputRef = useRef<TextInput>(null);
   const [searchOpen, setSearchOpen] = useState(() => searchQuery.trim().length > 0);
@@ -106,7 +109,7 @@ export function LoadCenterHubMobileShell({
   const canCreateIndent = canSurface("tripops.indents.create");
 
   return (
-    <View style={chrome.shell}>
+    <View style={[chrome.shell, embedInPageScroll && styles.shellInPageScroll]}>
       <HubMobileScreenHeader
         title="My Loads"
         action={
@@ -177,6 +180,7 @@ export function LoadCenterHubMobileShell({
           horizontal
           showsHorizontalScrollIndicator={false}
           keyboardShouldPersistTaps="handled"
+          nestedScrollEnabled
           contentContainerStyle={[
             chrome.metricTabsContent,
             showDoneSubTabs && chrome.metricTabsContentSpread,
@@ -220,6 +224,12 @@ export function LoadCenterHubMobileShell({
 }
 
 const styles = StyleSheet.create({
+  shellInPageScroll: {
+    paddingHorizontal: 0,
+    paddingTop: 0,
+    paddingBottom: 4,
+    backgroundColor: "transparent",
+  },
   headerActions: {
     flexDirection: "row",
     alignItems: "center",

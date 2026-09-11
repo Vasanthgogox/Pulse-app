@@ -3155,7 +3155,7 @@ export default function TripDetailScreen({
   const odometerPreviewEl = showOdometerVerification ? (
     <TripOdometerPreviewCard
       trip={trip}
-      compact
+      compact={!isDesktop}
       density={expenseHubDensity}
       onRecordStart={() => openOdometerVerification("start")}
       onRecordEnd={() => openOdometerVerification("end")}
@@ -5160,7 +5160,13 @@ export default function TripDetailScreen({
                     )}
                   </View>
                 ) : activeTab === "expenses" ? (
-                  <View style={neoStyles.financeStack}>
+                  <View
+                    style={[
+                      neoStyles.financeStack,
+                      neoStyles.expenseHubStack,
+                      isDesktop && neoStyles.expenseHubStackDesktop,
+                    ]}
+                  >
                     {odometerPreviewEl}
                     <Suspense fallback={<ActivityIndicator style={{ margin: 24 }} color="#818cf8" />}>
                     <TripExpensesScreen

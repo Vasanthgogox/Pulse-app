@@ -35,7 +35,7 @@ import { canAccessPartyKind } from "@/lib/capabilities";
 import { useCapabilities } from "@/lib/useCapabilities";
 import type { MemberSurfaceId } from "@/lib/memberSurfaces";
 import { useMemberAccess } from "@/lib/useMemberAccess";
-import { buildPulseCommerceUrl, buildPulseInvoiceUrl, openSuiteProductApp, openSuiteProductAppInNewTab } from "@/lib/suite/suiteAuth";
+import { buildPulseCommerceUrl, openSuiteProductApp, openSuiteProductAppInNewTab } from "@/lib/suite/suiteAuth";
 import { useRouter } from "expo-router";
 import {
   Building2,
@@ -127,7 +127,6 @@ export function WorkspaceHubMenu({
   const [orgLogoUri, setOrgLogoUri] = useState<string | null>(null);
   const [showSignOutConfirm, setShowSignOutConfirm] = useState(false);
   const [showCommerceConfirm, setShowCommerceConfirm] = useState(false);
-  const [showInvoiceConfirm, setShowInvoiceConfirm] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
   const displayName = (profile?.full_name ?? profile?.displayName ?? "User").trim();
@@ -189,15 +188,16 @@ export function WorkspaceHubMenu({
   };
 
   const commerceUrl = useMemo(() => buildPulseCommerceUrl(), []);
-  const invoiceUrl = useMemo(() => buildPulseInvoiceUrl(), []);
 
   const openCommerce = useCallback(() => {
     setShowCommerceConfirm(true);
   }, []);
 
+  /** In-app stack push — do not use window.location / new-tab (remounts the data plane). */
   const openInvoice = useCallback(() => {
-    setShowInvoiceConfirm(true);
-  }, []);
+    onExit?.();
+    router.push(ROUTES.PULSE_INVOICE as Parameters<typeof router.push>[0]);
+  }, [onExit, router]);
 
   const confirmCommerceSwitch = useCallback(() => {
     setShowCommerceConfirm(false);
@@ -209,21 +209,6 @@ export function WorkspaceHubMenu({
     setShowCommerceConfirm(false);
     openSuiteProductAppInNewTab(commerceUrl);
   }, [commerceUrl]);
-
-  const confirmInvoiceSwitch = useCallback(() => {
-    setShowInvoiceConfirm(false);
-    onExit?.();
-    if (Platform.OS === "web") {
-      openSuiteProductApp(invoiceUrl);
-      return;
-    }
-    router.replace(ROUTES.PULSE_INVOICE);
-  }, [invoiceUrl, onExit, router]);
-
-  const confirmInvoiceNewWindow = useCallback(() => {
-    setShowInvoiceConfirm(false);
-    openSuiteProductAppInNewTab(invoiceUrl);
-  }, [invoiceUrl]);
 
   /**
    * This drawer renders above every MemberDomainGate, so each row
@@ -728,49 +713,6 @@ export function WorkspaceHubMenu({
               ) : null}
               <Pressable
                 onPress={() => setShowCommerceConfirm(false)}
-                style={hubStyles.confirmCancelBtn}
-              >
-                <Text style={hubStyles.confirmCancelText}>Cancel</Text>
-              </Pressable>
-            </View>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal
-        visible={showInvoiceConfirm}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowInvoiceConfirm(false)}
-      >
-        <View style={hubStyles.confirmBackdrop}>
-          <Pressable
-            style={StyleSheet.absoluteFill}
-            onPress={() => setShowInvoiceConfirm(false)}
-          />
-          <View style={hubStyles.confirmCard}>
-            <Text style={hubStyles.confirmTitle}>Switch to Pulse Invoice</Text>
-            <Text style={hubStyles.confirmBody}>
-              You will be redirected to Pulse Invoice. Your workspace session stays
-              signed in.
-            </Text>
-            <View style={hubStyles.confirmActionsStack}>
-              <Pressable
-                onPress={confirmInvoiceSwitch}
-                style={hubStyles.confirmCtaBtn}
-              >
-                <Text style={hubStyles.confirmCtaText}>Switch to Pulse Invoice</Text>
-              </Pressable>
-              {Platform.OS === "web" ? (
-                <Pressable
-                  onPress={confirmInvoiceNewWindow}
-                  style={hubStyles.confirmSecondaryBtn}
-                >
-                  <Text style={hubStyles.confirmSecondaryText}>Open in new window</Text>
-                </Pressable>
-              ) : null}
-              <Pressable
-                onPress={() => setShowInvoiceConfirm(false)}
                 style={hubStyles.confirmCancelBtn}
               >
                 <Text style={hubStyles.confirmCancelText}>Cancel</Text>

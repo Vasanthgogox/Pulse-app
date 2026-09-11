@@ -2,9 +2,9 @@
  * Mobile trips hub — MakeMyTrip “My Trips” ticket card (single white surface, no nested panels).
  */
 import { PartyAvatar } from "@/components/PartyAvatar";
+import { TripHubDriverPresenceBadge } from "@/features/trips/components/TripHubDriverPresenceBadge";
 import { FinanceTxnTypography } from "@/constants/FinanceTxnTypography";
 import Theme from "@/constants/Theme";
-import { TripHubInTransitPingLines } from "@/features/trips/components/TripHubInTransitPingLines";
 import type { TripHubInTransitPingMeta } from "@/features/trips/hooks/useTripHubInTransitPings";
 import {
   getTripDisplayNumber,
@@ -129,6 +129,7 @@ function PartyChip({
   organizationImageUrl,
   organizationAvatarSeed,
   alignEnd,
+  presencePing,
 }: {
   name: string;
   entityType: "supplier" | "driver";
@@ -138,8 +139,10 @@ function PartyChip({
   organizationImageUrl?: string | null;
   organizationAvatarSeed?: string | null;
   alignEnd?: boolean;
+  presencePing?: TripHubInTransitPingMeta | null;
 }) {
   const label = formatPartyName(name);
+  const showPresence = entityType === "driver" && Boolean(presencePing);
 
   return (
     <View style={[styles.chip, alignEnd && styles.chipEnd]}>
@@ -153,12 +156,21 @@ function PartyChip({
         entityType={entityType}
         size={CHIP_AVATAR}
       />
-      <Text
-        style={[styles.chipName, alignEnd && styles.chipNameEnd]}
-        numberOfLines={1}
-      >
-        {label}
-      </Text>
+      <View style={[styles.chipCopy, alignEnd && styles.chipCopyEnd]}>
+        <Text
+          style={[styles.chipName, alignEnd && styles.chipNameEnd]}
+          numberOfLines={1}
+        >
+          {label}
+        </Text>
+        {showPresence ? (
+          <TripHubDriverPresenceBadge
+            ping={presencePing}
+            variant="belowName"
+            alignEnd={alignEnd}
+          />
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -477,7 +489,6 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
                   {originTagUpper}
                 </Text>
               </View>
-              <TripHubInTransitPingLines ping={inTransitPing} />
             </View>
           </View>
 
@@ -538,6 +549,7 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
                   avatarSeed={driverAvatarSeed}
                   initialsColorSeed={driverFb}
                   alignEnd
+                  presencePing={inTransitPing}
                 />
               </View>
             </View>
@@ -571,6 +583,7 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
                   avatarSeed={driverAvatarSeed}
                   initialsColorSeed={driverFb}
                   alignEnd
+                  presencePing={inTransitPing}
                 />
               </View>
             </>
@@ -911,7 +924,7 @@ const styles = StyleSheet.create({
   },
   partyRow: {
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     justifyContent: "space-between",
     gap: 10,
     marginTop: 6,
@@ -926,12 +939,20 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 6,
   },
   chipEnd: {
     flexDirection: "row-reverse",
     justifyContent: "flex-start",
+  },
+  chipCopy: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  chipCopyEnd: {
+    alignItems: "flex-end",
   },
   chipName: {
     ...FinanceTxnTypography.partyTitle,
