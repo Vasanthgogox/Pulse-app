@@ -337,6 +337,8 @@ export const queryKeys = {
   },
 
   discover: {
+    /** Prefix — invalidate all Discover searches for an org. */
+    all: (orgId: string) => ["q", "discover", orgId] as const,
     search: (orgId: string, search: string) =>
       ["q", "discover", orgId, search] as const,
   },
@@ -563,9 +565,14 @@ export const queryKeys = {
       ["q", "ocr", "metrics", orgId, days] as const,
   },
 
-  /** Linked-org display profiles (avatar URL + seed) fetched via batch RPC. */
-  linkedOrgDisplay: (ids: string[]) =>
-    ["q", "linked-org-display", ids.join("|")] as const,
+  /**
+   * Canonical linked-org display map (avatars, KYC, names), scoped to viewer org.
+   * `ensure(orgId, ids)` fetches only IDs missing from that org's map.
+   */
+  linkedOrgDisplayCanonical: (orgId: string) =>
+    ["q", "linked-org-display", orgId, "map"] as const,
+  linkedOrgDisplay: (orgId: string, ids: string[]) =>
+    ["q", "linked-org-display", orgId, "ensure", ids.join("|")] as const,
 
   /** Driver linked-user profile images (signed URLs) fetched via batch RPC. */
   driverProfileImages: (ids: string[]) =>

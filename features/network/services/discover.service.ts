@@ -4,28 +4,6 @@
 import { isOrgKycVerified } from '@/features/network/utils/orgVerification.util';
 import { supabase } from '@/lib/supabase';
 
-type PartnerDisplayBatch = Record<
-  string,
-  {
-    avatarUrl?: string | null;
-    avatarSeed?: string | null;
-    verificationStatus?: string | null;
-    verification_status?: string | null;
-    averageRating?: number | string | null;
-    average_rating?: number | string | null;
-    tripCount?: number | string | null;
-    trip_count?: number | string | null;
-    vehicleCount?: number | string | null;
-    vehicle_count?: number | string | null;
-    ratingCount?: number | string | null;
-    rating_count?: number | string | null;
-    orgCreatedAt?: string | null;
-    org_created_at?: string | null;
-    networkIndentCount?: number | string | null;
-    network_indent_count?: number | string | null;
-  }
->;
-
 function parseRating(value: unknown): number | null {
   if (typeof value === "number" && Number.isFinite(value)) return value;
   if (typeof value === "string" && value.trim()) {
@@ -48,54 +26,46 @@ function parseTimestamp(value: unknown): string | null {
 }
 
 /**
- * Resolve org logo / owner photo + KYC verification via SECURITY DEFINER batch RPC —
- * same path as the network profile modal (`getOrgProfileSnapshot`). Remote
- * `discover_organizations` may omit `avatar_url` or only return `avatar_seed`; logos
- * still live on `organizations.logo_url` and must be merged here. Verification is
- * also merged so home/grow cards can show Verified + Recommended tags.
+ * Merge partner-display fields (logo, KYC, stats) onto discover_organizations rows.
+ * Profiles come from the canonical linked-org cache (one batch RPC for missing IDs).
  */
-async function enrichDiscoverOrgsWithPartnerDisplay(
+export function applyPartnerDisplayToDiscoverOrgs(
   orgs: DiscoverOrg[],
-): Promise<DiscoverOrg[]> {
+  profiles: Record<
+    string,
+    {
+      avatarUrl?: string | null;
+      avatarSeed?: string | null;
+      verificationStatus?: string | null;
+      averageRating?: number | string | null;
+      tripCount?: number | string | null;
+      ratingCount?: number | string | null;
+      orgCreatedAt?: string | null;
+    }
+  >,
+): DiscoverOrg[] {
   if (orgs.length === 0) return orgs;
 
-  const ids = orgs.map((o) => o.id);
-  const { data, error } = await supabase().rpc(
-    "get_connection_partner_display_batch",
-    { p_linked_organization_ids: ids },
-  );
-
-  const map =
-    !error && data && typeof data === "object"
-      ? (data as PartnerDisplayBatch)
-      : null;
-
   return orgs.map((org) => {
-    const row = map?.[org.id];
+    const row = profiles[org.id];
     const batchUrl = (row?.avatarUrl ?? "").trim();
     const batchSeed = (row?.avatarSeed ?? "").trim();
     const verificationStatus =
       (
         row?.verificationStatus ??
-        row?.verification_status ??
         org.verification_status ??
         ""
       )
         .toString()
         .trim() || null;
-    const batchRating = parseRating(row?.averageRating ?? row?.average_rating);
+    const batchRating = parseRating(row?.averageRating);
     const orgRating = parseRating(org.average_rating ?? org.rating);
     const rating = batchRating ?? orgRating;
     const tripCount =
-      parseCount(row?.tripCount ?? row?.trip_count) ?? parseCount(org.trip_count);
-    const vehicleCount = parseCount(row?.vehicleCount ?? row?.vehicle_count);
-    const ratingCount = parseCount(row?.ratingCount ?? row?.rating_count);
+      parseCount(row?.tripCount) ?? parseCount(org.trip_count);
+    const ratingCount = parseCount(row?.ratingCount) ?? parseCount(org.rating_count);
     const orgCreatedAt =
-      parseTimestamp(row?.orgCreatedAt ?? row?.org_created_at) ??
-      parseTimestamp(org.org_created_at);
-    const networkIndentCount = parseCount(
-      row?.networkIndentCount ?? row?.network_indent_count,
-    );
+      parseTimestamp(row?.orgCreatedAt) ?? parseTimestamp(org.org_created_at);
     return {
       ...org,
       avatar_url: (org.avatar_url ?? "").trim() || batchUrl || null,
@@ -108,10 +78,8 @@ async function enrichDiscoverOrgsWithPartnerDisplay(
       average_rating: rating,
       rating,
       trip_count: tripCount,
-      vehicle_count: vehicleCount,
       rating_count: ratingCount,
       org_created_at: orgCreatedAt,
-      network_indent_count: networkIndentCount,
     };
   });
 }
@@ -179,6 +147,5 @@ export async function discoverOrganizations(
       }),
     };
   });
-  const orgs = await enrichDiscoverOrgsWithPartnerDisplay(raw);
-  return { error: null, orgs };
+  return { error: null, orgs: raw };
 }

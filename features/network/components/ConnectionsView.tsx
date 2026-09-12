@@ -25,7 +25,6 @@ import {
     getOrganizationLocationsByIds,
     getOrganizationLocationsByNames,
 } from "@/features/organization/services/organization.service";
-import { supabase } from "@/lib/supabase";
 import {
     averageRatingForRatedParty,
     averageScoreDeduped,
@@ -34,6 +33,7 @@ import {
     getRatingsForDrivers,
     getRatingsForSuppliers,
 } from "@/features/ratings/services/ratings.service";
+import { useLinkedOrgDisplayMap } from "@/lib/queries/useLinkedOrgDisplayQuery";
 import { useClientsQuery } from "@/lib/queries/useClientsQuery";
 import { useDriversQuery } from "@/lib/queries/useDriversQuery";
 import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
@@ -677,29 +677,16 @@ export function ConnectionsView({
     [clientsQ.data, suppliersQ.data],
   );
 
-  const kycByLinkedOrgIdQ = useQuery({
-    queryKey: ["network", "connections", "kyc-verification", linkedOrgIdsForKyc],
-    queryFn: async () => {
-      const { data, error } = await supabase().rpc(
-        "get_connection_partner_display_batch",
-        { p_linked_organization_ids: linkedOrgIdsForKyc },
-      );
-      if (error || !data || typeof data !== "object") return {} as Record<string, boolean>;
-      const map = data as Record<
-        string,
-        { verificationStatus?: string | null; verification_status?: string | null }
-      >;
-      const out: Record<string, boolean> = {};
-      for (const [id, row] of Object.entries(map)) {
-        out[id] = isOrgKycVerified({
-          verification_status: row.verificationStatus ?? row.verification_status,
-        });
-      }
-      return out;
-    },
-    enabled: linkedOrgIdsForKyc.length > 0,
-  });
-  const kycByLinkedOrgId = kycByLinkedOrgIdQ.data ?? {};
+  const linkedOrgDisplay = useLinkedOrgDisplayMap(linkedOrgIdsForKyc);
+  const kycByLinkedOrgId = useMemo(() => {
+    const out: Record<string, boolean> = {};
+    for (const [id, row] of Object.entries(linkedOrgDisplay)) {
+      out[id] = isOrgKycVerified({
+        verification_status: row.verificationStatus,
+      });
+    }
+    return out;
+  }, [linkedOrgDisplay]);
 
 
   useEffect(() => {

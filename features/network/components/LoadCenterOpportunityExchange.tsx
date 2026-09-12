@@ -9,7 +9,8 @@
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { LoadCenterSidebarFindEmpty } from "@/features/network/components/LoadCenterSidebarFindEmpty";
 import Theme from "@/constants/Theme";
-import { getLinkedOrgProfilesBatch } from "@/features/clients/services/clients.service";
+import { useLinkedOrgDisplayMap } from "@/lib/queries/useLinkedOrgDisplayQuery";
+import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
 import type { DirectQuoteRow } from "@/features/indents";
 import type { PostRow } from "@/features/network/services/posts.service";
 import { getMyBidsForPostIds } from "@/features/network/services/bids.service";
@@ -30,7 +31,6 @@ import { useMyDirectQuotesQuery } from "@/lib/queries";
 import { useNetworkFeedQuery } from "@/lib/queries/usePostsQuery";
 import { queryKeys } from "@/lib/queryKeys";
 import { STALE } from "@/lib/queryClient";
-import type { LinkedOrgDisplay } from "@/lib/useLinkedOrgProfileMap";
 import { useQuery } from "@tanstack/react-query";
 import { useRouter } from "expo-router";
 import { ArrowRight, Truck } from "lucide-react-native";
@@ -549,25 +549,7 @@ export function useLoadCenterOpportunityPosts(
     return Array.from(set).sort();
   }, [posts]);
 
-  const orgProfilesQ = useQuery({
-    queryKey: queryKeys.linkedOrgDisplay(creatorOrgIds),
-    queryFn: async () => {
-      const profiles = await getLinkedOrgProfilesBatch(creatorOrgIds);
-      const result: Record<string, LinkedOrgDisplay> = {};
-      for (const [oid, profile] of Object.entries(profiles)) {
-        result[oid] = {
-          avatarUrl: (profile.avatarUrl ?? "").trim() || undefined,
-          avatarSeed:
-            (profile.avatarSeed ?? profile.orgAvatarSeed ?? "").trim() ||
-            undefined,
-        };
-      }
-      return result;
-    },
-    enabled: creatorOrgIds.length > 0,
-    staleTime: STALE.moderate,
-  });
-  const orgProfileMap = orgProfilesQ.data ?? {};
+  const orgProfileMap = useLinkedOrgDisplayMap(creatorOrgIds);
 
   const loadMode = mode === "get";
   const myQuotesQ = useMyDirectQuotesQuery(loadMode ? orgId : null);

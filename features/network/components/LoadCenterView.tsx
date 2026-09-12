@@ -21,8 +21,9 @@ import {
   LOADS_HUB_PAGE_BG,
   LoadCenterHubMobileShell,
 } from "@/features/network/components/LoadCenterHubMobileShell";
-import { getLinkedOrgProfilesBatch } from "@/features/clients/services/clients.service";
+import { useLinkedOrgDisplayMap } from "@/lib/queries/useLinkedOrgDisplayQuery";
 import type { ClientRow } from "@/features/clients/services/clients.service";
+import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import {
   giveLoadIndentAvatarProps,
   marketLoadIndentAvatarProps,
@@ -106,7 +107,6 @@ import {
 import {
     assignmentShellColors,
 } from "@/features/trips/styles/assignmentShellShared";
-import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import { useMemberAccess } from "@/lib/useMemberAccess";
 import { formatINR } from "@/lib/format";
 import { ROUTES } from "@/lib/routes";
@@ -131,8 +131,7 @@ import {
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Compass, Search } from "lucide-react-native";
 import { type FlashListRef } from "@shopify/flash-list";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { STALE } from "@/lib/queryClient";
+import { useQueryClient } from "@tanstack/react-query";
 import * as Linking from "expo-linking";
 
 
@@ -211,9 +210,6 @@ export function LoadCenterView({
   const [kanbanDetailIndentId, setKanbanDetailIndentId] = useState<string | null>(
     null,
   );
-  const [creatorOrgProfileMap, setCreatorOrgProfileMap] = useState<
-    Record<string, { avatarUrl?: string; avatarSeed?: string }>
-  >({});
   const [showPostModal, setShowPostModal] = useState(false);
   const { showSuccess, successMsg, trigger: triggerSuccess } = useSuccessToast();
   const [bidLoad, setBidLoad] = useState<IndentRow | null>(null);
@@ -442,21 +438,6 @@ export function LoadCenterView({
     () => awardedSupplierOrgIds.filter((id) => !supplierNameByOrgId[id]),
     [awardedSupplierOrgIds, supplierNameByOrgId],
   );
-
-  const { data: awardedOrgDisplayNames = {} } = useQuery({
-    queryKey: ["q", "awarded-supplier-names", missingAwardedOrgIds.join("|")],
-    queryFn: async () => {
-      const profiles = await getLinkedOrgProfilesBatch(missingAwardedOrgIds);
-      const names: Record<string, string> = {};
-      for (const [oid, profile] of Object.entries(profiles)) {
-        const n = (profile.organizationName ?? "").trim();
-        if (n) names[oid] = n;
-      }
-      return names;
-    },
-    enabled: missingAwardedOrgIds.length > 0,
-    staleTime: STALE.moderate,
-  });
 
   const giveLoadKanbanColumns = useMemo(() => {
     const buckets = bucketGiveLoadIndentsForKanban(hirePartnerLoads, quoteCounts, {
@@ -863,7 +844,7 @@ export function LoadCenterView({
     return map;
   }, [clients]);
 
-  const marketCreatorOrgIdsKey = useMemo(() => {
+  const marketCreatorOrgIds = useMemo(() => {
     const ids = new Set<string>();
     const addOrg = (load: { organization_id?: string | null }) => {
       const orgIdKey = (load.organization_id ?? "").trim();
@@ -875,7 +856,7 @@ export function LoadCenterView({
     for (const load of findWorkDoneUnionLoads) addOrg(load);
     for (const load of displayedClaimedLoads) addOrg(load);
     for (const load of hirePartnerLoads) addOrg(load);
-    return Array.from(ids).sort().join("|");
+    return Array.from(ids).sort();
   }, [
     filteredFindWorkList,
     findWorkLoads,
@@ -885,47 +866,26 @@ export function LoadCenterView({
     hirePartnerLoads,
   ]);
 
-  useEffect(() => {
-    const ids = marketCreatorOrgIdsKey
-      ? marketCreatorOrgIdsKey.split("|").filter(Boolean)
-      : [];
-    if (ids.length === 0) {
-      setCreatorOrgProfileMap((prev) =>
-        Object.keys(prev).length === 0 ? prev : {},
-      );
-      return;
+  const loadCenterPartnerDisplayIds = useMemo(() => {
+    const set = new Set(marketCreatorOrgIds);
+    for (const id of missingAwardedOrgIds) set.add(id);
+    return Array.from(set).sort();
+  }, [marketCreatorOrgIds, missingAwardedOrgIds]);
+
+  const loadCenterPartnerDisplay = useLinkedOrgDisplayMap(
+    loadCenterPartnerDisplayIds,
+  );
+
+  const creatorOrgProfileMap = loadCenterPartnerDisplay;
+
+  const awardedOrgDisplayNames = useMemo(() => {
+    const names: Record<string, string> = {};
+    for (const id of missingAwardedOrgIds) {
+      const n = (loadCenterPartnerDisplay[id]?.organizationName ?? "").trim();
+      if (n) names[id] = n;
     }
-    let cancelled = false;
-    void getLinkedOrgProfilesBatch(ids).then((profiles) => {
-      if (cancelled) return;
-      const next: Record<string, { avatarUrl?: string; avatarSeed?: string }> =
-        {};
-      for (const [oid, profile] of Object.entries(profiles)) {
-        next[oid] = {
-          avatarUrl: (profile.avatarUrl ?? "").trim() || undefined,
-          avatarSeed: (profile.avatarSeed ?? "").trim() || undefined,
-        };
-      }
-      setCreatorOrgProfileMap((prev) => {
-        const prevKeys = Object.keys(prev);
-        const nextKeys = Object.keys(next);
-        if (
-          prevKeys.length === nextKeys.length &&
-          nextKeys.every(
-            (k) =>
-              prev[k]?.avatarUrl === next[k]?.avatarUrl &&
-              prev[k]?.avatarSeed === next[k]?.avatarSeed,
-          )
-        ) {
-          return prev;
-        }
-        return next;
-      });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [marketCreatorOrgIdsKey]);
+    return names;
+  }, [missingAwardedOrgIds, loadCenterPartnerDisplay]);
 
   useEffect(() => {
     // Action required = pending allocation only (bids won → allocate vehicle).

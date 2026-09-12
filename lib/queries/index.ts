@@ -131,6 +131,7 @@ export {
   useSaveTripFuelEntry,
   useSaveTripTollEntry,
 } from "./useTripOperationsQuery";
+export { useLinkedOrgDisplayMap } from "./useLinkedOrgDisplayQuery";
 export { useReimbursementQueue } from "@/features/trips/operations/reimbursement/useReimbursementQueue";
 export { useOperationsControlCenter } from "@/features/operations/control-center/queries/useOperationsControlCenter";
 export { useOperationalHealthSnapshot } from "@/features/operations/observability/useOperationalHealthSnapshot";

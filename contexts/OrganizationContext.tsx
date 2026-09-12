@@ -19,6 +19,10 @@ import * as organizationService from '@/features/organization/services/organizat
 import { markStartupPhase, isStartupComplete } from '@/lib/startupMetrics';
 import type { CurrentOrganization } from '@/types/organization';
 import { getQueryClient } from '@/lib/queryClient';
+import {
+  bindLinkedOrgDisplayViewerOrg,
+  purgeLinkedOrgDisplayQueries,
+} from '@/lib/queries/linkedOrgDisplayCache';
 import { isInfrastructureErrorMessage } from '@/lib/supabaseHttp.util';
 
 interface OrganizationContextType {
@@ -94,6 +98,7 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   const setCurrentOrganization = useCallback((org: CurrentOrganization | null) => {
     const currentUid = userRef.current?.uid ?? null;
     if (currentUid) workspacePopulatedForUserRef.current = currentUid;
+    bindLinkedOrgDisplayViewerOrg(org?.id ?? null);
     setCurrentOrganizationState(org);
     setError(null);
     setIsLoading(false);
@@ -224,14 +229,20 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
   // Realtime-covered queries self-update; the rest need a forced eviction.
   useEffect(() => {
     const newOrgId = currentOrganization?.id ?? null;
-    if (prevOrgIdRef.current !== null && prevOrgIdRef.current !== newOrgId) {
-      const qc = getQueryClient();
+    bindLinkedOrgDisplayViewerOrg(newOrgId);
+    const prevOrgId = prevOrgIdRef.current;
+    const qc = getQueryClient();
+    if (prevOrgId !== null && prevOrgId !== newOrgId) {
       // Remove all cached entity lists — they're org-scoped and must not leak across orgs.
       // Realtime subscriptions will re-populate fresh data after the switch.
       qc.removeQueries({ predicate: (q) => {
         const key = q.queryKey;
         return Array.isArray(key) && key[0] === 'q';
       }});
+    } else if (prevOrgId !== newOrgId) {
+      // First org after cold start (prev === null) or logout (new === null):
+      // drop any persisted/global linked-org-display map so it cannot be reused.
+      purgeLinkedOrgDisplayQueries(qc);
     }
     prevOrgIdRef.current = newOrgId;
   }, [currentOrganization?.id]);

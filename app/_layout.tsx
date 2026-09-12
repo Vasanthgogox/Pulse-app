@@ -47,6 +47,10 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { makeQueryClient } from '@/lib/queryClient';
 import { purgeEmptyEntityQueriesFromCache } from '@/lib/queries/entityListQueryOptions';
 import {
+  isLinkedOrgDisplayQueryKey,
+  purgeLinkedOrgDisplayQueries,
+} from '@/lib/queries/linkedOrgDisplayCache';
+import {
   installForegroundPruning,
   installRealtimeDiagnosticsGlobalHook,
   startRealtimeDiagnosticsLogger,
@@ -393,6 +397,7 @@ export default function RootLayout() {
             client={queryClient}
             onSuccess={() => {
               purgeEmptyEntityQueriesFromCache(queryClient);
+              purgeLinkedOrgDisplayQueries(queryClient);
             }}
             persistOptions={{
               persister,
@@ -408,6 +413,9 @@ export default function RootLayout() {
                   const data = query.state.data;
                   // Never persist empty entity lists — they block refetch on cold start.
                   if (Array.isArray(data) && data.length === 0) return false;
+                  // Linked-org display is workspace-scoped; a persisted map can
+                  // hydrate before org resolution and leak across sessions.
+                  if (isLinkedOrgDisplayQueryKey(query.queryKey)) return false;
                   return true;
                 },
               },

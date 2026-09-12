@@ -5,7 +5,6 @@
 import { LoadingIndicator } from "@/components/LoadingIndicator";
 import { PartyAvatar } from "@/components/PartyAvatar";
 import Theme from '@/constants/Theme';
-import { getLinkedOrgProfilesBatch } from '@/features/clients/services/clients.service';
 import { BidSheet } from '@/features/network/components/bidding/BidSheet';
 import { useVerifiedActionGuard } from '@/features/network/utils/verifiedActionGuard';
 import { useNetworkFeedQuery, useAfterPostDeleted } from '@/lib/queries/usePostsQuery';
@@ -23,6 +22,7 @@ import { ROUTES } from '@/lib/routes';
 import { formatINR } from '@/lib/format';
 import { confirmDialog } from '@/lib/confirmDialog';
 import type { LinkedOrgDisplay } from '@/lib/useLinkedOrgProfileMap';
+import { useLinkedOrgDisplayMap } from '@/lib/queries/useLinkedOrgDisplayQuery';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import {
   ArrowLeft,
@@ -164,36 +164,18 @@ export default function PostDetailScreen() {
   const markSourceDeletedMutation = useMarkReachCampaignSourceDeletedMutation();
   const color = post ? orgColor(post.organization_id ?? '') : Theme.primary;
   const bids = bidsQ.data ?? [];
-  const [bidderBrandingByOrgId, setBidderBrandingByOrgId] = useState<
-    Record<string, LinkedOrgDisplay>
-  >({});
-
-  React.useEffect(() => {
-    const ids = [
-      ...new Set(
-        bids.map((b) => b.bidder_organization_id).filter((id): id is string => Boolean(id)),
-      ),
-    ];
-    if (ids.length === 0) {
-      setBidderBrandingByOrgId({});
-      return;
-    }
-    let cancelled = false;
-    void getLinkedOrgProfilesBatch(ids).then((profiles) => {
-      if (cancelled) return;
-      const next: Record<string, LinkedOrgDisplay> = {};
-      for (const [oid, profile] of Object.entries(profiles)) {
-        next[oid] = {
-          avatarUrl: (profile.avatarUrl ?? "").trim() || undefined,
-          avatarSeed: (profile.avatarSeed ?? "").trim() || undefined,
-        };
-      }
-      setBidderBrandingByOrgId(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [bids]);
+  const bidderOrgIds = useMemo(
+    () =>
+      [
+        ...new Set(
+          bids
+            .map((b) => b.bidder_organization_id)
+            .filter((id): id is string => Boolean(id)),
+        ),
+      ].sort(),
+    [bids],
+  );
+  const bidderBrandingByOrgId = useLinkedOrgDisplayMap(bidderOrgIds);
 
   /**
    * Relationship Guard v1 (docs/architecture/11-relationship-guard-v1.md): the shipper

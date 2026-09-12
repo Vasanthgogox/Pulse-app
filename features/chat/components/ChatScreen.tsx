@@ -1,6 +1,4 @@
 import { LoadingIndicator } from "@/components/LoadingIndicator";
-import { useQuery } from "@tanstack/react-query";
-import { getLinkedOrgProfilesBatch } from "@/features/clients/services/clients.service";
 import { ChatPartyAvatar } from "@/features/chat/components/ChatPartyAvatar";
 import {
   isSelfNetworkStory,
@@ -22,8 +20,6 @@ import {
   type DriverSwapPair,
   type SystemUpdateDriverContext,
 } from "@/features/chat/utils/chatAvatar.util";
-import { queryKeys } from "@/lib/queryKeys";
-import { STALE } from "@/lib/queryClient";
 import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 import { chatFilterChromeStyles } from "@/constants/ChatFilterChrome";
 import Theme from "@/constants/Theme";
@@ -191,6 +187,7 @@ import {
 import { getTripOperationalDisplay } from "@/features/operations/display";
 import { useTripAssignmentAuditHistoryQuery } from "@/lib/queries/useTripsQuery";
 import { useNetworkFeedQuery } from "@/lib/queries/usePostsQuery";
+import { useLinkedOrgDisplayMap } from "@/lib/queries/useLinkedOrgDisplayQuery";
 import { isAggregateTrip } from "@/features/drivers/utils/driverUtils.util";
 import type { ActiveTripSummary } from "@/lib/globalSync/types";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
@@ -1274,12 +1271,7 @@ export function ChatScreen() {
     return Array.from(ids).sort();
   }, [composeTrips, hubComposeTrips]);
 
-  const { data: tripLinkedOrgBranding = {} } = useQuery({
-    queryKey: queryKeys.linkedOrgDisplay(tripLinkedOrgIds),
-    queryFn: () => getLinkedOrgProfilesBatch(tripLinkedOrgIds),
-    enabled: tripLinkedOrgIds.length > 0,
-    staleTime: STALE.moderate,
-  });
+  const tripLinkedOrgBranding = useLinkedOrgDisplayMap(tripLinkedOrgIds);
   const [initiating, setInitiating] = useState(false);
   const [showNetCompose, setShowNetCompose] = useState(false);
   const [netComposeSearch, setNetComposeSearch] = useState("");

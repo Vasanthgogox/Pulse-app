@@ -1,14 +1,11 @@
-import { getLinkedOrgProfilesBatch } from "@/features/clients/services/clients.service";
-import { queryKeys } from "@/lib/queryKeys";
-import { STALE } from "@/lib/queryClient";
-import { useQuery } from "@tanstack/react-query";
+import { useLinkedOrgDisplayMap } from "@/lib/queries/useLinkedOrgDisplayQuery";
 import { useMemo } from "react";
 
 export type LinkedOrgDisplay = { avatarUrl?: string; avatarSeed?: string };
 
 /**
  * Fetches display profiles (avatar URL + seed) for all linked org IDs found in
- * the given client and supplier lists. Results are cached by TanStack Query.
+ * the given client and supplier lists. Results share the canonical linked-org cache.
  */
 export function useLinkedOrgProfileMap(
   clients: readonly { linked_organization_id?: string | null }[],
@@ -27,22 +24,15 @@ export function useLinkedOrgProfileMap(
     return Array.from(set).sort();
   }, [clients, suppliers]);
 
-  const { data = {} } = useQuery({
-    queryKey: queryKeys.linkedOrgDisplay(ids),
-    queryFn: async () => {
-      const profiles = await getLinkedOrgProfilesBatch(ids);
-      const result: Record<string, LinkedOrgDisplay> = {};
-      for (const [oid, profile] of Object.entries(profiles)) {
-        result[oid] = {
-          avatarUrl: (profile.avatarUrl ?? "").trim() || undefined,
-          avatarSeed: (profile.avatarSeed ?? "").trim() || undefined,
-        };
-      }
-      return result;
-    },
-    enabled: ids.length > 0,
-    staleTime: STALE.moderate,
-  });
-
-  return data;
+  const profiles = useLinkedOrgDisplayMap(ids);
+  return useMemo(() => {
+    const result: Record<string, LinkedOrgDisplay> = {};
+    for (const [oid, profile] of Object.entries(profiles)) {
+      result[oid] = {
+        avatarUrl: profile.avatarUrl,
+        avatarSeed: profile.avatarSeed,
+      };
+    }
+    return result;
+  }, [profiles]);
 }

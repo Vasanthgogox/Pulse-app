@@ -264,7 +264,7 @@ export async function getLinkedOrgProfile(linkedOrganizationId: string): Promise
   };
 }
 
-type OrgDisplayProfile = {
+export type OrgDisplayProfile = {
   organizationName: string;
   contactPerson: string;
   phone: string;

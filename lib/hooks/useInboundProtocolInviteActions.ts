@@ -37,6 +37,7 @@ export function useInboundProtocolInviteActions(orgId: string | null) {
         error = res.error;
         if (!error) {
           clearDiscoveryCache(orgId);
+          void qc.invalidateQueries({ queryKey: queryKeys.discover.all(orgId) });
           // DB trigger created client/supplier rows synchronously — invalidate
           // everything so "Your connections" reflects the new connection immediately.
           qc.invalidateQueries({ queryKey: queryKeys.clients.all(orgId) });
@@ -49,7 +50,10 @@ export function useInboundProtocolInviteActions(orgId: string | null) {
         patchAfterAction(item.id, item.linkedRequestIds);
         const res = await rejectConnectionRequest(item.id, orgId);
         error = res.error;
-        if (!error) clearDiscoveryCache(orgId);
+        if (!error) {
+          clearDiscoveryCache(orgId);
+          void qc.invalidateQueries({ queryKey: queryKeys.discover.all(orgId) });
+        }
       } else if (action === "cancel" && item.kind === "driver") {
         const res = await cancelDriverInvite(item.id);
         error = res.error;
