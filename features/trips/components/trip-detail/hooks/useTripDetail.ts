@@ -49,7 +49,13 @@ import {
     useTransactionsQuery,
     useTripSubcontractsQuery,
 } from "@/lib/queries";
-import { isBundleEnabled, useTripDetailBundleQuery, type TripDetailBundle } from "@/lib/queries/useTripDetailBundleQuery";
+import {
+    isBundleEnabled,
+    useTripDetailBundleQuery,
+    type BundleDocument,
+    type BundleTransaction,
+    type TripDetailBundle,
+} from "@/lib/queries/useTripDetailBundleQuery";
 import { queryKeys } from "@/lib/queryKeys";
 import * as driverLocationService from "@/features/driver/services/driverLocation.service";
 import { getMoverAssetClientPaid } from "@/features/trips/services/moverAssetPayment.service";
@@ -117,6 +123,45 @@ import {
   TRACKING_LOCATION_GEOCODE_MAX,
   TRIP_TRACKING_HISTORY_FETCH_LIMIT,
 } from "@/lib/trackingLocation.constants";
+
+function ledgerRowsFromBundleTransactions(
+  rows: BundleTransaction[] | null | undefined,
+): LedgerRow[] {
+  if (!rows?.length) return [];
+  return rows.map((tx) => ({
+    id: tx.id,
+    organization_id: tx.organization_id,
+    trip_id: tx.trip_id,
+    party_name: tx.party_name,
+    description: tx.description,
+    amount_in: Number(tx.amount_in ?? 0),
+    amount_out: Number(tx.amount_out ?? 0),
+    transaction_date: tx.transaction_date,
+    created_at: tx.created_at ?? tx.transaction_date,
+    contact_id: tx.contact_id,
+    contact_type: (tx.contact_type as LedgerRow["contact_type"]) ?? null,
+    ledger_entity_type: tx.ledger_entity_type,
+    ledger_flow_type: tx.ledger_flow_type,
+    ledger_category: tx.ledger_category,
+  }));
+}
+
+function tripDocumentsFromBundle(
+  rows: BundleDocument[] | null | undefined,
+): tripDocumentsService.TripDocumentRow[] {
+  if (!rows?.length) return [];
+  return rows.map((doc) => ({
+    id: doc.id,
+    trip_id: doc.trip_id,
+    file_name: doc.file_name,
+    storage_path: doc.storage_path,
+    mime_type: doc.mime_type,
+    size_bytes: doc.size_bytes,
+    uploaded_at: doc.uploaded_at,
+    uploaded_by: doc.uploaded_by,
+    document_type: doc.document_type ?? "pod",
+  }));
+}
 
 function docTypeFromFileName(fileName: string): string {
   const ext = fileName.split(".").pop()?.toLowerCase() || "";
@@ -408,6 +453,7 @@ export function useTripDetail({
   } | null>(null);
   const [showTrackingModal, setShowTrackingModal] = useState(false);
   const [showFullScreenMap, setShowFullScreenMap] = useState(false);
+  const [locationHistoryEnabled, setLocationHistoryEnabled] = useState(false);
   const [showDriverRejectedModal, setShowDriverRejectedModal] = useState(false);
   const [tripDetailTab, setTripDetailTab] = useState<TripDetailTab>("finance");
   const [expandedTimelineEntryIds, setExpandedTimelineEntryIds] = useState<
@@ -440,6 +486,13 @@ export function useTripDetail({
   const lastBroadcastTimestampRef = useRef<string | null>(null);
   // Phase 3b: true after bundle data has been seeded into state on initial mount.
   const bundleSeededRef = useRef(false);
+  /** Documents/POD viewer opened — allows OCR + Storage fallback. */
+  const documentsViewerActiveRef = useRef(false);
+  /**
+   * Bundle seed already applies latest_driver_location. Skip the first
+   * status/updated_at location read for this tripId; later status changes still fetch.
+   */
+  const skippedBundleMountLocationReadForTripRef = useRef<string | null>(null);
 
   // ── Shipper display names (platform-level alias) ──────────────────────────
   const { data: shipperNameByTripId = {} } = useShipperDisplayNamesQuery(
@@ -757,8 +810,20 @@ export function useTripDetail({
     return rows;
   }, [trip, assignmentAuditRows, assignmentDriverNames, assignmentVehicleLabels]);
 
+  // Phase 3b: single-RPC bundle replacing 18-24 serial calls.
+  // When ENABLE_TRIP_DETAIL_BUNDLE is true (global), bundleActive is true for all orgs.
+  // Legacy load effects below are no-ops on the bundle path.
+  const { bundle, isBundleLoading, bundleError } = useTripDetailBundleQuery(
+    tripId,
+    currentOrganization?.id ?? null,
+  );
+  const bundleActive = isBundleEnabled(currentOrganization?.id ?? null);
+
   // ── Transactions (React Query) ────────────────────────────────────────────
-  const orgIdForTransactions = currentOrganization?.id ?? null;
+  // Bundle already includes the trip-scoped 50-row slice — do not load org-wide ledger.
+  const orgIdForTransactions = bundleActive
+    ? null
+    : (currentOrganization?.id ?? null);
   const tripOwnerOrgIdForTransactions = trip?.organization_id ?? null;
   const secondaryOrgIdForTransactions =
     orgIdForTransactions &&
@@ -783,10 +848,17 @@ export function useTripDetail({
     isSuccess: secondaryTxSuccess,
   } = useTransactionsQuery(secondaryOrgIdForTransactions);
   refetchTransactionsRef.current = () => {
+    if (bundleActive && tripId) {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.trips.bundle(tripId) });
+      return;
+    }
     void refetchPrimaryTransactions();
     if (secondaryOrgIdForTransactions) void refetchSecondaryTransactions();
   };
   const transactions: LedgerRow[] | null = useMemo(() => {
+    if (bundleActive) {
+      return ledgerRowsFromBundleTransactions(bundle?.transactions);
+    }
     if (!orgIdForTransactions) return null;
     const merged = [...primaryTransactionsData, ...secondaryTransactionsData];
     if (merged.length <= 1) return merged;
@@ -794,6 +866,8 @@ export function useTripDetail({
     for (const row of merged) deduped.set(row.id, row);
     return Array.from(deduped.values());
   }, [
+    bundleActive,
+    bundle?.transactions,
     orgIdForTransactions,
     primaryTransactionsData,
     secondaryTransactionsData,
@@ -820,12 +894,15 @@ export function useTripDetail({
   const secondaryTxAwaiting =
     secondaryTxRequired &&
     (secondaryTxLoading || (secondaryTxPending && !secondaryTxSuccess && !secondaryTxError));
-  const tripLedgerEntriesLoading =
-    tripLedgerEntries.length === 0 && (primaryTxAwaiting || secondaryTxAwaiting);
-  const tripLedgerEntriesError =
-    tripLedgerEntries.length === 0 &&
-    !tripLedgerEntriesLoading &&
-    ((primaryTxRequired && primaryTxError) || (secondaryTxRequired && secondaryTxError));
+  const tripLedgerEntriesLoading = bundleActive
+    ? tripLedgerEntries.length === 0 && isBundleLoading
+    : tripLedgerEntries.length === 0 && (primaryTxAwaiting || secondaryTxAwaiting);
+  const tripLedgerEntriesError = bundleActive
+    ? tripLedgerEntries.length === 0 && !isBundleLoading && !!bundleError
+    : tripLedgerEntries.length === 0 &&
+      !tripLedgerEntriesLoading &&
+      ((primaryTxRequired && primaryTxError) ||
+        (secondaryTxRequired && secondaryTxError));
 
   /** Prefer linked supplier name; fall back to supplier ledger party_name. */
   const resolvedPartnerName = useMemo(
@@ -853,12 +930,6 @@ export function useTripDetail({
     currentOrganization?.id ?? null,
     trip ? [trip.id] : [],
   );
-
-  // Phase 3b: single-RPC bundle replacing 18-24 serial calls.
-  // When ENABLE_TRIP_DETAIL_BUNDLE is true (global), bundleActive is true for all orgs.
-  // Legacy load effects below are no-ops on the bundle path.
-  const { bundle } = useTripDetailBundleQuery(tripId, currentOrganization?.id ?? null);
-  const bundleActive = isBundleEnabled(currentOrganization?.id ?? null);
 
   const subcontractRate = useMemo(() => {
     if (tripSubcontracts.length > 0 && trip) {
@@ -1134,10 +1205,9 @@ export function useTripDetail({
       }
       isRefreshingRef.current = true;
       setFinanceRefreshKey((k) => k + 1);
+      // Bundle path: refetchTransactionsRef already invalidates queryKeys.trips.bundle.
       refetchTransactionsRef.current();
-      if (bundleActive && tripId) {
-        void queryClient.invalidateQueries({ queryKey: queryKeys.trips.bundle(tripId) });
-      } else {
+      if (!bundleActive) {
         load();
         loadAssignmentAudit();
       }
@@ -1689,21 +1759,34 @@ export function useTripDetail({
     });
   }, [trip?.id, trip?.supplier_id, trip?.driver_id, trip?.vehicle_id, trip?.vehicle_display_number, driverLinked]);
 
-  const loadTripDocuments = useCallback(() => {
-    if (!tripId) return Promise.resolve();
-    const requestedTripId = tripId;
-    return tripDocumentsService
-      .getDocumentsByTripId(tripId)
-      .then(({ documents, error }) => {
-        // The active trip changed while this request was in flight -- a
-        // stale response here would otherwise overwrite the new trip's
-        // documents with the previous trip's (wrong LR/POD/manifest shown
-        // under the new trip's labels).
-        if (currentTripIdRef.current !== requestedTripId) return;
-        if (error) setTripDocuments([]);
-        else setTripDocuments(documents ?? []);
-      });
-  }, [tripId]);
+  const loadTripDocuments = useCallback(
+    (opts?: { forViewer?: boolean }) => {
+      if (!tripId) return Promise.resolve();
+      if (opts?.forViewer) documentsViewerActiveRef.current = true;
+      const requestedTripId = tripId;
+      const forViewer = documentsViewerActiveRef.current;
+      return tripDocumentsService
+        .getDocumentsByTripId(tripId, {
+          includeOcr: forViewer,
+          includeStorageFallback: forViewer,
+        })
+        .then(({ documents, error }) => {
+          if (currentTripIdRef.current !== requestedTripId) return;
+          if (error) return;
+          if ((documents ?? []).length > 0) {
+            setTripDocuments(documents ?? []);
+            return;
+          }
+          if (forViewer) setTripDocuments([]);
+        });
+    },
+    [tripId],
+  );
+
+  const ensureTripDocumentsForViewer = useCallback(() => {
+    documentsViewerActiveRef.current = true;
+    return loadTripDocuments({ forViewer: true });
+  }, [loadTripDocuments]);
 
   const upsertTripDocument = useCallback(
     (row: tripDocumentsService.TripDocumentRow) => {
@@ -1718,28 +1801,43 @@ export function useTripDetail({
   // Ops has no other signal for a driver-uploaded document (e.g. POD) — trip_documents
   // has no org-scoped realtime coverage elsewhere, so this per-trip subscription is the
   // only way this screen learns about a new upload without a manual refresh.
-  useRealtimeTripDocuments(tripId ?? null, loadTripDocuments);
+  useRealtimeTripDocuments(tripId ?? null, () => {
+    void loadTripDocuments();
+  });
 
-  const fetchDriverLocationFromDb = useCallback(async () => {
+  const fetchLatestDriverLocationFromDb = useCallback(async () => {
     if (!trip?.id) return;
     const driverId = effectiveDriverIdForLocation;
     setDriverLocationLoading(true);
     try {
-      const [latestRes, historyByTrip] = await Promise.all([
-        driverLocationService.getLatestDriverLocationForTripOrDriver(trip.id, driverId),
-        driverLocationService.getTripLocationHistory(
+      const latestRes =
+        await driverLocationService.getLatestDriverLocationForTripOrDriver(
           trip.id,
-          TRIP_TRACKING_HISTORY_FETCH_LIMIT,
-        ),
-      ]);
+          driverId,
+        );
+      const latest = latestRes.error ? null : (latestRes.location ?? null);
+      if (latest) setDriverLocation(latest);
+    } catch {
+      // Location fetch failed silently — UI shows offline state
+    } finally {
+      setDriverLocationLoading(false);
+    }
+  }, [trip?.id, effectiveDriverIdForLocation]);
+
+  const fetchLocationHistoryFromDb = useCallback(async () => {
+    if (!trip?.id) return;
+    const driverId = effectiveDriverIdForLocation;
+    try {
+      const historyByTrip = await driverLocationService.getTripLocationHistory(
+        trip.id,
+        TRIP_TRACKING_HISTORY_FETCH_LIMIT,
+      );
       let effectivePoints = !historyByTrip.error ? historyByTrip.points : [];
       if (effectivePoints.length === 0 && driverId) {
         const historyByDriver =
           await driverLocationService.getDriverLocationHistoryByDriverId(driverId);
         if (!historyByDriver.error) effectivePoints = historyByDriver.points;
       }
-      const latest = latestRes.error ? null : (latestRes.location ?? null);
-      setDriverLocation(latest);
       setTripLocationPoints(
         effectivePoints.map((p) => ({
           latitude: p.latitude,
@@ -1748,11 +1846,24 @@ export function useTripDetail({
         })),
       );
     } catch {
-      // Location fetch failed silently — UI shows offline state
-    } finally {
-      setDriverLocationLoading(false);
+      // History fetch failed silently — latest ping still available
     }
   }, [trip?.id, effectiveDriverIdForLocation]);
+
+  const fetchDriverLocationFromDb = useCallback(async () => {
+    await fetchLatestDriverLocationFromDb();
+    if (locationHistoryEnabled) {
+      await fetchLocationHistoryFromDb();
+    }
+  }, [
+    fetchLatestDriverLocationFromDb,
+    fetchLocationHistoryFromDb,
+    locationHistoryEnabled,
+  ]);
+
+  const ensureLocationHistory = useCallback(() => {
+    setLocationHistoryEnabled(true);
+  }, []);
 
   const handleRefresh = useCallback(() => {
     isRefreshingRef.current = true;
@@ -2058,8 +2169,9 @@ export function useTripDetail({
         ? bundle.adjustments
         : []) as unknown as TripAdjustment[],
     );
-    // document_number is not in the bundle payload — load the table rows instead.
-    loadTripDocuments();
+    if (!documentsViewerActiveRef.current) {
+      setTripDocuments(tripDocumentsFromBundle(bundle.documents));
+    }
 
     if (bundle.otp) {
       setTripOtp({ code: bundle.otp.code, expires_at: bundle.otp.expires_at });
@@ -2133,7 +2245,7 @@ export function useTripDetail({
           : null,
       );
     }
-  }, [bundle, loadTripDocuments]);
+  }, [bundle]);
 
   // Stash: preloaded trip from load-flow
   useEffect(() => {
@@ -2174,11 +2286,25 @@ export function useTripDetail({
     if (tripId) loadAssignmentAudit();
   }, [tripId, loadAssignmentAudit, bundleActive]);
 
-  // Trip documents include document_number, which the bundle RPC does not return.
+  // Legacy path: one table-only document list. Bundle path seeds from RPC.
+  // OCR + Storage fallback wait until Documents/POD viewer (ensureTripDocumentsForViewer).
   useEffect(() => {
+    documentsViewerActiveRef.current = false;
+    setLocationHistoryEnabled(false);
+    skippedBundleMountLocationReadForTripRef.current = null;
+  }, [tripId]);
+
+  useEffect(() => {
+    if (bundleActive) return;
     if (trip?.id) loadTripDocuments();
     else setTripDocuments([]);
-  }, [trip?.id, loadTripDocuments]);
+  }, [trip?.id, loadTripDocuments, bundleActive]);
+
+  useEffect(() => {
+    if (!selectedDoc) return;
+    if (documentsViewerActiveRef.current) return;
+    void ensureTripDocumentsForViewer();
+  }, [selectedDoc, ensureTripDocumentsForViewer]);
 
   useEffect(() => {
     if (!selectedDoc) {
@@ -2307,7 +2433,7 @@ export function useTripDetail({
     if (!selectedDoc.id.startsWith("pod") || docPreviewStoragePath || !tripId) return;
     if (podModalRefetchDoneRef.current) return;
     podModalRefetchDoneRef.current = true;
-    loadTripDocuments();
+    void loadTripDocuments({ forViewer: true });
   }, [selectedDoc, docPreviewStoragePath, tripId, loadTripDocuments]);
 
   // OTP — skipped on bundle path (bundle seeding effect provides otp or null)
@@ -2320,7 +2446,7 @@ export function useTripDetail({
     }
   }, [trip?.id, trip?.supplier_id, trip?.driver_id, driverLinked, loadTripOtp, bundleActive]);
 
-  // Driver_locations history + latest fix (mobile app pings) — always for assigned / in-transit trips.
+  // Latest ping only on the legacy path. Bundle already supplies latest_driver_location.
   useEffect(() => {
     if (!driverMapDataEnabled) {
       setDriverLocation(null);
@@ -2328,23 +2454,48 @@ export function useTripDetail({
       setDriverLocationLoading(false);
       return;
     }
-    void fetchDriverLocationFromDb();
+    if (bundleActive) return;
+    void fetchLatestDriverLocationFromDb();
   }, [
     driverMapDataEnabled,
     trip?.id,
     effectiveDriverIdForLocation,
-    fetchDriverLocationFromDb,
+    fetchLatestDriverLocationFromDb,
+    bundleActive,
+  ]);
+
+  useEffect(() => {
+    if (showTrackingModal || showFullScreenMap || tripDetailTab === "tracking") {
+      setLocationHistoryEnabled(true);
+    }
+  }, [showTrackingModal, showFullScreenMap, tripDetailTab]);
+
+  useEffect(() => {
+    if (!locationHistoryEnabled || !trip?.id || !driverMapDataEnabled) return;
+    void fetchLocationHistoryFromDb();
+  }, [
+    locationHistoryEnabled,
+    trip?.id,
+    driverMapDataEnabled,
+    fetchLocationHistoryFromDb,
   ]);
 
   // Live tracking seed/trail: TanStack Query key is [tripId, driverId] — driver change refetches once, no per-render loop.
 
   // Phase 3c: on trip status/update events, fetch latest location only — history unchanged by status transitions.
+  // Bundle mount already seeds latest_driver_location; skip that first read. Keep later
+  // fetches because Realtime trip UPDATE merges the trip row without refreshing bundle location.
   useEffect(() => {
     if (!trip?.id || !effectiveDriverIdForLocation) return;
+    if (bundleActive) {
+      if (skippedBundleMountLocationReadForTripRef.current !== trip.id) {
+        skippedBundleMountLocationReadForTripRef.current = trip.id;
+        return;
+      }
+    }
     void driverLocationService.getLatestDriverLocationForTripOrDriver(trip.id, effectiveDriverIdForLocation)
       .then(res => { if (!res.error && res.location) setDriverLocation(res.location); });
-   
-  }, [trip?.updated_at, trip?.status, effectiveDriverIdForLocation, trip?.id]);
+  }, [trip?.updated_at, trip?.status, effectiveDriverIdForLocation, trip?.id, bundleActive]);
 
   useTrackingTripBroadcast({
     tripId: trip?.id ?? null,
@@ -2419,17 +2570,16 @@ export function useTripDetail({
 
   /**
    * Phase 3c: fallback poll fetches latest location only (not history).
-   * History is established at initial mount and updated via realtime payload merge.
-   * 1 DB call per 60s vs 2-3 calls previously.
+   * History loads when map/tracking UI is opened.
    * Disabled when broadcast is active — broadcast updates arrive at 30s cadence.
    */
   useEffect(() => {
     if (!driverMapDataEnabled || tripCompleted) return;
     const id = globalThis.setInterval(() => {
-      void fetchDriverLocationFromDb();
+      void fetchLatestDriverLocationFromDb();
     }, 60_000);
     return () => globalThis.clearInterval(id);
-  }, [driverMapDataEnabled, tripCompleted, fetchDriverLocationFromDb]);
+  }, [driverMapDataEnabled, tripCompleted, fetchLatestDriverLocationFromDb]);
 
   // Mover_asset: fetch how much the aggregator has paid on the linked load, so
   // the mover's receivable shows "<client> marked paid ₹X" instead of nothing.
@@ -2669,6 +2819,7 @@ export function useTripDetail({
     // Documents
     tripDocuments,
     loadTripDocuments,
+    ensureTripDocumentsForViewer,
     upsertTripDocument,
     computedTripDocs,
     vehiclePreviewDocs,
@@ -2725,6 +2876,7 @@ export function useTripDetail({
     handleUpdateAdjustment,
     handleRecordDriverPayment,
     fetchDriverLocationFromDb,
+    ensureLocationHistory,
 
     // Misc
     currentUserId,

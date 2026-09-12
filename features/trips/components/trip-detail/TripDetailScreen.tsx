@@ -546,6 +546,19 @@ export default function TripDetailScreen({
     onBack,
   });
 
+  useEffect(() => {
+    if (activeTab === "docs") {
+      void detail.ensureTripDocumentsForViewer();
+    }
+    if (activeTab === "tracking") {
+      detail.ensureLocationHistory();
+    }
+  }, [
+    activeTab,
+    detail.ensureTripDocumentsForViewer,
+    detail.ensureLocationHistory,
+  ]);
+
   const resolveReceiptPartyAvatar = useCallback(
     (row: LedgerRow): LedgerEntryReceiptPartyAvatar | undefined => {
       const partyName = (row.party_name ?? "").trim();

@@ -220,14 +220,28 @@ export function isUsableStorageListObject(name: string | undefined | null): bool
 
 /**
  * List documents for a trip (e.g. POD). Used to show count and enable Complete.
- * 1) Reads from trip_documents table (indexed by trip_id) — O(1) query.
- * 2) If table returns no rows, fallback: list storage prefix {tripId}/ so POD still
- *    shows when the file exists in storage but the table row is missing (e.g. RLS or insert failure).
- *    Storage list by prefix is O(k) where k = files in that folder; typically 1–5.
+ * 1) Reads from trip_documents table (indexed by trip_id).
+ * 2) If table returns no rows and includeStorageFallback is true, list storage
+ *    prefix {tripId}/ so POD still shows when the file exists in storage but the
+ *    table row is missing. Trip Detail defers this until the Documents/POD viewer.
  */
+export type GetDocumentsByTripIdOptions = {
+  /** Join OCR jobs for LR rows. Default true for non–trip-detail callers. */
+  includeOcr?: boolean;
+  /**
+   * List Storage when the table returns no rows. Default true for callers that
+   * still need the historical storage-only POD path. Trip Detail defers this
+   * until the Documents/POD viewer is opened.
+   */
+  includeStorageFallback?: boolean;
+};
+
 export async function getDocumentsByTripId(
-  tripId: string
+  tripId: string,
+  options?: GetDocumentsByTripIdOptions,
 ): Promise<{ documents: TripDocumentRow[]; error: Error | null }> {
+  const includeOcr = options?.includeOcr !== false;
+  const includeStorageFallback = options?.includeStorageFallback !== false;
   const { data, error } = await supabase()
     .from("trip_documents")
     .select("id, trip_id, file_name, storage_path, mime_type, size_bytes, uploaded_at, uploaded_by, document_type, document_number, ocr_job_id")
@@ -246,8 +260,15 @@ export async function getDocumentsByTripId(
       };
     }) as TripDocumentRow[];
     if (rows.length > 0) {
-      return { documents: await attachLrOcrFields(rows), error: null };
+      return {
+        documents: includeOcr ? await attachLrOcrFields(rows) : rows,
+        error: null,
+      };
     }
+  }
+
+  if (!includeStorageFallback) {
+    return { documents: [], error: tableError };
   }
 
   // Fallback: list storage folder for this trip so dispatcher/supplier can still preview POD
