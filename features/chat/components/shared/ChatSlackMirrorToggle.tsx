@@ -28,6 +28,16 @@ export type MirrorToggleItem = {
 
 type MirrorVariant = "bottomNav" | "sidebar" | "filter" | "party";
 
+function partySecondLine(label?: string, subLabel?: string): string | null {
+  const second = (subLabel ?? "").trim();
+  if (!second) return null;
+  const first = (label ?? "").trim();
+  if (first && first.localeCompare(second, undefined, { sensitivity: "accent" }) === 0) {
+    return null;
+  }
+  return second;
+}
+
 export function ChatSlackMirrorToggle({
   items,
   activeId,
@@ -197,11 +207,13 @@ export function ChatSlackMirrorToggle({
         }
 
         if (variant === "party") {
+          const secondLine = partySecondLine(item.label, item.subLabel);
           return (
             <TouchableOpacity
               key={item.id}
               style={[
                 styles.partyItem,
+                secondLine ? styles.partyItemStacked : styles.partyItemSingle,
                 twoPartyMode && styles.partyItemTwoItem,
                 multiPartyMode && styles.partyItemMulti,
                 item.disabled && styles.partyItemOff,
@@ -224,7 +236,12 @@ export function ChatSlackMirrorToggle({
                   />
                 </View>
               ) : null}
-              <View style={styles.partyTextCol}>
+              <View
+                style={[
+                  styles.partyTextCol,
+                  secondLine ? styles.partyTextColStacked : styles.partyTextColSingle,
+                ]}
+              >
                 {item.label ? (
                   <Text
                     style={[styles.partyName, active && styles.partyNameActive, { includeFontPadding: false }]}
@@ -234,13 +251,13 @@ export function ChatSlackMirrorToggle({
                     {item.label}
                   </Text>
                 ) : null}
-                {item.subLabel ? (
+                {secondLine ? (
                   <Text
                     style={[styles.partyRole, active && styles.partyRoleActive, { includeFontPadding: false }]}
                     numberOfLines={1}
                     ellipsizeMode="tail"
                   >
-                    {item.subLabel}
+                    {secondLine}
                   </Text>
                 ) : null}
               </View>
@@ -485,7 +502,6 @@ const styles = StyleSheet.create({
   },
   partyItem: {
     flexDirection: "row",
-    alignItems: "center",
     justifyContent: "flex-start",
     paddingHorizontal: 10,
     paddingVertical: 6,
@@ -493,6 +509,12 @@ const styles = StyleSheet.create({
     minHeight: 40,
     gap: 6,
     zIndex: 2,
+  },
+  partyItemSingle: {
+    alignItems: "center",
+  },
+  partyItemStacked: {
+    alignItems: "flex-start",
   },
   partyItemTwoItem: {
     flex: 1,
@@ -527,8 +549,14 @@ const styles = StyleSheet.create({
   partyTextCol: {
     flex: 1,
     minWidth: 0,
+  },
+  partyTextColSingle: {
+    gap: 0,
     justifyContent: "center",
+  },
+  partyTextColStacked: {
     gap: 2,
+    justifyContent: "flex-start",
   },
   partyName: {
     fontSize: 10,

@@ -147,7 +147,13 @@ function PartyChip({
   const showPresence = entityType === "driver" && Boolean(presencePing);
 
   return (
-    <View style={[styles.chip, alignEnd && styles.chipEnd]}>
+    <View
+      style={[
+        styles.chip,
+        alignEnd && styles.chipEnd,
+        showPresence ? styles.chipStacked : styles.chipSingle,
+      ]}
+    >
       <PartyAvatar
         name={label}
         initialsColorSeed={initialsColorSeed}
@@ -158,7 +164,13 @@ function PartyChip({
         entityType={entityType}
         size={CHIP_AVATAR}
       />
-      <View style={[styles.chipCopy, alignEnd && styles.chipCopyEnd]}>
+      <View
+        style={[
+          styles.chipCopy,
+          alignEnd && styles.chipCopyEnd,
+          showPresence ? styles.chipCopyStacked : styles.chipCopySingle,
+        ]}
+      >
         <Text
           style={[styles.chipName, alignEnd && styles.chipNameEnd]}
           numberOfLines={1}
@@ -450,7 +462,12 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
           accessibilityLabel={`${tripNo} ${clientName}, ${originTagUpper}, ${asLabel(origin)} to ${asLabel(dest)}`}
         >
           <View style={[styles.head, fillGrid && styles.headGrid]}>
-            <View style={styles.headLeft}>
+            <View
+              style={[
+                styles.headLeft,
+                clientSubline ? styles.headLeftStacked : styles.headLeftSingle,
+              ]}
+            >
               <PartyAvatar
                 name={clientName}
                 initialsColorSeed={clientFb}
@@ -461,7 +478,12 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
                 entityType="client"
                 size={HUB_CARD_HEAD_AVATAR}
               />
-              <View style={styles.headText}>
+              <View
+                style={[
+                  styles.headText,
+                  clientSubline ? styles.headTextStacked : styles.headTextSingle,
+                ]}
+              >
                 <Text style={styles.brand} numberOfLines={1}>
                   {formatPartyName(clientName)}
                 </Text>
@@ -718,14 +740,24 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     flexDirection: "row",
-    alignItems: "center",
     gap: HUB_CARD_HEAD_LEFT_GAP,
+  },
+  headLeftSingle: {
+    alignItems: "center",
+  },
+  headLeftStacked: {
+    alignItems: "flex-start",
   },
   headText: {
     flex: 1,
     minWidth: 0,
     minHeight: HUB_CARD_HEAD_AVATAR,
+  },
+  headTextSingle: {
     justifyContent: "center",
+  },
+  headTextStacked: {
+    justifyContent: "flex-start",
   },
   brand: {
     ...FinanceTxnTypography.partyTitle,
@@ -952,8 +984,13 @@ const styles = StyleSheet.create({
     flex: 1,
     minWidth: 0,
     flexDirection: "row",
-    alignItems: "flex-start",
     gap: 6,
+  },
+  chipSingle: {
+    alignItems: "center",
+  },
+  chipStacked: {
+    alignItems: "flex-start",
   },
   chipEnd: {
     flexDirection: "row-reverse",
@@ -962,14 +999,18 @@ const styles = StyleSheet.create({
   chipCopy: {
     flex: 1,
     minWidth: 0,
+  },
+  chipCopySingle: {
     justifyContent: "center",
+  },
+  chipCopyStacked: {
+    justifyContent: "flex-start",
   },
   chipCopyEnd: {
     alignItems: "flex-end",
   },
   chipName: {
     ...FinanceTxnTypography.partyTitle,
-    flex: 1,
     minWidth: 0,
     fontSize: 10,
     lineHeight: 13,

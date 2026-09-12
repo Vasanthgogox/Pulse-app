@@ -57,7 +57,11 @@ import {
 import { computeTripSettlementDues } from "@/features/finance/utils/tripSettlement.util";
 import type { TripAdjustment } from "@/features/trips/services/tripAdjustments";
 import type { TripRow } from "@/features/trips/services/trips.service";
-import { loadLrPodIndexByTripIds } from "@/features/trips/services/tripDocumentLrPod.service";
+import {
+  loadHubPodReceiptFlags,
+  tripHasHubPodFlag,
+  tripPodIsReceived,
+} from "@/features/trips/services/tripDocumentLrPod.service";
 import {
   classifyTripMetric,
   countTripsByMetric,
@@ -385,7 +389,7 @@ export default function TripsScreen() {
           refetchTransactions(),
           refetchAssignment(),
           queryClient.invalidateQueries({
-            queryKey: ["q", "trips", "doc-trip-ids", orgId],
+            queryKey: ["q", "trips", "doc-trip-ids"],
           }),
           queryClient.invalidateQueries({
             queryKey: [...queryKeys.tripFinanceAdjustmentsRoot],
@@ -499,42 +503,46 @@ export default function TripsScreen() {
   }, [trips]);
 
   /** Persisted React Query cache is JSON — `Set` breaks after hydrate (`.has` missing). Store IDs as array, derive Set in memo. */
-  const { data: tripIdsWithDocumentsRaw } = useQuery({
+  const { data: hubPodFlagsRaw } = useQuery({
     queryKey: [
       "q",
       "trips",
       "doc-trip-ids",
-      "v3",
+      "v4-pod-flags",
       orgId ?? "",
       podDocumentTripIdsSorted,
     ],
     enabled: !!orgId && podDocumentTripIdsSorted.length > 0,
     staleTime: 60_000,
-    queryFn: async (): Promise<string[]> => {
+    queryFn: async () => {
       const ids = podDocumentTripIdsSorted.split(",").filter(Boolean);
-      if (ids.length === 0) return [];
-      const index = await loadLrPodIndexByTripIds(ids);
-      const out: string[] = [];
-      for (const [tripId, docs] of index) {
-        if (docs.hasPodDocument) out.push(tripId);
-      }
-      return out;
+      return loadHubPodReceiptFlags(ids);
     },
   });
   const tripIdsWithDocuments = useMemo(() => {
-    if (tripIdsWithDocumentsRaw instanceof Set) {
-      return tripIdsWithDocumentsRaw;
-    }
-    if (Array.isArray(tripIdsWithDocumentsRaw)) {
+    const soft = hubPodFlagsRaw?.softTripIds;
+    if (Array.isArray(soft)) {
       return new Set(
-        tripIdsWithDocumentsRaw
+        soft
           .filter((value): value is string => typeof value === "string")
-          .map((value) => value.trim())
+          .map((value) => value.trim().toLowerCase())
           .filter(Boolean),
       );
     }
     return new Set<string>();
-  }, [tripIdsWithDocumentsRaw]);
+  }, [hubPodFlagsRaw]);
+  const hardPodTripIds = useMemo(() => {
+    const hard = hubPodFlagsRaw?.hardTripIds;
+    if (Array.isArray(hard)) {
+      return new Set(
+        hard
+          .filter((value): value is string => typeof value === "string")
+          .map((value) => value.trim().toLowerCase())
+          .filter(Boolean),
+      );
+    }
+    return new Set<string>();
+  }, [hubPodFlagsRaw]);
 
   const tripsForHubMetricCounts = useMemo(() => {
     let list = tripsByStatus.filter((t) =>
@@ -2078,6 +2086,7 @@ export default function TripsScreen() {
                   linkedOrgByOrganizationId={linkedOrgByOrganizationId}
                   partyMetaByTripId={tripHubPartyMetaByTripId}
                   softPodTripIds={tripIdsWithDocuments}
+                  hardPodTripIds={hardPodTripIds}
                 />
                 {filtered.length === 0 ? (
                   <View style={emptyBannerStageStyle}>
@@ -2129,6 +2138,7 @@ export default function TripsScreen() {
                 linkedOrgByOrganizationId={linkedOrgByOrganizationId}
                 partyMetaByTripId={tripHubPartyMetaByTripId}
                 softPodTripIds={tripIdsWithDocuments}
+                hardPodTripIds={hardPodTripIds}
                 renderBody={(rows) =>
                   rows.length === 0 ? (
                     <View style={emptyBannerStageStyle}>
@@ -2163,7 +2173,14 @@ export default function TripsScreen() {
                           <TripsHubTripCard
                             hubGrid
                             trip={t}
-                            softPodReceived={tripIdsWithDocuments.has(t.id)}
+                            softPodReceived={tripHasHubPodFlag(
+                              tripIdsWithDocuments,
+                              t.id,
+                            )}
+                            hardPodReceived={
+                              tripHasHubPodFlag(hardPodTripIds, t.id) ||
+                              tripPodIsReceived(t)
+                            }
                             currentOrganizationId={
                               currentOrganization?.id ?? null
                             }
@@ -2261,7 +2278,14 @@ export default function TripsScreen() {
                         <TripsHubTripCard
                           key={t.id}
                           trip={t}
-                          softPodReceived={tripIdsWithDocuments.has(t.id)}
+                          softPodReceived={tripHasHubPodFlag(
+                            tripIdsWithDocuments,
+                            t.id,
+                          )}
+                          hardPodReceived={
+                            tripHasHubPodFlag(hardPodTripIds, t.id) ||
+                            tripPodIsReceived(t)
+                          }
                           currentOrganizationId={
                             currentOrganization?.id ?? null
                           }

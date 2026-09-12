@@ -6,7 +6,8 @@ import { supabase } from "@/lib/supabase";
 import { expandLR } from "@/lib/utils/lr";
 import { parseLrFieldValues } from "@/features/trips/services/lrDocumentOcr.util";
 
-const TRIP_ID_CHUNK = 200;
+/** Keep IN-lists short — 200 UUIDs overflow typical 8kb gateway URL limits and return []. */
+const TRIP_ID_CHUNK = 40;
 
 export type TripDocumentLrPodRow = {
   trip_id: string;
@@ -29,16 +30,16 @@ export function indexLrPodDocuments(
 ): Map<string, TripLrPodIndex> {
   const byTrip = new Map<string, TripLrPodIndex>();
   for (const row of rows) {
-    const tripId = String(row.trip_id ?? "").trim();
+    const tripId = normalizeTripPodId(row.trip_id);
     if (!tripId) continue;
     const current = byTrip.get(tripId) ?? {
       lrNumbers: [],
       hasPodDocument: false,
     };
-    const type = String(row.document_type ?? "").toLowerCase();
+    const type = String(row.document_type ?? "").trim().toLowerCase();
     if (type === "lr") {
       current.lrNumbers.push(...lrNumberFromDocument(row.document_number));
-    } else if (type === "pod") {
+    } else if (isSoftPodDocumentType(type)) {
       current.hasPodDocument = true;
     }
     byTrip.set(tripId, current);
@@ -58,6 +59,23 @@ export function tripPodIsReceived(trip: {
 }
 
 /** Digital/soft-copy POD: at least one trip_documents row with document_type = pod. */
+export function normalizeTripPodId(id: string | null | undefined): string {
+  return String(id ?? "").trim().toLowerCase();
+}
+
+export function tripHasHubPodFlag(
+  flags: Set<string> | undefined,
+  tripId: string | null | undefined,
+): boolean {
+  const id = normalizeTripPodId(tripId);
+  return Boolean(id) && Boolean(flags?.has(id));
+}
+
+export function isSoftPodDocumentType(documentType: string | null | undefined): boolean {
+  const type = String(documentType ?? "").trim().toLowerCase();
+  return type === "pod" || type === "soft_pod" || type === "pod_soft";
+}
+
 export function tripHasSoftCopyPod(hasPodDocument: boolean | null | undefined): boolean {
   return Boolean(hasPodDocument);
 }
@@ -184,7 +202,7 @@ export async function loadLrPodIndexByTripIds(
         .from("trip_documents")
         .select("trip_id, document_type, document_number")
         .in("trip_id", chunk)
-        .in("document_type", ["lr", "pod"]);
+        .in("document_type", ["lr", "pod", "soft_pod", "pod_soft"]);
       if (error) {
         console.warn("[tripDocumentLrPod] trip_documents fetch:", error.message);
         return [] as TripDocumentLrPodRow[];
@@ -194,4 +212,72 @@ export async function loadLrPodIndexByTripIds(
   );
   for (const part of results) rows.push(...part);
   return indexLrPodDocuments(rows);
+}
+
+export type HubPodReceiptFlags = {
+  softTripIds: string[];
+  hardTripIds: string[];
+};
+
+/**
+ * Pulse POD chip sources for the hub:
+ * soft = trip_documents document_type pod; hard = trips.pod_received_at.
+ */
+export async function loadHubPodReceiptFlags(
+  tripIds: string[],
+): Promise<HubPodReceiptFlags> {
+  const wanted = Array.from(
+    new Set(tripIds.map((id) => normalizeTripPodId(id)).filter(Boolean)),
+  );
+  if (wanted.length === 0) return { softTripIds: [], hardTripIds: [] };
+
+  const chunks = chunkIds(wanted);
+  const soft = new Set<string>();
+  const hard = new Set<string>();
+
+  const docParts = await Promise.all(
+    chunks.map(async (chunk) => {
+      const { data, error } = await supabase()
+        .from("trip_documents")
+        .select("trip_id, document_type")
+        .in("trip_id", chunk)
+        .in("document_type", ["pod", "soft_pod", "pod_soft"]);
+      if (error) {
+        console.warn("[tripDocumentLrPod] hub soft POD fetch:", error.message);
+        return [] as TripDocumentLrPodRow[];
+      }
+      return (data ?? []) as TripDocumentLrPodRow[];
+    }),
+  );
+  for (const part of docParts) {
+    for (const row of part) {
+      if (!isSoftPodDocumentType(row.document_type)) continue;
+      const id = normalizeTripPodId(row.trip_id);
+      if (id) soft.add(id);
+    }
+  }
+
+  const stampParts = await Promise.all(
+    chunks.map(async (chunk) => {
+      const { data, error } = await supabase()
+        .from("trips")
+        .select("id, pod_received_at")
+        .in("id", chunk);
+      if (error) {
+        console.warn("[tripDocumentLrPod] hub hard POD fetch:", error.message);
+        return [] as { id?: string; pod_received_at?: string | null }[];
+      }
+      return (data ?? []) as { id?: string; pod_received_at?: string | null }[];
+    }),
+  );
+  for (const part of stampParts) {
+    for (const row of part) {
+      if (tripPodIsReceived({ pod_received_at: row.pod_received_at })) {
+        const id = normalizeTripPodId(row.id);
+        if (id) hard.add(id);
+      }
+    }
+  }
+
+  return { softTripIds: [...soft], hardTripIds: [...hard] };
 }

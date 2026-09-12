@@ -6102,7 +6102,6 @@ const s = StyleSheet.create({
   },
   detailPartyTab: {
     flexDirection: "row",
-    alignItems: "center",
     gap: 6,
     paddingHorizontal: 9,
     paddingVertical: 5,
@@ -6113,6 +6112,12 @@ const s = StyleSheet.create({
     maxWidth: 136,
     minHeight: 34,
     flexShrink: 0,
+  },
+  detailPartyTabSingle: {
+    alignItems: "center",
+  },
+  detailPartyTabStacked: {
+    alignItems: "flex-start",
   },
   detailPartyTabOn: {
     borderColor: "#0f172a",
@@ -6125,8 +6130,14 @@ const s = StyleSheet.create({
   detailPartyTabTextCol: {
     flex: 1,
     minWidth: 0,
-    gap: 2,
+  },
+  detailPartyTabTextColSingle: {
+    gap: 0,
     justifyContent: "center",
+  },
+  detailPartyTabTextColStacked: {
+    gap: 2,
+    justifyContent: "flex-start",
   },
   detailPartyTabName: {
     fontSize: 10,
@@ -9151,7 +9162,6 @@ function TripConversationDetailLoaded({
       return {
         id: tab.rowType,
         label: partyName,
-        subLabel: roleLabel,
         avatarIdentity: tabAvatarIdentity,
         disabled: !partyConversationMap[tab.rowType],
       };
@@ -9242,19 +9252,16 @@ function TripConversationDetailLoaded({
                   : formatChatPartyName(
                       resolvedPartyName ?? displayPartyName(partyType),
                     );
-          const partyRoleLine =
-            partyType != null
-              ? formatChatPartyInboxLine(
-                  missionBarPartyTypes.find((t) => t.rowType === partyType)
-                    ?.displayType ?? partyType,
-                  resolvedPartyName,
-                ) ?? partyLabelReadable(partyType)
-              : tab.subLabel;
+          const partySecondLine = isTeam
+            ? (tab.subLabel ?? "").trim() || null
+            : null;
+          const partyNameText = isTeam ? tab.label : partyLine;
           return (
             <TouchableOpacity
               key={tab.id}
               style={[
                 s.detailPartyTab,
+                partySecondLine ? s.detailPartyTabStacked : s.detailPartyTabSingle,
                 on && s.detailPartyTabOn,
                 !hasConversation && s.detailPartyTabOff,
               ]}
@@ -9270,26 +9277,35 @@ function TripConversationDetailLoaded({
               ) : (
                 partyTabIcon(partyType!, on)
               )}
-              <View style={s.detailPartyTabTextCol}>
+              <View
+                style={[
+                  s.detailPartyTabTextCol,
+                  partySecondLine
+                    ? s.detailPartyTabTextColStacked
+                    : s.detailPartyTabTextColSingle,
+                ]}
+              >
                 {partyLine || isTeam ? (
                   <Text
                     style={[s.detailPartyTabName, on && s.detailPartyTabNameOn]}
                     numberOfLines={1}
                     ellipsizeMode="tail"
                   >
-                    {isTeam ? tab.label : partyLine}
+                    {partyNameText}
                   </Text>
                 ) : null}
-                <Text
-                  style={[
-                    s.detailPartyTabText,
-                    on && s.detailPartyTabTextOn,
-                    !hasConversation && s.detailPartyTabTextOff,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {isTeam ? tab.subLabel : partyRoleLine}
-                </Text>
+                {partySecondLine ? (
+                  <Text
+                    style={[
+                      s.detailPartyTabText,
+                      on && s.detailPartyTabTextOn,
+                      !hasConversation && s.detailPartyTabTextOff,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {partySecondLine}
+                  </Text>
+                ) : null}
               </View>
             </TouchableOpacity>
           );

@@ -83,6 +83,7 @@ import type { TripHubInTransitPingMeta } from "../hooks/useTripHubInTransitPings
 import type { TripHubPartyMeta } from "../utils/tripHubPartyMeta";
 import { TripPodStatusTags } from "./TripPodStatusTags";
 import {
+  tripHasHubPodFlag,
   tripIsDeliveredStatus,
   tripPodIsReceived,
 } from "../services/tripDocumentLrPod.service";
@@ -419,6 +420,8 @@ export type TripsHubTripCardProps = {
   inTransitPing?: TripHubInTransitPingMeta | null;
   /** Digital POD present (trip_documents document_type=pod). */
   softPodReceived?: boolean;
+  /** Physical POD (trips.pod_received_at / Pulse POD received). */
+  hardPodReceived?: boolean;
 };
 
 function tripsHubTripCardAreEqual(
@@ -434,6 +437,7 @@ function tripsHubTripCardAreEqual(
   if (prev.displayDriverName !== next.displayDriverName) return false;
   if (prev.inTransitPing !== next.inTransitPing) return false;
   if (prev.softPodReceived !== next.softPodReceived) return false;
+  if (prev.hardPodReceived !== next.hardPodReceived) return false;
   if (prev.trip.pod_received_at !== next.trip.pod_received_at) return false;
   if (prev.financeAdjustments !== next.financeAdjustments) return false;
   if (prev.ledgerReceivedTotal !== next.ledgerReceivedTotal) return false;
@@ -494,6 +498,7 @@ function TripsHubTripCardInner({
   hubGrid = false,
   inTransitPing = null,
   softPodReceived = false,
+  hardPodReceived,
 }: TripsHubTripCardProps) {
   const handlePress = useCallback(() => {
     if (onPress) onPress();
@@ -613,7 +618,7 @@ function TripsHubTripCardInner({
     inTransitPing,
     secondaryLabel: tripSecondaryLabel,
     softPodReceived,
-    hardPodReceived: tripPodIsReceived(trip),
+    hardPodReceived: hardPodReceived ?? tripPodIsReceived(trip),
   };
 
   const receivedForReceivable =
@@ -1030,6 +1035,8 @@ export type TripsHubTableViewProps = {
   onDisplayedTripsLengthChange?: (n: number) => void;
   /** Trip ids with a digital POD document (batched). */
   softPodTripIds?: Set<string>;
+  /** Trip ids with Pulse POD hard-copy received (trips.pod_received_at). */
+  hardPodTripIds?: Set<string>;
 };
 
 function txnAmount(row: LedgerRow): number {
@@ -1093,6 +1100,7 @@ export function TripsHubTableView({
   pagination,
   onDisplayedTripsLengthChange,
   softPodTripIds,
+  hardPodTripIds,
 }: TripsHubTableViewProps) {
   const insets = useSafeAreaInsets();
   const { width: layoutWidth } = useWindowDimensions();
@@ -1907,8 +1915,14 @@ export function TripsHubTableView({
                             {tripIsDeliveredStatus(t.status) ? (
                               <TripPodStatusTags
                                 compact
-                                softCopyReceived={Boolean(softPodTripIds?.has(t.id))}
-                                hardCopyReceived={tripPodIsReceived(t)}
+                                softCopyReceived={tripHasHubPodFlag(
+                                  softPodTripIds,
+                                  t.id,
+                                )}
+                                hardCopyReceived={
+                                  tripHasHubPodFlag(hardPodTripIds, t.id) ||
+                                  tripPodIsReceived(t)
+                                }
                               />
                             ) : null}
                             {tableSecondaryLabel ? (

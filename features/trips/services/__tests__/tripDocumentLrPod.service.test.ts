@@ -1,6 +1,8 @@
 import {
   indexLrPodDocuments,
+  isSoftPodDocumentType,
   receivedLrNumbersForTrip,
+  tripHasHubPodFlag,
   tripPodIsReceived,
   tripPodStatusFlags,
   tripIsDeliveredStatus,
@@ -18,6 +20,30 @@ describe("indexLrPodDocuments", () => {
     expect(index.get("t1")?.hasPodDocument).toBe(true);
     expect(index.get("t2")?.lrNumbers).toEqual(["AB9"]);
     expect(index.get("t2")?.hasPodDocument).toBe(false);
+  });
+
+  it("treats POD / soft_pod types as digital soft copy", () => {
+    const index = indexLrPodDocuments([
+      { trip_id: "T1", document_type: "POD" },
+      { trip_id: "t2", document_type: "soft_pod" },
+    ]);
+    expect(index.get("t1")?.hasPodDocument).toBe(true);
+    expect(index.get("t2")?.hasPodDocument).toBe(true);
+    expect(isSoftPodDocumentType("pod_soft")).toBe(true);
+    expect(isSoftPodDocumentType("lr")).toBe(false);
+  });
+});
+
+describe("tripHasHubPodFlag", () => {
+  it("matches Pulse POD trip ids case-insensitively", () => {
+    const flags = new Set(["cf9bd120-5e8d-4694-9ce2-e558a46596fe"]);
+    expect(
+      tripHasHubPodFlag(flags, "CF9BD120-5E8D-4694-9CE2-E558A46596FE"),
+    ).toBe(true);
+    expect(tripHasHubPodFlag(flags, "missing")).toBe(false);
+    expect(tripHasHubPodFlag(undefined, "cf9bd120-5e8d-4694-9ce2-e558a46596fe")).toBe(
+      false,
+    );
   });
 });
 
