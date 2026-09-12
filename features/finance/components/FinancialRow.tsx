@@ -171,6 +171,8 @@ export interface FinancialRowData {
   profileImageUrl?: string | null;
   /** Drivers: preset when no profileImageUrl (PartyAvatar / driver seed). */
   avatarSeed?: string | null;
+  /** Supplier-lane subtype. DCO keeps contact_type=dco and must not open supplier detail. */
+  counterpartyKind?: "supplier" | "dco";
   /** Ledger client/supplier: linked org logo / seed (before contact avatar). */
   organizationImageUrl?: string | null;
   organizationAvatarSeed?: string | null;

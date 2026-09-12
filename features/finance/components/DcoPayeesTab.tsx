@@ -1,9 +1,7 @@
 /**
- * DCO-6: Independent Operators (DCO) Finance tab. Deliberately its own tab,
- * not merged into Suppliers or Drivers — a DCO must never visually appear
- * as either. Due comes from get_dco_ledger_aggregation (derived from DCO
- * trips' supplier_rate, never a posted transaction); paid from actual
- * contact_type='dco' transactions. Layout mirrors SuppliersTab.tsx.
+ * DCO payees on the Finance → Suppliers lane (DCO tag/filter).
+ * Internal ledger identity remains contact_type='dco' / dco_payee_id.
+ * Must never appear on Finance → Drivers.
  */
 import { EntityAvatar } from "@/components/EntityAvatar";
 import { LiquidFillPill } from "@/components/LiquidFillPill";
@@ -14,6 +12,7 @@ import {
   type FinancialRowData,
   type DcoPayeeName,
 } from "@/features/finance/aggregation";
+import type { EntityListFilter } from "@/features/finance/components/TreasurySummaryCard";
 import { useDcoLedgerAggregationQuery } from "@/lib/queries/useLedgerAggregationQuery";
 import { supabase } from "@/lib/supabase";
 import { useEffect, useMemo, useState } from "react";
@@ -33,20 +32,28 @@ export interface DcoPayeesTabProps {
   organizationId: string | null;
   onRowSelect?: (data: FinancialRowData) => void;
   searchQuery?: string;
+  entityFilter?: EntityListFilter;
   topContent?: React.ReactNode;
   refreshing?: boolean;
   onRefresh?: () => void;
   bottomInset?: number;
+  embedInParentScroll?: boolean;
+  hideSummaryRow?: boolean;
+  onTotals?: (totals: { totalIn: number; totalOut: number }) => void;
 }
 
 export function DcoPayeesTab({
   organizationId,
   onRowSelect,
   searchQuery = "",
+  entityFilter = "all",
   topContent,
   refreshing = false,
   onRefresh,
   bottomInset = 100,
+  embedInParentScroll = false,
+  hideSummaryRow = false,
+  onTotals,
 }: DcoPayeesTabProps) {
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const insets = useSafeAreaInsets();
@@ -88,15 +95,28 @@ export function DcoPayeesTab({
 
   const q = searchQuery.trim().toLowerCase();
   const filteredRows = useMemo(() => {
-    if (!q) return rows;
-    return rows.filter((r) => (r.name || "").toLowerCase().includes(q));
-  }, [rows, q]);
+    let list = rows;
+    if (q) {
+      list = list.filter((r) => (r.name || "").toLowerCase().includes(q));
+    }
+    if (entityFilter === "has_due") list = list.filter((r) => (r.due ?? 0) > 0);
+    if (entityFilter === "no_due") list = list.filter((r) => (r.due ?? 0) === 0);
+    return list;
+  }, [rows, q, entityFilter]);
+
+  useEffect(() => {
+    onTotals?.(totals);
+  }, [onTotals, totals]);
 
   if (dcoLoading) {
+    if (embedInParentScroll) return null;
     return <Text style={styles.loading}>Loading…</Text>;
   }
 
   if (filteredRows.length === 0) {
+    if (embedInParentScroll) {
+      return topContent ? <View>{topContent}</View> : null;
+    }
     return (
       <ScrollView
         contentContainerStyle={[styles.emptyState, { paddingBottom: bottomInset + insets.bottom }]}
@@ -117,6 +137,69 @@ export function DcoPayeesTab({
   const settledPercent =
     totalPayables > 0 ? Math.round(((totalPayables - totalDue) / totalPayables) * 100) : 0;
 
+  const listBody = (
+    <>
+      {topContent}
+      {!hideSummaryRow ? (
+        <View style={styles.summaryRow}>
+          <View style={styles.summaryCard}>
+            <Text style={styles.summaryLabel}>Total Due</Text>
+            <Text style={styles.summaryDue}>₹{totalDue.toLocaleString("en-IN")}</Text>
+          </View>
+          <LiquidFillPill percentage={settledPercent} label="Settled" valueSuffix="%" />
+        </View>
+      ) : null}
+      <View style={styles.tableCard}>
+        {filteredRows.map((data) => {
+          const due = data.due ?? 0;
+          const paid = data.paid ?? 0;
+          const payables = data.payables ?? 0;
+          const tripCount = data.trips ?? 0;
+          return (
+            <TouchableOpacity
+              key={data.id}
+              style={styles.tableRow}
+              onPress={() => onRowSelect?.(data)}
+              activeOpacity={0.7}
+            >
+              <View style={styles.tableEntityMain}>
+                <EntityAvatar
+                  name={data.name ?? ""}
+                  initialsColorSeed={data.id}
+                  entityType="supplier"
+                />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.tableEntityName} numberOfLines={1}>
+                    {data.name ?? "—"}
+                  </Text>
+                  <Text style={styles.tableEntitySub} numberOfLines={1}>
+                    DCO
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.tripsPill}>
+                <Text style={styles.tripsPillText}>{tripCount}</Text>
+              </View>
+              {isWebDesktop ? (
+                <>
+                  <Text style={styles.tableAmtValue}>₹{payables.toLocaleString("en-IN")}</Text>
+                  <Text style={styles.tableAmtPaid}>₹{paid.toLocaleString("en-IN")}</Text>
+                </>
+              ) : null}
+              <Text style={[styles.tableDueValue, due > 0 ? styles.tableDueUnpaid : styles.tableDueSettled]}>
+                ₹{due.toLocaleString("en-IN")}
+              </Text>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </>
+  );
+
+  if (embedInParentScroll) {
+    return <View style={styles.embedInner}>{listBody}</View>;
+  }
+
   return (
     <View style={styles.wrap}>
       <ScrollView
@@ -130,58 +213,7 @@ export function DcoPayeesTab({
           ) : undefined
         }
       >
-        {topContent}
-        <View style={styles.summaryRow}>
-          <View style={styles.summaryCard}>
-            <Text style={styles.summaryLabel}>Total Due</Text>
-            <Text style={styles.summaryDue}>₹{totalDue.toLocaleString("en-IN")}</Text>
-          </View>
-          <LiquidFillPill percentage={settledPercent} label="Settled" valueSuffix="%" />
-        </View>
-        <View style={styles.tableCard}>
-          {filteredRows.map((data) => {
-            const due = data.due ?? 0;
-            const paid = data.paid ?? 0;
-            const payables = data.payables ?? 0;
-            const tripCount = data.trips ?? 0;
-            return (
-              <TouchableOpacity
-                key={data.id}
-                style={styles.tableRow}
-                onPress={() => onRowSelect?.(data)}
-                activeOpacity={0.7}
-              >
-                <View style={styles.tableEntityMain}>
-                  <EntityAvatar
-                    name={data.name ?? ""}
-                    initialsColorSeed={data.id}
-                    entityType="driver"
-                  />
-                  <View style={{ flex: 1, minWidth: 0 }}>
-                    <Text style={styles.tableEntityName} numberOfLines={1}>
-                      {data.name ?? "—"}
-                    </Text>
-                    <Text style={styles.tableEntitySub} numberOfLines={1}>
-                      Independent Operator
-                    </Text>
-                  </View>
-                </View>
-                <View style={styles.tripsPill}>
-                  <Text style={styles.tripsPillText}>{tripCount}</Text>
-                </View>
-                {isWebDesktop ? (
-                  <>
-                    <Text style={styles.tableAmtValue}>₹{payables.toLocaleString("en-IN")}</Text>
-                    <Text style={styles.tableAmtPaid}>₹{paid.toLocaleString("en-IN")}</Text>
-                  </>
-                ) : null}
-                <Text style={[styles.tableDueValue, due > 0 ? styles.tableDueUnpaid : styles.tableDueSettled]}>
-                  ₹{due.toLocaleString("en-IN")}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </View>
+        {listBody}
       </ScrollView>
     </View>
   );
@@ -190,6 +222,7 @@ export function DcoPayeesTab({
 const styles = StyleSheet.create({
   loading: { padding: 24, textAlign: "center", color: Theme.textSecondary },
   wrap: { flex: 1, backgroundColor: "#FBFBFF" },
+  embedInner: { width: "100%", minWidth: 0, paddingTop: 12 },
   tableScroll: { flex: 1 },
   tableScrollContent: { paddingHorizontal: 0, paddingTop: 12 },
   summaryRow: { flexDirection: "row", gap: 12, paddingHorizontal: 16, paddingVertical: 12 },

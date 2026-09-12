@@ -1,5 +1,6 @@
 import type { TripRow } from "@/features/trips/services/trips.service";
 import type { FuelPostingCandidate } from "./postingSelectors";
+import { isDcoOperatingTrip } from "@/features/trips/domain/tripDcoOperating";
 import { getTripOperationalCapabilities } from "@/features/trips/capabilities";
 
 export type VehiclePostingDecision =
@@ -14,6 +15,7 @@ export function decideFuelPostingRule(params: {
 }): VehiclePostingDecision {
   const capabilities = getTripOperationalCapabilities(params.trip);
   const c = params.candidate;
+  if (isDcoOperatingTrip(params.trip)) return "skip";
   if (!capabilities.isAssetTrip) return "supplier_operational_adjustment";
   if (c.approvalState !== "approved") return "skip";
   if (c.ledgerState === "posted") return "skip";

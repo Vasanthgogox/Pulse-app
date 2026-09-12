@@ -69,9 +69,7 @@ function defaultDriverPartyAvatar(
   driverById: Map<string, { avatar_url?: string | null; avatar_seed?: string | null }>,
   driverProfileImageUrls: Record<string, string> | undefined,
 ): ReactNode | null {
-  const isDriver =
-    row.contact_type === "driver" ||
-    (row.driver_name ?? "").trim() !== "";
+  const isDriver = row.contact_type === "driver";
   if (!isDriver) return null;
 
   const contactId = (row.contact_id ?? "").trim();

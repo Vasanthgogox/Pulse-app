@@ -217,6 +217,7 @@ const TripExpensesScreen = lazy(() =>
   ),
 );
 import { isAssetExecutionTrip } from "@/features/trips/domain/tripExecutionModel";
+import { isDcoOperatingTrip } from "@/features/trips/domain/tripDcoOperating";
 import { getMoverAssetTripIdForIndent } from "@/features/trips/services/trips.service";
 import { tripIsDeliveredStatus } from "@/features/trips/services/tripDocumentLrPod.service";
 import { FeedbackPlaceholder } from "./parts/FeedbackPlaceholder";
@@ -2133,7 +2134,8 @@ export default function TripDetailScreen({
    * source, so gate on that instead. isAggregate is left untouched for OTP,
    * earnings, and ledger logic, which depend on its current meaning.
    */
-  const showExpenseHub = isAssetExecutionTrip(trip);
+  const showExpenseHub =
+    isDcoOperatingTrip(trip) || isAssetExecutionTrip(trip);
 
   const driverSummaryText = (() => {
     const name = detail.driverName?.trim();
@@ -2292,7 +2294,8 @@ export default function TripDetailScreen({
   const customerSales = Number(trip.client_price ?? 0);
   const supplierCost = Number(trip.supplier_rate ?? 0);
   const sales = isPartnerSettlementView ? supplierCost : customerSales;
-  const isAssetTripFinance = isAssetExecutionTrip(trip);
+  const isDcoTrip = isDcoOperatingTrip(trip);
+  const isAssetTripFinance = !isDcoTrip && isAssetExecutionTrip(trip);
   const assetApprovedCostInr =
     tripOperationsSummaryQuery.data?.financialSnapshot?.approvedOperationalCostInr ?? 0;
   const assetDriverOffer = driverOfferFromDriverRow(
@@ -2750,6 +2753,7 @@ export default function TripDetailScreen({
     !!String(trip.driver_display_name ?? "").trim() ||
     !!String(trip.vehicle_display_number ?? "").trim();
   const payoutModeLabel = (() => {
+    if (isDcoOperatingTrip(trip)) return "DCO";
     if (!payoutModeLc) return "—";
     if (payoutModeLc === "asset") return "Asset";
     if (payoutModeLc === "market") return "Market";
@@ -2797,11 +2801,13 @@ export default function TripDetailScreen({
   const costSideDelta = adjCost - cost;
   const receivableAfterAdjustments = tripSettlement.receivableDue;
   const supplierDueAfterAdjustments = tripSettlement.payableDue;
-  const provisionCostPartyName = isAssetTripFinance
-    ? allocatedDriverName !== "Unassigned"
-      ? allocatedDriverName
-      : detail.driverName?.trim() || "Driver"
-    : supplierNameForParty;
+  const provisionCostPartyName = isDcoTrip
+    ? "DCO"
+    : isAssetTripFinance
+      ? allocatedDriverName !== "Unassigned"
+        ? allocatedDriverName
+        : detail.driverName?.trim() || "Driver"
+      : supplierNameForParty;
   const clientPartyIntegrated = detail.clientPartyRes?.integrated ?? false;
   const supplierPartyIntegrated = detail.supplierPartyRes?.integrated ?? false;
   const hasLinkedClient = Boolean((clientIdFromContext ?? trip.client_id)?.trim());
@@ -2817,9 +2823,13 @@ export default function TripDetailScreen({
    */
   const hasMarketSupplierPayable =
     !isAssetTripFinance &&
+    !isDcoTrip &&
     tripLedgerType === "market" &&
     payoutModeLc !== "asset" &&
     (adjCost > 0 || cost > 0 || hasNamedSupplierParty);
+  const hasDcoPayable =
+    isDcoTrip &&
+    (adjCost > 0 || cost > 0 || Number(trip.supplier_rate ?? 0) > 0);
   const showRecordSupplierPayoutCta =
     hasMarketSupplierPayable &&
     !isPartnerSettlementView &&
@@ -2847,7 +2857,7 @@ export default function TripDetailScreen({
    */
   const showPayableSettlementLane = isPartnerSettlementView
     ? partnerOwnAssetDriverPay > 0
-    : hasMarketSupplierPayable || isAssetTripFinance;
+    : hasMarketSupplierPayable || isAssetTripFinance || hasDcoPayable;
   const tripLedgerNavContext = {
     trip,
     router,
@@ -2859,7 +2869,11 @@ export default function TripDetailScreen({
   };
   const financeLayout = isDesktop ? "desktop" : "mobile";
   const openSettlementLanePreview = (lane: "receivable" | "payable") => {
-    const payableEntityType = isAssetTripFinance ? "driver" : "supplier";
+    const payableEntityType = isDcoTrip
+      ? "dco"
+      : isAssetTripFinance
+        ? "driver"
+        : "supplier";
     const tx = latestTripSettlementLedgerEntry(
       ledgerEntries,
       lane,
@@ -2927,8 +2941,12 @@ export default function TripDetailScreen({
         payableIntegrated={
           isAssetTripFinance ? undefined : supplierPartyIntegrated
         }
-        payableEntityType={isAssetTripFinance ? "driver" : "supplier"}
-        payableLaneLabel={isAssetTripFinance ? "Driver payable" : "Payable"}
+        payableEntityType={
+          isDcoTrip ? "dco" : isAssetTripFinance ? "driver" : "supplier"
+        }
+        payableLaneLabel={
+          isDcoTrip ? "DCO payable" : isAssetTripFinance ? "Driver payable" : "Payable"
+        }
         revisedPayable={adjCost}
         paidAmount={supplierPaid}
         payableDue={supplierDueAfterAdjustments}
@@ -3133,7 +3151,7 @@ export default function TripDetailScreen({
           companyName: currentOrganization?.name?.trim() || "PULSE",
           partyName: isSale ? clientNameForParty : provisionCostPartyName,
           laneLabel: isSale ? "Sale" : "Cost",
-          partyRole: isSale ? "Client" : isAssetTripFinance ? "Driver" : "Supplier",
+          partyRole: isSale ? "Client" : isDcoTrip ? "DCO" : isAssetTripFinance ? "Driver" : "Supplier",
           baseLaneAmount: isSale ? sales : cost,
           revisedLaneAmount: isSale ? adjSales : adjCost,
         });
@@ -3152,7 +3170,8 @@ export default function TripDetailScreen({
     />
   );
 
-  const showOdometerVerification = isAssetExecutionTrip(trip);
+  const showOdometerVerification =
+    isDcoOperatingTrip(trip) || isAssetExecutionTrip(trip);
   const expenseHubDensity = isDesktop ? "comfortable" : "compact";
   const odometerPreviewEl = showOdometerVerification ? (
     <TripOdometerPreviewCard
@@ -3756,7 +3775,9 @@ export default function TripDetailScreen({
                   isPartnerSettlementView ? "Partner amount" : "Client rate"
                 }
                 costLabel={
-                  isAssetTripFinance
+                  isDcoTrip
+                    ? "DCO earning"
+                    : isAssetTripFinance
                     ? "Trip cost"
                     : isPartnerSettlementView
                       ? "Your cost"
@@ -3847,7 +3868,9 @@ export default function TripDetailScreen({
                   isPartnerSettlementView ? "Partner amount" : "Client rate"
                 }
                 costLabel={
-                  isAssetTripFinance
+                  isDcoTrip
+                    ? "DCO earning"
+                    : isAssetTripFinance
                     ? "Trip cost"
                     : isPartnerSettlementView
                       ? "Your cost"
@@ -3862,7 +3885,7 @@ export default function TripDetailScreen({
                 clientName={clientNameForParty}
                 payablePartyName={provisionCostPartyName}
                 payablePartyLabel={
-                  isAssetTripFinance ? "Driver" : "Supplier"
+                  isDcoTrip ? "DCO" : isAssetTripFinance ? "Driver" : "Supplier"
                 }
                 subTab={financeSubTab}
                 onSubTabChange={setFinanceSubTab}

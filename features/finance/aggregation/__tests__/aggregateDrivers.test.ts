@@ -116,4 +116,31 @@ describe('aggregateDrivers', () => {
     expect(totals.totalIn).toBe(200);
     expect(totals.totalOut).toBe(200);
   });
+
+  it('does not treat a DCO trip as a Driver payable even when driver_id is set', () => {
+    const trips: TripForDriver[] = [
+      {
+        driver_id: 'd1',
+        operating_mode: 'DCO',
+        supplier_rate: 36500,
+        driver_commission: 0,
+      } as TripForDriver,
+    ];
+    const { rows, totals } = aggregateDrivers(drivers, trips, [
+      { contact_type: 'dco', contact_id: 'payee-1', amount_out: 1000 } as LedgerTx,
+    ]);
+    expect(rows[0].due).toBe(0);
+    expect(rows[0].trips).toBe(0);
+    expect(rows[0].paid).toBe(0);
+    expect(totals.totalIn).toBe(0);
+  });
+
+  it('returns 0 commission for DCO even if a fleet offer exists', () => {
+    expect(
+      computeDriverCommissionForTrip(
+        { driver_id: 'd1', operating_mode: 'DCO', client_price: 50000 },
+        { commissionPercent: 10, commissionPerKm: null, payableAmount: null },
+      ),
+    ).toBe(0);
+  });
 });

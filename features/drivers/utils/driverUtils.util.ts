@@ -5,6 +5,7 @@
  */
 
 import * as driversService from "@/features/drivers/services/drivers.service";
+import { isDcoOperatingTrip } from "@/features/trips/domain/tripDcoOperating";
 
 export interface TripWithSupplier {
   supplier_id?: string | null;
@@ -14,6 +15,7 @@ export interface TripWithSupplier {
   distance?: string | number | null;
   odometer_distance_km?: number | null;
   gps_distance_km?: number | null;
+  operating_mode?: string | null;
 }
 
 export interface DriverTripPayoutTerms {
@@ -143,6 +145,7 @@ export type DriverEarningsBasis =
   | "trip_commission"
   | "per_km"
   | "commission_percent"
+  | "dco_settlement"
   | "estimated"
   | "none";
 
@@ -165,6 +168,18 @@ export function tripEarningsDetailForDriver(
 ): DriverTripEarnings {
   const none = { amount: 0, basis: "none" as const, isEstimated: false };
   if (!trip) return none;
+
+  if (isDcoOperatingTrip(trip)) {
+    const agreed = Number(trip.supplier_rate ?? 0) || 0;
+    if (agreed > 0) {
+      return {
+        amount: Math.round(agreed),
+        basis: "dco_settlement",
+        isEstimated: false,
+      };
+    }
+    return none;
+  }
 
   /**
    * A driver is paid by their EMPLOYER, never by their employer's customer.
@@ -323,7 +338,8 @@ export function resolveDriverTripPayoutTerms(
   const hasRealCommissionBasis =
     commissionDetail.basis === "trip_commission" ||
     commissionDetail.basis === "per_km" ||
-    commissionDetail.basis === "commission_percent";
+    commissionDetail.basis === "commission_percent" ||
+    commissionDetail.basis === "dco_settlement";
   const monthlyPayableAmount = Number(offer?.payableAmount ?? 0) || 0;
   return {
     hasAgreedPayoutTerms: hasRealCommissionBasis || monthlyPayableAmount > 0,
@@ -347,6 +363,9 @@ export function canShowDriverTripEstEarnings(
   opts?: { trackingOnly?: boolean | null },
 ): boolean {
   if (!trip) return false;
+  if (isDcoOperatingTrip(trip)) {
+    return resolveDriverTripPayoutTerms(trip, offer).hasAgreedPayoutTerms;
+  }
   if (isAggregateTrip(trip)) return false;
   if (opts?.trackingOnly === true) return false;
   return resolveDriverTripPayoutTerms(trip, offer).hasAgreedPayoutTerms;

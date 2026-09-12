@@ -1,4 +1,5 @@
 import type { TripRow } from "@/features/trips/services/trips.service";
+import { isDcoOperatingTrip } from "@/features/trips/domain/tripDcoOperating";
 import {
   getAccountingMode,
   getOperationalOwner,
@@ -16,23 +17,25 @@ export interface TripOperationalCapabilities {
   canTrackVehicleEconomics: boolean;
   canTrackVerification: boolean;
   requiresBusinessApproval: boolean;
-  operationalOwner: "organization_vehicle" | "supplier_vehicle";
-  accountingMode: "vehicle_economics" | "supplier_operations";
+  operationalOwner: "organization_vehicle" | "supplier_vehicle" | "dco_owned";
+  accountingMode: "vehicle_economics" | "supplier_operations" | "dco_operations";
 }
 
 export function getTripOperationalCapabilities(
   trip: TripRow,
 ): TripOperationalCapabilities {
+  const dco = isDcoOperatingTrip(trip);
   const assetTrip = isAssetTrip(trip);
   const aggregationTrip = isAggregationTrip(trip);
+  const opsCapture = dco || assetTrip;
   return {
     isAssetTrip: assetTrip,
     isAggregationTrip: aggregationTrip,
-    canTrackFuel: assetTrip,
-    canTrackToll: assetTrip,
-    canTrackMileage: assetTrip,
-    canTrackMaintenance: assetTrip,
-    canTrackVehicleEconomics: assetTrip,
+    canTrackFuel: opsCapture,
+    canTrackToll: opsCapture,
+    canTrackMileage: opsCapture,
+    canTrackMaintenance: !dco && assetTrip,
+    canTrackVehicleEconomics: !dco && assetTrip,
     canTrackVerification: true,
     requiresBusinessApproval: true,
     operationalOwner: getOperationalOwner(trip),

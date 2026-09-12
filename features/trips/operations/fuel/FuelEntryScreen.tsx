@@ -22,7 +22,7 @@ import {
   FUEL_TYPE_OPTIONS,
   PAYMENT_MODE_OPTIONS,
   PAYMENT_OWNER_OPTIONS,
-  defaultPaymentOwnerForActor,
+  defaultPaymentOwnerForTrip,
   paymentOwnerOptionsForActor,
 } from "../shared/operationsEntryOptions";
 import { operationsEntryStyles as s } from "../shared/operationsEntryScreen.styles";
@@ -203,7 +203,7 @@ export function FuelEntryScreen({
   const [stationName, setStationName] = useState("");
   const [notes, setNotes] = useState("");
   const [paymentOwner, setPaymentOwner] = useState<OperationalPaymentOwner>(() =>
-    defaultPaymentOwnerForActor(profile?.role),
+    defaultPaymentOwnerForTrip(trip, profile?.role),
   );
   const [paymentMode, setPaymentMode] = useState<OperationalPaymentMode>("unknown");
   const [hint, setHint] = useState<string | null>(null);
@@ -261,15 +261,15 @@ export function FuelEntryScreen({
   );
 
   const paymentOwnerOptions = useMemo(
-    () => paymentOwnerOptionsForActor(PAYMENT_OWNER_OPTIONS, profile?.role),
-    [profile?.role],
+    () => paymentOwnerOptionsForActor(PAYMENT_OWNER_OPTIONS, profile?.role, trip),
+    [profile?.role, trip],
   );
 
   useEffect(() => {
-    if (!isEditing && profile?.role === "driver") {
-      setPaymentOwner(defaultPaymentOwnerForActor(profile.role));
+    if (!isEditing) {
+      setPaymentOwner(defaultPaymentOwnerForTrip(trip, profile?.role));
     }
-  }, [isEditing, profile?.role]);
+  }, [isEditing, profile?.role, trip]);
 
   useEffect(() => {
     const id = entryId?.trim();
@@ -328,6 +328,7 @@ export function FuelEntryScreen({
       enteredBy: profile?.uid ?? null,
       paymentOwner,
       paymentMode,
+      operatingMode: trip.operating_mode ?? null,
       billPhotoLocalUri: photoUri,
       ocrJobId: persistedJob?.id,
     };

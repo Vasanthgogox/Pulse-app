@@ -194,7 +194,7 @@ export interface TripPayableReceivableSummaryCardProps {
   payableOrganizationImageUrl?: string | null;
   payableOrganizationAvatarSeed?: string | null;
   payableIntegrated?: boolean;
-  payableEntityType?: "supplier" | "driver";
+  payableEntityType?: "supplier" | "driver" | "dco";
   payableLaneLabel?: string;
   revisedPayable: number;
   paidAmount: number;
@@ -302,7 +302,11 @@ export const TripPayableReceivableSummaryCard = memo(
                 organizationImageUrl={props.payableOrganizationImageUrl}
                 organizationAvatarSeed={props.payableOrganizationAvatarSeed}
                 isIntegrated={props.payableIntegrated}
-                entityType={props.payableEntityType ?? "supplier"}
+                entityType={
+                  props.payableEntityType === "dco"
+                    ? "supplier"
+                    : (props.payableEntityType ?? "supplier")
+                }
                 laneLabel={props.payableLaneLabel ?? "Payable"}
                 revisedAmount={props.revisedPayable}
                 settledAmount={props.paidAmount}

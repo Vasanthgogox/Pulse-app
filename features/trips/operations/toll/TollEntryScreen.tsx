@@ -20,7 +20,7 @@ import { getDocumentViewUrl } from "@/features/trips/services/tripDocuments.serv
 import {
   PAYMENT_MODE_OPTIONS,
   TOLL_PAYMENT_OWNER_OPTIONS,
-  defaultPaymentOwnerForActor,
+  defaultPaymentOwnerForTrip,
   paymentOwnerOptionsForActor,
 } from "../shared/operationsEntryOptions";
 import { operationsEntryStyles as s } from "../shared/operationsEntryScreen.styles";
@@ -76,7 +76,7 @@ export function TollEntryScreen({
   const [notes, setNotes] = useState("");
   const [isEstimated, setIsEstimated] = useState(false);
   const [paymentOwner, setPaymentOwner] = useState<OperationalPaymentOwner>(() =>
-    defaultPaymentOwnerForActor(profile?.role),
+    defaultPaymentOwnerForTrip(trip, profile?.role),
   );
   const [paymentMode, setPaymentMode] = useState<OperationalPaymentMode>("unknown");
   const [hint, setHint] = useState<string | null>(null);
@@ -133,15 +133,15 @@ export function TollEntryScreen({
   );
 
   const paymentOwnerOptions = useMemo(
-    () => paymentOwnerOptionsForActor(TOLL_PAYMENT_OWNER_OPTIONS, profile?.role),
-    [profile?.role],
+    () => paymentOwnerOptionsForActor(TOLL_PAYMENT_OWNER_OPTIONS, profile?.role, trip),
+    [profile?.role, trip],
   );
 
   useEffect(() => {
-    if (!isEditing && profile?.role === "driver") {
-      setPaymentOwner(defaultPaymentOwnerForActor(profile.role));
+    if (!isEditing) {
+      setPaymentOwner(defaultPaymentOwnerForTrip(trip, profile?.role));
     }
-  }, [isEditing, profile?.role]);
+  }, [isEditing, profile?.role, trip]);
 
   useEffect(() => {
     const id = entryId?.trim();
@@ -198,6 +198,7 @@ export function TollEntryScreen({
       enteredBy: profile?.uid ?? null,
       paymentOwner,
       paymentMode,
+      operatingMode: trip.operating_mode ?? null,
       receiptLocalUri: receiptUri,
       ocrJobId: persistedJob?.id,
     };

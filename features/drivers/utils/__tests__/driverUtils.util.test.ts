@@ -156,4 +156,18 @@ describe('tripEarningsDetailForDriver — unchanged canonical resolver semantics
     expect(detail.isEstimated).toBe(true);
     expect(detail.basis).toBe('estimated');
   });
+
+  it('DCO uses supplier_rate as agreed earning, never the 10% estimate', () => {
+    const trip: TripWithSupplier = {
+      supplier_id: null,
+      driver_commission: 0,
+      supplier_rate: 19000,
+      client_price: 25000,
+      operating_mode: 'DCO',
+    };
+    const detail = tripEarningsDetailForDriver(trip);
+    expect(detail.isEstimated).toBe(false);
+    expect(detail.basis).toBe('dco_settlement');
+    expect(detail.amount).toBe(19000);
+  });
 });

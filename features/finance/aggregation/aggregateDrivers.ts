@@ -6,6 +6,8 @@
  */
 import type { FinancialRowData, AggregationTotals } from './types';
 import type { LedgerTx, TripForDriver, DriverLike, DriverOfferForAggregation, TripPartyMap } from './types';
+import { isDcoOperatingTrip } from '@/features/trips/domain/tripDcoOperating';
+import { isDriverLedgerContactType } from '@/features/finance/domain/financeCounterpartyLane';
 
 /** Parse trip distance (km) to numeric km for per-km commission. */
 function parseDistanceKm(distance: string | number | null | undefined): number | null {
@@ -32,6 +34,7 @@ export function computeDriverCommissionForTrip(
   trip: Omit<TripForDriver, 'distance'> & { distance?: string | number | null },
   offer: DriverOfferForAggregation | null | undefined
 ): number {
+  if (isDcoOperatingTrip(trip)) return 0;
   const basePrice = Number(trip.client_price ?? 0) || 0;
   const distanceKm = parseDistanceKm(trip.distance);
   if (offer) {
@@ -67,6 +70,8 @@ export function aggregateDrivers(
   for (let i = 0; i < trips.length; i++) {
     const t = trips[i];
     if (!t.driver_id) continue;
+    // DCO settlement is dco_payee / contact_type=dco — never Finance → Drivers.
+    if (isDcoOperatingTrip(t)) continue;
     const offer = offers[t.driver_id] ?? null;
     const commission = computeDriverCommissionForTrip(t, offer);
     dueFromTrips[t.driver_id] = (dueFromTrips[t.driver_id] ?? 0) + commission;
@@ -78,7 +83,7 @@ export function aggregateDrivers(
     const amtOut = Number(tx.amount_out ?? 0);
     if (!amtOut) continue;
 
-    if (tx.contact_type === 'driver' && tx.contact_id) {
+    if (isDriverLedgerContactType(tx.contact_type) && tx.contact_id) {
       paidFromLedger[tx.contact_id] =
         (paidFromLedger[tx.contact_id] ?? 0) + amtOut;
       continue;

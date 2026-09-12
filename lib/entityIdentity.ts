@@ -132,9 +132,10 @@ function deriveLedgerPartyType(
   row: LedgerRow,
   tripPartyMap: LedgerIdentityContext["tripPartyMap"],
 ): "client" | "supplier" | "driver" | "vehicle" {
+  if (row.contact_type === "dco") return "supplier";
   const isDriverPayment =
     row.contact_type === "driver" ||
-    (row.driver_name ?? "").trim() !== "";
+    (!row.contact_type && (row.driver_name ?? "").trim() !== "");
   let derivedPartyType = row.contact_type;
   if (!derivedPartyType && row.trip_id && tripPartyMap?.[row.trip_id]) {
     const pm = tripPartyMap[row.trip_id];

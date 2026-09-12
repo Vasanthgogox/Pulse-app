@@ -934,7 +934,9 @@ export default function LedgerSyncScreen() {
       ? "customers"
       : params.partyContext === "suppliers"
         ? "suppliers"
-        : "all";
+        : params.partyContext === "dco"
+          ? "dco"
+          : "all";
 
   const resolvedEntityPartyName = useMemo(() => {
     const rawName = (params.partyName ?? "").trim();
@@ -1049,6 +1051,9 @@ export default function LedgerSyncScreen() {
     if (ctx === "suppliers") {
       return inferredSupplierFromTrip.id ?? undefined;
     }
+    if (ctx === "dco") {
+      return pid || undefined;
+    }
     if (!ctx || ctx === "all") {
       return inferredSupplierFromTrip.id ?? undefined;
     }
@@ -1114,7 +1119,9 @@ export default function LedgerSyncScreen() {
         defaultPartyId={defaultPartyIdForModal}
         defaultPartyName={resolvedModalPartyName ?? undefined}
         lockedPartyId={
-          params.entityType === "CLIENT"
+          params.partyContext === "dco"
+            ? (params.partyId ?? params.entityId ?? undefined)
+            : params.entityType === "CLIENT"
             ? (params.entityId ?? params.partyId ?? undefined)
             : params.entityType === "SUPPLIER"
               ? (params.entityId ?? params.partyId ?? inferredSupplierFromTrip.id ?? undefined)
@@ -1123,12 +1130,15 @@ export default function LedgerSyncScreen() {
                 : undefined
         }
         lockedPartyName={
+          params.partyContext === "dco" ||
           params.entityType === "CLIENT" || params.entityType === "SUPPLIER" || params.entityType === "DRIVER"
             ? (resolvedModalPartyName ?? undefined)
             : undefined
         }
         lockedEntityType={
-          params.entityType === "CLIENT" ||
+          params.partyContext === "dco"
+            ? null
+            : params.entityType === "CLIENT" ||
           params.entityType === "SUPPLIER" ||
           params.entityType === "DRIVER"
             ? params.entityType
@@ -1165,7 +1175,7 @@ export default function LedgerSyncScreen() {
         defaultTripId={params.tripId ?? undefined}
         tripLocked={tripLedgerLocked}
         lockedTripDisplay={params.tripNumber ?? undefined}
-        requireTripForSupplierOut
+        requireTripForSupplierOut={partyContext === "suppliers"}
         dueAmountIn={effectiveDueAmountIn}
         dueAmountOut={effectiveDueAmountOut}
         ledgerTransactions={transactions}

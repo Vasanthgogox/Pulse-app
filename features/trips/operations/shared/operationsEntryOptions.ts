@@ -3,6 +3,7 @@ import type {
   OperationalPaymentMode,
   OperationalPaymentOwner,
 } from "../types";
+import { isDcoOperatingTrip } from "@/features/trips/domain/tripDcoOperating";
 
 export type ChipOption<T extends string> = { value: T; label: string };
 
@@ -50,11 +51,21 @@ export function defaultPaymentOwnerForActor(
   return actorRole === "driver" ? "driver" : "organization";
 }
 
+export function defaultPaymentOwnerForTrip(
+  trip: { operating_mode?: string | null } | null | undefined,
+  actorRole?: string | null,
+): OperationalPaymentOwner {
+  if (isDcoOperatingTrip(trip)) return "driver";
+  return defaultPaymentOwnerForActor(actorRole);
+}
+
 /** Driver-submitted costs are always reimbursable requests to the fleet owner. */
 export function resolvePaymentOwnerForSave(input: {
   actorRole?: string | null;
   paymentOwner?: OperationalPaymentOwner | null;
+  operatingMode?: string | null;
 }): OperationalPaymentOwner {
+  if (isDcoOperatingTrip({ operating_mode: input.operatingMode })) return "driver";
   if (input.actorRole === "driver") return "driver";
   return input.paymentOwner ?? "unknown";
 }
@@ -63,7 +74,10 @@ export function resolvePaymentOwnerForSave(input: {
 export function paymentOwnerOptionsForActor(
   options: ChipOption<OperationalPaymentOwner>[],
   actorRole?: string | null,
+  trip?: { operating_mode?: string | null } | null,
 ): ChipOption<OperationalPaymentOwner>[] {
-  if (actorRole !== "driver") return options;
-  return [DRIVER_PAYMENT_OWNER_OPTION];
+  if (isDcoOperatingTrip(trip) || actorRole === "driver") {
+    return [DRIVER_PAYMENT_OWNER_OPTION];
+  }
+  return options;
 }

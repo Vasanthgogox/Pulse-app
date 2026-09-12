@@ -12,6 +12,7 @@ import {
     formatLedgerEntryDate,
     resolveLedgerPartyName,
 } from "@/features/finance/components/ledger/buildFinancialRowDataForLedgerRow";
+import { isEmployeeDriverLedgerPayment } from "@/features/finance/domain/financeCounterpartyLane";
 import { getTripOperationalDisplay } from "@/features/operations/display";
 import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
 import {
@@ -309,9 +310,7 @@ export function LedgerTab({
         const categoryLabel = ALL_LEDGER_CATEGORY_VALUES.includes(categoryBase)
           ? categoryBase
           : "GENERAL";
-        const isDriverPayment =
-          row.contact_type === "driver" ||
-          (row.driver_name ?? "").trim() !== "";
+        const isDriverPayment = isEmployeeDriverLedgerPayment(row);
         const vehicleNum =
           row.vehicle_number ??
           (row.trip_id != null && !isDriverPayment
@@ -376,12 +375,11 @@ export function LedgerTab({
                   (r) => r.trip_id != null && r.trip_id === row.trip_id,
                 );
                 return sameTrip.map((r) => {
-                  const isDr =
-                    r.contact_type === "driver" ||
-                    (r.driver_name ?? "").trim() !== "";
+                  const isDr = isEmployeeDriverLedgerPayment(r);
                   const isCS =
                     r.contact_type === "client" ||
-                    r.contact_type === "supplier";
+                    r.contact_type === "supplier" ||
+                    r.contact_type === "dco";
                   const vn =
                     r.vehicle_number ??
                     (r.trip_id && !isDr
@@ -414,7 +412,7 @@ export function LedgerTab({
         const ledgerPartyType =
           derivedPartyType === "client"
             ? "client"
-            : derivedPartyType === "supplier"
+            : derivedPartyType === "supplier" || derivedPartyType === "dco"
               ? "supplier"
               : isDriverPayment
                 ? "driver"

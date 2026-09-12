@@ -54,7 +54,7 @@ import { getDocumentViewUrl } from "@/features/trips/services/tripDocuments.serv
 import {
   PAYMENT_MODE_OPTIONS,
   PAYMENT_OWNER_OPTIONS,
-  defaultPaymentOwnerForActor,
+  defaultPaymentOwnerForTrip,
   paymentOwnerOptionsForActor,
 } from "../shared/operationsEntryOptions";
 import {
@@ -195,7 +195,7 @@ export function OtherExpenseEntryScreen({
   const [locationName, setLocationName] = useState("");
   const [notes, setNotes] = useState("");
   const [paymentOwner, setPaymentOwner] = useState<OperationalPaymentOwner>(() =>
-    defaultPaymentOwnerForActor(profile?.role),
+    defaultPaymentOwnerForTrip(trip, profile?.role),
   );
   const [paymentMode, setPaymentMode] = useState<OperationalPaymentMode>("cash");
 
@@ -282,8 +282,8 @@ export function OtherExpenseEntryScreen({
   );
 
   const paymentOwnerOptions = useMemo(
-    () => paymentOwnerOptionsForActor(PAYMENT_OWNER_OPTIONS, profile?.role),
-    [profile?.role],
+    () => paymentOwnerOptionsForActor(PAYMENT_OWNER_OPTIONS, profile?.role, trip),
+    [profile?.role, trip],
   );
 
   const { primary: primaryCategories, more: moreCategories } = useMemo(
@@ -380,10 +380,10 @@ export function OtherExpenseEntryScreen({
   }, [entryId, hydratePersistedOcrFromJob, router, setExpenseCategory, setPhotoUri, trip.id]);
 
   useEffect(() => {
-    if (!isEditing && profile?.role === "driver") {
-      setPaymentOwner(defaultPaymentOwnerForActor(profile.role));
+    if (!isEditing) {
+      setPaymentOwner(defaultPaymentOwnerForTrip(trip, profile?.role));
     }
-  }, [isEditing, profile?.role]);
+  }, [isEditing, profile?.role, trip]);
 
   useEffect(() => {
     return () => {
@@ -419,6 +419,7 @@ export function OtherExpenseEntryScreen({
       enteredBy: profile?.uid ?? null,
       paymentOwner,
       paymentMode,
+      operatingMode: trip.operating_mode ?? null,
       receiptLocalUri: photoUri,
       ocrJobId: persistedJob?.id,
     };

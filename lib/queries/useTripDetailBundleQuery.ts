@@ -73,6 +73,8 @@ export interface BundleTrip {
   created_by_user_id: string | null;
   assigned_by_user_id: string | null;
   trip_payout_mode: string | null;
+  operating_mode: string | null;
+  dco_payee_id: string | null;
   last_location_at: string | null;
   actual_distance_traveled_km: number | null;
   last_location_chat_at: string | null;
@@ -228,7 +230,28 @@ async function fetchTripDetailBundle(
     p_viewer_org_id: viewerOrgId,
   });
   if (error) throw new Error(error.message);
-  return (data as TripDetailBundle | null) ?? null;
+  const bundle = (data as TripDetailBundle | null) ?? null;
+  const tripIdFromBundle = bundle?.trip?.id;
+  if (!bundle?.trip || !tripIdFromBundle) return bundle;
+  // Live RPC still omits these keys until 20270912143000 is applied.
+  // Extra-select from trips so Business App DCO identity does not wait on that gate.
+  const hasDcoContract =
+    Object.prototype.hasOwnProperty.call(bundle.trip, "operating_mode") &&
+    Object.prototype.hasOwnProperty.call(bundle.trip, "dco_payee_id");
+  if (hasDcoContract) return bundle;
+  const extra = await supabase()
+    .from("trips")
+    .select("operating_mode, dco_payee_id")
+    .eq("id", tripIdFromBundle)
+    .maybeSingle();
+  if (extra.data) {
+    bundle.trip = {
+      ...bundle.trip,
+      operating_mode: extra.data.operating_mode ?? null,
+      dco_payee_id: extra.data.dco_payee_id ?? null,
+    };
+  }
+  return bundle;
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────────

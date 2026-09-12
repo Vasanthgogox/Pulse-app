@@ -47,6 +47,7 @@ export function useReimbursementQueue(input: {
           .select(selectFields)
           .eq("trips.organization_id", input.organizationId!)
           .eq("payment_owner", "driver")
+          .not("trips.operating_mode", "eq", "DCO")
           .order("entered_at", { ascending: false })
           .limit(200),
         supabase()
@@ -54,6 +55,7 @@ export function useReimbursementQueue(input: {
           .select(selectFields)
           .eq("trips.organization_id", input.organizationId!)
           .eq("payment_owner", "driver")
+          .not("trips.operating_mode", "eq", "DCO")
           .order("entered_at", { ascending: false })
           .limit(200),
       ]);

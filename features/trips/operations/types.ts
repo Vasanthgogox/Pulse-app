@@ -111,6 +111,8 @@ export interface SaveFuelEntryInput {
   actorRole?: "driver" | "user" | null;
   paymentOwner?: OperationalPaymentOwner | null;
   paymentMode?: OperationalPaymentMode | null;
+  /** When DCO, save path forces driver-owned opex (not org reimbursement/P&L). */
+  operatingMode?: string | null;
   billPhotoLocalUri?: string | null;
   ocrJobId?: string | null;
 }
@@ -129,6 +131,7 @@ export interface SaveTollEntryInput {
   actorRole?: "driver" | "user" | null;
   paymentOwner?: OperationalPaymentOwner | null;
   paymentMode?: OperationalPaymentMode | null;
+  operatingMode?: string | null;
   receiptLocalUri?: string | null;
   ocrJobId?: string | null;
 }
@@ -193,6 +196,7 @@ export interface SaveOtherExpenseInput {
   actorRole?: "driver" | "user" | null;
   paymentOwner?: OperationalPaymentOwner | null;
   paymentMode?: OperationalPaymentMode | null;
+  operatingMode?: string | null;
   receiptLocalUri?: string | null;
   ocrJobId?: string | null;
 }

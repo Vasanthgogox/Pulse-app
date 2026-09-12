@@ -47,7 +47,7 @@ export interface FinanceModalsProps {
   defaultPartyName: string | undefined;
   lockedPartyId: string | undefined;
   lockedPartyName: string | undefined;
-  partyContext: "customers" | "suppliers" | "all";
+  partyContext: "customers" | "suppliers" | "dco" | "all";
   initialEntry: LedgerRow | null;
   lockedAmount: number | undefined;
   /** Suggested receivable for Cash IN amount placeholder (empty field). */

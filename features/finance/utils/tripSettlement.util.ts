@@ -11,6 +11,7 @@ import {
   type TripLedgerTripType,
 } from "@/features/finance/utils/tripLedgerPayoutMode.util";
 import { isAssetExecutionTrip } from "@/features/trips/domain/tripExecutionModel";
+import { isDcoOperatingTrip } from "@/features/trips/domain/tripDcoOperating";
 import {
   adjustedCost,
   adjustedRevenue,
@@ -134,6 +135,10 @@ export function tripPayableCostTarget(
     );
   }
 
+  if (isDcoOperatingTrip(trip)) {
+    return roundCurrency(Number(trip.supplier_rate ?? 0));
+  }
+
   if (isAssetExecutionTrip(trip)) {
     const provisionTotal = Number(assetProvisionCostInr ?? 0);
     if (provisionTotal > 0) return roundCurrency(provisionTotal);
@@ -249,8 +254,9 @@ export function computeTripSettlementDues(input: {
     };
   }
 
-  const payablePaid =
-    tripType === "asset"
+  const payablePaid = isDcoOperatingTrip(input.trip)
+    ? rollup.dcoPaid
+    : tripType === "asset"
       ? rollup.driverPaid
       : rollup.supplierPaid > 0
         ? rollup.supplierPaid

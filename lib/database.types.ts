@@ -9717,6 +9717,7 @@ export type Database = {
           created_at: string | null
           created_by_user_id: string | null
           deleted_at: string | null
+          dco_payee_id: string | null
           display_trip_id: string | null
           distance: number | null
           distance_discrepancy_km: number | null
@@ -9746,6 +9747,7 @@ export type Database = {
           odometer_updated_at: string | null
           odometer_updated_by: string | null
           odometer_verification_state: string
+          operating_mode: string | null
           organization_id: string
           owner_user_id: string | null
           payment_status: string
@@ -9790,6 +9792,7 @@ export type Database = {
           created_at?: string | null
           created_by_user_id?: string | null
           deleted_at?: string | null
+          dco_payee_id?: string | null
           display_trip_id?: string | null
           distance?: number | null
           distance_discrepancy_km?: number | null
@@ -9819,6 +9822,7 @@ export type Database = {
           odometer_updated_at?: string | null
           odometer_updated_by?: string | null
           odometer_verification_state?: string
+          operating_mode?: string | null
           organization_id: string
           owner_user_id?: string | null
           payment_status?: string
@@ -9863,6 +9867,7 @@ export type Database = {
           created_at?: string | null
           created_by_user_id?: string | null
           deleted_at?: string | null
+          dco_payee_id?: string | null
           display_trip_id?: string | null
           distance?: number | null
           distance_discrepancy_km?: number | null
@@ -9892,6 +9897,7 @@ export type Database = {
           odometer_updated_at?: string | null
           odometer_updated_by?: string | null
           odometer_verification_state?: string
+          operating_mode?: string | null
           organization_id?: string
           owner_user_id?: string | null
           payment_status?: string
@@ -11043,6 +11049,7 @@ export type Database = {
           client_price: number | null
           completed_at: string | null
           created_at: string | null
+          dco_payee_id: string | null
           distance: number | null
           distance_discrepancy_km: number | null
           distance_source: string | null
@@ -11063,8 +11070,10 @@ export type Database = {
           odometer_notes: string | null
           odometer_updated_at: string | null
           odometer_verification_state: string | null
+          operating_mode: string | null
           organization_id: string | null
           organization_name: string | null
+          owner_vehicle_id: string | null
           pickup_address: string | null
           pickup_lat: number | null
           pickup_location: string | null

@@ -14,6 +14,7 @@ import {
   adjustedRevenue,
   type TripAdjustment,
 } from '@/features/trips/services/tripAdjustments';
+import { isDcoOperatingTrip } from '@/features/trips/domain/tripDcoOperating';
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from '@/features/trips/visibility/tripVisibility';
 
 /** Trip with organization_id (trip owner); used for "trips where we are the client". client_price = amount we were billed (use for due). */
@@ -80,6 +81,7 @@ export function aggregateSuppliers(
   // O(trips): attribute each trip to supplier by supplier_id (normalized) or by supplier_name (aggregated trip = partner rate as due).
   for (let i = 0; i < trips.length; i++) {
     const t = trips[i];
+    if (isDcoOperatingTrip(t)) continue;
     const tid = (t as { id?: string }).id;
     const adj = adjustmentsForTrip(adjustmentsByTripId, tid);
     const rawRate = Number(t.supplier_rate ?? 0);
@@ -107,6 +109,7 @@ export function aggregateSuppliers(
   const asClient = tripsWhereOrgIsClient ?? [];
   for (let i = 0; i < asClient.length; i++) {
     const t = asClient[i];
+    if (isDcoOperatingTrip(t)) continue;
     if (!isLoadBasedTrip(t) && !normId(t.supplier_id)) continue;
     const ownerOrgId = t.organization_id;
     if (!ownerOrgId) continue;
@@ -133,6 +136,8 @@ export function aggregateSuppliers(
     const tx = transactions[i];
     const amtOut = Number(tx.amount_out ?? 0);
     if (!amtOut) continue;
+
+    if (tx.contact_type === 'dco') continue;
 
     if (tx.contact_type === 'supplier' && tx.contact_id) {
       const raw = normId(tx.contact_id);

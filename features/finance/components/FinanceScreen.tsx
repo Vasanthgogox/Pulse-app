@@ -115,6 +115,7 @@ import type { PartyRegistrationKind } from "./PartyRegistrationPortal";
 import { FinanceTabBody } from "./FinanceTabBody";
 import type { FinancialRowData } from "./FinancialRow";
 import type { EntityListFilter } from "./TreasurySummaryCard";
+import type { SupplierPartyKindFilter } from "@/features/finance/domain/financeCounterpartyLane";
 
 function financeSubTabToPartyKind(
   tab: FinanceSubTab,
@@ -400,6 +401,8 @@ export function FinanceScreen() {
   );
 
   const [entityFilter, setEntityFilter] = useState<EntityListFilter>("all");
+  const [supplierPartyKind, setSupplierPartyKind] =
+    useState<SupplierPartyKindFilter>("all");
   const [financeDateModalVisible, setFinanceDateModalVisible] = useState(false);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showAddClientModal, setShowAddClientModal] = useState(false);
@@ -421,13 +424,17 @@ export function FinanceScreen() {
   const profileImages = useDriverProfileImagesQuery(driverIdsForProfiles);
 
   const isAnyFilterActive = useMemo(
-    () => ledgerAnyFilterActive || entityFilter !== "all",
-    [ledgerAnyFilterActive, entityFilter],
+    () =>
+      ledgerAnyFilterActive ||
+      entityFilter !== "all" ||
+      (financeSubTab === "suppliers" && supplierPartyKind !== "all"),
+    [ledgerAnyFilterActive, entityFilter, financeSubTab, supplierPartyKind],
   );
 
   const handleClearFilters = useCallback(() => {
     ledgerClearFilters();
     setEntityFilter("all");
+    setSupplierPartyKind("all");
   }, [ledgerClearFilters]);
 
   const openAddPartyForSubTab = useCallback(
@@ -1092,7 +1099,8 @@ export function FinanceScreen() {
         );
         return;
       }
-      if (entityType === "SUPPLIER" && subTab === "suppliers") {
+      const isDcoCounterparty = data.counterpartyKind === "dco";
+      if (entityType === "SUPPLIER" && subTab === "suppliers" && !isDcoCounterparty) {
         router.push(
           ROUTES.supplierDetail(data.id, "cash") as Parameters<
             typeof router.push
@@ -1208,6 +1216,9 @@ export function FinanceScreen() {
       });
     }
     if (entityType === "SUPPLIER") {
+      if (entity.counterpartyKind === "dco") {
+        return tripRows.filter((t) => t.dco_payee_id === entity.id);
+      }
       const supplierRow = supplierRows.find((s) => s.id === entity.id) ?? null;
       const fromOwned = tripRows.filter((t) => t.supplier_id === entity.id);
       if (!supplierRow || !isIntegratedSupplierRow(supplierRow)) {
@@ -1320,6 +1331,11 @@ export function FinanceScreen() {
     }
     if (entityType !== "CLIENT" && entityType !== "SUPPLIER") return null;
     if (allTx.length === 0) return null;
+    if (entity.counterpartyKind === "dco") {
+      return allTx.filter(
+        (tx) => tx.contact_type === "dco" && tx.contact_id === entity.id,
+      );
+    }
     const contactType = entityType === "CLIENT" ? "client" : "supplier";
     if (entity.id.startsWith("ledger-party-")) {
       const nameKey = (entity.name ?? "").toLowerCase().trim();
@@ -1662,6 +1678,8 @@ export function FinanceScreen() {
               onEntityRowSelect={handleEntityRowSelect}
               searchQuery={searchQuery}
               entityFilter={entityFilter}
+              supplierPartyKind={supplierPartyKind}
+              onSupplierPartyKindChange={setSupplierPartyKind}
               connectionRequestsSent={connectionRequestsSent}
               tripPartyMap={tripPartyMap}
               garagePeriod={garagePeriod}
@@ -1805,6 +1823,9 @@ export function FinanceScreen() {
         partyContext={
           financeSubTab === "customers"
             ? "customers"
+            : financeSubTab === "suppliers" &&
+                selectedEntity?.data.counterpartyKind === "dco"
+              ? "dco"
             : financeSubTab === "suppliers"
               ? "suppliers"
               : canAggregateSupply
@@ -1930,17 +1951,24 @@ export function FinanceScreen() {
           const entity = selectedEntity;
           const params = new URLSearchParams();
           if (entity) {
-            params.set("entityType", entity.entityType);
+            if (entity.data.counterpartyKind !== "dco") {
+              params.set("entityType", entity.entityType);
+            }
             params.set("entityId", String(entity.data.id));
             params.set("partyName", String(entity.data.name ?? ""));
             if (
               entity.entityType === "CLIENT" ||
-              entity.entityType === "SUPPLIER"
+              (entity.entityType === "SUPPLIER" &&
+                entity.data.counterpartyKind !== "dco")
             ) {
               params.set(
                 "partyContext",
                 entity.entityType === "CLIENT" ? "customers" : "suppliers",
               );
+              params.set("partyId", String(entity.data.id));
+            }
+            if (entity.data.counterpartyKind === "dco") {
+              params.set("partyContext", "dco");
               params.set("partyId", String(entity.data.id));
             }
             if (entity.entityType === "DRIVER")
@@ -1953,7 +1981,16 @@ export function FinanceScreen() {
                 params.set("dueAmountIn", String(pending));
               }
             }
-            if (entity.entityType === "SUPPLIER") {
+            if (
+              entity.entityType === "SUPPLIER" &&
+              entity.data.counterpartyKind !== "dco"
+            ) {
+              params.set("defaultType", "out");
+              if (due != null && due > 0) {
+                params.set("dueAmountOut", String(due));
+              }
+            }
+            if (entity.data.counterpartyKind === "dco") {
               params.set("defaultType", "out");
               if (due != null && due > 0) {
                 params.set("dueAmountOut", String(due));

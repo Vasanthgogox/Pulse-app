@@ -4,6 +4,7 @@ import {
   isCompletedStatus,
 } from "@/features/drivers/utils/driverUtils.util";
 import type { TripRow } from "@/features/trips/services/trips.service";
+import { isDcoOperatingTrip } from "@/features/trips/domain/tripDcoOperating";
 import { isAssetExecutionTrip } from "@/features/trips/domain/tripExecutionModel";
 
 function normalizeStatus(status: string | null | undefined): string {
@@ -68,6 +69,9 @@ export function findDriverActiveOpsTrip(trips: TripRow[]): TripRow | null {
 
 export function driverOpsTripCapabilities(trip: TripRow | null | undefined) {
   if (!trip) {
+    return { showExpense: true, showOdometer: true, isAsset: false };
+  }
+  if (isDcoOperatingTrip(trip)) {
     return { showExpense: true, showOdometer: true, isAsset: false };
   }
   const isAsset = isAssetExecutionTrip(trip);

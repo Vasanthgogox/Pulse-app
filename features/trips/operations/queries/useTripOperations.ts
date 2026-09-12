@@ -95,6 +95,7 @@ import {
 } from "../offline/outbox";
 import { supabase } from "@/lib/supabase";
 import { getTripExecutionModel } from "@/features/trips/domain/tripExecutionModel";
+import { isDcoOperatingTrip } from "@/features/trips/domain/tripDcoOperating";
 
 const reviewInFlightKeys = new Set<string>();
 
@@ -231,8 +232,9 @@ export function useTripOperationsSummary(tripId: string | null, opts?: { enabled
         events: costEvents,
         distanceKm: mileage.distanceKm ?? null,
       });
+      const isDcoTrip = isDcoOperatingTrip(tripRes.trip);
       const assetPnL =
-        executionModel === "asset"
+        executionModel === "asset" && !isDcoTrip
           ? {
               actualMarginInr: selectAssetTripActualMargin({
                 trip: tripRes.trip,
@@ -249,7 +251,7 @@ export function useTripOperationsSummary(tripId: string | null, opts?: { enabled
             }
           : null;
       const integrity =
-        executionModel === "asset"
+        executionModel === "asset" && !isDcoTrip
           ? {
               trip: selectTripAccountingIntegrity({
                 trip: tripRes.trip,
@@ -259,7 +261,7 @@ export function useTripOperationsSummary(tripId: string | null, opts?: { enabled
             }
           : null;
       const aggregatePnL =
-        executionModel === "aggregate"
+        executionModel === "aggregate" && !isDcoTrip
           ? {
               supplierCostInr: selectAggregateTripSupplierCost({
                 trip: tripRes.trip,
@@ -345,6 +347,7 @@ export function useSaveTripFuelEntry() {
         actorRole: input.actorRole ?? null,
         paymentOwner: input.paymentOwner ?? null,
         paymentMode: input.paymentMode ?? null,
+        operatingMode: input.operatingMode ?? null,
       };
 
       if (!isOnline) {
@@ -448,6 +451,7 @@ export function useSaveTripTollEntry() {
         actorRole: input.actorRole ?? null,
         paymentOwner: input.paymentOwner ?? null,
         paymentMode: input.paymentMode ?? null,
+        operatingMode: input.operatingMode ?? null,
       };
 
       if (!isOnline) {
@@ -784,6 +788,7 @@ export function useSaveTripOtherExpense() {
         actorRole: input.actorRole ?? null,
         paymentOwner: input.paymentOwner ?? null,
         paymentMode: input.paymentMode ?? null,
+        operatingMode: input.operatingMode ?? null,
         receiptStoragePath,
         ocrJobId: input.ocrJobId ?? null,
       });

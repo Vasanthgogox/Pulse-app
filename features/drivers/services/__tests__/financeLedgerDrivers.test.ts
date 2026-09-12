@@ -1,6 +1,7 @@
 import {
   isActiveFleetRelationshipDriver,
   isFinanceLedgerDriver,
+  isSalaryEligibleDriver,
 } from '../drivers.service';
 
 describe('isFinanceLedgerDriver', () => {
@@ -41,6 +42,15 @@ describe('isFinanceLedgerDriver', () => {
     ).toBe(false);
   });
 
+  it('excludes market_award DCO stubs from the Finance → Drivers roster', () => {
+    expect(
+      isFinanceLedgerDriver({
+        relationship_status: 'independent',
+        relationship_origin: 'market_award',
+      }),
+    ).toBe(false);
+  });
+
   it('does not treat an arbitrary trip driver_id as a ledger party', () => {
     expect(
       isFinanceLedgerDriver({
@@ -50,5 +60,27 @@ describe('isFinanceLedgerDriver', () => {
         status: 'offline',
       }),
     ).toBe(false);
+  });
+});
+
+describe('isSalaryEligibleDriver', () => {
+  it('excludes market_award DCO relationships from employee salary', () => {
+    expect(
+      isSalaryEligibleDriver({
+        organization_id: 'org-1',
+        relationship_status: 'active',
+        relationship_origin: 'market_award',
+      }),
+    ).toBe(false);
+  });
+
+  it('keeps employed fleet drivers eligible', () => {
+    expect(
+      isSalaryEligibleDriver({
+        organization_id: 'org-1',
+        relationship_status: 'active',
+        relationship_origin: 'employment',
+      }),
+    ).toBe(true);
   });
 });

@@ -12,6 +12,7 @@ import { useLanguage } from "@/contexts/LanguageContext";
 import { ClientRiskBadge } from "@/features/ai";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
+import { isEmployeeDriverLedgerPayment } from "@/features/finance/domain/financeCounterpartyLane";
 import { computeLedgerDerivedPaidSeed } from "@/features/finance/utils/ledgerDerivedPaidSeed.util";
 import {
   averageScore,
@@ -578,7 +579,13 @@ export function EntityDetailOverlay({
           const paidByTripId: Record<string, number> = {};
           const outByTripId: Record<string, number> = {};
           const firstTripKey = norm(trips[0].id);
-          const contactType = entityType === "CLIENT" ? "client" : "supplier";
+          const isDcoParty = entity.counterpartyKind === "dco";
+          const contactType =
+            entityType === "CLIENT"
+              ? "client"
+              : isDcoParty
+                ? "dco"
+                : "supplier";
           const isEntityLinked = (tx: LedgerRow) =>
             tx.contact_type === contactType &&
             tx.contact_id != null &&
@@ -913,11 +920,14 @@ export function EntityDetailOverlay({
     if (entityType === "SUPPLIER") {
       const tripIds = new Set(trips.map((t) => t.id));
       const partyNameKey = (entity.name ?? "").trim().toLowerCase();
+      const isDcoParty = entity.counterpartyKind === "dco";
       return allTx.filter(
         (tx) =>
-          (tx.contact_type === "supplier" && tx.contact_id === entity.id) ||
+          (tx.contact_type === (isDcoParty ? "dco" : "supplier") &&
+            tx.contact_id === entity.id) ||
           (tx.trip_id != null && tripIds.has(tx.trip_id)) ||
-          (partyNameKey &&
+          (!isDcoParty &&
+            partyNameKey &&
             (tx.party_name ?? "").trim().toLowerCase() === partyNameKey),
       );
     }
@@ -944,7 +954,7 @@ export function EntityDetailOverlay({
       const key = String(tx.trip_id).trim().toLowerCase();
       const out = Number(tx.amount_out ?? 0);
       if (out <= 0) continue;
-      if (tx.contact_type === "supplier") continue;
+      if (tx.contact_type === "supplier" || tx.contact_type === "dco") continue;
       byTrip[key] = (byTrip[key] ?? 0) + out;
     }
     return byTrip;
@@ -1501,12 +1511,11 @@ export function EntityDetailOverlay({
                   )
                     ? desc
                     : "GENERAL";
-                  const isDriverPayment =
-                    tx.contact_type === "driver" ||
-                    (tx.driver_name ?? "").trim() !== "";
+                  const isDriverPayment = isEmployeeDriverLedgerPayment(tx);
                   const isClientOrSupplier =
                     tx.contact_type === "client" ||
-                    tx.contact_type === "supplier";
+                    tx.contact_type === "supplier" ||
+                    tx.contact_type === "dco";
                   const vehicleNum = tx.vehicle_number ?? null;
                   // Party column: show person name for client/supplier/driver; show vehicle only for vehicle expense (no contact).
                   const entityName = isDriverPayment
@@ -1571,12 +1580,11 @@ export function EntityDetailOverlay({
                   const sameTripTransactions =
                     sameTrip.length > 0
                       ? sameTrip.map((r) => {
-                          const isDr =
-                            r.contact_type === "driver" ||
-                            (r.driver_name ?? "").trim() !== "";
+                          const isDr = isEmployeeDriverLedgerPayment(r);
                           const isCS =
                             r.contact_type === "client" ||
-                            r.contact_type === "supplier";
+                            r.contact_type === "supplier" ||
+                            r.contact_type === "dco";
                           const party = isDr
                             ? r.driver_name || r.party_name || "—"
                             : isCS
@@ -1599,7 +1607,7 @@ export function EntityDetailOverlay({
                   const ledgerPartyType =
                     tx.contact_type === "client"
                       ? "client"
-                      : tx.contact_type === "supplier"
+                      : tx.contact_type === "supplier" || tx.contact_type === "dco"
                         ? "supplier"
                         : tx.contact_type === "driver"
                           ? "driver"

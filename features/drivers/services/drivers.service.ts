@@ -177,11 +177,24 @@ export function isSalaryEligibleDriver(
  * Finance Drivers ledger — settle current fleet members and former members
  * who left (`left_at` / disconnected). Tracking-only trip stubs stay out:
  * a phone-assign on a trip is not a roster identity.
+ *
+ * `market_award` DCO stubs stay out: DCO settlement is Finance → Suppliers
+ * (contact_type=dco / dco_payee_id), never Finance → Drivers.
  */
 export function isFinanceLedgerDriver(
-  d: Pick<DriverRow, "relationship_status" | "left_at" | "tracking_only" | "status">,
+  d: Pick<
+    DriverRow,
+    | "relationship_status"
+    | "left_at"
+    | "tracking_only"
+    | "status"
+    | "relationship_origin"
+  >,
 ): boolean {
   if (d.tracking_only === true) return false;
+  if (String(d.relationship_origin ?? "").trim().toLowerCase() === "market_award") {
+    return false;
+  }
   if (isActiveFleetRelationshipDriver(d)) return true;
   if (d.relationship_status === "disconnected") return true;
   if (d.left_at != null && String(d.left_at).trim() !== "") return true;

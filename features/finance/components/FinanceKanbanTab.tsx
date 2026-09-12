@@ -396,6 +396,11 @@ export function FinanceKanbanTab({
       if (pn && !isPlaceholderLedgerPartyName(pn)) return pn;
       return "—";
     }
+    if (contactType === 'dco') {
+      const pn = row.party_name;
+      if (pn && !isPlaceholderLedgerPartyName(pn)) return pn;
+      return "DCO";
+    }
     if (contactType === 'driver') {
       return row.driver_name || row.party_name || "—";
     }
@@ -453,11 +458,10 @@ export function FinanceKanbanTab({
     const hasAmtIn = (row.amount_in ?? 0) > 0;
     const hasAmtOut = (row.amount_out ?? 0) > 0;
     const contactType = row.contact_type;
-    const driverName = (row.driver_name ?? "").trim();
 
     if (contactType === "client") return "customers";
-    if (contactType === "supplier") return "suppliers";
-    if (contactType === "driver" || driverName !== "") return "drivers";
+    if (contactType === "supplier" || contactType === "dco") return "suppliers";
+    if (contactType === "driver") return "drivers";
 
     let resolvedContactType: LedgerRow["contact_type"] = contactType;
     if (!resolvedContactType && row.trip_id && tripPartyMap[row.trip_id]) {

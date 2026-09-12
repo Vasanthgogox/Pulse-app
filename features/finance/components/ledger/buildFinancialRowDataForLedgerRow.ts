@@ -108,6 +108,11 @@ export function resolveLedgerPartyName(
     if (pn && !isPlaceholderLedgerPartyName(pn)) return pn;
     return "—";
   }
+  if (contactType === "dco") {
+    const pn = row.party_name;
+    if (pn && !isPlaceholderLedgerPartyName(pn)) return pn;
+    return "DCO";
+  }
   if (contactType === "driver") {
     return row.driver_name || row.party_name || "—";
   }

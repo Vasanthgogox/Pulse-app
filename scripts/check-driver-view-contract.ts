@@ -44,6 +44,8 @@ const REQUIRED_VIEW_COLUMNS = [
   'start_odometer_km',
   'end_odometer_km',
   'trip_payout_mode',
+  'operating_mode',
+  'dco_payee_id',
 ];
 
 const errors: string[] = [];

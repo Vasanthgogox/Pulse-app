@@ -72,6 +72,8 @@ export type DriverTripRow = {
   source_indent_id?: string | null;
   /** Asset vs market — drives driver expense / odometer capabilities. */
   trip_payout_mode?: string | null;
+  operating_mode?: string | null;
+  dco_payee_id?: string | null;
   start_odometer_km?: number | null;
   end_odometer_km?: number | null;
   odometer_distance_km?: number | null;
@@ -157,6 +159,8 @@ export function tripRowToDriverTripRow(
     | 'completed_at'
     | 'indent_id'
     | 'trip_payout_mode'
+    | 'operating_mode'
+    | 'dco_payee_id'
     | 'start_odometer_km'
     | 'end_odometer_km'
     | 'odometer_distance_km'
@@ -207,6 +211,8 @@ export function tripRowToDriverTripRow(
     trip_number: row.trip_number ?? null,
     indent_id: row.indent_id ?? null,
     trip_payout_mode: row.trip_payout_mode ?? null,
+    operating_mode: row.operating_mode ?? null,
+    dco_payee_id: row.dco_payee_id ?? null,
     start_odometer_km: row.start_odometer_km ?? null,
     end_odometer_km: row.end_odometer_km ?? null,
     odometer_distance_km: row.odometer_distance_km ?? null,
@@ -266,6 +272,8 @@ export function driverRowToTripRow(row: DriverTripRow): TripRow {
     load_type: null,
     completed_at: row.completed_at ?? null,
     trip_payout_mode: row.trip_payout_mode ?? null,
+    operating_mode: row.operating_mode ?? null,
+    dco_payee_id: row.dco_payee_id ?? null,
     start_odometer_km: row.start_odometer_km ?? null,
     end_odometer_km: row.end_odometer_km ?? null,
     odometer_distance_km: row.odometer_distance_km ?? null,

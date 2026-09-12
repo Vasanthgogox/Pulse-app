@@ -358,7 +358,7 @@ export function useFinanceLedger({
       if (cat === "all") return true;
       const ct = r.contact_type;
       if (cat === "customers") return ct === "client";
-      if (cat === "suppliers") return ct === "supplier";
+      if (cat === "suppliers") return ct === "supplier" || ct === "dco";
       if (cat === "driver") return ct === "driver";
       if (cat === "vehicle") return ct != null ? false : true;
       return true;
@@ -497,7 +497,7 @@ export function useFinanceLedger({
       if (cat === "all") return true;
       const ct = r.contact_type;
       if (cat === "customers") return ct === "client";
-      if (cat === "suppliers") return ct === "supplier";
+      if (cat === "suppliers") return ct === "supplier" || ct === "dco";
       if (cat === "driver") return ct === "driver";
       if (cat === "vehicle") return ct == null;
       return true;

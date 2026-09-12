@@ -15,6 +15,7 @@ import {
 } from "../vehicle/vehicleOperationsLedger.service";
 import { appendTripOperationalTimelineEventSafe } from "../timeline/timelineEvents.service";
 import { buildExpenseEditApprovalReset } from "../shared/expenseEntryEdit.util";
+import { isDcoOperatingTrip } from "@/features/trips/domain/tripDcoOperating";
 import { resolvePaymentOwnerForSave } from "../shared/operationsEntryOptions";
 import type { UpdateTollEntryInput } from "../types";
 
@@ -124,6 +125,7 @@ export async function createTripTollEntry(
   },
 ): Promise<{ error: Error | null; entry: TripTollEntry | null; alreadyExists?: boolean }> {
   const paymentOwner = resolvePaymentOwnerForSave(input);
+  const dcoOwned = isDcoOperatingTrip({ operating_mode: input.operatingMode });
   const paymentMode: OperationalPaymentMode =
     input.paymentMode ?? (input.actorRole === "driver" ? "cash" : "unknown");
   const approvalState: OperationalApprovalState =
@@ -150,7 +152,11 @@ export async function createTripTollEntry(
     retry_count: 0,
     last_retry_at: null,
     reimbursement_state:
-      (paymentOwner === "driver" ? "reported" : "approved") as ReimbursementState,
+      (dcoOwned
+        ? "approved"
+        : paymentOwner === "driver"
+          ? "reported"
+          : "approved") as ReimbursementState,
     reimbursement_updated_at: new Date().toISOString(),
     reimbursed_at: null,
     reimbursed_by: null,
@@ -171,13 +177,15 @@ export async function createTripTollEntry(
     }
     return { error: new Error(error.message), entry: null };
   }
-  await createVehicleOperationLedgerDraftFromSource({
-    sourceType: "toll",
-    sourceId: String(data.id),
-    tripId: String(data.trip_id),
-    amount: Number(data.amount_inr ?? 0),
-    entryType: "expense",
-  });
+  if (!dcoOwned) {
+    await createVehicleOperationLedgerDraftFromSource({
+      sourceType: "toll",
+      sourceId: String(data.id),
+      tripId: String(data.trip_id),
+      amount: Number(data.amount_inr ?? 0),
+      entryType: "expense",
+    });
+  }
   await appendTripOperationalTimelineEventSafe({
     tripId: String(data.trip_id),
     eventType: "toll_logged",

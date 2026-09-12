@@ -116,6 +116,33 @@ describe("tripSettlement.util", () => {
     expect(settlement.payablePaid).toBe(63000);
   });
 
+  it("uses DCO settlement (supplier_rate + dco ledger) instead of driver commission", () => {
+    const dcoTrip = trip({
+      operating_mode: "DCO",
+      dco_payee_id: "payee-1",
+      supplier_id: null,
+      trip_payout_mode: "market",
+      supplier_rate: 19000,
+      driver_commission: 0,
+      client_price: 25000,
+    });
+    expect(tripPayableCostTarget(dcoTrip, "org-1")).toBe(19000);
+    const settlement = computeTripSettlementDues({
+      trip: dcoTrip,
+      viewerOrgId: "org-1",
+      ledgerEntries: [
+        ledger({
+          id: "dco-out",
+          contact_type: "dco",
+          amount_out: 5000,
+        }),
+      ],
+    });
+    expect(settlement.payableTarget).toBe(19000);
+    expect(settlement.payablePaid).toBe(5000);
+    expect(settlement.payableDue).toBe(14000);
+  });
+
   it("rolls client receipts separately from other inflows", () => {
     const rollup = rollupTripSettlementLedger(
       [

@@ -15,6 +15,7 @@ import {
 } from "../vehicle/vehicleOperationsLedger.service";
 import { appendTripOperationalTimelineEventSafe } from "../timeline/timelineEvents.service";
 import { buildExpenseEditApprovalReset } from "../shared/expenseEntryEdit.util";
+import { isDcoOperatingTrip } from "@/features/trips/domain/tripDcoOperating";
 import { resolvePaymentOwnerForSave } from "../shared/operationsEntryOptions";
 import type { UpdateFuelEntryInput } from "../types";
 
@@ -132,6 +133,7 @@ export async function createTripFuelEntry(
   },
 ): Promise<{ error: Error | null; entry: TripFuelEntry | null; alreadyExists?: boolean }> {
   const paymentOwner = resolvePaymentOwnerForSave(input);
+  const dcoOwned = isDcoOperatingTrip({ operating_mode: input.operatingMode });
   const paymentMode: OperationalPaymentMode =
     input.paymentMode ?? (input.actorRole === "driver" ? "cash" : "unknown");
   const approvalState: OperationalApprovalState =
@@ -159,7 +161,11 @@ export async function createTripFuelEntry(
     retry_count: 0,
     last_retry_at: null,
     reimbursement_state:
-      (paymentOwner === "driver" ? "reported" : "approved") as ReimbursementState,
+      (dcoOwned
+        ? "approved"
+        : paymentOwner === "driver"
+          ? "reported"
+          : "approved") as ReimbursementState,
     reimbursement_updated_at: new Date().toISOString(),
     reimbursed_at: null,
     reimbursed_by: null,
@@ -180,13 +186,15 @@ export async function createTripFuelEntry(
     }
     return { error: new Error(error.message), entry: null };
   }
-  await createVehicleOperationLedgerDraftFromSource({
-    sourceType: "fuel",
-    sourceId: String(data.id),
-    tripId: String(data.trip_id),
-    amount: Number(data.amount_inr ?? 0),
-    entryType: "expense",
-  });
+  if (!dcoOwned) {
+    await createVehicleOperationLedgerDraftFromSource({
+      sourceType: "fuel",
+      sourceId: String(data.id),
+      tripId: String(data.trip_id),
+      amount: Number(data.amount_inr ?? 0),
+      entryType: "expense",
+    });
+  }
   await appendTripOperationalTimelineEventSafe({
     organizationId: String((data as { organization_id?: string | null }).organization_id ?? ""),
     tripId: String(data.trip_id),

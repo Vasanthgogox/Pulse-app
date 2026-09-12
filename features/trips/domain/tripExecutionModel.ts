@@ -10,7 +10,13 @@ function normalizePayoutMode(mode: TripRow["trip_payout_mode"]): string {
 
 /**
  * Canonical execution model for trip accounting and UX branching.
- * This is the single source of truth for asset vs aggregate behavior.
+ * This is the single source of truth for asset vs aggregate **fleet** behavior.
+ *
+ * DCO trips (`operating_mode = 'DCO'`) may still resolve to `"asset"` or
+ * `"aggregate"` here (e.g. DCO-4 stamps trip_payout_mode = 'market'). Callers
+ * that own expenses, vehicle P&L, commission, or settlement MUST check
+ * {@link isDcoOperatingTrip} first and apply DCO overrides. Do not treat DCO as
+ * organisation Asset economics or supplier Aggregate economics.
  */
 export function getTripExecutionModel(trip: TripRow): TripExecutionModel {
   // Explicit, dispatcher-captured signal (Issue B) — highest priority.

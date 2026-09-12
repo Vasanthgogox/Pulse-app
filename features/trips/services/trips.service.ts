@@ -24,6 +24,7 @@ import {
   driverRowToTripRow,
   tripRowToDriverTripRow,
 } from "@/types/trip-views";
+import { isDcoOperatingTrip } from "@/features/trips/domain/tripDcoOperating";
 
 export type { DriverTripRow, SupplierTripRow } from "@/types/trip-views";
 export { driverRowToTripRow, supplierRowToTripRow } from "@/types/trip-views";
@@ -75,6 +76,13 @@ export interface TripRow {
   supplier_id: string | null;
   /** Ledger lane: `market` = supplier payable; `asset` = driver + vehicle. NULL = infer from supplier_id. */
   trip_payout_mode?: "market" | "asset" | string | null;
+  /**
+   * Who operates commercially: FLEET (org/supplier) or DCO (independent owner-operator).
+   * Independent of execution_type and trip_payout_mode. See isDcoOperatingTrip().
+   */
+  operating_mode?: "FLEET" | "DCO" | string | null;
+  /** DCO payee when operating_mode is DCO. Mutually exclusive with supplier_id. */
+  dco_payee_id?: string | null;
   /** Explicit, dispatcher-captured execution model for a subcontracted trip. NULL = infer via getTripExecutionModel()'s legacy heuristic. Immutable once started_at is set. */
   execution_type?: "ASSET" | "AGGREGATE" | null;
   /** Optional; when set without supplier_id, used for supplier due/name matching (e.g. synced trips). */
@@ -719,6 +727,8 @@ const DRIVER_TRIP_FALLBACK_COLUMNS = [
   // once — see dedupeDriverTripsForDriverOrgs.
   "source_indent_id",
   "owner_vehicle_id",
+  "operating_mode",
+  "dco_payee_id",
   // NOTE: organization_name is deliberately NOT fetched here. `trips` has no such
   // column and embedding `organizations(name)` fails outright for drivers
   // ("permission denied for function is_org_member"), which would break the whole
@@ -2643,6 +2653,8 @@ async function ensureAssetCompletionAutoEntries(
   trip: TripRow | null | undefined,
 ): Promise<void> {
   if (!trip?.id || !trip.organization_id) return;
+  // DCO settlement is dco_payee / supplier_rate — never employee DRIVER_COMMISSION.
+  if (isDcoOperatingTrip(trip)) return;
   if (resolveTripPayoutModeForCompletion(trip) !== "asset") return;
 
   const existingRes = await supabase()
@@ -2803,7 +2815,7 @@ async function validateSupplierLinkForCompletion(
 ): Promise<{ error: Error | null }> {
   const { data: trip, error: tripError } = await supabase()
     .from("trips")
-    .select("id, source, supplier_id, trip_payout_mode, driver_id, vehicle_id")
+    .select("id, source, supplier_id, trip_payout_mode, driver_id, vehicle_id, operating_mode")
     .eq("id", tripId)
     .maybeSingle();
   if (tripError) return { error: new Error(tripError.message) };
@@ -2830,6 +2842,7 @@ async function validateSupplierLinkForCompletion(
   const source = String(trip.source ?? "")
     .trim()
     .toLowerCase();
+  if (isDcoOperatingTrip(trip)) return { error: null };
   if (source === "mover_asset") return { error: null };
   if (payoutMode === "asset") return { error: null };
   if (!payoutMode && hasOwnDriver && hasOwnVehicle) return { error: null };

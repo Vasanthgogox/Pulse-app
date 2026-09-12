@@ -6,7 +6,7 @@ export type TripSettlementLane = "receivable" | "payable";
 export function tripLedgerEntriesForSettlementLane(
   entries: LedgerRow[],
   lane: TripSettlementLane,
-  payableEntityType: "supplier" | "driver" = "supplier",
+  payableEntityType: "supplier" | "driver" | "dco" = "supplier",
 ): LedgerRow[] {
   if (lane === "receivable") {
     return entries.filter(
@@ -14,7 +14,12 @@ export function tripLedgerEntriesForSettlementLane(
         tx.contact_type === "client" && Number(tx.amount_in ?? 0) > 0,
     );
   }
-  const contactType = payableEntityType === "driver" ? "driver" : "supplier";
+  const contactType =
+    payableEntityType === "driver"
+      ? "driver"
+      : payableEntityType === "dco"
+        ? "dco"
+        : "supplier";
   return entries.filter(
     (tx) =>
       tx.contact_type === contactType && Number(tx.amount_out ?? 0) > 0,
@@ -25,7 +30,7 @@ export function tripLedgerEntriesForSettlementLane(
 export function latestTripSettlementLedgerEntry(
   entries: LedgerRow[],
   lane: TripSettlementLane,
-  payableEntityType: "supplier" | "driver" = "supplier",
+  payableEntityType: "supplier" | "driver" | "dco" = "supplier",
 ): LedgerRow | null {
   const laneRows = tripLedgerEntriesForSettlementLane(
     entries,

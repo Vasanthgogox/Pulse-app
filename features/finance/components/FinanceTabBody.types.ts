@@ -19,6 +19,7 @@ import type { LedgerRow } from "../services/finance.service";
 import type { FinanceSubTab } from "../types";
 import type { FinancialRowData } from "./FinancialRow";
 import type { EntityListFilter } from "./TreasurySummaryCard";
+import type { SupplierPartyKindFilter } from "@/features/finance/domain/financeCounterpartyLane";
 
 export interface FinanceTabBodyProps {
   financeSubTab: FinanceSubTab;
@@ -64,6 +65,9 @@ export interface FinanceTabBodyProps {
   ) => void;
   searchQuery: string;
   entityFilter: EntityListFilter;
+  /** Finance → Suppliers: All / Supplier / DCO. DCO stays contact_type=dco. */
+  supplierPartyKind?: SupplierPartyKindFilter;
+  onSupplierPartyKindChange?: (kind: SupplierPartyKindFilter) => void;
   connectionRequestsSent: ConnectionRequestRow[];
   tripPartyMap: Record<
     string,

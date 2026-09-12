@@ -52,6 +52,8 @@ export interface TripForSupplier {
   /** Optional; when supplier_id is null, used to match supplier by name (e.g. integrated/synced trips). */
   supplier_name?: string | null;
   supplier_rate: number;
+  /** Canonical DCO discriminator. DCO trips settle via dco_payee, not this supplier list. */
+  operating_mode?: string | null;
   /** Source indent id; used to dedup when indent-level amounts are also included (prevents double-count). */
   indent_id?: string | null;
   /** Present on full trip rows; used for party map / driver attribution. */
@@ -90,6 +92,8 @@ export interface TripForDriver {
   driver_id: string | null;
   driver_commission?: number | null;
   supplier_rate?: number | null;
+  /** Canonical DCO discriminator. DCO trips must not enter Finance → Drivers. */
+  operating_mode?: string | null;
   /** Trip base price (REVENUE); used to compute commission from driver offer %. */
   client_price?: number | null;
   /**
@@ -179,6 +183,11 @@ export interface FinancialRowData {
   profileImageUrl?: string | null;
   /** Drivers: seed preset when no profileImageUrl. */
   avatarSeed?: string | null;
+  /**
+   * Supplier-lane subtype. `dco` stays contact_type=dco internally and must not
+   * route to a suppliers-table detail page.
+   */
+  counterpartyKind?: "supplier" | "dco";
 }
 
 export interface AggregationTotals {

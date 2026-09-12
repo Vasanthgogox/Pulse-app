@@ -48,4 +48,23 @@ describe('aggregateSuppliers', () => {
     expect(rows[0].payables).toBe(0);
     expect(totals.totalIn).toBe(0);
   });
+
+  it('does not fold DCO settlement into a normal supplier row', () => {
+    const trips: TripForSupplier[] = [
+      {
+        id: 'trip-dco',
+        supplier_id: null,
+        supplier_name: 'Acme Logistics',
+        supplier_rate: 36500,
+        operating_mode: 'DCO',
+      } as TripForSupplier,
+    ];
+    const transactions: LedgerTx[] = [
+      { contact_type: 'dco', contact_id: 'payee-1', amount_out: 1000 } as LedgerTx,
+    ];
+    const { rows, totals } = aggregateSuppliers([supplier], trips, transactions);
+    expect(rows[0].payables).toBe(0);
+    expect(rows[0].paid).toBe(0);
+    expect(totals.totalIn).toBe(0);
+  });
 });

@@ -33,13 +33,14 @@ export function aggregateDcoPayeesFromRpc(
     rows.push({
       id: r.dco_payee_id,
       name: (nameInfo?.name || '').trim() || 'Unnamed',
-      subline: 'INDEPENDENT OPERATOR',
+      subline: 'DCO',
       trips: r.trips_count,
       sourced: r.trips_count,
       due: r.outstanding,
       payables: r.due,
       paid: r.paid,
       contactPerson: (nameInfo?.phone ?? '').trim() || undefined,
+      counterpartyKind: 'dco',
     });
   }
 
