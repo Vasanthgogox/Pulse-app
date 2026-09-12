@@ -2712,12 +2712,14 @@ export function useTripDetail({
    */
   const handleReassignCompleted = useCallback(
     async (meta?: { driverIdChanged?: boolean }) => {
-      await load();
-      loadAssignmentAudit();
-      loadAdjustments();
-      loadTripDocuments();
+      if (!bundleActive) {
+        await load();
+        loadAssignmentAudit();
+        loadAdjustments();
+        loadTripDocuments();
+        loadTripOtp();
+      }
       setFinanceRefreshKey((k) => k + 1);
-      loadTripOtp();
       if (meta?.driverIdChanged) {
         setWaitingForNewDriverLocation(true);
       }
