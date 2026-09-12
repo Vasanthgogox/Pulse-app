@@ -1,20 +1,26 @@
 /**
  * Workspace overlay — right-anchored flex card with backdrop on desktop;
- * full-screen on mobile. Master/detail split widens the card when a panel opens.
+ * full-screen on mobile. Always single-pane (hub or a detail panel).
+ *
+ * Core tabs open the hub. Product chrome (Finance Pro / Invoice / POD) opens
+ * My Account as the root — same page and stack as Commerce: edit, workspace
+ * (Organization), language, and region stay on the account stack; back from
+ * My Account returns to the product.
  */
 import { WorkspaceFlexCardShell } from "@/components/layout/WorkspaceFlexCardShell";
 import { WorkspaceHubMenu } from "@/components/profile/WorkspaceHubMenu";
 import { WorkspaceAccountPanel } from "@/features/organization/components/workspace/WorkspaceAccountPanel";
 import { WorkspaceEditAccountPanel } from "@/features/organization/components/workspace/WorkspaceEditAccountPanel";
 import { WorkspaceFeedbackProvider } from "@/features/organization/components/workspace/WorkspaceFeedbackProvider";
+import { WorkspaceLanguagePanel } from "@/features/organization/components/workspace/WorkspaceLanguagePanel";
 import { WorkspaceOrgKycPanel } from "@/features/organization/components/workspace/WorkspaceOrgKycPanel";
 import { WorkspaceOcrUsagePanel } from "@/features/organization/components/workspace/WorkspaceOcrUsagePanel";
 import { WorkspaceProductsPanel } from "@/features/organization/components/workspace/WorkspaceProductsPanel";
 import { WorkspaceProfilePanel } from "@/features/organization/components/workspace/WorkspaceProfilePanel";
+import { WorkspaceRegionPanel } from "@/features/organization/components/workspace/WorkspaceRegionPanel";
 import { WorkspaceSettingsPanel } from "@/features/organization/components/workspace/WorkspaceSettingsPanel";
 import { WorkspaceTeamPanel } from "@/features/organization/components/workspace/WorkspaceTeamPanel";
 import {
-  isWorkspaceHubInlinePanel,
   parseOrgHubSection,
   parseWorkspacePanelId,
   type OrgHubSection,
@@ -24,10 +30,21 @@ import { ROUTES } from "@/lib/routes";
 import { shouldMountAuthenticatedDataPlane } from "@/lib/bootGate";
 import { useMemberAccess } from "@/lib/useMemberAccess";
 import { useAuth } from "@/contexts/AuthContext";
+import type { ExpoProductShellId } from "@/lib/suite/suiteProducts";
 import { Redirect, useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { StyleSheet, View } from "react-native";
 import type { MemberSurfaceId } from "@/lib/memberSurfaces";
+
+function parseFromProduct(
+  raw: string | string[] | undefined,
+): ExpoProductShellId | null {
+  const value = Array.isArray(raw) ? raw[0] : raw;
+  if (value === "finance-pro" || value === "invoice" || value === "pod") {
+    return value;
+  }
+  return null;
+}
 
 export default function WorkspaceScreen() {
   const { sessionAttached } = useAuth();
@@ -42,6 +59,7 @@ function AuthenticatedWorkspaceScreen() {
   const params = useLocalSearchParams<{
     panel?: string | string[];
     section?: string | string[];
+    fromProduct?: string | string[];
   }>();
 
   const activePanel = useMemo(
@@ -52,6 +70,12 @@ function AuthenticatedWorkspaceScreen() {
     () => parseOrgHubSection(params.section),
     [params.section],
   );
+  const fromProduct = useMemo(
+    () => parseFromProduct(params.fromProduct),
+    [params.fromProduct],
+  );
+  /** Product chrome (Finance Pro / Invoice / POD) opens My Account as the root, same as Commerce. */
+  const accountIsRoot = !!fromProduct;
 
   const previousPanelRef = useRef<WorkspacePanelId | null>(null);
 
@@ -86,47 +110,77 @@ function AuthenticatedWorkspaceScreen() {
     else router.replace(ROUTES.TABS.NETWORK as Parameters<typeof router.replace>[0]);
   }, [router]);
 
+  const setWorkspaceParams = useCallback(
+    (next: { panel?: string; section?: string }) => {
+      router.setParams({
+        panel: next.panel ?? "",
+        section: next.section ?? "",
+        ...(fromProduct ? { fromProduct } : {}),
+      });
+    },
+    [fromProduct, router],
+  );
+
   const openPanel = useCallback(
     (panel: WorkspacePanelId) => {
       previousPanelRef.current = activePanel;
-      router.setParams({ panel, section: "" });
+      setWorkspaceParams({ panel, section: "" });
     },
-    [activePanel, router],
+    [activePanel, setWorkspaceParams],
   );
 
   const closePanel = useCallback(() => {
-    router.setParams({ panel: "", section: "" });
-  }, [router]);
+    setWorkspaceParams({ panel: "", section: "" });
+  }, [setWorkspaceParams]);
 
-  // Bounce a denied panel back to the hub menu — mirrors MemberDomainGate's
-  // redirect-on-deny pattern for full-screen routes, scoped to this overlay.
+  const popPanel = useCallback(() => {
+    const previous = previousPanelRef.current;
+    previousPanelRef.current = null;
+    if (previous && previous !== activePanel) {
+      setWorkspaceParams({ panel: previous, section: "" });
+      return;
+    }
+    if (accountIsRoot) {
+      setWorkspaceParams({ panel: "account", section: "" });
+      return;
+    }
+    closePanel();
+  }, [accountIsRoot, activePanel, closePanel, setWorkspaceParams]);
+
+  const closeAccount = useCallback(() => {
+    if (accountIsRoot) {
+      closeOverlay();
+      return;
+    }
+    closePanel();
+  }, [accountIsRoot, closeOverlay, closePanel]);
+
+  // Bounce a denied panel back to the hub — or My Account when a product opened us.
   useEffect(() => {
-    if (panelDenied) closePanel();
-  }, [panelDenied, closePanel]);
-
-  const closeTeamPanel = useCallback(() => {
-    const previous = previousPanelRef.current;
-    if (previous && previous !== "team") {
-      openPanel(previous);
+    if (!panelDenied) return;
+    if (accountIsRoot) {
+      setWorkspaceParams({ panel: "account", section: "" });
       return;
     }
     closePanel();
-  }, [closePanel, openPanel]);
+  }, [accountIsRoot, closePanel, panelDenied, setWorkspaceParams]);
 
-  const closeOcrUsagePanel = useCallback(() => {
-    const previous = previousPanelRef.current;
-    if (previous && previous !== "ocr-usage") {
-      openPanel(previous);
-      return;
-    }
-    closePanel();
-  }, [closePanel, openPanel]);
+  useEffect(() => {
+    if (!accountIsRoot || activePanel || memberAccessLoading || panelDenied) return;
+    setWorkspaceParams({ panel: "account", section: "" });
+  }, [
+    accountIsRoot,
+    activePanel,
+    memberAccessLoading,
+    panelDenied,
+    setWorkspaceParams,
+  ]);
 
   const openOrgSection = useCallback(
     (section: OrgHubSection | null) => {
       if (section) {
         previousPanelRef.current = activePanel;
-        router.setParams({ panel: "kyc", section });
+        setWorkspaceParams({ panel: "kyc", section });
         return;
       }
       const previous = previousPanelRef.current;
@@ -135,9 +189,9 @@ function AuthenticatedWorkspaceScreen() {
         openPanel(previous);
         return;
       }
-      router.setParams({ panel: "kyc", section: "" });
+      setWorkspaceParams({ panel: "kyc", section: "" });
     },
-    [activePanel, openPanel, router],
+    [activePanel, openPanel, setWorkspaceParams],
   );
 
   const panelContent = useMemo(() => {
@@ -145,7 +199,7 @@ function AuthenticatedWorkspaceScreen() {
     if (activePanel === "account") {
       return (
         <WorkspaceAccountPanel
-          onBack={closePanel}
+          onBack={closeAccount}
           onEdit={() => openPanel("account-edit")}
           onOpenPanel={openPanel}
           onOpenRoute={(path) => {
@@ -158,10 +212,16 @@ function AuthenticatedWorkspaceScreen() {
     if (activePanel === "account-edit") {
       return <WorkspaceEditAccountPanel onBack={() => openPanel("account")} />;
     }
+    if (activePanel === "language") {
+      return <WorkspaceLanguagePanel onBack={() => openPanel("account")} />;
+    }
+    if (activePanel === "region") {
+      return <WorkspaceRegionPanel onBack={() => openPanel("account")} />;
+    }
     if (activePanel === "profile") {
       return (
         <WorkspaceProfilePanel
-          onBack={closePanel}
+          onBack={popPanel}
           onOpenPanel={openPanel}
           onOpenOrgSection={openOrgSection}
           onOpenRoute={(path) => {
@@ -172,15 +232,15 @@ function AuthenticatedWorkspaceScreen() {
       );
     }
     if (activePanel === "settings") {
-      return <WorkspaceSettingsPanel onBack={closePanel} />;
+      return <WorkspaceSettingsPanel onBack={popPanel} />;
     }
     if (activePanel === "team") {
-      return <WorkspaceTeamPanel onBack={closeTeamPanel} />;
+      return <WorkspaceTeamPanel onBack={popPanel} />;
     }
     if (activePanel === "kyc") {
       return (
         <WorkspaceOrgKycPanel
-          onBack={closePanel}
+          onBack={popPanel}
           section={orgSection}
           onOpenSection={openOrgSection}
           onOpenPanel={openPanel}
@@ -188,24 +248,42 @@ function AuthenticatedWorkspaceScreen() {
       );
     }
     if (activePanel === "products") {
-      return <WorkspaceProductsPanel onBack={closePanel} />;
+      return <WorkspaceProductsPanel onBack={popPanel} />;
     }
     if (activePanel === "ocr-usage") {
-      return <WorkspaceOcrUsagePanel onBack={closeOcrUsagePanel} />;
+      return <WorkspaceOcrUsagePanel onBack={popPanel} />;
     }
     return null;
-  }, [activePanel, closeOverlay, closePanel, closeOcrUsagePanel, closeTeamPanel, openOrgSection, openPanel, orgSection, panelDenied, router]);
+  }, [
+    activePanel,
+    closeAccount,
+    closeOverlay,
+    openOrgSection,
+    openPanel,
+    orgSection,
+    panelDenied,
+    popPanel,
+    router,
+  ]);
 
-  const shellPanelOpen = !!activePanel && !isWorkspaceHubInlinePanel(activePanel);
+  const shellPanelOpen = !!activePanel;
 
-  const hub = (
+  const hub = accountIsRoot ? (
+    <WorkspaceAccountPanel
+      onBack={closeAccount}
+      onEdit={() => openPanel("account-edit")}
+      onOpenPanel={openPanel}
+      onOpenRoute={(path) => {
+        closeOverlay();
+        router.replace(path as Parameters<typeof router.replace>[0]);
+      }}
+    />
+  ) : (
     <WorkspaceHubMenu
       activePanel={activePanel}
       onSelectPanel={openPanel}
       onSelectOrgSection={openOrgSection}
       onExit={closeOverlay}
-      inlinePanel={isWorkspaceHubInlinePanel(activePanel) ? activePanel : null}
-      onCloseInlinePanel={closePanel}
     />
   );
 

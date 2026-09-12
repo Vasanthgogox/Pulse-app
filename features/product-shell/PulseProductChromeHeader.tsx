@@ -14,6 +14,7 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { FinanceProAlertsPanel } from "@/features/finance-pro/components/FinanceProAlertsPanel";
 import { useFinanceProChromeAlerts } from "@/features/finance-pro/hooks/useFinanceProChromeAlerts";
+import { PulseProductAccountMenu } from "@/features/product-shell/PulseProductAccountMenu";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import {
   getTotalChatUnreadCount as readTotalChatUnread,
@@ -27,7 +28,6 @@ import { useRouter } from "expo-router";
 import { FileText, LineChart, MessageSquare, ScanLine } from "lucide-react-native";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
-  Image,
   Modal,
   Platform,
   Pressable,
@@ -224,23 +224,11 @@ export function PulseProductChromeHeader({
               />
             </Pressable>
           ) : null}
-          <Pressable
-            onPress={() =>
-              router.push({
-                pathname: ROUTES.WORKSPACE,
-                params: { panel: "account", fromProduct: productId },
-              } as never)
-            }
-            style={styles.avatarBtn}
-            accessibilityRole="button"
-            accessibilityLabel="Open profile"
-          >
-            {profileAvatarUri ? (
-              <Image source={{ uri: profileAvatarUri }} style={styles.avatarImage} />
-            ) : (
-              <Text style={styles.avatarText}>{initials}</Text>
-            )}
-          </Pressable>
+          <PulseProductAccountMenu
+            productId={productId}
+            avatarUri={profileAvatarUri}
+            initials={initials}
+          />
         </View>
       </View>
     </View>
@@ -340,30 +328,6 @@ const styles = StyleSheet.create({
   },
   iconDotChat: {
     backgroundColor: "#50CD89",
-  },
-  avatarBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 2,
-    borderWidth: 1.5,
-    borderColor: "#181C32",
-    backgroundColor: "#ffffff",
-    overflow: "hidden",
-  },
-  avatarImage: {
-    width: "100%",
-    height: "100%",
-    borderRadius: 19,
-  },
-  avatarText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#181C32",
-    textTransform: "uppercase",
-    letterSpacing: 0.4,
   },
   nativeSheet: {
     flex: 1,
