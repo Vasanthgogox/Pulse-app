@@ -15,9 +15,11 @@ import {
   getSalaryRequestByIdForOrganization,
   type SalaryRequestWithDriverRow,
 } from "@/features/drivers/services/salaryRequests.service";
-import { useClientsQuery } from "@/lib/queries/useClientsQuery";
-import { useDriversQuery } from "@/lib/queries/useDriversQuery";
-import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
+import type { ClientRow } from "@/features/clients/services/clients.service";
+import type { DriverRow } from "@/features/drivers/services/drivers.service";
+import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
+import { useCachedQueryRows } from "@/lib/queries/useCachedQueryRows";
+import { queryKeys } from "@/lib/queryKeys";
 import type { GlobalOperationAlert } from "@/lib/globalSync/priorityEngine.util";
 import type { RegistryFeedKind } from "@/lib/globalSync/registryFeed.util";
 import { useGlobalSyncStore } from "@/lib/globalSync/useGlobalSyncStore";
@@ -80,9 +82,11 @@ export function AlertDetailScreen({
   const activeTrips = useGlobalSyncStore((s) => s.activeTrips);
   const partnerDisplayByOrgId = useGlobalSyncStore((s) => s.partnerDisplayByOrgId);
   const partnerAvatarUriByOrgId = useGlobalSyncStore((s) => s.partnerAvatarUriByOrgId);
-  const { data: drivers = [] } = useDriversQuery(orgId);
-  const { data: clients = [] } = useClientsQuery(orgId);
-  const { data: suppliers = [] } = useSuppliersQuery(orgId);
+  const drivers = useCachedQueryRows<DriverRow>(queryKeys.drivers.finite(orgId ?? ""));
+  const clients = useCachedQueryRows<ClientRow>(queryKeys.clients.finite(orgId ?? ""));
+  const suppliers = useCachedQueryRows<SupplierRow>(
+    queryKeys.suppliers.finite(orgId ?? ""),
+  );
 
   const driversById = useMemo(
     () => new Map(drivers.map((d) => [d.id, d])),

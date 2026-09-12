@@ -1,7 +1,10 @@
 import { useMemo } from 'react';
 import { lateMonitoringTripsFromActive } from '@/lib/globalSync/lateMonitoringFromTrips.util';
 import type { GlobalOperationAlert } from '@/lib/globalSync/priorityEngine.util';
-import { buildRegistryFeed } from '@/lib/globalSync/registryFeed.util';
+import {
+  buildRegistryFeed,
+  type RegistryFeedEntry,
+} from '@/lib/globalSync/registryFeed.util';
 import { useAlertRegistryNotifications } from '@/lib/globalSync/useAlertRegistryNotifications';
 import { useGlobalSyncStore } from '@/lib/globalSync/useGlobalSyncStore';
 import { useOperationsShelfItems } from '@/lib/globalSync/useOperationsDerived';
@@ -12,18 +15,21 @@ import { useNetworkNotificationsQuery } from '@/lib/queries/useNetworkNotificati
  * (zero extra DB). The network lane is the one exception: cross-org indent/bid/
  * award events cannot be derived locally, so they are read from
  * `network_notifications` and kept live over realtime.
+ *
+ * Both lifecycle tabs are built in one pass so the notifications panel does not
+ * subscribe/rebuild the same derivation 3–4 times.
  */
-export function useRegistryFeed(
-  tab: 'active' | 'history',
-  orgId: string | null,
-) {
+export function useRegistryFeed(orgId: string | null): {
+  activeFeed: RegistryFeedEntry[];
+  historyFeed: RegistryFeedEntry[];
+  opsAlerts: GlobalOperationAlert[];
+} {
   const items = useOperationsShelfItems();
   const activeTrips = useGlobalSyncStore((s) => s.activeTrips);
   const {
     activeSalaryRequests,
     historySalaryRequests,
   } = useAlertRegistryNotifications(orgId);
-  // Single query for both lifecycle tabs; split locally so only one channel opens.
   const { data: networkNotifications } = useNetworkNotificationsQuery(orgId);
 
   const { activeNetwork, historyNetwork } = useMemo(() => {
@@ -72,14 +78,13 @@ export function useRegistryFeed(
 
   const opsAlertsForFeed = useMemo(() => {
     if (activeSalaryRequests.length === 0) return opsAlerts;
-    // Dedicated salary cards (kind: salary) own the feed row — drop ops mirrors.
     return opsAlerts.filter((a) => a.category !== 'salary');
   }, [opsAlerts, activeSalaryRequests.length]);
 
-  const feed = useMemo(
+  const activeFeed = useMemo(
     () =>
       buildRegistryFeed({
-        tab,
+        tab: 'active',
         opsAlerts: opsAlertsForFeed,
         activeSalary: activeSalaryRequests,
         historySalary: historySalaryRequests,
@@ -87,7 +92,6 @@ export function useRegistryFeed(
         historyNetwork,
       }),
     [
-      tab,
       opsAlertsForFeed,
       activeSalaryRequests,
       historySalaryRequests,
@@ -96,5 +100,24 @@ export function useRegistryFeed(
     ],
   );
 
-  return { feed, opsAlerts };
+  const historyFeed = useMemo(
+    () =>
+      buildRegistryFeed({
+        tab: 'history',
+        opsAlerts: opsAlertsForFeed,
+        activeSalary: activeSalaryRequests,
+        historySalary: historySalaryRequests,
+        activeNetwork,
+        historyNetwork,
+      }),
+    [
+      opsAlertsForFeed,
+      activeSalaryRequests,
+      historySalaryRequests,
+      activeNetwork,
+      historyNetwork,
+    ],
+  );
+
+  return { activeFeed, historyFeed, opsAlerts };
 }

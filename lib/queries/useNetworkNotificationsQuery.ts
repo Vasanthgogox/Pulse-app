@@ -38,16 +38,27 @@ export function useNetworkNotificationsQuery(
     },
     enabled: !!orgId,
     staleTime: STALE.realtime,
+    refetchOnMount: false,
+    refetchOnWindowFocus: false,
   });
 
   // One shared channel per org; invalidates both the list and the badge count.
+  // Debounce so bursty indent/bid writes do not refetch the inbox on every row.
   useEffect(() => {
     if (!orgId) return;
-    return subscribeToNetworkNotifications(orgId, () => {
-      void queryClient.invalidateQueries({
-        queryKey: queryKeys.networkNotifications.all(orgId),
-      });
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const unsub = subscribeToNetworkNotifications(orgId, () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(() => {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.networkNotifications.all(orgId),
+        });
+      }, 280);
     });
+    return () => {
+      if (timer) clearTimeout(timer);
+      unsub();
+    };
   }, [orgId, queryClient]);
 
   return { ...query, data: query.data ?? EMPTY };

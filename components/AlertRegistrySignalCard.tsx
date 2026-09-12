@@ -399,6 +399,7 @@ const stylesDef = {
   headline: text({
     fontSize: 13,
     lineHeight: 19,
+    fontWeight: "400",
     color: METRONIC.primaryBtn,
   }),
   headlineCompact: text({
@@ -413,21 +414,21 @@ const stylesDef = {
     maxWidth: "48%",
   }),
   actorName: text({
-    fontWeight: "600",
+    fontWeight: "500",
     color: METRONIC.primaryBtn,
   }),
   actionText: text({
     fontWeight: "400",
-    color: METRONIC.primaryBtn,
+    color: Theme.textRouteCard,
   }),
   highlightText: text({
-    fontWeight: "600",
+    fontWeight: "500",
     color: METRONIC.link,
   }),
   metaLine: text({
     fontSize: 12,
     lineHeight: 17,
-    fontWeight: "500",
+    fontWeight: "400",
     color: METRONIC.muted,
   }),
   metaLineCompact: text({
@@ -436,7 +437,7 @@ const stylesDef = {
   }),
   metaContext: text({
     color: "#78829D",
-    fontWeight: "500",
+    fontWeight: "400",
   }),
   detailCard: view({
     marginTop: 2,
@@ -454,7 +455,7 @@ const stylesDef = {
   detailTitle: text({
     fontSize: 12,
     lineHeight: 17,
-    fontWeight: "600",
+    fontWeight: "500",
     color: METRONIC.primaryBtn,
   }),
   detailTitleCompact: text({
@@ -464,19 +465,19 @@ const stylesDef = {
   detailSubtitle: text({
     fontSize: 12,
     lineHeight: 17,
-    fontWeight: "500",
+    fontWeight: "400",
     color: "#78829D",
   }),
   detailSubtitleCompact: text({
     fontSize: 11,
     lineHeight: 15,
-    fontWeight: "600",
+    fontWeight: "500",
     color: METRONIC.link,
   }),
   detailBody: text({
     fontSize: 12,
     lineHeight: 17,
-    fontWeight: "500",
+    fontWeight: "400",
     color: "#78829D",
   }),
   tagPill: view({
@@ -488,7 +489,8 @@ const stylesDef = {
   tagText: text({
     fontSize: 9,
     lineHeight: 11,
-    fontWeight: "600",
+    fontWeight: "500",
+    letterSpacing: 0.1,
   }),
   metaBlock: view({
     flexDirection: "row",

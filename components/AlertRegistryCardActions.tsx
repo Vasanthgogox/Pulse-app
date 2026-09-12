@@ -53,7 +53,7 @@ export const alertRegistryActionStyles = StyleSheet.create({
   },
   ghostBtnText: {
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: "500",
     color: METRONIC.primaryBtn,
   },
   primaryBtn: {
@@ -69,7 +69,7 @@ export const alertRegistryActionStyles = StyleSheet.create({
   },
   primaryBtnText: {
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: "500",
     color: Theme.buttonDarkText,
   },
   ghostBtnCompact: {
@@ -109,7 +109,7 @@ export const alertRegistryActionStyles = StyleSheet.create({
   },
   viewBtnText: {
     fontSize: 10,
-    fontWeight: "600",
+    fontWeight: "500",
     color: METRONIC.primaryBtn,
   },
   statusPill: {
@@ -124,7 +124,8 @@ export const alertRegistryActionStyles = StyleSheet.create({
   statusPillText: {
     fontSize: 9,
     lineHeight: 11,
-    fontWeight: "600",
+    fontWeight: "500",
+    letterSpacing: 0.1,
   },
   btnDisabled: {
     opacity: 0.55,
@@ -152,7 +153,7 @@ export const alertRegistryActionStyles = StyleSheet.create({
   },
   footerGhostBtnText: {
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "500",
     color: METRONIC.primaryBtn,
   },
   footerPrimaryBtn: {
@@ -169,7 +170,7 @@ export const alertRegistryActionStyles = StyleSheet.create({
   },
   footerPrimaryBtnText: {
     fontSize: 12,
-    fontWeight: "800",
+    fontWeight: "500",
     color: Theme.buttonDarkText,
   },
   footerTertiaryBtn: {
@@ -185,12 +186,12 @@ export const alertRegistryActionStyles = StyleSheet.create({
   },
   footerTertiaryBtnText: {
     fontSize: 12,
-    fontWeight: "700",
+    fontWeight: "500",
     color: METRONIC.primaryBtn,
   },
   footerSummary: {
     fontSize: 11,
-    fontWeight: "600",
+    fontWeight: "400",
     color: Theme.textMuted,
     textAlign: "center",
     lineHeight: 15,

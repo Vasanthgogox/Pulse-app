@@ -45,9 +45,12 @@ import {
 import { useMarkNetworkNotificationRead } from "@/lib/queries/useNetworkNotificationsQuery";
 import { ROUTES } from "@/lib/routes";
 import { useRouter } from "expo-router";
-import { useClientsQuery } from "@/lib/queries/useClientsQuery";
-import { useDriversQuery } from "@/lib/queries/useDriversQuery";
-import { useSuppliersQuery } from "@/lib/queries/useSuppliersQuery";
+import type { ClientRow } from "@/features/clients/services/clients.service";
+import type { DriverRow } from "@/features/drivers/services/drivers.service";
+import type { SupplierRow } from "@/features/suppliers/services/suppliers.service";
+import { useCachedQueryRows } from "@/lib/queries/useCachedQueryRows";
+import { queryKeys } from "@/lib/queryKeys";
+import type { RegistryFeedEntry } from "@/lib/globalSync/registryFeed.util";
 import type { SalaryRequestWithDriverRow } from "@/features/drivers/services/salaryRequests.service";
 import type { AlertDetailMode } from "@/lib/alertRegistry/alertDetailRoute.util";
 import type { RegistryFeedKind } from "@/lib/globalSync/registryFeed.util";
@@ -199,10 +202,12 @@ function RegistryFeedList({
   filterTab,
   visibleCount,
   finance,
+  feed,
 }: {
   filterTab: RegistryFilterTab;
   visibleCount: number;
   finance: AlertRegistryFinanceHandlers;
+  feed: RegistryFeedEntry[];
 }) {
   const auth = useOptionalAuth();
   const org = useOptionalOrganization();
@@ -211,9 +216,11 @@ function RegistryFeedList({
   const activeTrips = useGlobalSyncStore((s) => s.activeTrips);
   const partnerDisplayByOrgId = useGlobalSyncStore((s) => s.partnerDisplayByOrgId);
   const partnerAvatarUriByOrgId = useGlobalSyncStore((s) => s.partnerAvatarUriByOrgId);
-  const { data: drivers = [] } = useDriversQuery(orgId);
-  const { data: clients = [] } = useClientsQuery(orgId);
-  const { data: suppliers = [] } = useSuppliersQuery(orgId);
+  const drivers = useCachedQueryRows<DriverRow>(queryKeys.drivers.finite(orgId ?? ""));
+  const clients = useCachedQueryRows<ClientRow>(queryKeys.clients.finite(orgId ?? ""));
+  const suppliers = useCachedQueryRows<SupplierRow>(
+    queryKeys.suppliers.finite(orgId ?? ""),
+  );
   const router = useRouter();
   const markNetworkRead = useMarkNetworkNotificationRead(orgId);
   const driversById = useMemo(
@@ -247,12 +254,6 @@ function RegistryFeedList({
       partnerDisplayByOrgId,
       partnerAvatarUriByOrgId,
     ],
-  );
-  const lifecycleTab = registryFeedLifecycleTab(filterTab);
-  const { feed: rawFeed } = useRegistryFeed(lifecycleTab, orgId);
-  const feed = useMemo(
-    () => filterRegistryFeed(rawFeed, filterTab),
-    [rawFeed, filterTab],
   );
   const isActiveView = filterTab !== "archive";
 
@@ -552,9 +553,9 @@ export function AlertRegistryPanel({
 
   const salaryRequestsHasMore = useGlobalSyncStore((s) => s.salaryRequestsHasMore);
   const loadMoreSalaryRequests = useGlobalSyncStore((s) => s.loadMoreSalaryRequests);
-  const { feed: activeFeed } = useRegistryFeed("active", orgId);
-  const { feed: historyFeed } = useRegistryFeed("history", orgId);
-  const { feed } = useRegistryFeed(registryFeedLifecycleTab(filterTab), orgId);
+  const { activeFeed, historyFeed } = useRegistryFeed(orgId);
+  const feed =
+    registryFeedLifecycleTab(filterTab) === "history" ? historyFeed : activeFeed;
   const filteredFeed = useMemo(
     () => filterRegistryFeed(feed, filterTab),
     [feed, filterTab],
@@ -780,6 +781,7 @@ export function AlertRegistryPanel({
           filterTab={filterTab}
           visibleCount={visibleCount}
           finance={panelFinance}
+          feed={filteredFeed}
         />
         {showLoadMore ? (
           <Pressable
@@ -840,9 +842,9 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 15,
-    fontWeight: "600",
+    fontWeight: "500",
     color: METRONIC.primaryBtn,
-    letterSpacing: -0.1,
+    letterSpacing: -0.2,
   },
   headerTitleCentered: {
     flex: 1,
@@ -907,12 +909,12 @@ const styles = StyleSheet.create({
   },
   tabText: {
     fontSize: 13,
-    fontWeight: "500",
+    fontWeight: "400",
     color: METRONIC.muted,
   },
   tabTextActive: {
     color: Theme.primary,
-    fontWeight: "600",
+    fontWeight: "500",
   },
   tabIndicator: {
     position: "absolute",
@@ -958,7 +960,7 @@ const styles = StyleSheet.create({
   },
   emptyTitle: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "500",
     color: METRONIC.primaryBtn,
     textAlign: "center",
   },
@@ -977,9 +979,9 @@ const styles = StyleSheet.create({
   },
   groupHeaderText: {
     fontSize: 10,
-    fontWeight: "700",
+    fontWeight: "500",
     color: METRONIC.muted,
-    letterSpacing: 0.4,
+    letterSpacing: 0.6,
     textTransform: "uppercase",
   },
   loadMoreBtn: {
@@ -998,7 +1000,7 @@ const styles = StyleSheet.create({
   },
   loadMoreText: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "500",
     color: METRONIC.muted,
   },
 });
