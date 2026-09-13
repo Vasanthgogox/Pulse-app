@@ -14,6 +14,19 @@ export type ExecutionPlanRef = {
 
 export const executionPlanRepository = {
   /** Idempotency lookup — a plan already published for this client-generated plan id. */
+  async findById(workspaceId: WorkspaceId, planId: string): Promise<ExecutionPlanRef | null> {
+    const { data, error } = await requirePlatformDb()
+      .from('execution_plans')
+      .select('id,plan_number,status')
+      .eq('organization_id', workspaceId)
+      .eq('id', planId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return null;
+    return { id: String(data.id), planNumber: String(data.plan_number), status: String(data.status) };
+  },
+
   async findByClientPlanId(workspaceId: WorkspaceId, clientPlanId: string): Promise<ExecutionPlanRef | null> {
     const { data, error } = await requirePlatformDb()
       .from('execution_plans')

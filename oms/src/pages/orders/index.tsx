@@ -234,7 +234,18 @@ export function OrdersPage() {
             }
             footer={
               canContinue ? (
-                <Button className="w-full" size="sm" asChild>
+                <Button
+                  className="w-full"
+                  size="sm"
+                  asChild
+                  onClick={() => {
+                    setSelectedOrderIds(
+                      selectedOrders
+                        .filter(o => o.status === 'Pending Consolidation' && !o.execution_plan_id)
+                        .map(o => o.id),
+                    );
+                  }}
+                >
                   <Link to="/execution-plans/build">Continue to Plan Builder →</Link>
                 </Button>
               ) : (

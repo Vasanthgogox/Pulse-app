@@ -68,6 +68,7 @@ export async function postExecutionPlan(
           id: li.id, quantity: li.qty, weightKg: li.weightKg, volumeM3: li.volumeM3,
         })),
       })),
+      supplierTarget: command.supplierTarget ?? 0,
     },
   });
 

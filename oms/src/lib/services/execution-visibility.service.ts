@@ -167,6 +167,49 @@ function firstOf<T>(row: T[] | T | null): T | null {
   return Array.isArray(row) ? (row[0] ?? null) : row;
 }
 
+function asArray<T>(row: T[] | T | null | undefined): T[] {
+  if (!row) return [];
+  return Array.isArray(row) ? row : [row];
+}
+
+function tripProgressRank(status: string): number {
+  if (status === 'cancelled') return 0;
+  if (status === 'completed' || status === 'delivered' || status === 'done') return 50;
+  if (
+    status === 'in_progress' || status === 'picked_up' || status === 'in_transit'
+    || status === 'transit' || status === 'at_pickup' || status === 'loading'
+    || status === 'at_drop' || status === 'unloading' || status === 'active'
+  ) return 40;
+  if (status === 'assigned') return 30;
+  if (status === 'pending_acceptance') return 20;
+  if (status === 'draft') return 10;
+  return 15;
+}
+
+function pickBestTrip(trips: TripRow[] | TripRow | null | undefined): TripRow | null {
+  const list = asArray(trips);
+  if (!list.length) return null;
+  const live = list.filter(t => t.status !== 'cancelled');
+  const pool = live.length ? live : list;
+  return pool.slice().sort((a, b) => tripProgressRank(b.status) - tripProgressRank(a.status))[0] ?? null;
+}
+
+function pickBestIndent(indents: IndentRow[] | IndentRow | null | undefined): IndentRow | null {
+  const list = asArray(indents);
+  if (!list.length) return null;
+  const withLiveTrip = list.filter(i => {
+    const trip = pickBestTrip(i.trips);
+    return trip != null && trip.status !== 'cancelled';
+  });
+  if (withLiveTrip.length) {
+    return withLiveTrip.find(i => i.status === 'awarded' || i.status === 'completed') ?? withLiveTrip[0];
+  }
+  return list.find(i => i.status === 'awarded')
+    ?? list.find(i => i.status === 'completed')
+    ?? list.find(i => i.status === 'broadcast' || i.status === 'open' || i.status === 'quoted')
+    ?? list[0];
+}
+
 function stopRowToCommerceStop(row: StopRow): CommerceExecutionStop {
   return {
     id:         row.id,
@@ -183,8 +226,8 @@ function planRowToCommerceExecution(
   orderSummary: { count: number; amount: number; weightKg: number },
   orders: CommerceExecutionOrder[],
 ): CommerceExecution {
-  const indentRow = firstOf(row.indents);
-  const tripRow = indentRow ? firstOf(indentRow.trips) : null;
+  const indentRow = pickBestIndent(row.indents);
+  const tripRow = indentRow ? pickBestTrip(indentRow.trips) : null;
   const supplier = tripRow ? firstOf(tripRow.suppliers) : null;
   const stops = (row.stops ?? []).slice().sort((a, b) => a.sequence - b.sequence);
 
@@ -270,6 +313,48 @@ export function toExecutionJob(exec: CommerceExecution, organizationId: string):
   };
 }
 
+/**
+ * Embed only follows trips.indent_id. Core also links mover/award trips via
+ * source_indent_id, and a plan can have more than one indent. Hydrate both
+ * FKs so Commerce trip status matches Pulse Core.
+ */
+async function hydrateTripsFromIndentLinks(planRows: PlanRow[]): Promise<void> {
+  const indentIds = [...new Set(planRows.flatMap(row => asArray(row.indents).map(i => i.id)))];
+  if (!indentIds.length) return;
+  const sb = getSupabase();
+  if (!sb) return;
+
+  const { data, error } = await sb
+    .from('trips')
+    .select('id, trip_number, status, supplier_rate, indent_id, source_indent_id, suppliers(name)')
+    .or(`indent_id.in.(${indentIds.join(',')}),source_indent_id.in.(${indentIds.join(',')})`);
+  if (error || !data?.length) return;
+
+  type LinkedTrip = TripRow & { indent_id: string | null; source_indent_id: string | null };
+  const byIndent = new Map<string, TripRow[]>();
+  const add = (indentId: string | null, trip: LinkedTrip) => {
+    if (!indentId) return;
+    const list = byIndent.get(indentId) ?? [];
+    if (!list.some(existing => existing.id === trip.id)) list.push(trip);
+    byIndent.set(indentId, list);
+  };
+  for (const trip of data as LinkedTrip[]) {
+    add(trip.indent_id, trip);
+    add(trip.source_indent_id, trip);
+  }
+
+  for (const row of planRows) {
+    for (const indent of asArray(row.indents)) {
+      const extra = byIndent.get(indent.id) ?? [];
+      const merged = asArray(indent.trips);
+      for (const trip of extra) {
+        if (!merged.some(existing => existing.id === trip.id)) merged.push(trip);
+      }
+      indent.trips = merged;
+    }
+  }
+}
+
 async function queryCommerceExecutions(organizationId: string): Promise<CommerceExecution[]> {
   const sb = getSupabase();
   if (!sb || !organizationId) return [];
@@ -287,10 +372,12 @@ async function queryCommerceExecutions(organizationId: string): Promise<Commerce
   if (!planRows.length) return [];
 
   const planIds = planRows.map(p => p.id);
+  await hydrateTripsFromIndentLinks(planRows);
+
   const tripIdByPlanId = new Map<string, string>();
   for (const row of planRows) {
-    const indentRow = firstOf(row.indents);
-    const tripRow = indentRow ? firstOf(indentRow.trips) : null;
+    const indentRow = pickBestIndent(row.indents);
+    const tripRow = indentRow ? pickBestTrip(indentRow.trips) : null;
     if (tripRow) tripIdByPlanId.set(row.id, tripRow.id);
   }
 

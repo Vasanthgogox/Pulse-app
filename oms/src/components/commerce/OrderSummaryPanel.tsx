@@ -50,8 +50,7 @@ export function OrderSummaryPanel({
   const utilization = vehicleCapacityKg > 0
     ? Math.min(100, Math.round((totalWeightKg / vehicleCapacityKg) * 100))
     : 0;
-  const previewSlice = previewOrders.slice(0, 4);
-  const overflow = previewOrders.length - previewSlice.length;
+  const previewSlice = previewOrders;
 
   function formatLineAmount(line: SummaryLine) {
     if (line.formatAsCurrency === false) {
@@ -91,7 +90,7 @@ export function OrderSummaryPanel({
                 {previewOrders.length} order{previewOrders.length !== 1 ? 's' : ''}
               </span>
             </div>
-            <ul className="space-y-1.5 max-h-[9.5rem] overflow-y-auto pe-0.5">
+            <ul className="space-y-1.5 max-h-[16rem] overflow-y-auto pe-0.5">
               {previewSlice.map(order => (
                 <li
                   key={order.id}
@@ -110,10 +109,6 @@ export function OrderSummaryPanel({
                 </li>
               ))}
             </ul>
-            {overflow > 0 && (
-              <p className="text-3xs text-muted-foreground text-center">+{overflow} more in bundle</p>
-            )}
-
             {totalWeightKg > 0 && (
               <div className="pt-1">
                 <div className="flex items-center justify-between text-3xs text-muted-foreground mb-1">

@@ -6,7 +6,8 @@ import { useExecution } from '@/context/ExecutionProvider';
 import { formatCurrency } from '@/lib/utils';
 import { coreIndentUrl, coreTripUrl } from '@/lib/core-navigation';
 import {
-  isTripDelivered, isTripInTransit, lifecycleStages, orderDeliveryStatusLabel,
+  commerceTripStatusLabel,
+  isFulfillmentDelivered, isTripInTransit, lifecycleStages, orderDeliveryStatusLabel,
   orderProgressLabel, orderStatusGlyph, primaryStatusLabel, transportCostStatusLabel,
 } from '@/lib/commerce-execution-status';
 import type { CommerceExecution } from '@/lib/services/execution-visibility.service';
@@ -67,7 +68,9 @@ function TransportationSection({ exec }: { exec: CommerceExecution }) {
           </>
         )}
 
-        <span className="text-muted-foreground">Status</span>
+        <span className="text-muted-foreground">Trip status</span>
+        <span className="text-right font-medium">{commerceTripStatusLabel(exec)}</span>
+        <span className="text-muted-foreground">Award</span>
         <span className="text-right font-medium">{transportCostStatusLabel(exec)}</span>
       </div>
     </div>
@@ -121,9 +124,17 @@ function ExecutionCard({ exec }: { exec: CommerceExecution }) {
           <p className="text-2xs text-muted-foreground mt-0.5">Sales Value <span className="font-medium text-foreground">{formatCurrency(exec.totalAmount)}</span></p>
           <StopsPreview exec={exec} />
         </div>
-        <span className="text-2xs font-medium px-2.5 py-1 rounded-full bg-primary/10 text-primary shrink-0">
-          {primaryStatusLabel(exec)}
-        </span>
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          <span className="text-2xs font-medium px-2.5 py-1 rounded-full bg-primary/10 text-primary">
+            {primaryStatusLabel(exec)}
+          </span>
+          <Link
+            to={`/execution/plan/${exec.executionPlanId}`}
+            className="text-2xs font-medium text-primary hover:underline"
+          >
+            View status →
+          </Link>
+        </div>
       </div>
 
       <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-2sm">
@@ -183,9 +194,13 @@ function ExecutionCard({ exec }: { exec: CommerceExecution }) {
         </div>
       )}
 
-      {exec.orders.length > 0 && (
+      {exec.orders.length > 0 ? (
         <div className="border-t border-border/60 pt-3">
           <OrdersList exec={exec} />
+        </div>
+      ) : (
+        <div className="border-t border-border/60 pt-3">
+          <p className="text-2xs text-muted-foreground">No orders linked to this published plan.</p>
         </div>
       )}
 
@@ -206,7 +221,7 @@ export function ExecutionDashboardPage() {
 
   const awaitingTrip = commerceExecutions.filter(e => !e.trip).length;
   const inTransit = commerceExecutions.filter(e => e.trip && isTripInTransit(e.trip.status)).length;
-  const delivered = commerceExecutions.filter(e => e.trip && isTripDelivered(e.trip.status)).length;
+  const delivered = commerceExecutions.filter(e => isFulfillmentDelivered(e)).length;
   const totalValue = commerceExecutions.reduce((sum, e) => sum + e.totalAmount, 0);
 
   const hasAnyContent = commerceExecutions.length > 0 || activeJobs.length > 0;

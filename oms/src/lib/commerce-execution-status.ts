@@ -64,9 +64,9 @@ const TRIP_STATUS_LABELS: Record<string, string> = {
   loading:            'At Pickup',
   at_drop:            'At Drop',
   unloading:          'At Drop',
-  completed:          'Delivered',
-  delivered:          'Delivered',
-  done:               'Delivered',
+  completed:          'Trip completed',
+  delivered:          'Trip completed',
+  done:               'Trip completed',
   cancelled:          'Cancelled',
   active:             'In Transit',
 };
@@ -91,31 +91,60 @@ export function isTripInTransit(status: string): boolean {
   return TRIP_IN_TRANSIT_STATUSES.has(status);
 }
 
+/** Every sales order on the plan has its own drop SES completed. Never inferred from trips.status. */
+export function isFulfillmentDelivered(exec: CommerceExecution): boolean {
+  return exec.orders.length > 0 && exec.orders.every(o => isOrderDelivered(o.deliveryStatus));
+}
+
 /** The single primary status shown for an execution — the most specific real state known. */
 export function primaryStatusLabel(exec: CommerceExecution): string {
-  if (exec.trip) return tripStatusLabel(exec.trip.status);
+  if (isFulfillmentDelivered(exec)) return 'Delivered';
+  if (exec.trip) {
+    if (isTripDelivered(exec.trip.status) && exec.orders.length === 0) {
+      return 'Trip completed · No orders';
+    }
+    if (isTripDelivered(exec.trip.status)) {
+      return `Trip completed · ${orderProgressLabel(exec) ?? 'Awaiting Delivery'}`;
+    }
+    return tripStatusLabel(exec.trip.status);
+  }
   if (exec.indent) return `${indentStatusLabel(exec.indent.status)} · Awaiting Trip`;
   return 'Preparing Indent';
 }
 
 /** Ordered lifecycle stages with completion state, driven only by real persisted data. */
+/** Core trip.status for the Transportation row — never the award/bid label. */
+export function commerceTripStatusLabel(exec: CommerceExecution): string {
+  if (!exec.trip) return 'No trip';
+  return tripStatusLabel(exec.trip.status);
+}
+
+/** Ordered lifecycle stages with completion state, driven only by real persisted data. */
 export function lifecycleStages(exec: CommerceExecution): { stage: CommerceLifecycleStage; label: string; done: boolean; current: boolean }[] {
   const hasIndent = exec.indent != null;
-  const hasTrip = exec.trip != null;
-  const delivered = hasTrip && isTripDelivered(exec.trip!.status);
-  const inTransit = hasTrip && !delivered && isTripInTransit(exec.trip!.status);
+  const hasTrip = exec.trip != null && !isTripCancelled(exec.trip.status);
+  const fulfillmentDelivered = isFulfillmentDelivered(exec);
+  const tripDone = hasTrip && isTripDelivered(exec.trip!.status);
+  const inTransit = hasTrip && !tripDone && isTripInTransit(exec.trip!.status);
 
   const stages: { stage: CommerceLifecycleStage; label: string; done: boolean }[] = [
-    { stage: 'orders',         label: 'Orders',           done: true },
+    { stage: 'orders',         label: 'Orders',            done: exec.orders.length > 0 },
     { stage: 'planned',        label: 'Execution Planned', done: true },
-    { stage: 'indent_created', label: 'Indent Created',   done: hasIndent },
-    { stage: 'awaiting_trip',  label: 'Trip Assigned',    done: hasTrip },
-    { stage: 'in_transit',     label: 'In Transit',       done: inTransit || delivered },
-    { stage: 'delivered',      label: 'Delivered',        done: delivered },
+    { stage: 'indent_created', label: 'Indent Created',    done: hasIndent },
+    { stage: 'awaiting_trip',  label: hasTrip ? 'Trip Assigned' : 'Awaiting Trip', done: hasTrip },
+    { stage: 'in_transit',     label: 'In Transit',        done: inTransit || tripDone || fulfillmentDelivered },
+    { stage: 'delivered',      label: 'Delivered',         done: fulfillmentDelivered },
   ];
 
-  const currentIdx = stages.findIndex(s => !s.done);
-  return stages.map((s, i) => ({ ...s, current: i === (currentIdx === -1 ? stages.length - 1 : currentIdx) }));
+  let currentStage: CommerceLifecycleStage;
+  if (fulfillmentDelivered) currentStage = 'delivered';
+  else if (tripDone) currentStage = 'delivered';
+  else if (inTransit) currentStage = 'in_transit';
+  else if (hasTrip || hasIndent) currentStage = 'awaiting_trip';
+  else if (exec.orders.length > 0) currentStage = 'indent_created';
+  else currentStage = 'orders';
+
+  return stages.map(s => ({ ...s, current: s.stage === currentStage }));
 }
 
 const ORDER_DELIVERY_STATUS_LABELS: Record<string, string> = {
@@ -159,6 +188,57 @@ export function transportCostStatus(exec: CommerceExecution): TransportCostStatu
 
 export function transportCostStatusLabel(exec: CommerceExecution): string {
   return exec.trip ? 'Awarded' : 'Awaiting Bid';
+}
+
+/** Display lifecycle for the Plans table — Core indent/trip/order SES, not frozen plan.status. */
+export type PlanLifecycleKind =
+  | 'draft'
+  | 'published'
+  | 'indent_posted'
+  | 'trip_assigned'
+  | 'in_transit'
+  | 'trip_completed'
+  | 'delivered'
+  | 'cancelled';
+
+export function planLifecycleKind(
+  planStatus: string,
+  exec: CommerceExecution | null | undefined,
+): PlanLifecycleKind {
+  if (planStatus === 'cancelled' || (exec?.trip && isTripCancelled(exec.trip.status))) return 'cancelled';
+  if (exec) {
+    if (isFulfillmentDelivered(exec)) return 'delivered';
+    if (exec.trip && isTripDelivered(exec.trip.status)) return 'trip_completed';
+    if (exec.trip && isTripInTransit(exec.trip.status)) return 'in_transit';
+    if (exec.trip) return 'trip_assigned';
+    if (exec.indent) return 'indent_posted';
+    return 'published';
+  }
+  if (planStatus === 'fulfilled') return 'delivered';
+  if (planStatus === 'published') return 'published';
+  if (planStatus === 'draft' || planStatus === 'optimizing' || planStatus === 'ready') return 'draft';
+  return 'published';
+}
+
+export function planLifecycleLabel(kind: PlanLifecycleKind): string {
+  switch (kind) {
+    case 'draft':           return 'Draft';
+    case 'published':       return 'Published';
+    case 'indent_posted':   return 'Indent posted';
+    case 'trip_assigned':   return 'Trip assigned';
+    case 'in_transit':      return 'In transit';
+    case 'trip_completed':  return 'Trip completed';
+    case 'delivered':       return 'Delivered';
+    case 'cancelled':       return 'Cancelled';
+  }
+}
+
+export function findCommerceExecutionForPlan(
+  executions: readonly CommerceExecution[],
+  plan: { id: string; plan_number: string },
+): CommerceExecution | undefined {
+  return executions.find(e => e.executionPlanId === plan.id)
+    ?? executions.find(e => e.planNumber === plan.plan_number);
 }
 
 export function orderStatusGlyph(order: CommerceExecutionOrder): '✓' | '→' | '○' {

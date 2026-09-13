@@ -24,6 +24,7 @@ export const IndentService = {
     orderCount: number;
     totalWeightKg: number;
     totalAmount: number;
+    supplierTarget: number;
     pickupSummary: string;
     dropSummary: string;
     requestedBy: string;

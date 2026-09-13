@@ -17,4 +17,7 @@ export const OrderService = {
   markPlannedForExecutionPlan(workspaceId: WorkspaceId, orderIds: string[], executionPlanId: string): Promise<void> {
     return orderRepository.markPlannedForExecutionPlan(workspaceId, orderIds, executionPlanId);
   },
+  listPlanLinks(workspaceId: WorkspaceId, orderIds: string[]) {
+    return orderRepository.listPlanLinks(workspaceId, orderIds);
+  },
 };

@@ -38,6 +38,7 @@ export const indentRepository = {
     orderCount: number;
     totalWeightKg: number;
     totalAmount: number;
+    supplierTarget: number;
     pickupSummary: string;
     dropSummary: string;
     requestedBy: string;
@@ -53,7 +54,8 @@ export const indentRepository = {
         drop_location: input.dropSummary,
         client_name: `${input.orderCount} merged orders`,
         client_price: input.totalAmount,
-        supplier_target: 0,
+        supplier_target: input.supplierTarget,
+        sale_rate_basis: 'per_trip',
         vehicle_type: input.vehicleType ?? 'Truck',
         load_type: 'General',
         weight: Math.max(input.totalWeightKg, 1),

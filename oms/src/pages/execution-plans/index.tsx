@@ -17,23 +17,39 @@ import {
 } from '@/components/commerce/CommerceDataTable';
 import { StatusDotBadge, type StatusDotTone } from '@/components/commerce/StatusDotBadge';
 import { useCommerce } from '@/context/CommerceProvider';
+import { useExecution } from '@/context/ExecutionProvider';
+import {
+  findCommerceExecutionForPlan,
+  planLifecycleKind,
+  planLifecycleLabel,
+} from '@/lib/commerce-execution-status';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
-import type { ExecutionPlan, PlanStatus } from '@/types/commerce';
+import type { ExecutionPlan } from '@/types/commerce';
 import { cn } from '@/lib/utils';
+import type { CommerceExecution } from '@/lib/services/execution-visibility.service';
+import type { PlanLifecycleKind } from '@/lib/commerce-execution-status';
 
-const PLAN_STATUS: Record<PlanStatus, { label: string; tone: StatusDotTone }> = {
-  draft:       { label: 'Draft', tone: 'muted' },
-  optimizing:  { label: 'Optimizing', tone: 'warning' },
-  ready:       { label: 'Ready', tone: 'info' },
-  published:   { label: 'Published', tone: 'info' },
-  fulfilled:   { label: 'Fulfilled', tone: 'success' },
-  cancelled:   { label: 'Cancelled', tone: 'danger' },
+const LIFECYCLE_TONE: Record<PlanLifecycleKind, StatusDotTone> = {
+  draft:          'muted',
+  published:      'info',
+  indent_posted:  'info',
+  trip_assigned:  'info',
+  in_transit:     'warning',
+  trip_completed: 'warning',
+  delivered:      'success',
+  cancelled:      'danger',
 };
 
-function PlanIcon({ plan }: { plan: ExecutionPlan }) {
+function lifecycleOf(plan: ExecutionPlan, exec: CommerceExecution | undefined) {
+  const kind = planLifecycleKind(plan.status, exec);
+  return { kind, label: planLifecycleLabel(kind), tone: LIFECYCLE_TONE[kind] };
+}
+
+function PlanIcon({ kind }: { kind: PlanLifecycleKind }) {
   const cls = 'size-4 text-[var(--pulse-hero-blue)]';
-  if (plan.journey_in_progress) return <Loader2 className={cn(cls, 'animate-spin')} />;
-  if (plan.status === 'fulfilled') return <CheckCircle2 className={cls} />;
+  if (kind === 'in_transit') return <Loader2 className={cn(cls, 'animate-spin')} />;
+  if (kind === 'trip_assigned') return <Truck className={cls} />;
+  if (kind === 'delivered') return <CheckCircle2 className={cls} />;
   return <Clock className={cls} />;
 }
 
@@ -60,12 +76,16 @@ function StatTile({
 
 export function ExecutionPlansPage() {
   const { plans } = useCommerce();
+  const { commerceExecutions } = useExecution();
   const [view, setView] = useState<'table' | 'grid'>('table');
   const [selectedId, setSelectedId] = useState<string | null>(null);
 
-  const published = plans.filter(p => p.status === 'published' || p.status === 'fulfilled').length;
-  const inFlight = plans.filter(p => p.journey_in_progress).length;
-  const totalValue = plans.reduce((s, p) => s + p.total_amount, 0);
+  const execFor = (plan: ExecutionPlan) => findCommerceExecutionForPlan(commerceExecutions, plan);
+  const kindOf = (plan: ExecutionPlan) => planLifecycleKind(plan.status, execFor(plan));
+
+  const indentPosted = plans.filter(p => kindOf(p) === 'indent_posted').length;
+  const inFlight = plans.filter(p => kindOf(p) === 'in_transit' || kindOf(p) === 'trip_assigned').length;
+  const delivered = plans.filter(p => kindOf(p) === 'delivered').length;
 
   const columns = useMemo<ColumnDef<ExecutionPlan, unknown>[]>(() => [
     {
@@ -74,7 +94,7 @@ export function ExecutionPlansPage() {
       header: ({ column }) => <DataGridColumnHeader column={column} title="Plan" />,
       cell: ({ row }) => (
         <MemberCell
-          avatar={<PlanIcon plan={row.original} />}
+          avatar={<PlanIcon kind={lifecycleOf(row.original, execFor(row.original)).kind} />}
           title={row.original.plan_number}
           subtitle={`${row.original.total_orders} order${row.original.total_orders !== 1 ? 's' : ''} · ${row.original.constraints.vehicle_type}`}
         />
@@ -86,13 +106,10 @@ export function ExecutionPlansPage() {
       accessorKey: 'status',
       header: ({ column }) => <DataGridColumnHeader column={column} title="Status" />,
       cell: ({ row }) => {
-        const s = PLAN_STATUS[row.original.status];
+        const s = lifecycleOf(row.original, execFor(row.original));
         return (
           <div className="flex flex-col gap-1 items-start">
             <StatusDotBadge label={s.label} tone={s.tone} />
-            {row.original.journey_in_progress && (
-              <StatusDotBadge label="In transit" tone="warning" />
-            )}
           </div>
         );
       },
@@ -163,14 +180,14 @@ export function ExecutionPlansPage() {
       enableSorting: false,
       meta: commerceTableMeta.actions,
     },
-  ], []);
+  ], [commerceExecutions]);
 
   return (
     <div className="container-fluid">
       <PageToolbar
         title="Execution Plans"
         breadcrumb={['Commerce', 'Planning', 'Published Plans']}
-        description="Published plans → Gateway → Execution. Trace every lifecycle via correlation ID."
+        description="Status follows the Core indent and trip — Posted, In transit, or Delivered — not a frozen Published stamp."
         actions={
           <Button size="sm" asChild>
             <Link to="/execution-plans/build"><GitMerge className="size-3.5" /> New Plan</Link>
@@ -180,9 +197,9 @@ export function ExecutionPlansPage() {
 
       <div className="grid gap-3 pulse-stat-grid commerce-section">
         <StatTile label="Total plans" value={String(plans.length)} sub="All execution plans" />
-        <StatTile label="Published" value={String(published)} sub="Gateway handoff" accent />
-        <StatTile label="In transit" value={String(inFlight)} sub="Journey in progress" />
-        <StatTile label="Plan value" value={formatCurrency(totalValue)} sub="Combined order value" />
+        <StatTile label="Indent posted" value={String(indentPosted)} sub="Shared to Core · awaiting trip" accent />
+        <StatTile label="In transit" value={String(inFlight)} sub="Trip assigned or moving" />
+        <StatTile label="Delivered" value={String(delivered)} sub="Orders delivered" />
       </div>
 
       <div className="flex flex-wrap items-center justify-between gap-2 mb-3">
@@ -214,13 +231,15 @@ export function ExecutionPlansPage() {
           columns={columns}
           enableSelection={false}
           searchPlaceholder="Search plans…"
-          getSearchText={p => `${p.plan_number} ${p.status} ${p.correlation_id ?? ''} ${p.constraints.vehicle_type}`}
+          getSearchText={p => `${p.plan_number} ${planLifecycleLabel(kindOf(p))} ${p.correlation_id ?? ''} ${p.constraints.vehicle_type}`}
           getRowId={p => p.id}
           statusFilters={[
-            { label: 'Published', value: 'published', match: p => p.status === 'published' },
-            { label: 'Ready', value: 'ready', match: p => p.status === 'ready' },
-            { label: 'Fulfilled', value: 'fulfilled', match: p => p.status === 'fulfilled' },
-            { label: 'In transit', value: 'transit', match: p => Boolean(p.journey_in_progress) },
+            { label: 'Indent posted', value: 'posted', match: p => kindOf(p) === 'indent_posted' },
+            { label: 'Trip assigned', value: 'assigned', match: p => kindOf(p) === 'trip_assigned' },
+            { label: 'In transit', value: 'transit', match: p => kindOf(p) === 'in_transit' },
+            { label: 'Trip completed', value: 'trip_done', match: p => kindOf(p) === 'trip_completed' },
+            { label: 'Delivered', value: 'delivered', match: p => kindOf(p) === 'delivered' },
+            { label: 'Published', value: 'published', match: p => kindOf(p) === 'published' },
           ]}
           emptyMessage="No plans match your search"
           onRowClick={p => setSelectedId(p.id)}
@@ -228,7 +247,7 @@ export function ExecutionPlansPage() {
       ) : (
         <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
           {plans.map(plan => {
-            const s = PLAN_STATUS[plan.status];
+            const s = lifecycleOf(plan, execFor(plan));
             return (
               <button
                 key={plan.id}
@@ -238,7 +257,7 @@ export function ExecutionPlansPage() {
               >
                 <div className="flex items-start gap-3">
                   <div className="size-10 rounded-lg bg-[var(--pulse-brand-soft)] flex items-center justify-center shrink-0">
-                    <PlanIcon plan={plan} />
+                    <PlanIcon kind={s.kind} />
                   </div>
                   <div className="min-w-0 flex-1">
                     <p className="font-mono font-bold text-sm text-[var(--pulse-hero-blue)] truncate">{plan.plan_number}</p>

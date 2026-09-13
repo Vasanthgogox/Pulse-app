@@ -4,6 +4,14 @@ import { Button } from '@/components/ui/button';
 import { EntityFlexSheet } from '@/components/commerce/EntityFlexSheet';
 import { CorrelationTrace, RouteTimeline, StatusBadge } from '@/components/pulse-ui';
 import { useCommerce } from '@/context/CommerceProvider';
+import { useExecution } from '@/context/ExecutionProvider';
+import {
+  findCommerceExecutionForPlan,
+  commerceTripStatusLabel,
+  planLifecycleKind,
+  planLifecycleLabel,
+  primaryStatusLabel,
+} from '@/lib/commerce-execution-status';
 import { formatCurrency, formatDateTime } from '@/lib/utils';
 import { getStopById } from '@/lib/merge-engine';
 
@@ -15,7 +23,10 @@ interface PlanDetailSheetProps {
 
 export function PlanDetailSheet({ planId, open, onClose }: PlanDetailSheetProps) {
   const { plans, orders } = useCommerce();
+  const { commerceExecutions } = useExecution();
   const plan = plans.find(p => p.id === planId) ?? null;
+  const exec = plan ? findCommerceExecutionForPlan(commerceExecutions, plan) : undefined;
+  const lifecycle = plan ? planLifecycleLabel(planLifecycleKind(plan.status, exec)) : null;
 
   if (!plan) return null;
 
@@ -41,6 +52,11 @@ export function PlanDetailSheet({ planId, open, onClose }: PlanDetailSheetProps)
               <Link to="/execution-plans/build">Open in Plan Builder →</Link>
             </Button>
           )}
+          {exec && (
+            <Button className="w-full" size="sm" asChild>
+              <Link to={`/execution/plan/${exec.executionPlanId}`}>View fulfillment status →</Link>
+            </Button>
+          )}
           {plan.correlation_id && (
             <Button className="w-full" variant="outline" size="sm" asChild>
               <Link to="/observatory">View in Observatory →</Link>
@@ -54,8 +70,9 @@ export function PlanDetailSheet({ planId, open, onClose }: PlanDetailSheetProps)
           <p className="font-mono font-bold text-base text-[var(--pulse-hero-blue)]">{plan.plan_number}</p>
           <div className="flex flex-wrap gap-2 mt-2">
             <StatusBadge status={plan.status} />
-            {plan.journey_in_progress && <StatusBadge status="trip_started" />}
-            {plan.lifecycle_stage && <StatusBadge status={plan.lifecycle_stage} />}
+            <span className="text-2xs font-medium px-2 py-0.5 rounded-full bg-primary/10 text-primary">
+              {exec ? primaryStatusLabel(exec) : lifecycle}
+            </span>
           </div>
           <dl className="grid grid-cols-2 gap-3 mt-4 text-2sm">
             <div>
@@ -74,6 +91,18 @@ export function PlanDetailSheet({ planId, open, onClose }: PlanDetailSheetProps)
               <dt className="text-3xs text-muted-foreground uppercase">Vehicle</dt>
               <dd className="font-medium">{plan.constraints.vehicle_type}</dd>
             </div>
+            {exec && (
+              <>
+                <div>
+                  <dt className="text-3xs text-muted-foreground uppercase">Trip status</dt>
+                  <dd className="font-medium">{commerceTripStatusLabel(exec)}</dd>
+                </div>
+                <div>
+                  <dt className="text-3xs text-muted-foreground uppercase">Fulfillment</dt>
+                  <dd className="font-medium">{lifecycle ?? primaryStatusLabel(exec)}</dd>
+                </div>
+              </>
+            )}
           </dl>
           {plan.optimization && (
             <p className="text-2xs text-muted-foreground mt-3">

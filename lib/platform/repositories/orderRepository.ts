@@ -69,6 +69,31 @@ export const orderRepository = {
     if (error) throw new Error(error.message);
   },
 
+  async listPlanLinks(
+    workspaceId: WorkspaceId,
+    orderIds: string[],
+  ): Promise<{ id: string; orderNumber: string; status: string; executionPlanId: string | null }[]> {
+    if (!orderIds.length) return [];
+    const { data, error } = await requirePlatformDb()
+      .from('sales_orders')
+      .select('id, order_number, status, execution_plan_id')
+      .eq('organization_id', workspaceId)
+      .in('id', orderIds)
+      .is('deleted_at', null);
+    if (error) throw new Error(error.message);
+    return ((data ?? []) as {
+      id: string;
+      order_number: string | null;
+      status: string | null;
+      execution_plan_id: string | null;
+    }[]).map((row) => ({
+      id: String(row.id),
+      orderNumber: String(row.order_number ?? ''),
+      status: String(row.status ?? ''),
+      executionPlanId: row.execution_plan_id ? String(row.execution_plan_id) : null,
+    }));
+  },
+
   async markPlannedForExecutionPlan(
     workspaceId: WorkspaceId,
     orderIds: string[],
@@ -79,7 +104,8 @@ export const orderRepository = {
       .from('sales_orders')
       .update({ status: 'Planned', execution_plan_id: executionPlanId, updated_at: new Date().toISOString() })
       .eq('organization_id', workspaceId)
-      .in('id', orderIds);
+      .in('id', orderIds)
+      .or(`execution_plan_id.is.null,execution_plan_id.eq.${executionPlanId}`);
     if (error) throw new Error(error.message);
   },
 };

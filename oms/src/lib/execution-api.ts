@@ -36,6 +36,8 @@ export interface PublishExecutionPlanCommand {
     mergeScore?:     number;
     currency:        string;
   };
+  /** Asking freight shared to Core market. Not the sales invoice total. */
+  supplierTarget?: number;
 }
 
 export interface PublishStopPayload {
@@ -78,6 +80,7 @@ export function buildPublishExecutionPlanPayload(
   createdBy: string,
   workspaceId: string,
   requestedBy: string,
+  supplierTarget?: number,
 ): PublishExecutionPlanCommand {
   const orderById = new Map(orders.map(o => [o.id, o]));
   const meta = plan.meta ?? createEntityMetadata({
@@ -141,6 +144,7 @@ export function buildPublishExecutionPlanPayload(
       mergeScore:    plan.optimization?.merge_score,
       currency:      'INR',
     },
+    supplierTarget,
   };
 }
 

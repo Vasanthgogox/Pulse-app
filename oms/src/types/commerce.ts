@@ -245,7 +245,11 @@ export interface CommerceContextValue {
     constraints: ExecutionConstraints,
     optimization?: MergeOptimizationMetrics,
   ) => ExecutionPlan;
-  publishExecutionPlan: (planId: string, planSnapshot?: ExecutionPlan) => Promise<void>;
+  publishExecutionPlan: (
+    planId: string,
+    planSnapshot?: ExecutionPlan,
+    options?: { supplierTargetInr: number },
+  ) => Promise<void>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   updateOrder: (orderId: string, patch: Partial<Order>) => void;
   deleteOrder: (orderId: string) => void;

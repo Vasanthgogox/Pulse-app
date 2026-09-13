@@ -152,6 +152,67 @@ export function createExecutionOrchestrator(eventBus: EventBus = getPlatformEven
         }
       }
 
+      const orderIds = payload.orders.map(o => o.orderId);
+      const links = await OrderService.listPlanLinks(workspaceId, orderIds);
+      const linkedPlanIds = [...new Set(links.map(l => l.executionPlanId).filter((id): id is string => Boolean(id)))];
+      if (linkedPlanIds.length > 1) {
+        fail(
+          'INVALID_COMMAND',
+          `Orders are already split across execution plans and cannot be republished together: ${links
+            .filter(l => l.executionPlanId)
+            .map(l => l.orderNumber)
+            .join(', ')}`,
+          correlationId,
+        );
+      }
+      if (linkedPlanIds.length === 1) {
+        const alreadyOn = links.filter(l => l.executionPlanId === linkedPlanIds[0]);
+        if (alreadyOn.length !== orderIds.length) {
+          fail(
+            'INVALID_COMMAND',
+            `Some selected orders are already on ${alreadyOn[0]?.orderNumber ?? 'another plan'}. Unplan them first or publish only pending orders.`,
+            correlationId,
+          );
+        }
+        const reused = await ExecutionPlanService.findById(workspaceId, linkedPlanIds[0]);
+        const existingIndent = reused
+          ? await indentRepository.findByExecutionPlanId(workspaceId, reused.id)
+          : null;
+        if (reused && existingIndent) {
+          return {
+            executionPlanId: reused.id,
+            planNumber: reused.planNumber,
+            indentId: existingIndent.id,
+            indentCode: existingIndent.indentCode,
+            correlationId,
+            alreadyPublished: true,
+          };
+        }
+        fail(
+          'INVALID_COMMAND',
+          'These orders are already linked to an execution plan. Publish will not create a duplicate indent.',
+          correlationId,
+        );
+      }
+
+      const notDispatchable = links.filter(l => !OrderService.isDispatchable(l.status));
+      if (notDispatchable.length) {
+        fail(
+          'ORDER_NOT_DISPATCHABLE',
+          `Only pending orders can be published: ${notDispatchable.map(l => l.orderNumber).join(', ')}`,
+          correlationId,
+        );
+      }
+
+      const supplierTarget = payload.supplierTarget;
+      if (!Number.isFinite(supplierTarget) || supplierTarget <= 0) {
+        fail(
+          'INVALID_COMMAND',
+          'Enter a supplier target before sharing the indent to market for bidding',
+          correlationId,
+        );
+      }
+
       const plan = existingPlan ?? await ExecutionPlanService.createWithGraph({
         workspaceId,
         clientPlanId: payload.clientPlanId,
@@ -162,7 +223,6 @@ export function createExecutionOrchestrator(eventBus: EventBus = getPlatformEven
         orders: payload.orders,
       });
 
-      const orderIds = payload.orders.map(o => o.orderId);
       const totalAmount = payload.orders.reduce((s, o) => s + o.totalAmount, 0);
       const indent = await IndentService.createFromExecutionPlan({
         workspaceId,
@@ -172,6 +232,7 @@ export function createExecutionOrchestrator(eventBus: EventBus = getPlatformEven
         orderCount: payload.orders.length,
         totalWeightKg: payload.totalWeightKg,
         totalAmount,
+        supplierTarget,
         pickupSummary: summarizeStopsByType(payload.stops, 'pickup'),
         dropSummary: summarizeStopsByType(payload.stops, 'drop'),
         requestedBy,

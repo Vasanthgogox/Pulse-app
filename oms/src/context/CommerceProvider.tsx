@@ -189,6 +189,17 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
     optimization?: MergeOptimizationMetrics,
   ): ExecutionPlan => {
     const selected = orders.filter(o => orderIds.includes(o.id));
+    const blocked = selected.filter(
+      o => o.status !== 'Pending Consolidation' || Boolean(o.execution_plan_id),
+    );
+    if (blocked.length) {
+      throw new Error(
+        `Already on a plan — cannot publish again: ${blocked.map(o => o.order_number).join(', ')}`,
+      );
+    }
+    if (!selected.length) {
+      throw new Error('Select pending orders that are not already on a plan.');
+    }
     const id = `PLN${String(plans.length + 1).padStart(3, '0')}`;
     const now = new Date().toISOString();
     const plan: ExecutionPlan = {
@@ -219,13 +230,22 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
     return plan;
   }, [orders, plans, tenant, identity.user.name]);
 
-  const publishExecutionPlan = useCallback(async (planId: string, planSnapshot?: ExecutionPlan) => {
+  const publishExecutionPlan = useCallback(async (
+    planId: string,
+    planSnapshot?: ExecutionPlan,
+    options?: { supplierTargetInr: number },
+  ) => {
     const plan = planSnapshot ?? plans.find(p => p.id === planId);
     if (!plan) return;
+    const supplierTargetInr = options?.supplierTargetInr;
+    if (supplierTargetInr == null || !(supplierTargetInr > 0)) {
+      throw new Error('Enter a supplier target before sharing the indent to market.');
+    }
 
     const command = buildPublishExecutionPlanPayload(
       plan, orders, tenant, identity.user.name,
       org.platformOrganization?.id ?? '', user?.id ?? '',
+      supplierTargetInr,
     );
     const result = await publishPlanToExecution(command);
 

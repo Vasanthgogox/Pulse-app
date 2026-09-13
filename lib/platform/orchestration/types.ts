@@ -76,6 +76,11 @@ export type PublishExecutionPlanCommandPayload = {
   allocations: PublishExecutionPlanAllocationInput[];
   orders: PublishExecutionPlanOrderInput[];
   totalWeightKg: number;
+  /**
+   * Asking freight for market bidding. Required. Never copy sales invoice
+   * totals here — client_price stays the commercial invoice reference.
+   */
+  supplierTarget: number;
 };
 
 export type PublishExecutionPlanCommand = OrchestrationCommandEnvelope<PublishExecutionPlanCommandPayload>;

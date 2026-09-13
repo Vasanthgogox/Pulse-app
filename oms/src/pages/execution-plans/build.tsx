@@ -19,6 +19,7 @@ import { formatCurrency } from '@/lib/utils';
 import type { Address, ExecutionPlan, PlanStop } from '@/types/commerce';
 import { isAddressIncomplete } from '@/lib/address';
 import { StopAddressDialog } from '@/components/commerce/StopAddressDialog';
+import { PublishPlanConfirmDialog } from '@/components/commerce/PublishPlanConfirmDialog';
 import { useOrganization } from '@/context/OrganizationProvider';
 
 export function ExecutionPlanBuilderPage() {
@@ -36,6 +37,7 @@ export function ExecutionPlanBuilderPage() {
   const [allocations, setAllocations] = useState<ReturnType<typeof buildPlanGraph>['allocations']>([]);
   const [route, setRoute] = useState<ReturnType<typeof buildPlanGraph>['route']>({ sequence: [] });
   const [publishing, setPublishing] = useState(false);
+  const [confirmOpen, setConfirmOpen] = useState(false);
   const [showPayload, setShowPayload] = useState(false);
   const [addressStopId, setAddressStopId] = useState<string | null>(null);
   const [skippedStopIds, setSkippedStopIds] = useState<string[]>([]);
@@ -145,8 +147,20 @@ export function ExecutionPlanBuilderPage() {
     return buildPublishExecutionPlanPayload(draft, selected, tenant, identity.user.name, '', '');
   }, [selected, selectedOrderIds, stops, route, allocations, constraints, metrics, tenant, identity.user.name]);
 
+  const eligibleOrderIds = selectedOrderIds.filter((id) => {
+    const order = orders.find(o => o.id === id);
+    return order?.status === 'Pending Consolidation' && !order.execution_plan_id;
+  });
+
   async function handlePublish() {
-    if (!selectedOrderIds.length) return;
+    if (!eligibleOrderIds.length) {
+      toast.error('Select pending orders that are not already on a published plan.');
+      return;
+    }
+    if (eligibleOrderIds.length < selectedOrderIds.length) {
+      toast.error('Some selected orders are already on a plan. Only pending orders can be published.');
+      return;
+    }
     const missing = stops.find(s => isAddressIncomplete(s.address));
     if (missing) {
       setAddressStopId(missing.stop_id);
@@ -157,10 +171,16 @@ export function ExecutionPlanBuilderPage() {
       );
       return;
     }
+    setConfirmOpen(true);
+  }
+
+  async function handleConfirmPublish(supplierTargetInr: number) {
     setPublishing(true);
     try {
-      const plan = createExecutionPlan(selectedOrderIds, stops, route, allocations, constraints, metrics);
-      await publishExecutionPlan(plan.id, plan);
+      const plan = createExecutionPlan(eligibleOrderIds, stops, route, allocations, constraints, metrics);
+      await publishExecutionPlan(plan.id, plan, { supplierTargetInr });
+      setConfirmOpen(false);
+      toast.success('Indent shared to market for bidding');
       navigate('/execution');
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to publish execution plan');
@@ -176,7 +196,7 @@ export function ExecutionPlanBuilderPage() {
       <PageToolbar
         title="Execution Plan Builder"
         breadcrumb={['Commerce', 'Orders', 'Plan Builder']}
-        description="Optimize utilization and cost — then publish an execution plan. Execution creates the dispatch job."
+        description="Set a supplier target, confirm, then share the indent to market for bidding. Invoice value is not freight."
       />
 
       {topRec && (
@@ -299,9 +319,9 @@ export function ExecutionPlanBuilderPage() {
             </div>
           </CardShell>
 
-          <Button className="w-full" size="md" disabled={!selectedOrderIds.length || publishing} onClick={handlePublish}>
+          <Button className="w-full" size="md" disabled={!eligibleOrderIds.length || publishing} onClick={handlePublish}>
             {publishing ? <Loader2 className="size-3.5 animate-spin" /> : <GitMerge className="size-3.5" />}
-            Publish Execution Plan
+            Publish & share indent
           </Button>
 
           {previewPayload && (
@@ -314,6 +334,15 @@ export function ExecutionPlanBuilderPage() {
           )}
         </div>
       </div>
+
+      <PublishPlanConfirmDialog
+        open={confirmOpen}
+        salesInvoiceInr={selected.reduce((s, o) => s + o.total_amount, 0)}
+        orderCount={eligibleOrderIds.length}
+        publishing={publishing}
+        onClose={() => { if (!publishing) setConfirmOpen(false); }}
+        onConfirm={handleConfirmPublish}
+      />
 
       <StopAddressDialog
         open={Boolean(addressStop)}
