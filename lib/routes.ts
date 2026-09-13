@@ -93,6 +93,9 @@ export const ROUTES = {
   },
   /** Phase A/B: this bidder's own market_bids rows. */
   driverMyBids: () => '/(driver)/my-bids' as const,
+  /** Read-only Commerce delivery mission (Primitive A). */
+  driverCommerceMission: (tripId: string) =>
+    `/(driver)/commerce-mission/${encodeURIComponent(tripId)}` as const,
   /** Phase A/B: awarded Market trips (source='market_bid'). */
   driverMarketAwards: () => '/(driver)/market-awards' as const,
   /** Phase 3B.1: FO capacity Story composer (optional vehicleId). */

@@ -83,6 +83,7 @@ function DriverTabsNavigator() {
       <Tabs.Screen name="my-bids" options={{ title: 'My Bids', href: null }} />
       <Tabs.Screen name="market-awards" options={{ title: 'Awards', href: null }} />
       <Tabs.Screen name="capacity-story" options={{ title: 'Capacity Story', href: null }} />
+      <Tabs.Screen name="commerce-mission" options={{ title: 'Delivery mission', href: null }} />
     </Tabs>
   );
 }
