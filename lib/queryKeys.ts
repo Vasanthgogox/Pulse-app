@@ -173,6 +173,9 @@ export const queryKeys = {
     /** Finance aggregation: accepted direct quotes for indents owned by this org. */
     acceptedQuotes: (orgId: string) =>
       ["q", "indents", orgId, "acceptedQuotes"] as const,
+    /** Commerce execution-plan stop cities for Give Load cards. */
+    planRoutes: (orgId: string, planIdsKey: string) =>
+      ["q", "indents", orgId, "plan-routes", planIdsKey] as const,
   },
 
   connectionRequests: {

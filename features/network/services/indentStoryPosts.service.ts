@@ -12,6 +12,9 @@ import {
   indentStoryExpiresAt,
   isIndentStoryLive,
 } from '@/features/network/utils/indentStoryWindow.util';
+import { fetchExecutionPlanRouteSummaries } from '@/features/network/services/fetchExecutionPlanRouteSummaries';
+import { indentDisplayOriginDest } from '@/features/network/utils/executionPlanRouteSummary';
+import { looksLikePlannerStopSummary } from '@/features/network/utils/storyDisplay';
 import { supabase } from '@/lib/supabase';
 
 export { indentStoryExpiresAt, isIndentStoryLive } from '@/features/network/utils/indentStoryWindow.util';
@@ -52,6 +55,7 @@ export type IndentStorySource = {
   client_price?: number | null;
   load_type?: string | null;
   status?: string | null;
+  execution_plan_id?: string | null;
 };
 
 type LinkedStoryRow = {
@@ -215,15 +219,59 @@ export async function listLiveOwnLoadStories(
   return { error: null, posts };
 }
 
+async function resolvedStoryRoute(indent: IndentStorySource): Promise<{
+  origin: string | undefined;
+  destination: string | undefined;
+}> {
+  const fallback = {
+    origin: indent.pickup_area || undefined,
+    destination: indent.drop_location || undefined,
+  };
+  const planId =
+    typeof indent.execution_plan_id === 'string' ? indent.execution_plan_id.trim() : '';
+  if (!planId) return fallback;
+  try {
+    const map = await fetchExecutionPlanRouteSummaries([planId]);
+    const overlay = indentDisplayOriginDest(indent, map);
+    return {
+      origin: overlay.origin === '—' ? fallback.origin : overlay.origin,
+      destination: overlay.dest === '—' ? fallback.destination : overlay.dest,
+    };
+  } catch {
+    return fallback;
+  }
+}
+
+async function persistIndentRouteIfNeeded(
+  indent: IndentStorySource,
+  origin: string | undefined,
+  destination: string | undefined,
+): Promise<void> {
+  if (!origin || !destination) return;
+  const pickup = (indent.pickup_area ?? '').trim();
+  const drop = (indent.drop_location ?? '').trim();
+  if (pickup === origin && drop === destination) return;
+  if (!looksLikePlannerStopSummary(pickup) && !looksLikePlannerStopSummary(drop)) {
+    return;
+  }
+  await supabase()
+    .from('indents')
+    .update({ pickup_area: origin, drop_location: destination })
+    .eq('id', indent.id);
+}
+
 async function reactivateStory(
   postId: string,
   content?: string,
+  route?: { origin?: string; destination?: string },
 ): Promise<{ error: Error | null }> {
   const payload: Record<string, unknown> = {
     is_active: true,
     expires_at: indentStoryExpiresAt(),
   };
   if (content !== undefined) payload.content = content || null;
+  if (route?.origin) payload.origin = route.origin;
+  if (route?.destination) payload.destination = route.destination;
 
   const { error } = await supabase().from('posts').update(payload).eq('id', postId);
   if (error) return { error: new Error(error.message) };
@@ -263,13 +311,24 @@ export async function ensureIndentStory(
 
   const [latest, ...older] = listed.rows;
   const live = latest ? isIndentStoryLive(latest) : false;
+  const route = await resolvedStoryRoute(indent);
+  await persistIndentRouteIfNeeded(indent, route.origin, route.destination);
 
   if (latest && live && !options?.reboost) {
+    if (route.origin || route.destination) {
+      await supabase()
+        .from('posts')
+        .update({
+          ...(route.origin ? { origin: route.origin } : {}),
+          ...(route.destination ? { destination: route.destination } : {}),
+        })
+        .eq('id', latest.id);
+    }
     return { error: null, postId: latest.id, created: false, reboosted: false };
   }
 
   if (latest) {
-    const reactivated = await reactivateStory(latest.id, options?.content);
+    const reactivated = await reactivateStory(latest.id, options?.content, route);
     if (reactivated.error) {
       return { error: reactivated.error, postId: null, created: false, reboosted: false };
     }
@@ -284,8 +343,8 @@ export async function ensureIndentStory(
     organizationId: orgId,
     type: 'LOAD',
     content: options?.content,
-    origin: indent.pickup_area || undefined,
-    destination: indent.drop_location || undefined,
+    origin: route.origin,
+    destination: route.destination,
     loadDate: indent.pickup_date ?? undefined,
     vehicleType: indent.vehicle_type ?? undefined,
     weightTonnes: storyWeightTonnes(indent),

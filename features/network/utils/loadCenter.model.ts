@@ -583,7 +583,17 @@ export function giveLoadStatusPillStyles(status: string): {
       text: { color: Theme.textOnPrimary },
     };
   }
-  if (["completed", "closed", "cancelled", "expired"].includes(s)) {
+  if (s === "in transit" || s === "in_transit") {
+    return {
+      pill: {
+        backgroundColor: Theme.primary,
+        borderWidth: 1,
+        borderColor: Theme.primary,
+      },
+      text: { color: Theme.textOnPrimary },
+    };
+  }
+  if (s === "delivered" || ["completed", "closed", "cancelled", "expired"].includes(s)) {
     return {
       pill: {
         backgroundColor: Theme.surfaceGray,

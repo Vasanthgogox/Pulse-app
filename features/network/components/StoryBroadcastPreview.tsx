@@ -4,6 +4,7 @@
 import { HubPromoHeroLottie } from "@/components/hub/HubPromoLottie";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
+import { RouteEndpointStack } from "@/features/network/components/RouteEndpointStack";
 import type { PostRow } from "@/features/network/services/posts.service";
 import { formatINR } from "@/lib/format";
 import { ArrowRight, Package } from "lucide-react-native";
@@ -25,13 +26,11 @@ const SKY_TRAY = Theme.loadStatusTabTrayBg;
 const LOAD_BROADCAST_LOTTIE = require("@/assets/Animated folder/auction.json");
 const OPEN_CAPACITY_LOTTIE = require("@/assets/Animated folder/truck.json");
 
-type LocationParts = { city: string; state: string };
-
 export type StoryBroadcastPreviewProps = {
   post: PostRow;
   loadMaterial: string;
-  originParts: LocationParts;
-  destinationParts: LocationParts;
+  origin: string | null | undefined;
+  destination: string | null | undefined;
   loadTargetRate: number | null;
   isDesktopPreview?: boolean;
   storyKey: string;
@@ -42,8 +41,8 @@ export type StoryBroadcastPreviewProps = {
 export function StoryBroadcastPreview({
   post,
   loadMaterial,
-  originParts,
-  destinationParts,
+  origin,
+  destination,
   loadTargetRate,
   isDesktopPreview = false,
   storyKey,
@@ -145,14 +144,12 @@ export function StoryBroadcastPreview({
         <View style={styles.routeStrip}>
           <View style={styles.routeEndpoint}>
             <View style={styles.dotOrigin} />
-            <Text style={styles.routeCity} numberOfLines={1}>
-              {originParts.city}
-            </Text>
-            {originParts.state ? (
-              <Text style={styles.routeState} numberOfLines={1}>
-                {originParts.state}
-              </Text>
-            ) : null}
+            <RouteEndpointStack
+              value={origin}
+              primaryStyle={styles.routeCity}
+              secondaryStyle={styles.routeState}
+              maxLinesPerItem={4}
+            />
           </View>
 
           <Animated.View style={[styles.routeArrowWrap, { opacity: arrowOpacity }]}>
@@ -163,14 +160,13 @@ export function StoryBroadcastPreview({
 
           <View style={[styles.routeEndpoint, styles.routeEndpointEnd]}>
             <View style={styles.dotDest} />
-            <Text style={[styles.routeCity, styles.routeCityEnd]} numberOfLines={1}>
-              {destinationParts.city}
-            </Text>
-            {destinationParts.state ? (
-              <Text style={[styles.routeState, styles.routeStateEnd]} numberOfLines={1}>
-                {destinationParts.state}
-              </Text>
-            ) : null}
+            <RouteEndpointStack
+              value={destination}
+              align="end"
+              primaryStyle={styles.routeCity}
+              secondaryStyle={styles.routeState}
+              maxLinesPerItem={4}
+            />
           </View>
         </View>
 
@@ -289,7 +285,7 @@ const styles = StyleSheet.create({
   routeStrip: {
     width: "100%",
     flexDirection: "row",
-    alignItems: "center",
+    alignItems: "flex-start",
     gap: 8,
     marginTop: 4,
     paddingVertical: 12,
@@ -327,7 +323,6 @@ const styles = StyleSheet.create({
     fontWeight: "900",
     color: INK,
     letterSpacing: -0.2,
-    textTransform: "uppercase",
     maxWidth: "100%",
   },
   routeCityEnd: {
@@ -338,7 +333,6 @@ const styles = StyleSheet.create({
     fontWeight: "700",
     color: MUTED,
     letterSpacing: 0.3,
-    textTransform: "uppercase",
     maxWidth: "100%",
   },
   routeStateEnd: {
@@ -350,6 +344,7 @@ const styles = StyleSheet.create({
     gap: 4,
     flexShrink: 0,
     paddingHorizontal: 2,
+    paddingTop: 18,
   },
   routeLine: {
     width: 10,

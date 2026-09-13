@@ -14,8 +14,8 @@ import type {
 } from "@/features/network/utils/loadCenter.model";
 import {
   formatStoryDateTimeWithFallback,
-  splitLocationParts,
 } from "@/features/network/utils/storyDisplay";
+import { RouteEndpointStack } from "@/features/network/components/RouteEndpointStack";
 import type { LoadCenterTripAllocation } from "@/features/network/utils/loadCenterTripAllocation.util";
 import { formatINR } from "@/lib/format";
 import { ArrowRight } from "lucide-react-native";
@@ -139,6 +139,12 @@ function resolveStatusChip(
   }
   if (s === "converted") {
     return { text: "CONVERTED", tone: "won" };
+  }
+  if (s === "in transit" || s === "in_transit") {
+    return { text: "IN TRANSIT", tone: "live" };
+  }
+  if (s === "delivered") {
+    return { text: "DELIVERED", tone: "muted" };
   }
   if (s === "completed" || s === "done") {
     return { text: "DONE", tone: "muted" };
@@ -294,8 +300,6 @@ export function LoadCenterHubMobileIndentCard({
       ? `client-entity:${String(indent.client_id).trim()}`
       : `indent:${indent.id}`);
 
-  const originParts = splitLocationParts(origin);
-  const destParts = splitLocationParts(dest);
   const statusChip = resolveStatusChip(statusLabel, sourceTag);
   const channelLabel = resolveChannelLabel(sourceTag, statusLabel);
   const isGetLoadCard = sourceTag != null;
@@ -456,16 +460,11 @@ export function LoadCenterHubMobileIndentCard({
           <View style={styles.routeGrid}>
             <View style={styles.routeCol}>
               <Text style={styles.routeLabel}>PICKUP</Text>
-              <Text style={styles.routeCity} numberOfLines={1}>
-                {titleCaseWord(originParts.city)}
-              </Text>
-              {originParts.state ? (
-                <Text style={styles.routeState} numberOfLines={1}>
-                  {titleCaseWord(originParts.state)}
-                </Text>
-              ) : (
-                <Text style={styles.routeStateSpacer}>{"\u00a0"}</Text>
-              )}
+              <RouteEndpointStack
+                value={origin}
+                primaryStyle={styles.routeCity}
+                secondaryStyle={styles.routeState}
+              />
             </View>
             <View style={styles.routeSep} pointerEvents="none" accessibilityElementsHidden>
               <View style={styles.routeSepLine} />
@@ -474,18 +473,12 @@ export function LoadCenterHubMobileIndentCard({
             </View>
             <View style={[styles.routeCol, styles.routeColEnd]}>
               <Text style={[styles.routeLabel, styles.routeLabelEnd]}>DROP</Text>
-              <Text style={[styles.routeCity, styles.routeCityEnd]} numberOfLines={1}>
-                {titleCaseWord(destParts.city)}
-              </Text>
-              {destParts.state ? (
-                <Text style={[styles.routeState, styles.routeStateEnd]} numberOfLines={1}>
-                  {titleCaseWord(destParts.state)}
-                </Text>
-              ) : (
-                <Text style={[styles.routeStateSpacer, styles.routeStateEnd]}>
-                  {"\u00a0"}
-                </Text>
-              )}
+              <RouteEndpointStack
+                value={dest}
+                align="end"
+                primaryStyle={styles.routeCity}
+                secondaryStyle={styles.routeState}
+              />
             </View>
           </View>
 
@@ -832,7 +825,6 @@ const styles = StyleSheet.create({
     web: {
       minWidth: 0,
       maxWidth: "100%",
-      overflow: "hidden",
     } as ViewStyle,
     default: {
       flex: 1,

@@ -1,7 +1,8 @@
 /**
  * Footer actions for Load Center hub indent cards (desktop grid).
  *
- * Dense / grid: single row — [status chip] [share] [primary] [pulse?]
+ * Dense / grid: single row — [status] [share] [primary] [marketplace?] [pulse?]
+ * Commerce row: [share] [marketplace] [pulse] [Review]
  */
 import {
   HUB_GRID_TOOLBAR_PULSE_SLOT_W,
@@ -294,16 +295,24 @@ function CommerceActionRow({
   return <View style={[styles.commerceRow, style]}>{children}</View>;
 }
 
+function marketplaceToggleLabel(isShared: boolean): string {
+  return isShared
+    ? "Shared to Marketplace — tap to stop sharing"
+    : "Share this load to Marketplace";
+}
+
 function CommerceIconButton({
   onPress,
   label,
   children,
   tone,
+  disabled,
 }: {
   onPress: () => void;
   label: string;
   children: ReactNode;
   tone?: "live" | "expired" | "default";
+  disabled?: boolean;
 }) {
   return (
     <TouchableOpacity
@@ -311,10 +320,13 @@ function CommerceIconButton({
         styles.commerceIconBtn,
         tone === "live" && styles.commerceIconBtnLive,
         tone === "expired" && styles.commerceIconBtnExpired,
+        disabled && { opacity: 0.7 },
       ]}
       onPress={onPress}
       activeOpacity={0.85}
+      disabled={disabled}
       accessibilityLabel={label}
+      accessibilityState={{ disabled: Boolean(disabled) }}
       hitSlop={TOOLBAR_HIT_SLOP}
     >
       {children}
@@ -322,8 +334,48 @@ function CommerceIconButton({
   );
 }
 
+function MarketplaceIconButton({
+  isShared,
+  busy,
+  onPress,
+  dense,
+}: {
+  isShared: boolean;
+  busy?: boolean;
+  onPress: () => void;
+  dense?: boolean;
+}) {
+  const color = isShared ? Theme.positive : Theme.textMuted;
+  const icon = (
+    <Package size={dense ? 14 : 13} color={color} strokeWidth={2.2} />
+  );
+  const label = marketplaceToggleLabel(isShared);
+  if (dense) {
+    return (
+      <View
+        pointerEvents={busy ? "none" : "auto"}
+        style={busy ? { opacity: 0.7 } : undefined}
+      >
+        <HubGridShareButton onPress={onPress} label={label} icon={icon} />
+      </View>
+    );
+  }
+  return (
+    <CommerceIconButton
+      label={label}
+      onPress={onPress}
+      tone={isShared ? "live" : "default"}
+      disabled={busy}
+    >
+      {icon}
+    </CommerceIconButton>
+  );
+}
+
 function compactCommerceCtaLabel(label: string): string {
   switch (label) {
+    case "View trip":
+      return "View trip";
     case "Review Hub":
     case "Review":
       return "Review";
@@ -588,6 +640,8 @@ export type GiveLoadIndentCardActionsProps = LoadCenterIndentCardActionsLayout &
   /** A2: toggle this indent's Marketplace distribution. Omit to hide the control entirely. */
   onToggleMarketplace?: (load: IndentRow) => void;
   marketplaceBusy?: boolean;
+  /** Linked trip exists — primary CTA opens trip detail (bootstrap seed + bundle prefetch). */
+  onViewTrip?: (load: IndentRow) => void;
 };
 
 export function GiveLoadIndentCardActions({
@@ -613,6 +667,7 @@ export function GiveLoadIndentCardActions({
   style,
   onToggleMarketplace,
   marketplaceBusy = false,
+  onViewTrip,
 }: GiveLoadIndentCardActionsProps) {
   const shareOpensDetail = isDone || isAwardedPendingTrip;
   const pulseHandler = onPulseStory ?? onShareToNetwork;
@@ -622,31 +677,53 @@ export function GiveLoadIndentCardActions({
     circulationTarget === "marketplace" || circulationTarget === "both";
   // Distribution only matters while the load can still gain new offers.
   const showMarketplaceToggle =
-    Boolean(onToggleMarketplace) && !isDraft && !isDone && !isAwardedPendingTrip;
+    Boolean(onToggleMarketplace) && !isDraft && !isDone && !isAwardedPendingTrip && !onViewTrip;
+
+  const primaryLabel = isDraft
+    ? "Broadcast"
+    : onViewTrip
+      ? "View trip"
+      : "Review Hub";
 
   const onPrimary = () => {
     if (isDraft) {
       onBroadcastDraft(load);
       return;
     }
+    if (onViewTrip) {
+      onViewTrip(load);
+      return;
+    }
     onOpenAwardModal(load);
   };
 
+  const hidePrimary = isDone && !onViewTrip;
+  const showPending = !hidePrimary && isAwaitingSupplierDeploy && !onViewTrip;
+  const primaryCta = hidePrimary ? null : showPending ? (
+    commerceRow ? (
+      <Text style={styles.commercePending} numberOfLines={1}>
+        Pending
+      </Text>
+    ) : (
+      <PendingChip dense={dense} />
+    )
+  ) : commerceRow ? (
+    <CommerceLinkCta
+      label={compactCommerceCtaLabel(primaryLabel)}
+      onPress={onPrimary}
+    />
+  ) : (
+    <PrimaryButton
+      dense={dense}
+      inline={dense}
+      label={compactGiveLoadCtaLabel(primaryLabel, dense)}
+      onPress={onPrimary}
+    />
+  );
+
   if (commerceRow) {
-    const ctaLabel = compactCommerceCtaLabel(
-      isDraft ? "Broadcast" : "Review Hub",
-    );
     return (
       <View style={style}>
-        {showMarketplaceToggle && !dense ? (
-          <View style={styles.marketplaceRow}>
-            <MarketplaceShareButton
-              isShared={isMarketplaceShared}
-              busy={marketplaceBusy}
-              onPress={() => onToggleMarketplace!(load)}
-            />
-          </View>
-        ) : null}
         <CommerceActionRow>
         <CommerceIconButton
           label={shareOpensDetail ? "View detail" : "Share indent"}
@@ -656,6 +733,13 @@ export function GiveLoadIndentCardActions({
         >
           <Share2 size={13} color={Theme.textMuted} strokeWidth={2.2} />
         </CommerceIconButton>
+        {showMarketplaceToggle ? (
+          <MarketplaceIconButton
+            isShared={isMarketplaceShared}
+            busy={marketplaceBusy}
+            onPress={() => onToggleMarketplace!(load)}
+          />
+        ) : null}
         {showPulse ? (
           <CommerceIconButton
             label={
@@ -673,13 +757,7 @@ export function GiveLoadIndentCardActions({
             />
           </CommerceIconButton>
         ) : null}
-        {isDone ? null : isAwaitingSupplierDeploy ? (
-          <Text style={styles.commercePending} numberOfLines={1}>
-            Pending
-          </Text>
-        ) : (
-          <CommerceLinkCta label={ctaLabel} onPress={onPrimary} />
-        )}
+        {primaryCta}
         </CommerceActionRow>
       </View>
     );
@@ -706,20 +784,7 @@ export function GiveLoadIndentCardActions({
     />
   );
 
-  const primary =
-    isDone ? null : isAwaitingSupplierDeploy ? (
-      <PendingChip dense={dense} />
-    ) : (
-      <PrimaryButton
-        dense={dense}
-        inline={dense}
-        label={compactGiveLoadCtaLabel(
-          isDraft ? "Broadcast" : "Review Hub",
-          dense,
-        )}
-        onPress={onPrimary}
-      />
-    );
+  const primary = commerceRow ? null : primaryCta;
 
   const pulse = showPulse ? (
     <PulseButton
@@ -730,8 +795,35 @@ export function GiveLoadIndentCardActions({
     />
   ) : null;
 
+  const marketplace = showMarketplaceToggle ? (
+    dense ? (
+      <MarketplaceIconButton
+        dense
+        isShared={isMarketplaceShared}
+        busy={marketplaceBusy}
+        onPress={() => onToggleMarketplace!(load)}
+      />
+    ) : (
+      <MarketplaceShareButton
+        isShared={isMarketplaceShared}
+        busy={marketplaceBusy}
+        onPress={() => onToggleMarketplace!(load)}
+      />
+    )
+  ) : null;
+
   const primarySlot =
     primary ?? (dense ? <PrimaryToolbarPlaceholder dense /> : null);
+
+  const trailing =
+    dense && (marketplace || pulse) ? (
+      <View style={styles.trailingCluster}>
+        {marketplace}
+        {pulse}
+      </View>
+    ) : (
+      pulse
+    );
 
   if (dense) {
     return (
@@ -741,7 +833,7 @@ export function GiveLoadIndentCardActions({
           status={statusChip}
           share={share}
           primary={primarySlot}
-          trailing={pulse}
+          trailing={trailing}
         />
       </View>
     );
@@ -749,6 +841,9 @@ export function GiveLoadIndentCardActions({
 
   return (
     <View style={style}>
+      {marketplace ? (
+        <View style={styles.marketplaceRow}>{marketplace}</View>
+      ) : null}
       <InlineActionRow>
         <InlineLeadingCluster>
           {statusChip}
@@ -765,6 +860,7 @@ function compactGiveLoadCtaLabel(label: string, dense?: boolean): string {
   if (!dense) return label;
   if (label === "Review Hub") return "Review";
   if (label === "Broadcast") return "Broadcast";
+  if (label === "View trip") return "View trip";
   return label;
 }
 
@@ -1177,6 +1273,12 @@ const styles = StyleSheet.create({
     fontSize: 11,
     fontWeight: "600",
     color: Theme.textMuted,
+  },
+  trailingCluster: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    flexShrink: 0,
   },
   marketplaceRow: {
     flexDirection: "row",

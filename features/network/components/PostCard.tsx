@@ -187,7 +187,7 @@ function LoadCard({
           <View style={styles.routeRow}>
             <View style={styles.routePoint}>
               <View style={[styles.routeDot, styles.routeDotOrigin]} />
-              <Text style={styles.routeCity} numberOfLines={2}>{post.origin}</Text>
+              <Text style={styles.routeCity} numberOfLines={4}>{post.origin}</Text>
             </View>
             <View style={styles.routeLine}>
               <View style={styles.routeLineBar} />
@@ -195,7 +195,7 @@ function LoadCard({
             </View>
             <View style={[styles.routePoint, { alignItems: 'flex-end' }]}>
               <View style={[styles.routeDot, styles.routeDotDest]} />
-              <Text style={styles.routeCity} numberOfLines={2}>{post.destination}</Text>
+              <Text style={styles.routeCity} numberOfLines={4}>{post.destination}</Text>
             </View>
           </View>
         )}

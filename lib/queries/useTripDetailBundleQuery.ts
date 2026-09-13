@@ -7,7 +7,7 @@
  * Rollback: set flag to false — the hook returns undefined and callers fall back
  * to the existing direct-service code path. No schema changes required for rollback.
  */
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, type QueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { throwIfCancelled, withAbortSignal } from '@/lib/supabaseAbort.util';
 import { queryKeys } from '@/lib/queryKeys';
@@ -274,6 +274,21 @@ async function fetchTripDetailBundle(
  * Invalidate manually via queryClient.invalidateQueries(queryKeys.trips.bundle(tripId))
  * after mutations (assignment, status change, finance entry).
  */
+export function prefetchTripDetailBundle(
+  queryClient: QueryClient,
+  tripId: string,
+  viewerOrgId: string,
+): Promise<void> {
+  const id = tripId.trim();
+  const org = viewerOrgId.trim();
+  if (!id || !org || !isBundleEnabled(org)) return Promise.resolve();
+  return queryClient.prefetchQuery({
+    queryKey: queryKeys.trips.bundle(id),
+    queryFn: ({ signal }) => fetchTripDetailBundle(id, org, signal),
+    staleTime: 60_000,
+  });
+}
+
 export function useTripDetailBundleQuery(
   tripId: string | null,
   viewerOrgId: string | null,

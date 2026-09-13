@@ -38,7 +38,6 @@ import {
     formatCapacityMaterial,
     formatStoryDate,
     loadMaterialLabel,
-    splitLocationParts,
     storyHeadline,
     storyTypeLabel,
 } from "@/features/network/utils/storyDisplay";
@@ -505,12 +504,6 @@ export default function StoryDetailScreen() {
     : null;
 
   const headline = post ? storyHeadline(post, Boolean(isLoad), Boolean(isVehicle)) : "";
-  const originParts = splitLocationParts(post?.origin);
-  const destinationParts = post?.destination?.trim()
-    ? splitLocationParts(post.destination)
-    : isVehicle
-      ? { city: "Anywhere", state: "" }
-      : splitLocationParts(post?.destination);
   const loadMaterial = post && isLoad ? loadMaterialLabel(post, headline) : "";
   const capacityMaterial =
     post && isVehicle
@@ -713,8 +706,8 @@ export default function StoryDetailScreen() {
           <StoryBroadcastPreview
             post={post}
             loadMaterial={loadMaterial}
-            originParts={originParts}
-            destinationParts={destinationParts}
+            origin={post.origin}
+            destination={post.destination}
             loadTargetRate={loadDisplayPrice}
             isDesktopPreview={isDesktopPreview}
             storyKey={post.id}
@@ -723,8 +716,8 @@ export default function StoryDetailScreen() {
           <StoryBroadcastPreview
             post={post}
             loadMaterial={capacityMaterial}
-            originParts={originParts}
-            destinationParts={destinationParts}
+            origin={post.origin}
+            destination={post.destination || "Anywhere"}
             loadTargetRate={capacityTargetRate}
             isDesktopPreview={isDesktopPreview}
             storyKey={post.id}

@@ -1,5 +1,6 @@
 import {
   bucketGiveLoadIndentsForKanban,
+  giveLoadTripKanbanStage,
   resolveGiveLoadKanbanColumn,
 } from "@/features/network/utils/giveLoadKanban.util";
 import type { IndentRow } from "@/features/indents";
@@ -9,6 +10,20 @@ function load(partial: Partial<IndentRow> & { id: string; status: string }): Ind
 }
 
 describe("giveLoadKanban.util", () => {
+  it("treats any linked trip without a terminal status as in transit", () => {
+    expect(giveLoadTripKanbanStage({ status: "accepted" })).toBe("in_transit");
+    expect(giveLoadTripKanbanStage({ status: "assigned" })).toBe("in_transit");
+    expect(giveLoadTripKanbanStage({ status: "in_transit" })).toBe("in_transit");
+  });
+
+  it("treats completed or delivered trips as delivered", () => {
+    expect(giveLoadTripKanbanStage({ status: "delivered" })).toBe("delivered");
+    expect(giveLoadTripKanbanStage({ status: "completed" })).toBe("delivered");
+    expect(
+      giveLoadTripKanbanStage({ status: "accepted", completed_at: "2026-09-13" }),
+    ).toBe("delivered");
+  });
+
   it("puts open loads with no bids in Open Market", () => {
     expect(
       resolveGiveLoadKanbanColumn(load({ id: "a", status: "open" }), 0),
@@ -42,16 +57,41 @@ describe("giveLoadKanban.util", () => {
     expect(buckets.DONE_IN_TRANSIT).toHaveLength(0);
   });
 
-  it("splits Done into In Transit vs Completed from trip activity", () => {
+  it("moves an awarded indent with an accepted trip to In Transit", () => {
+    const loads = [load({ id: "awarded1", status: "awarded" })];
+    const buckets = bucketGiveLoadIndentsForKanban(
+      loads,
+      { awarded1: 1 },
+      { tripStage: (id) => (id === "awarded1" ? "in_transit" : "none") },
+    );
+    expect(buckets.AWARDED).toHaveLength(0);
+    expect(buckets.DONE_IN_TRANSIT.map((l) => l.id)).toEqual(["awarded1"]);
+  });
+
+  it("moves a delivered trip to Delivered", () => {
+    const loads = [load({ id: "done1", status: "awarded" })];
+    const buckets = bucketGiveLoadIndentsForKanban(
+      loads,
+      { done1: 1 },
+      { tripStage: (id) => (id === "done1" ? "delivered" : "none") },
+    );
+    expect(buckets.DONE_COMPLETED.map((l) => l.id)).toEqual(["done1"]);
+    expect(buckets.DONE_IN_TRANSIT).toHaveLength(0);
+  });
+
+  it("splits Done into In Transit vs Delivered from trip stage", () => {
     const loads = [
       load({ id: "done1", status: "completed" }),
-      load({ id: "transit1", status: "completed" }),
+      load({ id: "transit1", status: "awarded" }),
       load({ id: "open1", status: "open" }),
     ];
     const buckets = bucketGiveLoadIndentsForKanban(
       loads,
       { done1: 1, transit1: 1, open1: 0 },
-      { isInTransit: (id) => id === "transit1" },
+      {
+        tripStage: (id) =>
+          id === "transit1" ? "in_transit" : id === "done1" ? "delivered" : "none",
+      },
     );
     expect(buckets.DONE.map((l) => l.id)).toEqual(["done1", "transit1"]);
     expect(buckets.DONE_IN_TRANSIT.map((l) => l.id)).toEqual(["transit1"]);

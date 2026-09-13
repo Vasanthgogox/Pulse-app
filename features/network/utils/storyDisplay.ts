@@ -185,6 +185,39 @@ export function splitLocationParts(value: string | null | undefined): {
   return { city: city || raw, state };
 }
 
+/** Planner labels written onto indents before address summaries existed. */
+export function looksLikePlannerStopSummary(
+  value: string | null | undefined,
+): boolean {
+  const raw = (value ?? "").trim();
+  if (!raw) return false;
+  return (
+    /^(pickup|drop)\s+[a-z0-9]+$/i.test(raw) ||
+    /^\d+\s+(pickups?|drops?)\s*\(/i.test(raw)
+  );
+}
+
+/**
+ * Lines for pickup/drop columns. Multi-stop summaries use ` · ` between stops
+ * so each location can wrap instead of one truncated "2 drops (…)" string.
+ */
+export function routeEndpointLines(value: string | null | undefined): string[] {
+  const raw = (value ?? "").trim();
+  if (!raw) return ["—"];
+  if (raw.includes(" · ")) {
+    return raw
+      .split(" · ")
+      .map((part) => part.trim())
+      .filter(Boolean);
+  }
+  const counted = raw.match(/^\d+\s+(?:pickups?|drops?)\s*\((.*)\)\s*$/i);
+  if (counted?.[1]) {
+    return [counted[1].trim()].filter(Boolean);
+  }
+  const { city, state } = splitLocationParts(raw);
+  return state ? [city, state] : [city];
+}
+
 /** City for a story ring. First place name only — "Bengaluru, Bangalore" is one city. */
 export function storyCityLabel(value: string | null | undefined): string {
   const city = splitLocationParts(value).city;

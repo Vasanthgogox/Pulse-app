@@ -10,11 +10,11 @@ import {
   getIndentDisplayNumber,
   resolveSupplierTargetDisplayRate,
 } from "@/features/indents";
+import { MarketplaceRouteGrid } from "@/features/network/components/MarketplaceLoadCardChrome";
 import { ensureIndentStory } from "@/features/network/services/indentStoryPosts.service";
-import {
-  formatStoryDate,
-  splitLocationParts,
-} from "@/features/network/utils/storyDisplay";
+import { indentDisplayOriginDest } from "@/features/network/utils/executionPlanRouteSummary";
+import { useExecutionPlanRouteSummaries } from "@/features/network/hooks/useExecutionPlanRouteSummaries";
+import { formatStoryDate } from "@/features/network/utils/storyDisplay";
 import { formatINR } from "@/lib/format";
 import { buildPulseStoryPublicUrl } from "@/lib/routes";
 import { platformShadow } from "@/lib/platformShadow";
@@ -23,7 +23,6 @@ import * as Clipboard from "expo-clipboard";
 import * as Linking from "expo-linking";
 import * as Sharing from "expo-sharing";
 import {
-  ArrowRight,
   CheckCircle2,
   Clock,
   Copy,
@@ -54,15 +53,6 @@ const MUTED = Theme.textMuted;
 const BORDER = Theme.borderLight;
 const CARD_EDGE = Theme.borderMedium;
 
-function titleCaseWord(value: string): string {
-  const t = value.trim();
-  if (!t) return t;
-  return t
-    .split(/\s+/)
-    .map((w) => w.charAt(0).toUpperCase() + w.slice(1).toLowerCase())
-    .join(" ");
-}
-
 function formatWeightChip(weightKg: number | null | undefined): string | null {
   const kg = Number(weightKg);
   if (!Number.isFinite(kg) || kg <= 0) return null;
@@ -74,55 +64,6 @@ function formatWeightChip(weightKg: number | null | undefined): string | null {
   return `${Math.round(kg)} kg`;
 }
 
-function LoadHubRoute({
-  origin,
-  destination,
-}: {
-  origin: string;
-  destination: string;
-}) {
-  const originParts = splitLocationParts(origin);
-  const destParts = splitLocationParts(destination);
-
-  return (
-    <View style={styles.routeGrid}>
-      <View style={styles.routeCol}>
-        <Text style={styles.routeLabel}>PICKUP</Text>
-        <Text style={styles.routeCity} numberOfLines={1}>
-          {titleCaseWord(originParts.city)}
-        </Text>
-        {originParts.state ? (
-          <Text style={styles.routeState} numberOfLines={1}>
-            {titleCaseWord(originParts.state)}
-          </Text>
-        ) : (
-          <Text style={styles.routeStateSpacer}>{"\u00a0"}</Text>
-        )}
-      </View>
-      <View style={styles.routeSep} pointerEvents="none" accessibilityElementsHidden>
-        <View style={styles.routeSepLine} />
-        <ArrowRight size={11} color={MUTED} strokeWidth={2.4} />
-        <View style={styles.routeSepLine} />
-      </View>
-      <View style={[styles.routeCol, styles.routeColEnd]}>
-        <Text style={[styles.routeLabel, styles.routeLabelEnd]}>DROP</Text>
-        <Text style={[styles.routeCity, styles.routeCityEnd]} numberOfLines={1}>
-          {titleCaseWord(destParts.city)}
-        </Text>
-        {destParts.state ? (
-          <Text style={[styles.routeState, styles.routeStateEnd]} numberOfLines={1}>
-            {titleCaseWord(destParts.state)}
-          </Text>
-        ) : (
-          <Text style={[styles.routeStateSpacer, styles.routeStateEnd]}>
-            {"\u00a0"}
-          </Text>
-        )}
-      </View>
-    </View>
-  );
-}
-
 function LoadPreviewCard({
   indent,
   statusChipText = "STORY",
@@ -130,6 +71,15 @@ function LoadPreviewCard({
   indent: IndentRow;
   statusChipText?: string;
 }) {
+  const planId =
+    typeof indent.execution_plan_id === "string"
+      ? indent.execution_plan_id.trim()
+      : "";
+  const { data: planRouteById } = useExecutionPlanRouteSummaries(
+    indent.organization_id,
+    planId ? [planId] : [],
+  );
+  const route = indentDisplayOriginDest(indent, planRouteById);
   const displayRate =
     resolveSupplierTargetDisplayRate(indent.supplier_target, indent.client_price) ??
     indent.client_price;
@@ -170,9 +120,11 @@ function LoadPreviewCard({
         </View>
       </View>
 
-      <LoadHubRoute
-        origin={indent.pickup_area || "—"}
-        destination={indent.drop_location || "—"}
+      <MarketplaceRouteGrid
+        pickup={route.origin}
+        drop={route.dest}
+        pickupLabel="PICKUP"
+        dropLabel="DROP"
       />
 
       {specChips.length > 0 || loadDateLabel ? (

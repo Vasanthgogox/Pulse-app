@@ -1,4 +1,8 @@
-import { splitLocationParts } from "@/features/network/utils/storyDisplay";
+import {
+  looksLikePlannerStopSummary,
+  routeEndpointLines,
+  splitLocationParts,
+} from "@/features/network/utils/storyDisplay";
 
 describe("splitLocationParts", () => {
   it("splits a plain 'City, State' address as before", () => {
@@ -26,5 +30,34 @@ describe("splitLocationParts", () => {
   it("returns an em dash placeholder for empty input", () => {
     expect(splitLocationParts(null)).toEqual({ city: "—", state: "" });
     expect(splitLocationParts("")).toEqual({ city: "—", state: "" });
+  });
+});
+
+describe("routeEndpointLines", () => {
+  it("splits city and state onto two lines", () => {
+    expect(routeEndpointLines("Chennai, Tamil Nadu")).toEqual([
+      "Chennai",
+      "Tamil Nadu",
+    ]);
+  });
+
+  it("shows each multi-stop location on its own line", () => {
+    expect(
+      routeEndpointLines("Ramaraj street · Banglore, Karnataka"),
+    ).toEqual(["Ramaraj street", "Banglore, Karnataka"]);
+  });
+
+  it("unwraps a legacy counted drop summary so the full list is visible", () => {
+    expect(routeEndpointLines("2 drops (Ramaraj street, Banglore, Karnataka)")).toEqual([
+      "Ramaraj street, Banglore, Karnataka",
+    ]);
+  });
+});
+
+describe("looksLikePlannerStopSummary", () => {
+  it("detects planner labels and counted stop lists", () => {
+    expect(looksLikePlannerStopSummary("Pickup A")).toBe(true);
+    expect(looksLikePlannerStopSummary("2 drops (Drop C, Drop D)")).toBe(true);
+    expect(looksLikePlannerStopSummary("Chennai, Tamil Nadu")).toBe(false);
   });
 });

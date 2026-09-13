@@ -7,6 +7,7 @@ import { OrderService } from '../services/OrderService';
 import { WarehouseService } from '../services/WarehouseService';
 import { indentRepository } from '../repositories/indentRepository';
 import type { ExecutionOrchestrator } from './ExecutionOrchestrator.contract';
+import { summarizeStopsByType } from './summarizeStopLocations';
 import type {
   OrchestrationError,
   PublishExecutionPlanCommand,
@@ -163,9 +164,6 @@ export function createExecutionOrchestrator(eventBus: EventBus = getPlatformEven
 
       const orderIds = payload.orders.map(o => o.orderId);
       const totalAmount = payload.orders.reduce((s, o) => s + o.totalAmount, 0);
-      const pickupLabels = [...new Set(payload.stops.filter(s => s.type === 'pickup').map(s => s.label))];
-      const dropLabels = [...new Set(payload.stops.filter(s => s.type === 'drop').map(s => s.label))];
-
       const indent = await IndentService.createFromExecutionPlan({
         workspaceId,
         executionPlanId: plan.id,
@@ -174,8 +172,8 @@ export function createExecutionOrchestrator(eventBus: EventBus = getPlatformEven
         orderCount: payload.orders.length,
         totalWeightKg: payload.totalWeightKg,
         totalAmount,
-        pickupSummary: pickupLabels.length > 1 ? `${pickupLabels.length} pickups (${pickupLabels.join(', ')})` : pickupLabels[0] ?? 'Pickup',
-        dropSummary: dropLabels.length > 1 ? `${dropLabels.length} drops (${dropLabels.join(', ')})` : dropLabels[0] ?? 'Drop',
+        pickupSummary: summarizeStopsByType(payload.stops, 'pickup'),
+        dropSummary: summarizeStopsByType(payload.stops, 'drop'),
         requestedBy,
       });
 

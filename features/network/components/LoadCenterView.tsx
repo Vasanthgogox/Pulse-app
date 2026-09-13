@@ -47,6 +47,8 @@ import { confirmDialog } from "@/lib/confirmDialog";
 import { shareDraftIndent } from "@/features/indents/services/indents.service";
 import { resolveMarketIndentShipperLabel } from "@/features/indents/utils/indentPartyDisplay.util";
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
+import { indentDisplayOriginDest } from "@/features/network/utils/executionPlanRouteSummary";
+import { looksLikePlannerStopSummary } from "@/features/network/utils/storyDisplay";
 import {
   resolveAwardedVendorName,
   resolveGiveLoadAwardedAmountInr,
@@ -72,6 +74,7 @@ import {
   type LoadCenterDriverProfile,
 } from "@/features/network/utils/loadCenterTripAllocation.util";
 import { useAwardQuote } from "@/features/network/hooks/useAwardQuote";
+import { useExecutionPlanRouteSummaries } from "@/features/network/hooks/useExecutionPlanRouteSummaries";
 import { useLoadCenterFilters } from "@/features/network/hooks/useLoadCenterFilters";
 import { useSuccessToast } from "@/features/network/hooks/useSuccessToast";
 import { useTripDeployment } from "@/features/network/hooks/useTripDeployment";
@@ -82,7 +85,8 @@ import { BoostSheet } from "@/features/reach/components/BoostSheet";
 import { queryKeys } from "@/lib/queryKeys";
 import { LoadCenterKanbanBoard, type LoadCenterKanbanColumn } from "@/features/network/components/LoadCenterKanbanBoard";
 import { LoadCenterKanbanColumnModal } from "@/features/network/components/LoadCenterKanbanColumnModal";
-import { GIVE_LOAD_KANBAN_COLUMNS, bucketGiveLoadIndentsForKanban, giveLoadKanbanColumnLabel } from "@/features/network/utils/giveLoadKanban.util";
+import { GIVE_LOAD_KANBAN_COLUMNS, bucketGiveLoadIndentsForKanban, giveLoadKanbanColumnLabel, giveLoadTripKanbanStage } from "@/features/network/utils/giveLoadKanban.util";
+import { useOpenTripDetail } from "@/lib/navigation/useOpenTripDetail";
 import {
   GET_LOAD_KANBAN_COLUMNS,
   bucketGetLoadIndentsForKanban,
@@ -127,6 +131,7 @@ import {
     useTripsQuery,
     useVehiclesQuery,
     useAcceptedDirectQuotesForFinanceQuery,
+    prefetchTripDetailBundle,
 } from "@/lib/queries";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Compass, Search } from "lucide-react-native";
@@ -224,6 +229,55 @@ export function LoadCenterView({
     isRefetching: marketRefetching,
     refetch: refetchMarketIndents,
   } = useMarketIndentsQuery(orgId, { urgent: true });
+  const commercePlanIds = useMemo(() => {
+    const ids: string[] = [];
+    for (const row of [...indents, ...marketIndents]) {
+      const id =
+        typeof row.execution_plan_id === "string"
+          ? row.execution_plan_id.trim()
+          : "";
+      if (id) ids.push(id);
+    }
+    return ids;
+  }, [indents, marketIndents]);
+  const { data: planRouteById } = useExecutionPlanRouteSummaries(
+    orgId,
+    commercePlanIds,
+  );
+  const syncedRouteIds = useRef(new Set<string>());
+  useEffect(() => {
+    if (!orgId || !planRouteById) return;
+    let cancelled = false;
+    void (async () => {
+      for (const load of indents) {
+        if (cancelled) return;
+        if ((load.organization_id ?? "") !== orgId) continue;
+        if (
+          !looksLikePlannerStopSummary(load.pickup_area) &&
+          !looksLikePlannerStopSummary(load.drop_location)
+        ) {
+          continue;
+        }
+        const route = indentDisplayOriginDest(load, planRouteById);
+        if (
+          route.origin === (load.pickup_area || "—") &&
+          route.dest === (load.drop_location || "—")
+        ) {
+          continue;
+        }
+        if (syncedRouteIds.current.has(load.id)) continue;
+        syncedRouteIds.current.add(load.id);
+        const { error } = await updateIndent(load.id, {
+          pickup_area: route.origin,
+          drop_location: route.dest,
+        });
+        if (error) syncedRouteIds.current.delete(load.id);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [orgId, indents, planRouteById]);
   const { data: myQuotes = [], refetch: refetchMyQuotes } =
     useMyDirectQuotesQuery(orgId);
   const { data: trips = [] } = useTripsQuery(orgId);
@@ -276,6 +330,7 @@ export function LoadCenterView({
   const [boostSheetVisible, setBoostSheetVisible] = useState(false);
   const [boostPostId, setBoostPostId] = useState<string | null>(null);
   const queryClient = useQueryClient();
+  const { openTripDetail } = useOpenTripDetail();
 
   useFocusEffect(
     useCallback(() => {
@@ -443,11 +498,8 @@ export function LoadCenterView({
     const buckets = bucketGiveLoadIndentsForKanban(hirePartnerLoads, quoteCounts, {
       searchQuery,
       matchesSearch: loadMatchesSearch,
-      isInTransit: (indentId) => {
-        const trip = tripByIndentId.get(indentId);
-        if (!trip) return false;
-        return isTripTrackingActive(trip.status, trip.completed_at);
-      },
+      tripStage: (indentId) =>
+        giveLoadTripKanbanStage(tripByIndentId.get(indentId)),
     });
     const accents = {
       OPEN: Theme.primary,
@@ -471,7 +523,7 @@ export function LoadCenterView({
             },
             {
               id: "COMPLETED",
-              label: "Completed",
+              label: "Delivered",
               loads: buckets.DONE_COMPLETED,
             },
           ],
@@ -793,6 +845,19 @@ export function LoadCenterView({
       onIndentPress(indent);
     },
     [expandedKanbanColumnId, onIndentPress],
+  );
+
+  const handleViewTrip = useCallback(
+    (indent: IndentRow) => {
+      const trip = tripByIndentId.get(indent.id);
+      const tripId = (trip?.id ?? "").trim();
+      if (!tripId) return;
+      if (orgId) {
+        void prefetchTripDetailBundle(queryClient, tripId, orgId);
+      }
+      openTripDetail(tripId, trip ?? null);
+    },
+    [openTripDetail, orgId, queryClient, tripByIndentId],
   );
 
   const handleKanbanEditIndent = useCallback(
@@ -1233,14 +1298,15 @@ export function LoadCenterView({
         load.organization_id,
         connectedClientOrgIds,
       );
+      const route = indentDisplayOriginDest(load, planRouteById);
       return (
         <LoadCenterHubMobileIndentCard
           key={load.id}
           indent={load}
           titleName={clientLabel}
           statusLabel={isDone ? "completed" : "action required"}
-          origin={load.pickup_area || "—"}
-          dest={load.drop_location || "—"}
+          origin={route.origin}
+          dest={route.dest}
           pickupIso={load.pickup_date}
           leftFooterLabel={(load.vehicle_type || "—").toUpperCase()}
           rightFooterLabel={
@@ -1283,6 +1349,7 @@ export function LoadCenterView({
       handleCardIndentPress,
       tripAllocationForLoad,
       tripDeployment.assigningTripId,
+      planRouteById,
     ],
   );
 
@@ -1314,16 +1381,22 @@ export function LoadCenterView({
           ? driverProfileById.get(trip.driver_id)?.name
           : "") ||
         (trip?.driver_display_name ?? "").trim();
-      const isAwaitingSupplierDeploy =
-        isAwardedPendingTrip || hasDirectSupplier;
+      const tripStage = giveLoadTripKanbanStage(trip);
+      const isAwaitingSupplierDeploy = !trip && (isAwardedPendingTrip || hasDirectSupplier);
       const bidCount = quoteCounts[load.id] ?? 0;
-      const displayStatus = resolveGiveLoadMobileDisplayStatus(
-        statusFilterTab,
-        status,
-        bidCount,
-        indentIdsWithTrip,
-        load.id,
-      );
+      const route = indentDisplayOriginDest(load, planRouteById);
+      const displayStatus =
+        tripStage === "delivered"
+          ? "delivered"
+          : tripStage === "in_transit"
+            ? "in transit"
+            : resolveGiveLoadMobileDisplayStatus(
+                statusFilterTab,
+                status,
+                bidCount,
+                indentIdsWithTrip,
+                load.id,
+              );
       const vehicleDetail = (load.vehicle_type || "—").toUpperCase();
       const loadTypeDetail = (load.load_type || "General").toUpperCase();
       const clientName = (load.client_name || "—").trim() || "—";
@@ -1377,8 +1450,8 @@ export function LoadCenterView({
           indent={load}
           titleName={clientName}
           statusLabel={displayStatus}
-          origin={load.pickup_area || "—"}
-          dest={load.drop_location || "—"}
+          origin={route.origin}
+          dest={route.dest}
           pickupIso={load.pickup_date}
           leftFooterLabel={vehicleDetail}
           ticketCommerce={ticketCommerce}
@@ -1425,6 +1498,7 @@ export function LoadCenterView({
                 marketplaceBusy={marketplaceToggleBusyId === load.id}
                 onBroadcastDraft={handleBroadcastDraft}
                 onOpenAwardModal={awardModal.open}
+                onViewTrip={trip ? handleViewTrip : undefined}
                 dense={layout.dense}
               />
             ) : undefined
@@ -1442,18 +1516,22 @@ export function LoadCenterView({
       clientById,
       handleBroadcastDraft,
       handlePulseStory,
+      handleToggleMarketplace,
       handleShareIndent,
       indentIdsWithTrip,
       indentStoryStates,
       isMobileView,
       linkedOrgByOrganizationId,
       handleCardIndentPress,
+      handleViewTrip,
+      marketplaceToggleBusyId,
       quoteCounts,
       statusFilterTab,
       supplierNameByOrgId,
       tripAllocationForLoad,
       tripByIndentId,
       supplierById,
+      planRouteById,
     ],
   );
 
@@ -1595,6 +1673,7 @@ export function LoadCenterView({
         load.organization_id,
         connectedClientOrgIds,
       );
+      const route = indentDisplayOriginDest(load, planRouteById);
 
       const openLoad = () => {
         if (isAwardedByIndent && !isDoneOutcome) {
@@ -1609,8 +1688,8 @@ export function LoadCenterView({
           indent={load}
           titleName={clientLabel}
           statusLabel={statusLabel}
-          origin={load.pickup_area || "—"}
-          dest={load.drop_location || "—"}
+          origin={route.origin}
+          dest={route.dest}
           pickupIso={load.pickup_date}
           leftFooterLabel={vehicleDetail}
           rightFooterLabel={rightFooter}
@@ -1663,6 +1742,7 @@ export function LoadCenterView({
       openIndentAllocation,
       statusFilterTab,
       tripAllocationForLoad,
+      planRouteById,
     ],
   );
 
@@ -1714,14 +1794,15 @@ export function LoadCenterView({
         load.organization_id,
         connectedClientOrgIds,
       );
+      const route = indentDisplayOriginDest(load, planRouteById);
 
       return (
         <LoadCenterHubMobileIndentCard
           indent={load}
           titleName={clientLabel}
           statusLabel={isDone ? "completed" : "action required"}
-          origin={load.pickup_area || "—"}
-          dest={load.drop_location || "—"}
+          origin={route.origin}
+          dest={route.dest}
           pickupIso={load.pickup_date}
           leftFooterLabel={(load.vehicle_type || "—").toUpperCase()}
           rightFooterLabel={isDone ? "On books" : formatINR(supplierRate)}
@@ -1758,6 +1839,7 @@ export function LoadCenterView({
       handleCardIndentPress,
       tripAllocationForLoad,
       tripDeployment.assigningTripId,
+      planRouteById,
     ],
   );
 

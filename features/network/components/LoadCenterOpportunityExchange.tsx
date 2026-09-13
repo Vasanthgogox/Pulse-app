@@ -18,11 +18,11 @@ import {
   opportunityPostAvatarProps,
   type IndentCardAvatarProps,
 } from "@/features/network/utils/indentCardAvatar.util";
+import { MarketplaceRouteGrid } from "@/features/network/components/MarketplaceLoadCardChrome";
 import {
   formatCapacityMaterial,
   formatStoryDate,
   isFleetOwnerCapacityPost,
-  splitLocationParts,
 } from "@/features/network/utils/storyDisplay";
 import { shouldHideLoadStoryFromAuthor } from "@/features/network/utils/storyLoadVisibility.util";
 import { isIndentStoryLive } from "@/features/network/utils/indentStoryWindow.util";
@@ -251,10 +251,6 @@ export const OpportunityCard = memo(function OpportunityCard({
   const isFleetCapacity = isFleetOwnerCapacityPost(post);
   const avatar = opportunityPostAvatarProps(post, orgProfileMap);
 
-  const originParts = splitLocationParts(post.origin);
-  const destinationParts = splitLocationParts(
-    isLoad ? post.destination : post.destination || "Anywhere",
-  );
   const vehicle =
     post.vehicle_type?.trim() || (isLoad ? "Any vehicle" : "Capacity");
   const material = formatCapacityMaterial(post.material);
@@ -409,41 +405,10 @@ export const OpportunityCard = memo(function OpportunityCard({
         </View>
       </View>
 
-      <View style={styles.routeGrid}>
-        <View style={styles.routeCol}>
-          <Text style={styles.routeLabel}>Pickup</Text>
-          <Text style={styles.routeValue} numberOfLines={1}>
-            {originParts.city}
-          </Text>
-          {originParts.state ? (
-            <Text style={styles.routeState} numberOfLines={1}>
-              {originParts.state}
-            </Text>
-          ) : null}
-        </View>
-        <View style={styles.routeSep}>
-          <View style={styles.routeSepLine} />
-          <ArrowRight size={11} color={MUTED} strokeWidth={2.4} />
-          <View style={styles.routeSepLine} />
-        </View>
-        <View style={[styles.routeCol, styles.routeColEnd]}>
-          <Text style={[styles.routeLabel, styles.routeLabelEnd]}>Drop</Text>
-          <Text
-            style={[styles.routeValue, styles.routeValueEnd]}
-            numberOfLines={1}
-          >
-            {destinationParts.city}
-          </Text>
-          {destinationParts.state ? (
-            <Text
-              style={[styles.routeState, styles.routeValueEnd]}
-              numberOfLines={1}
-            >
-              {destinationParts.state}
-            </Text>
-          ) : null}
-        </View>
-      </View>
+      <MarketplaceRouteGrid
+        pickup={post.origin}
+        drop={isLoad ? post.destination : post.destination || "Anywhere"}
+      />
 
       {specChips.length > 0 || loadDate ? (
         <ScrollView

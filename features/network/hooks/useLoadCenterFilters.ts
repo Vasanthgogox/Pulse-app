@@ -15,6 +15,10 @@ import {
   type StatusFilterTab,
 } from "@/features/network/utils/loadCenter.model";
 import {
+  giveLoadTripKanbanStage,
+  resolveGiveLoadKanbanColumn,
+} from "@/features/network/utils/giveLoadKanban.util";
+import {
   isDoneConvertedToTrip,
 } from "@/features/network/utils/loadCenterTripAllocation.util";
 
@@ -88,8 +92,10 @@ export function useLoadCenterFilters({
     const m = new Map<string, TripRow>();
     for (const t of trips ?? []) {
       const row = t as TripRow;
-      const id = (row.indent_id ?? "").trim();
-      if (id) m.set(id, row);
+      const indentId = (row.indent_id ?? "").trim();
+      const sourceIndentId = (row.source_indent_id ?? "").trim();
+      if (indentId) m.set(indentId, row);
+      if (sourceIndentId && !m.has(sourceIndentId)) m.set(sourceIndentId, row);
     }
     return m;
   }, [trips]);
@@ -308,10 +314,15 @@ export function useLoadCenterFilters({
 
   const hirePartnerDoneLoads = useMemo(
     () =>
-      hirePartnerLoads.filter((load) =>
-        statusMatchesFilter(load.status || "", "DONE"),
+      hirePartnerLoads.filter(
+        (load) =>
+          resolveGiveLoadKanbanColumn(
+            load,
+            quoteCounts[load.id] ?? 0,
+            giveLoadTripKanbanStage(tripByIndentId.get(load.id)),
+          ) === "DONE",
       ),
-    [hirePartnerLoads],
+    [hirePartnerLoads, quoteCounts, tripByIndentId],
   );
 
   /** Done → Rejected (Give Load): terminal loads not linked to a trip. */
@@ -424,22 +435,20 @@ export function useLoadCenterFilters({
     }
     const statusFiltered = hirePartnerLoads.filter((load) => {
       const status = (load.status || "").toLowerCase();
+      const tripStage = giveLoadTripKanbanStage(tripByIndentId.get(load.id));
+      const column = resolveGiveLoadKanbanColumn(
+        load,
+        quoteCounts[load.id] ?? 0,
+        tripStage,
+      );
       if (statusFilterTab === "QUOTED") {
-        // Give Load: Receiving Bids — still open market, at least one bid.
-        // Driven by bid count only; indent.status is never flipped to 'quoted'.
-        const hasBids = (quoteCounts[load.id] ?? 0) > 0;
-        const isNotTerminal =
-          !statusMatchesFilter(status, "AWARDED") &&
-          !statusMatchesFilter(status, "DONE");
-        return hasBids && isNotTerminal;
+        return column === "QUOTED";
       }
       if (statusFilterTab === "OPEN") {
-        // Open Market — published, no bids yet. First bid moves to Receiving Bids
-        // (shipper tab only). Marketplace for other suppliers stays open via
-        // indent.status remaining open/broadcast (ADR-012 Phase 0).
-        const hasBids = (quoteCounts[load.id] ?? 0) > 0;
-        if (hasBids) return false;
-        return statusMatchesFilter(status, "OPEN");
+        return column === "OPEN";
+      }
+      if (statusFilterTab === "AWARDED") {
+        return column === "AWARDED";
       }
       return statusMatchesFilter(status, statusFilterTab);
     });
@@ -453,6 +462,7 @@ export function useLoadCenterFilters({
     searchQuery,
     loadMatchesSearch,
     filteredHirePartnerDoneLoads,
+    tripByIndentId,
   ]);
 
   const doneSubTabCounts = useMemo(() => {
@@ -490,20 +500,12 @@ export function useLoadCenterFilters({
     const getCount = (filter: StatusFilterTab) => {
       if (loadSubTab === "GIVE_LOAD") {
         return hirePartnerLoads.filter((load) => {
-          const status = (load.status || "").toLowerCase();
-          if (filter === "QUOTED") {
-            const hasBids = (quoteCounts[load.id] ?? 0) > 0;
-            const isNotTerminal =
-              !statusMatchesFilter(status, "AWARDED") &&
-              !statusMatchesFilter(status, "DONE");
-            return hasBids && isNotTerminal;
-          }
-          if (filter === "OPEN") {
-            const hasBids = (quoteCounts[load.id] ?? 0) > 0;
-            if (hasBids) return false;
-            return statusMatchesFilter(status, "OPEN");
-          }
-          return statusMatchesFilter(status, filter);
+          const column = resolveGiveLoadKanbanColumn(
+            load,
+            quoteCounts[load.id] ?? 0,
+            giveLoadTripKanbanStage(tripByIndentId.get(load.id)),
+          );
+          return column === filter;
         }).length;
       }
       if (loadSubTab === "GET_LOAD") {
@@ -541,6 +543,7 @@ export function useLoadCenterFilters({
     awardedLoadsDone,
     quoteCounts,
     myQuoteByIndentId,
+    tripByIndentId,
   ]);
 
   return {

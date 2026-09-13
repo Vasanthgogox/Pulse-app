@@ -3,7 +3,7 @@
  * Mirrors Load Center indent cards so Marketplace surfaces match app UI.
  */
 import Theme from "@/constants/Theme";
-import { splitLocationParts } from "@/features/network/utils/storyDisplay";
+import { RouteEndpointStack } from "@/features/network/components/RouteEndpointStack";
 import { ArrowRight } from "lucide-react-native";
 import { Platform, ScrollView, StyleSheet, Text, View, type ViewStyle } from "react-native";
 
@@ -19,27 +19,23 @@ export function titleCaseWord(value: string): string {
 export function MarketplaceRouteGrid({
   pickup,
   drop,
+  pickupLabel = "Pickup",
+  dropLabel = "Drop",
 }: {
   pickup: string | null | undefined;
   drop: string | null | undefined;
+  pickupLabel?: string;
+  dropLabel?: string;
 }) {
-  const originParts = splitLocationParts(pickup);
-  const destParts = splitLocationParts(drop);
-
   return (
     <View style={styles.routeGrid}>
       <View style={styles.routeCol}>
-        <Text style={styles.routeLabel}>Pickup</Text>
-        <Text style={styles.routeCity} numberOfLines={1}>
-          {titleCaseWord(originParts.city)}
-        </Text>
-        {originParts.state ? (
-          <Text style={styles.routeState} numberOfLines={1}>
-            {titleCaseWord(originParts.state)}
-          </Text>
-        ) : (
-          <Text style={styles.routeStateSpacer}>{"\u00a0"}</Text>
-        )}
+        <Text style={styles.routeLabel}>{pickupLabel}</Text>
+        <RouteEndpointStack
+          value={pickup}
+          primaryStyle={styles.routeCity}
+          secondaryStyle={styles.routeState}
+        />
       </View>
       <View style={styles.routeSep} pointerEvents="none" accessibilityElementsHidden>
         <View style={styles.routeSepLine} />
@@ -47,17 +43,13 @@ export function MarketplaceRouteGrid({
         <View style={styles.routeSepLine} />
       </View>
       <View style={[styles.routeCol, styles.routeColEnd]}>
-        <Text style={[styles.routeLabel, styles.routeLabelEnd]}>Drop</Text>
-        <Text style={[styles.routeCity, styles.routeCityEnd]} numberOfLines={1}>
-          {titleCaseWord(destParts.city)}
-        </Text>
-        {destParts.state ? (
-          <Text style={[styles.routeState, styles.routeStateEnd]} numberOfLines={1}>
-            {titleCaseWord(destParts.state)}
-          </Text>
-        ) : (
-          <Text style={[styles.routeStateSpacer, styles.routeStateEnd]}>{"\u00a0"}</Text>
-        )}
+        <Text style={[styles.routeLabel, styles.routeLabelEnd]}>{dropLabel}</Text>
+        <RouteEndpointStack
+          value={drop}
+          align="end"
+          primaryStyle={styles.routeCity}
+          secondaryStyle={styles.routeState}
+        />
       </View>
     </View>
   );
@@ -106,14 +98,14 @@ const styles = StyleSheet.create({
       display: "grid",
       gridTemplateColumns: "minmax(0, 1fr) 44px minmax(0, 1fr)",
       columnGap: 10,
-      alignItems: "center",
+      alignItems: "flex-start",
       width: "100%",
       maxWidth: "100%",
       paddingVertical: 2,
     } as ViewStyle,
     default: {
       flexDirection: "row",
-      alignItems: "center",
+      alignItems: "flex-start",
       alignSelf: "stretch",
       width: "100%",
       gap: 10,
@@ -124,7 +116,6 @@ const styles = StyleSheet.create({
     web: {
       minWidth: 0,
       maxWidth: "100%",
-      overflow: "hidden",
     } as ViewStyle,
     default: {
       flex: 1,
@@ -138,7 +129,7 @@ const styles = StyleSheet.create({
     alignItems: "flex-end",
   },
   routeSep: {
-    paddingTop: 4,
+    paddingTop: 16,
     width: 44,
     flexDirection: "row",
     alignItems: "center",
@@ -146,7 +137,7 @@ const styles = StyleSheet.create({
     gap: 3,
     flexShrink: 0,
     flexGrow: 0,
-    alignSelf: "center",
+    alignSelf: "flex-start",
   },
   routeSepLine: {
     flex: 1,
@@ -170,29 +161,15 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
-    lineHeight: 15,
+    lineHeight: 16,
     letterSpacing: -0.2,
-  },
-  routeCityEnd: {
-    textAlign: "right",
-    width: "100%",
   },
   routeState: {
     marginTop: 1,
     fontSize: 10,
     fontWeight: "400",
     color: Theme.textMuted,
-    lineHeight: 12,
-  },
-  routeStateEnd: {
-    textAlign: "right",
-    width: "100%",
-  },
-  routeStateSpacer: {
-    marginTop: 1,
-    fontSize: 10,
-    lineHeight: 12,
-    color: "transparent",
+    lineHeight: 13,
   },
   specScroll: {
     width: "100%",
