@@ -638,7 +638,7 @@ export function GiveLoadIndentCardActions({
     );
     return (
       <View style={style}>
-        {showMarketplaceToggle ? (
+        {showMarketplaceToggle && !dense ? (
           <View style={styles.marketplaceRow}>
             <MarketplaceShareButton
               isShared={isMarketplaceShared}

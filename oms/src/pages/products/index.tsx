@@ -6,6 +6,7 @@ import { PageToolbar } from '@/components/commerce/PageToolbar';
 import { ProductGridCard } from '@/components/commerce/ProductGridCard';
 import { ProductDetailSheet } from '@/components/commerce/ProductDetailSheet';
 import { FormField } from '@/components/commerce/FormField';
+import { ProductImageHero, ProductThumb } from '@/components/commerce/ProductImageHero';
 import { PackingDimensionsFields } from '@/components/commerce/PackingDimensionsFields';
 import {
   CommerceDataTable,
@@ -22,6 +23,7 @@ import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sh
 import type { Product, ProductCategory } from '@/types/commerce';
 import { cn, formatCurrency } from '@/lib/utils';
 import { parseDimension, volumeFromDimensionsCm } from '@/lib/product-dimensions';
+import { uploadCommerceProductImage } from '@/lib/services/product-image';
 
 const CATEGORIES: ProductCategory[] = ['Electronics', 'Apparel', 'FMCG', 'Industrial', 'Pharmaceuticals', 'Food & Beverage'];
 const TIME_FILTERS = ['Today', 'Week', 'Month', 'All'];
@@ -37,18 +39,23 @@ function CreateProductSheet({ open, onClose }: { open: boolean; onClose: () => v
   const [dimW, setDimW] = useState('');
   const [dimH, setDimH] = useState('');
   const [description, setDescription] = useState('');
+  const [stock, setStock] = useState('');
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imagePreview, setImagePreview] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   async function handleSubmit() {
     if (!name.trim() || !sku.trim() || saving) return;
     setSaving(true);
+    setError(null);
     try {
       const dimensions = {
         l: parseDimension(dimL),
         w: parseDimension(dimW),
         h: parseDimension(dimH),
       };
-      await org.createProduct({
+      const created = await org.createProduct({
         sku:         sku.trim().toUpperCase(),
         name:        name.trim(),
         category,
@@ -57,12 +64,24 @@ function CreateProductSheet({ open, onClose }: { open: boolean; onClose: () => v
         weight_kg:   parseFloat(weight) || 0,
         volume_m3:   volumeFromDimensionsCm(dimensions),
         dimensions,
+        stock:       Math.max(0, parseInt(stock, 10) || 0),
         threshold:   10,
       });
+      const orgId = org.platformOrganization?.id;
+      if (created && imageFile && orgId) {
+        const path = await uploadCommerceProductImage(orgId, created.id, imageFile);
+        await org.updateProduct(created.id, { image_path: path });
+      }
       setName(''); setSku(''); setPrice(''); setWeight('');
       setDimL(''); setDimW(''); setDimH('');
       setDescription('');
+      setStock('');
+      setImageFile(null);
+      if (imagePreview) URL.revokeObjectURL(imagePreview);
+      setImagePreview(null);
       onClose();
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not save product');
     } finally {
       setSaving(false);
     }
@@ -73,6 +92,20 @@ function CreateProductSheet({ open, onClose }: { open: boolean; onClose: () => v
       <SheetContent className="w-full sm:max-w-md overflow-y-auto">
         <SheetHeader><SheetTitle>New product</SheetTitle></SheetHeader>
         <div className="mt-6 space-y-4">
+          <ProductImageHero
+            imagePath={imagePreview}
+            canEdit
+            onSelectFile={(file) => {
+              if (imagePreview) URL.revokeObjectURL(imagePreview);
+              setImageFile(file);
+              setImagePreview(URL.createObjectURL(file));
+            }}
+            onRemove={imagePreview ? () => {
+              URL.revokeObjectURL(imagePreview);
+              setImageFile(null);
+              setImagePreview(null);
+            } : undefined}
+          />
           <FormField label="Product name *" value={name} onChange={setName} placeholder="Widget Pro Max" />
           <FormField label="SKU *" value={sku} onChange={setSku} placeholder="WDG-001" />
           <label className="block">
@@ -95,7 +128,9 @@ function CreateProductSheet({ open, onClose }: { open: boolean; onClose: () => v
             onWidth={setDimW}
             onHeight={setDimH}
           />
+          <FormField label="Stock on hand" value={stock} onChange={setStock} placeholder="0" type="number" />
           <FormField label="Description" value={description} onChange={setDescription} placeholder="Optional description" />
+          {error ? <p className="text-2sm text-destructive">{error}</p> : null}
           <Button className="w-full mt-2" disabled={!name.trim() || !sku.trim() || saving} onClick={() => void handleSubmit()}>
             {saving ? 'Saving…' : 'Add product'}
           </Button>
@@ -119,7 +154,12 @@ export function ProductsPage() {
       header: ({ column }) => <DataGridColumnHeader column={column} title="Product" />,
       cell: ({ row }) => (
         <MemberCell
-          avatar={<Package className="size-3.5" />}
+          avatar={
+            <ProductThumb
+              imagePath={row.original.image_path}
+              fallback={<Package className="size-3.5" />}
+            />
+          }
           title={row.original.name}
           subtitle={`SKU: ${row.original.sku}`}
         />

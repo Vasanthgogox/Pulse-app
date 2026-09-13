@@ -7,7 +7,7 @@ import type {
 } from '../types/master-data';
 
 const PRODUCT_COLUMNS =
-  'id,organization_id,sku,name,description,category,uom,unit_price,weight_kg,volume_m3,length_cm,width_cm,height_cm,hazmat,fragile,temperature_type,status,hsn_code,tax_rate,created_at,updated_at';
+  'id,organization_id,sku,name,description,category,uom,unit_price,weight_kg,volume_m3,length_cm,width_cm,height_cm,hazmat,fragile,temperature_type,status,hsn_code,tax_rate,image_path,created_at,updated_at';
 
 function mapRow(row: Record<string, unknown>): PlatformProduct {
   return {
@@ -30,6 +30,7 @@ function mapRow(row: Record<string, unknown>): PlatformProduct {
     status: String(row.status ?? 'active'),
     hsnCode: (row.hsn_code as string | null) ?? null,
     taxRate: Number(row.tax_rate ?? 0),
+    imagePath: (row.image_path as string | null) ?? null,
     createdAt: String(row.created_at ?? ''),
     updatedAt: String(row.updated_at ?? ''),
   };
@@ -79,6 +80,7 @@ export const productRepository = {
         status: 'active',
         tax_rate: input.taxRate ?? 18,
         hsn_code: input.hsnCode,
+        image_path: input.imagePath ?? null,
       })
       .select(PRODUCT_COLUMNS)
       .single();
@@ -108,6 +110,7 @@ export const productRepository = {
     if (input.temperatureType !== undefined) patch.temperature_type = input.temperatureType;
     if (input.hsnCode !== undefined) patch.hsn_code = input.hsnCode;
     if (input.taxRate !== undefined) patch.tax_rate = input.taxRate;
+    if (input.imagePath !== undefined) patch.image_path = input.imagePath;
 
     const { data, error } = await requirePlatformDb()
       .from('products')

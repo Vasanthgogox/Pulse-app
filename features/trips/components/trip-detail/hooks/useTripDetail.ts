@@ -68,7 +68,7 @@ import {
 import { useQueryClient } from "@tanstack/react-query";
 import type { RealtimePostgresChangesPayload } from "@supabase/supabase-js";
 import { useRouter } from "expo-router";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useRealtimeDriverLocations, useRealtimeTrip, useRealtimeTripDocuments } from "../../../hooks/useRealtimeTrips";
 import { useTrackingTripBroadcast } from "@/features/tracking/hooks/useTrackingTripBroadcast";
 import { isTrackingBroadcastV1Enabled } from "@/features/tracking/trackingFeatureFlags";
@@ -353,6 +353,34 @@ export interface UseTripDetailOptions {
   onBack: () => void;
 }
 
+/**
+ * First paint: prefer an already-fetched bundle (authoritative) over the list
+ * TripRow seed. Never write the list row into `queryKeys.trips.bundle`.
+ */
+function peekTripDetailFirstPaint(
+  tripId: string | null | undefined,
+  queryClient: ReturnType<typeof useQueryClient>,
+): TripRow | null {
+  if (!tripId) return null;
+  const cached = queryClient.getQueryData<TripDetailBundle>(
+    queryKeys.trips.bundle(tripId),
+  );
+  if (cached?.trip?.id === tripId) {
+    return cached.trip as unknown as TripRow;
+  }
+  return getInitialTripForDetail(tripId);
+}
+
+function tripRowListPaintFields(row: TripRow): {
+  driverName: string | null;
+  vehicleLabel: string | null;
+} {
+  return {
+    driverName: (row.driver_display_name ?? "").trim() || null,
+    vehicleLabel: (row.vehicle_display_number ?? "").trim() || null,
+  };
+}
+
 export function useTripDetail({
   tripId,
   entryContext,
@@ -368,16 +396,28 @@ export function useTripDetail({
   void onBack;
 
   // ── Trip data ─────────────────────────────────────────────────────────────
-  const [trip, setTrip] = useState<TripRow | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Sync seed so the first committed render can paint from the list TripRow
+  // (or a cached bundle). Do not wait for a post-mount effect.
+  const [trip, setTrip] = useState<TripRow | null>(() =>
+    peekTripDetailFirstPaint(tripId, queryClient),
+  );
+  const [loading, setLoading] = useState(
+    () => peekTripDetailFirstPaint(tripId, queryClient) == null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
 
   // ── Assignment / driver / vehicle ─────────────────────────────────────────
-  const [driverName, setDriverName] = useState<string | null>(null);
+  const [driverName, setDriverName] = useState<string | null>(() => {
+    const row = peekTripDetailFirstPaint(tripId, queryClient);
+    return row ? tripRowListPaintFields(row).driverName : null;
+  });
   const [driverPhone, setDriverPhone] = useState<string | null>(null);
   const [driverAvatarUri, setDriverAvatarUri] = useState<string | null>(null);
-  const [vehicleLabel, setVehicleLabel] = useState<string | null>(null);
+  const [vehicleLabel, setVehicleLabel] = useState<string | null>(() => {
+    const row = peekTripDetailFirstPaint(tripId, queryClient);
+    return row ? tripRowListPaintFields(row).vehicleLabel : null;
+  });
   const [vehicleDocs, setVehicleDocs] = useState<VehicleDocuments | null>(null);
   const [displayVehicleFromInput, setDisplayVehicleFromInput] = useState("");
   const [driverLinked, setDriverLinked] = useState(false);
@@ -2143,6 +2183,9 @@ export function useTripDetail({
     setLoading(false);
     setError(null);
     loadCompletedForIdRef.current = bundle.trip.id;
+    // Drop the list/award seed after authoritative hydration so it cannot
+    // outlive this trip id. Do not write the seed into the bundle cache.
+    clearInitialTripForDetail(bundle.trip.id);
     initialLoadDoneRef.current = true;
 
     const auditRows = Array.isArray(bundle.assignment_audit)
@@ -2247,18 +2290,68 @@ export function useTripDetail({
     }
   }, [bundle]);
 
-  // Stash: preloaded trip from load-flow
-  useEffect(() => {
-    if (!tripId) return;
-    const initial = getInitialTripForDetail(tripId);
-    if (initial) {
-      setTrip(initial);
+  // List/award TripRow seed + trip-id switch: apply before paint so we never
+  // show the previous trip. Cached bundle wins over the partial list seed.
+  useLayoutEffect(() => {
+    if (!tripId) {
+      bundleSeededRef.current = false;
+      setTrip(null);
+      setLoading(true);
+      return;
+    }
+
+    const switchingAway = tripRef.current != null && tripRef.current.id !== tripId;
+    if (switchingAway) {
+      bundleSeededRef.current = false;
+    }
+
+    const next = peekTripDetailFirstPaint(tripId, queryClient);
+    if (next?.id === tripId) {
+      const cachedBundle = queryClient.getQueryData<TripDetailBundle>(
+        queryKeys.trips.bundle(tripId),
+      );
+      const hasAuthoritativeBundle = cachedBundle?.trip?.id === tripId;
+      setTrip((prev) => {
+        if (prev?.id === tripId && (bundleSeededRef.current || hasAuthoritativeBundle)) {
+          return prev;
+        }
+        if (prev?.id === tripId) return prev;
+        return next;
+      });
+      if (switchingAway) {
+        const paint = tripRowListPaintFields(next);
+        setDriverName(paint.driverName);
+        setVehicleLabel(paint.vehicleLabel);
+        setDriverPhone(null);
+        setDriverAvatarUri(null);
+        setPartnerName(String(next.supplier_name ?? "").trim() || null);
+        setClientPartyRes(null);
+        setSupplierPartyRes(null);
+      } else if (!bundleSeededRef.current && !hasAuthoritativeBundle) {
+        const paint = tripRowListPaintFields(next);
+        setDriverName(paint.driverName);
+        setVehicleLabel(paint.vehicleLabel);
+      }
       setError(null);
       setLoading(false);
       loadCompletedForIdRef.current = tripId;
-      clearInitialTripForDetail(tripId);
+      return;
     }
-  }, [tripId]);
+
+    if (switchingAway || tripRef.current?.id !== tripId) {
+      bundleSeededRef.current = false;
+      setTrip(null);
+      setDriverName(null);
+      setVehicleLabel(null);
+      setDriverPhone(null);
+      setDriverAvatarUri(null);
+      setPartnerName(null);
+      setClientPartyRes(null);
+      setSupplierPartyRes(null);
+      setError(null);
+      setLoading(true);
+    }
+  }, [tripId, queryClient]);
 
   // Initial load — skipped on bundle path (bundle seeding effect owns initial hydration)
   useEffect(() => {

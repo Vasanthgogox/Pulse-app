@@ -235,7 +235,7 @@ export default function TripsScreen() {
   const tripsHubLayoutCompact = width > 0 && width < 640;
   const handleOpenTripDetails = useCallback(
     (trip: TripRow) => {
-      openTripDetail(trip.id);
+      openTripDetail(trip.id, trip);
     },
     [openTripDetail],
   );

@@ -1,6 +1,7 @@
 import { Package, ShoppingCart } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
+import { productImagePublicUrl } from '@/lib/services/product-image';
 import { cn, formatCurrency } from '@/lib/utils';
 import type { Product } from '@/types/commerce';
 
@@ -12,26 +13,31 @@ interface ProductGridCardProps {
 export function ProductGridCard({ product, onSelect }: ProductGridCardProps) {
   const available = product.stock - product.reserved;
   const lowStock = available <= product.threshold;
+  const imageSrc = productImagePublicUrl(product.image_path);
 
   return (
     <div
       className="rounded-xl border border-border bg-card overflow-hidden hover:shadow-sm transition-shadow cursor-pointer group"
       onClick={onSelect}
     >
-      <div className="relative bg-muted/30 h-[180px] flex items-center justify-center">
+      <div className="relative bg-muted/30 h-[180px] flex items-center justify-center overflow-hidden">
         {lowStock && (
           <Badge
             size="sm"
             variant="destructive"
-            className="absolute top-2.5 right-2.5 uppercase text-[10px] font-bold tracking-wide px-1.5"
+            className="absolute top-2.5 right-2.5 uppercase text-[10px] font-bold tracking-wide px-1.5 z-10"
           >
             Low stock
           </Badge>
         )}
-        <div className="flex flex-col items-center gap-2 text-muted-foreground/40">
-          <Package className="size-12" />
-          <span className="text-[10px] font-mono">{product.sku}</span>
-        </div>
+        {imageSrc ? (
+          <img src={imageSrc} alt="" className="absolute inset-0 size-full object-cover" />
+        ) : (
+          <div className="flex flex-col items-center gap-2 text-muted-foreground/40">
+            <Package className="size-12" />
+            <span className="text-[10px] font-mono">{product.sku}</span>
+          </div>
+        )}
       </div>
 
       <div className="p-3.5">

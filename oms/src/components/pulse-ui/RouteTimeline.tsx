@@ -1,15 +1,17 @@
 import { MapPin } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import type { PlanStop } from '@/types/commerce';
+import { formatStopAddress, isAddressIncomplete } from '@/lib/address';
 import { LottieIcon } from './LottieIcon';
 
 interface RouteTimelineProps {
   stops:     PlanStop[];
   sequence?: string[];
   className?: string;
+  onMissingAddress?: (stop: PlanStop) => void;
 }
 
-export function RouteTimeline({ stops, sequence, className }: RouteTimelineProps) {
+export function RouteTimeline({ stops, sequence, className, onMissingAddress }: RouteTimelineProps) {
   const ordered = sequence
     ? sequence.map(id => stops.find(s => s.stop_id === id)).filter((s): s is PlanStop => Boolean(s))
     : stops;
@@ -45,7 +47,17 @@ export function RouteTimeline({ stops, sequence, className }: RouteTimelineProps
               <span className="text-2xs capitalize text-muted-foreground ml-auto">{stop.type}</span>
             </div>
             <p className="text-2sm text-muted-foreground mt-0.5 truncate">
-              {stop.address.city}, {stop.address.state}
+              {isAddressIncomplete(stop.address) ? (
+                <button
+                  type="button"
+                  className="text-[var(--pulse-hero-blue)] font-medium hover:underline"
+                  onClick={() => onMissingAddress?.(stop)}
+                >
+                  Add {stop.type === 'drop' ? 'client' : 'pickup'} address
+                </button>
+              ) : (
+                formatStopAddress(stop.address)
+              )}
             </p>
           </div>
         </div>

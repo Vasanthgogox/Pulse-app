@@ -32,18 +32,20 @@ export async function upsertInventory(
 ): Promise<void> {
   const sb = getSupabase();
   if (!sb) throw new Error('Supabase not configured');
+  const now = new Date().toISOString();
+  const row: Record<string, unknown> = {
+    organization_id: organizationId,
+    product_id: productId,
+    warehouse_id: warehouseId,
+    last_adjusted_at: now,
+    updated_at: now,
+  };
+  if (patch.available_qty !== undefined) row.available_qty = patch.available_qty;
+  if (patch.reserved_qty !== undefined) row.reserved_qty = patch.reserved_qty;
+  if (patch.damaged_qty !== undefined) row.damaged_qty = patch.damaged_qty;
+  if (patch.reorder_level !== undefined) row.reorder_level = patch.reorder_level;
   const { error } = await sb
     .from('commerce_inventory')
-    .upsert(
-      {
-        organization_id: organizationId,
-        product_id: productId,
-        warehouse_id: warehouseId,
-        ...patch,
-        last_adjusted_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      },
-      { onConflict: 'product_id,warehouse_id' },
-    );
+    .upsert(row, { onConflict: 'product_id,warehouse_id' });
   if (error) throw error;
 }

@@ -38,6 +38,8 @@ export interface Product {
   reserved:    number;
   threshold:   number;
   rating?:     number;
+  /** org-assets path or https URL */
+  image_path?: string | null;
   created_at:  string;
 }
 

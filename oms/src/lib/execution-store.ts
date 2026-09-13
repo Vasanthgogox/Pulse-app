@@ -53,6 +53,12 @@ export function upsertExecutionJob(job: ExecutionJob): ExecutionJob {
   return job;
 }
 
+export function removeExecutionJob(id: string): void {
+  if (!jobs.delete(id)) return;
+  persistJobs();
+  notify();
+}
+
 export function updateExecutionJob(
   id: string,
   patch: Partial<ExecutionJob>,

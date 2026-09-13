@@ -55,6 +55,7 @@ export type PlatformProduct = {
   status: string;
   hsnCode: string | null;
   taxRate: number;
+  imagePath: string | null;
   createdAt: string;
   updatedAt: string;
 };
@@ -112,6 +113,7 @@ export type CreatePlatformProductInput = {
   temperatureType?: string;
   hsnCode?: string;
   taxRate?: number;
+  imagePath?: string | null;
 };
 
 export type UpdatePlatformCustomerInput = {
@@ -163,4 +165,5 @@ export type UpdatePlatformProductInput = {
   temperatureType?: string;
   hsnCode?: string;
   taxRate?: number;
+  imagePath?: string | null;
 };

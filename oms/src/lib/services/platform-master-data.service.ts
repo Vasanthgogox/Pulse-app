@@ -171,7 +171,7 @@ export async function updateProduct(
     hsn_code?: string;
   },
 ): Promise<Product> {
-  const row = await ProductService.update(organizationId, productId, {
+  const updated = await ProductService.update(organizationId, productId, {
     sku: patch.sku,
     name: patch.name,
     description: patch.description,
@@ -188,8 +188,9 @@ export async function updateProduct(
     temperatureType: patch.temperature_type,
     hsnCode: patch.hsn_code,
     taxRate: patch.tax_rate,
+    imagePath: patch.image_path,
   });
-  return platformProductToCommerce(row);
+  return platformProductToCommerce(updated);
 }
 
 export async function deleteProduct(organizationId: string, productId: string): Promise<void> {

@@ -1,14 +1,19 @@
 import { useEffect, useState } from 'react';
-import { Package } from 'lucide-react';
-import { EntityFlexSheet, EntityHero } from '@/components/commerce/EntityFlexSheet';
+import { EntityFlexSheet } from '@/components/commerce/EntityFlexSheet';
+import { ProductImageHero } from '@/components/commerce/ProductImageHero';
+import { ProductInventoryPanel } from '@/components/commerce/ProductInventoryPanel';
 import { FormField, SpecRow, selectClass } from '@/components/commerce/FormField';
 import { PackingDimensionsFields } from '@/components/commerce/PackingDimensionsFields';
-import { StatusDotBadge } from '@/components/commerce/StatusDotBadge';
 import { useCommerce } from '@/context/CommerceProvider';
 import { useOrganization } from '@/context/OrganizationProvider';
 import { formatDimensions, parseDimension, volumeFromDimensionsCm } from '@/lib/product-dimensions';
 import type { ProductCategory } from '@/types/commerce';
+import { toast } from 'sonner';
 import { cn, formatCurrency } from '@/lib/utils';
+import {
+  removeCommerceProductImage,
+  uploadCommerceProductImage,
+} from '@/lib/services/product-image';
 
 const CATEGORIES: ProductCategory[] = ['Electronics', 'Apparel', 'FMCG', 'Industrial', 'Pharmaceuticals', 'Food & Beverage'];
 
@@ -31,13 +36,12 @@ export function ProductDetailSheet({ productId, open, onClose }: ProductDetailSh
   const [description, setDescription] = useState('');
   const [unitPrice, setUnitPrice] = useState('');
   const [weight, setWeight] = useState('');
-  const [stock, setStock] = useState('');
-  const [reserved, setReserved] = useState('');
-  const [threshold, setThreshold] = useState('');
   const [dimL, setDimL] = useState('');
   const [dimW, setDimW] = useState('');
   const [dimH, setDimH] = useState('');
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [imageUploading, setImageUploading] = useState(false);
 
   useEffect(() => {
     if (!product || editing) return;
@@ -47,9 +51,6 @@ export function ProductDetailSheet({ productId, open, onClose }: ProductDetailSh
     setDescription(product.description);
     setUnitPrice(String(product.unit_price));
     setWeight(String(product.weight_kg));
-    setStock(String(product.stock));
-    setReserved(String(product.reserved));
-    setThreshold(String(product.threshold));
     setDimL(String(product.dimensions.l || ''));
     setDimW(String(product.dimensions.w || ''));
     setDimH(String(product.dimensions.h || ''));
@@ -59,13 +60,12 @@ export function ProductDetailSheet({ productId, open, onClose }: ProductDetailSh
     if (!open) {
       setEditing(false);
       setDeleteConfirm(false);
+      setSaveError(null);
     }
   }, [open]);
 
   if (!product) return null;
 
-  const available = product.stock - product.reserved;
-  const low = available <= product.threshold;
   const canSave = name.trim().length > 0 && sku.trim().length > 0;
 
   function resetDraft() {
@@ -75,9 +75,6 @@ export function ProductDetailSheet({ productId, open, onClose }: ProductDetailSh
     setDescription(product!.description);
     setUnitPrice(String(product!.unit_price));
     setWeight(String(product!.weight_kg));
-    setStock(String(product!.stock));
-    setReserved(String(product!.reserved));
-    setThreshold(String(product!.threshold));
     setDimL(String(product!.dimensions.l || ''));
     setDimW(String(product!.dimensions.w || ''));
     setDimH(String(product!.dimensions.h || ''));
@@ -95,6 +92,7 @@ export function ProductDetailSheet({ productId, open, onClose }: ProductDetailSh
   async function handleSave() {
     if (!canSave || saving) return;
     setSaving(true);
+    setSaveError(null);
     try {
       const { dimensions, volume_m3 } = buildDimensions();
       await org.updateProduct(product!.id, {
@@ -104,15 +102,45 @@ export function ProductDetailSheet({ productId, open, onClose }: ProductDetailSh
         description: description.trim(),
         unit_price:  parseFloat(unitPrice) || 0,
         weight_kg:   parseFloat(weight) || 0,
-        stock:       Math.max(0, parseInt(stock, 10) || 0),
-        reserved:    Math.max(0, parseInt(reserved, 10) || 0),
-        threshold:   Math.max(0, parseInt(threshold, 10) || 0),
         dimensions,
         volume_m3,
       });
       setEditing(false);
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Could not save product';
+      setSaveError(message);
+      toast.error(message);
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleImageFile(file: File) {
+    const orgId = org.platformOrganization?.id;
+    if (!orgId || imageUploading) return;
+    setImageUploading(true);
+    try {
+      const path = await uploadCommerceProductImage(orgId, product!.id, file);
+      await org.updateProduct(product!.id, { image_path: path });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Could not upload photo';
+      toast.error(message);
+    } finally {
+      setImageUploading(false);
+    }
+  }
+
+  async function handleRemoveImage() {
+    if (!product?.image_path || imageUploading) return;
+    setImageUploading(true);
+    try {
+      await removeCommerceProductImage(product.image_path);
+      await org.updateProduct(product.id, { image_path: null });
+    } catch (e) {
+      const message = e instanceof Error ? e.message : 'Could not remove photo';
+      toast.error(message);
+    } finally {
+      setImageUploading(false);
     }
   }
 
@@ -128,7 +156,7 @@ export function ProductDetailSheet({ productId, open, onClose }: ProductDetailSh
       entity={product}
       title="Product Details"
       editing={editing}
-      canSave={canSave}
+      canSave={canSave && !saving}
       deleteConfirm={deleteConfirm}
       onClose={onClose}
       onEdit={() => setEditing(true)}
@@ -138,9 +166,22 @@ export function ProductDetailSheet({ productId, open, onClose }: ProductDetailSh
       onDeleteConfirm={() => void handleDelete()}
       onDeleteCancel={() => setDeleteConfirm(false)}
     >
-      <EntityHero>
-        <Package className="size-12 text-muted-foreground/20" />
-      </EntityHero>
+      <ProductImageHero
+        imagePath={product.image_path}
+        uploading={imageUploading}
+        canEdit
+        onSelectFile={(file) => void handleImageFile(file)}
+        onRemove={() => void handleRemoveImage()}
+      />
+
+      {!editing ? (
+        <div className="mb-4">
+          <h3 className="font-bold text-sm">{product.name}</h3>
+          <p className="text-2xs text-muted-foreground mt-1">{product.description || `${product.category} product`}</p>
+        </div>
+      ) : null}
+
+      <ProductInventoryPanel product={product} />
 
       {editing ? (
         <div className="space-y-3">
@@ -162,30 +203,14 @@ export function ProductDetailSheet({ productId, open, onClose }: ProductDetailSh
             onWidth={setDimW}
             onHeight={setDimH}
           />
-          <div className="grid grid-cols-3 gap-2">
-            <FormField label="Stock" value={stock} onChange={setStock} type="number" />
-            <FormField label="Reserved" value={reserved} onChange={setReserved} type="number" />
-            <FormField label="Threshold" value={threshold} onChange={setThreshold} type="number" />
-          </div>
+          {saveError ? <p className="text-2sm text-destructive">{saveError}</p> : null}
           <FormField label="Description" value={description} onChange={setDescription} />
         </div>
       ) : (
         <>
-          <div className="mb-4">
-            <h3 className="font-bold text-sm">{product.name}</h3>
-            <p className="text-2xs text-muted-foreground mt-1">{product.description || `${product.category} product`}</p>
-          </div>
           <div className="divide-y divide-border border-y border-border text-2sm">
             <SpecRow label="SKU"><span className="font-mono">{product.sku}</span></SpecRow>
             <SpecRow label="Category">{product.category}</SpecRow>
-            <SpecRow label="Available">
-              <div className="flex items-center justify-end gap-2 flex-wrap">
-                <span className={cn('font-medium tabular-nums', low && 'text-destructive')}>
-                  {available.toLocaleString()} units
-                </span>
-                <StatusDotBadge label={low ? 'Low stock' : 'In stock'} tone={low ? 'danger' : 'success'} />
-              </div>
-            </SpecRow>
             <SpecRow label="Weight">{product.weight_kg} kg</SpecRow>
             <SpecRow label="Packing">{formatDimensions(product.dimensions)}</SpecRow>
           </div>

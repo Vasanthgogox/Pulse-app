@@ -31,6 +31,10 @@ import {
 } from '@/lib/services/platform-master-data.service';
 import { upsertInventory, fetchInventory } from '@/lib/services/products.inventory';
 import {
+  hasInventoryQtyPatch,
+  toInventoryUpsertPatch,
+} from '@/lib/commerce-inventory';
+import {
   getPrimaryOrganizationForUser,
   type PlatformOrganization,
 } from '@/lib/services/identity-organization.service';
@@ -50,7 +54,12 @@ interface OrganizationContextValue extends OrganizationState {
   createWarehouse: (warehouse: Omit<Warehouse, 'id'>) => Promise<Warehouse | null>;
   updateWarehouse: (id: string, patch: Partial<Warehouse>) => Promise<void>;
   deleteWarehouse: (id: string) => Promise<void>;
-  createProduct: (product: Omit<Product, 'id' | 'stock' | 'reserved' | 'created_at'>) => Promise<Product | null>;
+  createProduct: (
+    product: Omit<Product, 'id' | 'stock' | 'reserved' | 'created_at'> & {
+      stock?: number;
+      reserved?: number;
+    },
+  ) => Promise<Product | null>;
   updateProduct: (id: string, patch: Partial<Product>) => Promise<void>;
   deleteProduct: (id: string) => Promise<void>;
   setProductStock: (productId: string, stock: number) => Promise<void>;
@@ -118,9 +127,9 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
           if (!stockRow) return commerce;
           return {
             ...commerce,
-            stock: stockRow.available_qty,
-            reserved: stockRow.reserved_qty,
-            threshold: stockRow.reorder_level,
+            stock: Number(stockRow.available_qty) || 0,
+            reserved: Number(stockRow.reserved_qty) || 0,
+            threshold: Number(stockRow.reorder_level) || 0,
           };
         }),
       }));
@@ -246,17 +255,57 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     });
   }, [workspaceId, runMutation, refreshMasterData]);
 
+  const ensureInventoryWarehouseId = useCallback(async (): Promise<string> => {
+    if (!workspaceId) throw new Error('Workspace not loaded');
+    const existing = state.warehouses[0]?.id;
+    if (existing) return existing;
+    const clientId = await ensureWarehouseClientId(
+      workspaceId,
+      state.customers,
+      state.profile?.name ?? 'Workspace',
+    );
+    const created = await createWarehouseRecord(workspaceId, clientId, {
+      name: 'Primary warehouse',
+      warehouse_code: 'PRIMARY',
+    });
+    return created.id;
+  }, [workspaceId, state.warehouses, state.customers, state.profile?.name]);
+
+  const writeProductInventory = useCallback(async (
+    productId: string,
+    next: { stock?: number; reserved?: number; threshold?: number },
+  ) => {
+    if (!workspaceId) return;
+    if (!hasInventoryQtyPatch(next)) return;
+    const warehouseId = await ensureInventoryWarehouseId();
+    await upsertInventory(
+      workspaceId,
+      productId,
+      warehouseId,
+      toInventoryUpsertPatch(next),
+    );
+  }, [workspaceId, ensureInventoryWarehouseId]);
+
   const createProduct = useCallback(async (
-    product: Omit<Product, 'id' | 'stock' | 'reserved' | 'created_at'>,
+    product: Omit<Product, 'id' | 'stock' | 'reserved' | 'created_at'> & {
+      stock?: number;
+      reserved?: number;
+    },
   ): Promise<Product | null> => {
     if (!workspaceId) return null;
     return runMutation(async () => {
-      const created = await createProductRecord(workspaceId, product);
+      const { stock, reserved, ...catalog } = product;
+      const created = await createProductRecord(workspaceId, catalog);
+      await writeProductInventory(created.id, {
+        stock,
+        reserved,
+        threshold: catalog.threshold,
+      });
       await refreshMasterData();
       persistOnboarding((prev) => ({ ...prev, onboardingStep: 'inventory' }));
       return created;
     });
-  }, [workspaceId, runMutation, refreshMasterData, persistOnboarding]);
+  }, [workspaceId, runMutation, writeProductInventory, refreshMasterData, persistOnboarding]);
 
   const updateProduct = useCallback(async (id: string, patch: Partial<Product>) => {
     if (!workspaceId) return;
@@ -265,17 +314,10 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
       if (Object.keys(catalogPatch).length > 0) {
         await updateProductRecord(workspaceId, id, catalogPatch);
       }
-      const warehouseId = state.warehouses[0]?.id;
-      if (warehouseId && (stock !== undefined || reserved !== undefined || threshold !== undefined)) {
-        await upsertInventory(workspaceId, id, warehouseId, {
-          available_qty: stock,
-          reserved_qty: reserved,
-          reorder_level: threshold,
-        });
-      }
+      await writeProductInventory(id, { stock, reserved, threshold });
       await refreshMasterData();
     });
-  }, [workspaceId, state.warehouses, runMutation, refreshMasterData]);
+  }, [workspaceId, writeProductInventory, runMutation, refreshMasterData]);
 
   const deleteProduct = useCallback(async (id: string) => {
     if (!workspaceId) return;
@@ -287,18 +329,15 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
 
   const setProductStock = useCallback(async (productId: string, stock: number) => {
     if (!workspaceId) return;
-    const warehouseId = state.warehouses[0]?.id;
     await runMutation(async () => {
-      if (warehouseId) {
-        await upsertInventory(workspaceId, productId, warehouseId, { available_qty: stock });
-      }
+      await writeProductInventory(productId, { stock });
       await refreshMasterData();
       persistOnboarding((prev) => ({
         ...prev,
         onboardingStep: prev.customers.length ? prev.onboardingStep : 'customer',
       }));
     });
-  }, [workspaceId, state.warehouses, runMutation, refreshMasterData, persistOnboarding]);
+  }, [workspaceId, writeProductInventory, runMutation, refreshMasterData, persistOnboarding]);
 
   const createCustomer = useCallback(async (
     customer: Omit<Customer, 'id' | 'total_orders' | 'total_spend' | 'created_at'>,

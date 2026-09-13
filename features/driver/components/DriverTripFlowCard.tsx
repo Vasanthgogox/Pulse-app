@@ -36,7 +36,10 @@ import { useTripTimelineQuery } from '@/lib/queries/useTripTimelineQuery';
 import { useTripCheckpointDistanceQuery } from '@/lib/queries/useTripCheckpointDistanceQuery';
 import { useTripDriverPresenceQuery } from '@/lib/queries/useTripDriverPresenceQuery';
 import { openExternalNavigation } from '@/lib/mapsNavigation.util';
+import { DriverMissionStopsList } from '@/features/driver/components/DriverMissionStopsList';
 import { MissionCardLayout } from '@/features/driver/components/MissionCardLayout';
+import { useDriverStopExecution } from '@/features/driver/hooks/useDriverStopExecution';
+import { shouldShowDriverMultiStop } from '@/features/driver/execution/normalizeDriverStopExecution';
 import { DriverShipperFeedbackModal } from '@/features/chat/components/driver/DriverShipperFeedbackModal';
 import { findLatestMissionDebriefMessage } from '@/features/chat/utils/missionDebrief.util';
 import { DriverPodCompletionPage } from '@/features/driver/components/DriverPodCompletionPage';
@@ -384,6 +387,14 @@ export function DriverTripFlowCard({
   const { conversations, ensureDriverTripConversation } = useDriverChat();
 
   const [localTrip, setLocalTrip] = useState<tripsService.TripRow>(trip);
+  const {
+    stops: executionStops,
+    currentStop,
+    mutating: stopMutating,
+    arrive: arriveCurrentStop,
+    complete: completeCurrentStop,
+  } = useDriverStopExecution(trip.id);
+  const showMultiStop = shouldShowDriverMultiStop(executionStops);
   const [step, setStep] = useState<StepId>(() => deriveDriverFlowStepFromTrip(trip));
   const [stepLoading, setStepLoading] = useState(false);
   const [stepError, setStepError] = useState<string | null>(null);
@@ -1533,6 +1544,28 @@ export function DriverTripFlowCard({
           dwellLabel={dwellLabel}
           guidanceMessage={guidanceMessage}
           onNavigate={onNavigate}
+        />
+      ) : null}
+
+      {showMultiStop && step !== 'completed' ? (
+        <DriverMissionStopsList
+          stops={executionStops}
+          currentStopId={currentStop?.stopId ?? null}
+          actionBusy={stopMutating != null}
+          onArrive={() => {
+            void arriveCurrentStop().then((result) => {
+              if (result.ignored) return;
+              if (!result.ok && result.error) setStepError(result.error.message);
+              else setStepError(null);
+            });
+          }}
+          onComplete={() => {
+            void completeCurrentStop().then((result) => {
+              if (result.ignored) return;
+              if (!result.ok && result.error) setStepError(result.error.message);
+              else setStepError(null);
+            });
+          }}
         />
       ) : null}
 

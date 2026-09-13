@@ -247,7 +247,7 @@ export function MemberCell({
 }) {
   return (
     <div className="flex items-center gap-2.5 min-w-0 py-0.5">
-      <div className="size-8 shrink-0 rounded-full bg-[var(--pulse-brand-soft)] flex items-center justify-center text-2xs font-bold text-[var(--pulse-hero-blue)]">
+      <div className="size-8 shrink-0 rounded-md overflow-hidden bg-[var(--pulse-brand-soft)] flex items-center justify-center text-2xs font-bold text-[var(--pulse-hero-blue)]">
         {avatar}
       </div>
       <div className="min-w-0 flex-1">

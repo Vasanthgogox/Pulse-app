@@ -5953,6 +5953,7 @@ export type Database = {
           height_cm: number | null
           hsn_code: string | null
           id: string
+          image_path: string | null
           length_cm: number | null
           name: string
           organization_id: string
@@ -5978,6 +5979,7 @@ export type Database = {
           height_cm?: number | null
           hsn_code?: string | null
           id?: string
+          image_path?: string | null
           length_cm?: number | null
           name: string
           organization_id: string
@@ -6003,6 +6005,7 @@ export type Database = {
           height_cm?: number | null
           hsn_code?: string | null
           id?: string
+          image_path?: string | null
           length_cm?: number | null
           name?: string
           organization_id?: string

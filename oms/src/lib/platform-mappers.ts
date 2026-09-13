@@ -66,6 +66,7 @@ export function platformProductToCommerce(product: PlatformProduct): Product {
     stock: 0,
     reserved: 0,
     threshold: 0,
+    image_path: product.imagePath,
     created_at: product.createdAt,
   };
 }

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { toast } from 'sonner';
 import {
   Truck, Weight, ArrowUp, ArrowDown, GitMerge,
   Loader2, Thermometer, Shield,
@@ -15,7 +16,10 @@ import {
   getStopById, reorderRoute,
 } from '@/lib/merge-engine';
 import { formatCurrency } from '@/lib/utils';
-import type { ExecutionPlan } from '@/types/commerce';
+import type { Address, ExecutionPlan, PlanStop } from '@/types/commerce';
+import { isAddressIncomplete } from '@/lib/address';
+import { StopAddressDialog } from '@/components/commerce/StopAddressDialog';
+import { useOrganization } from '@/context/OrganizationProvider';
 
 export function ExecutionPlanBuilderPage() {
   const navigate = useNavigate();
@@ -23,8 +27,9 @@ export function ExecutionPlanBuilderPage() {
     orders, selectedOrderIds, toggleOrderSelection, clearOrderSelection,
     mergeRecommendations, applyMergeRecommendation,
     createExecutionPlan, publishExecutionPlan,
-    tenant, identity,
+    tenant, identity, updateOrder,
   } = useCommerce();
+  const org = useOrganization();
 
   const [search, setSearch] = useState('');
   const [stops, setStops] = useState<ReturnType<typeof buildPlanGraph>['stops']>([]);
@@ -32,6 +37,8 @@ export function ExecutionPlanBuilderPage() {
   const [route, setRoute] = useState<ReturnType<typeof buildPlanGraph>['route']>({ sequence: [] });
   const [publishing, setPublishing] = useState(false);
   const [showPayload, setShowPayload] = useState(false);
+  const [addressStopId, setAddressStopId] = useState<string | null>(null);
+  const [skippedStopIds, setSkippedStopIds] = useState<string[]>([]);
 
   const pending = orders.filter(o => o.status === 'Pending Consolidation');
   const filtered = pending.filter(o => {
@@ -42,6 +49,10 @@ export function ExecutionPlanBuilderPage() {
   const metrics = useMemo(() => computeOptimizationMetrics(selected), [selected]);
   const constraints = useMemo(() => buildDefaultConstraints(selected), [selected]);
 
+  const addressFingerprint = selected
+    .map(o => `${o.id}:${o.pickup_address.line1}:${o.pickup_address.city}:${o.drop_address.line1}:${o.drop_address.city}:${o.drop_address.pincode}`)
+    .join('|');
+
   useEffect(() => {
     if (selected.length === 0) {
       setStops([]); setAllocations([]); setRoute({ sequence: [] });
@@ -50,12 +61,74 @@ export function ExecutionPlanBuilderPage() {
     const graph = buildPlanGraph(selected);
     setStops(graph.stops);
     setAllocations(graph.allocations);
-    setRoute(graph.route);
-  }, [selectedOrderIds, selected.length]);
+    setRoute((prev) => {
+      const ids = new Set(graph.route.sequence);
+      const kept = prev.sequence.filter((id) => ids.has(id));
+      return kept.length === graph.route.sequence.length ? { sequence: kept } : graph.route;
+    });
+  }, [selectedOrderIds, selected.length, addressFingerprint]);
 
   const orderedStops = route.sequence
     .map(id => getStopById(stops, id))
     .filter((s): s is NonNullable<typeof s> => Boolean(s));
+
+  const addressStop = addressStopId
+    ? stops.find(s => s.stop_id === addressStopId) ?? null
+    : null;
+
+  useEffect(() => {
+    if (addressStopId) return;
+    const missing = stops.find(
+      s => isAddressIncomplete(s.address) && !skippedStopIds.includes(s.stop_id),
+    );
+    if (missing) setAddressStopId(missing.stop_id);
+  }, [stops, addressStopId, skippedStopIds]);
+
+  function orderForStop(stop: PlanStop) {
+    const alloc = allocations.find(a =>
+      stop.type === 'drop' ? a.drop_stop_id === stop.stop_id : a.pickup_stop_id === stop.stop_id,
+    );
+    return alloc ? orders.find(o => o.id === alloc.order_id) ?? null : null;
+  }
+
+  async function handleSaveStopAddress(address: Address) {
+    if (!addressStop) return;
+    const order = orderForStop(addressStop);
+    if (addressStop.type === 'drop') {
+      if (order?.customer_id) {
+        await org.updateCustomer(order.customer_id, {
+          shipping_address: address,
+          billing_address: address,
+        });
+      }
+      if (order) updateOrder(order.id, { drop_address: address });
+      setStops((prev) => prev.map((s) => (
+        s.stop_id === addressStop.stop_id ? { ...s, address } : s
+      )));
+      return;
+    }
+    const warehouseId = addressStop.warehouse_id || order?.pickup_warehouse_id;
+    if (warehouseId) {
+      await org.updateWarehouse(warehouseId, {
+        address: {
+          line1: address.line1,
+          city: address.city,
+          state: address.state,
+          pincode: address.pincode,
+        },
+      });
+    }
+    if (warehouseId) {
+      orders
+        .filter(o => o.pickup_warehouse_id === warehouseId)
+        .forEach(o => updateOrder(o.id, { pickup_address: address }));
+    } else if (order) {
+      updateOrder(order.id, { pickup_address: address });
+    }
+    setStops((prev) => prev.map((s) => (
+      s.stop_id === addressStop.stop_id ? { ...s, address } : s
+    )));
+  }
 
   const previewPayload = useMemo(() => {
     if (selected.length === 0 || stops.length === 0) return null;
@@ -74,11 +147,26 @@ export function ExecutionPlanBuilderPage() {
 
   async function handlePublish() {
     if (!selectedOrderIds.length) return;
+    const missing = stops.find(s => isAddressIncomplete(s.address));
+    if (missing) {
+      setAddressStopId(missing.stop_id);
+      toast.error(
+        missing.type === 'drop'
+          ? 'Add the client delivery address before publishing'
+          : 'Add the pickup address before publishing',
+      );
+      return;
+    }
     setPublishing(true);
-    const plan = createExecutionPlan(selectedOrderIds, stops, route, allocations, constraints, metrics);
-    await publishExecutionPlan(plan.id, plan);
-    setPublishing(false);
-    navigate('/execution');
+    try {
+      const plan = createExecutionPlan(selectedOrderIds, stops, route, allocations, constraints, metrics);
+      await publishExecutionPlan(plan.id, plan);
+      navigate('/execution');
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to publish execution plan');
+    } finally {
+      setPublishing(false);
+    }
   }
 
   const topRec = mergeRecommendations[0];
@@ -140,13 +228,17 @@ export function ExecutionPlanBuilderPage() {
         <div className="xl:col-span-5 flex flex-col gap-3 min-w-0">
           <CardShell title="Stops (definitions)">
             <div className="p-3">
-              <RouteTimeline stops={stops} />
+              <RouteTimeline stops={stops} onMissingAddress={stop => setAddressStopId(stop.stop_id)} />
             </div>
           </CardShell>
 
           <CardShell title="Route (optimized sequence)">
             <div className="p-3">
-              <RouteTimeline stops={stops} sequence={route.sequence} />
+              <RouteTimeline
+                stops={stops}
+                sequence={route.sequence}
+                onMissingAddress={stop => setAddressStopId(stop.stop_id)}
+              />
             </div>
             {orderedStops.length > 0 && (
               <div className="border-t border-border divide-y divide-border">
@@ -222,6 +314,25 @@ export function ExecutionPlanBuilderPage() {
           )}
         </div>
       </div>
+
+      <StopAddressDialog
+        open={Boolean(addressStop)}
+        stop={addressStop}
+        partyName={
+          addressStop?.type === 'drop'
+            ? orderForStop(addressStop)?.customer_name
+            : org.warehouses.find(w => w.id === addressStop?.warehouse_id)?.name
+        }
+        onClose={() => {
+          if (addressStopId) {
+            setSkippedStopIds((prev) => (
+              prev.includes(addressStopId) ? prev : [...prev, addressStopId]
+            ));
+          }
+          setAddressStopId(null);
+        }}
+        onSave={handleSaveStopAddress}
+      />
     </div>
   );
 }

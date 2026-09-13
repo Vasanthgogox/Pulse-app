@@ -165,11 +165,24 @@ export function splitLocationParts(value: string | null | undefined): {
 } {
   const raw = (value ?? '').trim();
   if (!raw) return { city: '—', state: '' };
-  const [city, ...rest] = raw.split(',').map((part) => part.trim()).filter(Boolean);
-  return {
-    city: city || raw,
-    state: rest.join(', '),
-  };
+
+  // Split on the first top-level comma only — one outside any parentheses.
+  // Merged-plan summary strings like "2 pickups (Pickup A, Pickup B)" carry
+  // their only comma inside the parenthesized list, so they render as one
+  // clean label instead of being cut mid-list.
+  let depth = 0;
+  let splitAt = -1;
+  for (let i = 0; i < raw.length; i++) {
+    const ch = raw[i];
+    if (ch === '(') depth++;
+    else if (ch === ')') depth = Math.max(0, depth - 1);
+    else if (ch === ',' && depth === 0) { splitAt = i; break; }
+  }
+  if (splitAt === -1) return { city: raw, state: '' };
+
+  const city = raw.slice(0, splitAt).trim();
+  const state = raw.slice(splitAt + 1).trim();
+  return { city: city || raw, state };
 }
 
 /** City for a story ring. First place name only — "Bengaluru, Bangalore" is one city. */

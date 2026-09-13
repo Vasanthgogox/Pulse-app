@@ -1,5 +1,6 @@
 import { getIdentityDb as getSupabase } from '@/lib/supabase';
-import type { Order, OrderLineItem, OrderStatus } from '@/types/commerce';
+import { isAddressIncomplete } from '@/lib/address';
+import type { Address, Order, OrderLineItem, OrderStatus } from '@/types/commerce';
 
 // ─── DB row shapes ────────────────────────────────────────────────────────────
 interface OrderRow {
@@ -21,7 +22,7 @@ interface OrderRow {
   created_at: string;
   updated_at: string;
   // joined
-  customer: { id: string; name: string; legal_name: string | null; trade_name: string | null; email: string | null } | null;
+  customer: { id: string; name: string; legal_name: string | null; trade_name: string | null; email: string | null; address: string | null; state: string | null } | null;
   pickup_warehouse: { id: string; name: string; address: string | null; city: string | null; state: string | null; pincode: string | null; latitude: number | null; longitude: number | null } | null;
   drop_warehouse: { id: string; name: string; address: string | null; city: string | null; state: string | null; pincode: string | null; latitude: number | null; longitude: number | null } | null;
   lines: OrderLineRow[];
@@ -38,6 +39,41 @@ interface OrderLineRow {
   weight_kg: number;
   volume_m3: number;
   product: { id: string; name: string; sku: string } | null;
+}
+
+function warehouseToAddress(row: {
+  address: string | null;
+  city: string | null;
+  state: string | null;
+  pincode: string | null;
+  latitude: number | null;
+  longitude: number | null;
+} | null): Address {
+  return {
+    line1:   row?.address ?? '',
+    city:    row?.city ?? '',
+    state:   row?.state ?? '',
+    pincode: row?.pincode ?? '',
+    lat:     row?.latitude ?? undefined,
+    lng:     row?.longitude ?? undefined,
+  };
+}
+
+function dropAddressFromOrderRow(
+  drop: OrderRow['drop_warehouse'],
+  customer: OrderRow['customer'],
+): Address {
+  const fromWarehouse = warehouseToAddress(drop);
+  if (!isAddressIncomplete(fromWarehouse)) return fromWarehouse;
+  const line1 = (customer?.address ?? '').trim();
+  const state = (customer?.state ?? '').trim();
+  if (!line1 && !state) return fromWarehouse;
+  return {
+    line1,
+    city: '',
+    state,
+    pincode: '',
+  };
 }
 
 function rowToOrder(row: OrderRow): Order {
@@ -60,14 +96,7 @@ function rowToOrder(row: OrderRow): Order {
       lat:     pickup?.latitude ?? undefined,
       lng:     pickup?.longitude ?? undefined,
     },
-    drop_address: {
-      line1:   drop?.address ?? '',
-      city:    drop?.city ?? '',
-      state:   drop?.state ?? '',
-      pincode: drop?.pincode ?? '',
-      lat:     drop?.latitude ?? undefined,
-      lng:     drop?.longitude ?? undefined,
-    },
+    drop_address: dropAddressFromOrderRow(drop, customer),
     line_items: (row.lines ?? []).map(l => ({
       id:           l.id,
       product_id:   l.product_id,
@@ -99,7 +128,7 @@ const ORDER_SELECT = `
   subtotal, tax_amount, total_amount, total_weight_kg, total_volume_m3,
   notes, execution_plan_id, delivery_window_start, delivery_window_end,
   created_at, updated_at,
-  customer:clients!customer_id(id,name,legal_name,trade_name,email),
+  customer:clients!customer_id(id,name,legal_name,trade_name,email,address,state),
   pickup_warehouse:client_warehouses!pickup_warehouse_id(id,name,address,city,state,pincode,latitude,longitude),
   drop_warehouse:client_warehouses!drop_warehouse_id(id,name,address,city,state,pincode,latitude,longitude),
   lines:sales_order_lines(id,product_id,quantity,allocated_quantity,unit_price,tax_rate,line_total,weight_kg,volume_m3,product:products!product_id(id,name,sku))
