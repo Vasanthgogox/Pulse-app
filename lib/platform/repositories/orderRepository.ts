@@ -68,4 +68,18 @@ export const orderRepository = {
       .eq('id', orderId);
     if (error) throw new Error(error.message);
   },
+
+  async markPlannedForExecutionPlan(
+    workspaceId: WorkspaceId,
+    orderIds: string[],
+    executionPlanId: string,
+  ): Promise<void> {
+    if (!orderIds.length) return;
+    const { error } = await requirePlatformDb()
+      .from('sales_orders')
+      .update({ status: 'Planned', execution_plan_id: executionPlanId, updated_at: new Date().toISOString() })
+      .eq('organization_id', workspaceId)
+      .in('id', orderIds);
+    if (error) throw new Error(error.message);
+  },
 };

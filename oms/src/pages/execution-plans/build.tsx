@@ -69,7 +69,7 @@ export function ExecutionPlanBuilderPage() {
       optimization: metrics, created_by: 'Admin',
       created_at: new Date().toISOString(), updated_at: new Date().toISOString(),
     };
-    return buildPublishExecutionPlanPayload(draft, selected, tenant, identity.user.name);
+    return buildPublishExecutionPlanPayload(draft, selected, tenant, identity.user.name, '', '');
   }, [selected, selectedOrderIds, stops, route, allocations, constraints, metrics, tenant, identity.user.name]);
 
   async function handlePublish() {

@@ -223,7 +223,10 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
     const plan = planSnapshot ?? plans.find(p => p.id === planId);
     if (!plan) return;
 
-    const command = buildPublishExecutionPlanPayload(plan, orders, tenant, identity.user.name);
+    const command = buildPublishExecutionPlanPayload(
+      plan, orders, tenant, identity.user.name,
+      org.platformOrganization?.id ?? '', user?.id ?? '',
+    );
     const result = await publishPlanToExecution(command);
 
     setPlans(prev => {
@@ -248,7 +251,7 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
       };
     });
     });
-  }, [plans, orders, tenant, identity.user.name]);
+  }, [plans, orders, tenant, identity.user.name, org.platformOrganization?.id, user?.id]);
 
   return (
     <CommerceContext.Provider value={{

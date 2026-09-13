@@ -8,7 +8,73 @@ export type CreatedIndentRef = {
   salesOrderId: string | null;
 };
 
+export type CreatedPlanIndentRef = {
+  id: string;
+  indentCode: string;
+};
+
 export const indentRepository = {
+  async findByExecutionPlanId(
+    workspaceId: WorkspaceId,
+    executionPlanId: string,
+  ): Promise<CreatedPlanIndentRef | null> {
+    const { data, error } = await requirePlatformDb()
+      .from('indents')
+      .select('id,indent_number')
+      .eq('organization_id', workspaceId)
+      .eq('execution_plan_id', executionPlanId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (error) throw new Error(error.message);
+    if (!data) return null;
+    return { id: String(data.id), indentCode: String(data.indent_number ?? data.id) };
+  },
+
+  async createFromExecutionPlan(input: {
+    workspaceId: WorkspaceId;
+    executionPlanId: string;
+    planNumber: string;
+    vehicleType?: string;
+    orderCount: number;
+    totalWeightKg: number;
+    totalAmount: number;
+    pickupSummary: string;
+    dropSummary: string;
+    requestedBy: string;
+  }): Promise<CreatedPlanIndentRef> {
+    await ensurePublicUserRecord(input.requestedBy);
+    const { data, error } = await requirePlatformDb()
+      .from('indents')
+      .insert({
+        organization_id: input.workspaceId,
+        execution_plan_id: input.executionPlanId,
+        sales_order_id: null,
+        pickup_area: input.pickupSummary,
+        drop_location: input.dropSummary,
+        client_name: `${input.orderCount} merged orders`,
+        client_price: input.totalAmount,
+        supplier_target: 0,
+        vehicle_type: input.vehicleType ?? 'Truck',
+        load_type: 'General',
+        weight: Math.max(input.totalWeightKg, 1),
+        status: 'broadcast',
+        shared_at: new Date().toISOString(),
+        owner_user_id: input.requestedBy,
+        created_by_user_id: input.requestedBy,
+        indent_number: null,
+      })
+      .select('id,indent_number')
+      .single();
+    if (error) {
+      if (error.code === '23505') {
+        const existing = await indentRepository.findByExecutionPlanId(input.workspaceId, input.executionPlanId);
+        if (existing) return existing;
+      }
+      throw new Error(error.message);
+    }
+    return { id: String(data.id), indentCode: String(data.indent_number ?? data.id) };
+  },
+
   async findBySalesOrderId(
     workspaceId: WorkspaceId,
     salesOrderId: string,

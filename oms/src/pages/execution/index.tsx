@@ -5,6 +5,14 @@ import { KpiCard, LottieIcon, RouteTimeline, StatusBadge } from '@/components/pu
 import { useExecution } from '@/context/ExecutionProvider';
 import { formatCurrency } from '@/lib/utils';
 
+function formatTimestamp(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' });
+  } catch {
+    return iso;
+  }
+}
+
 export function ExecutionDashboardPage() {
   const { pendingJobs, activeJobs, completedJobs } = useExecution();
 
@@ -32,13 +40,17 @@ export function ExecutionDashboardPage() {
             {pendingJobs.map(job => (
               <div key={job.id} className="rounded-xl border border-primary/25 bg-primary/5 p-5 flex flex-wrap items-center justify-between gap-4">
                 <div className="min-w-0">
-                  <p className="font-mono font-bold text-sm">{job.planNumber}</p>
+                  <div className="flex items-center gap-2">
+                    <p className="font-mono font-bold text-sm">{job.planNumber}</p>
+                    <StatusBadge status={job.status} />
+                  </div>
                   {job.indentCode && (
                     <p className="text-2xs font-mono text-primary mt-0.5">Indent: {job.indentCode}</p>
                   )}
                   <p className="text-2xs text-muted-foreground mt-1">
                     {job.command.summary.orderCount} orders · {formatCurrency(job.command.summary.totalAmount)} · {job.stops.length} stops
                   </p>
+                  <p className="text-2xs text-muted-foreground mt-0.5">Published {formatTimestamp(job.receivedAt)}</p>
                   <p className="text-2xs font-mono text-primary/80 mt-1 flex items-center gap-1">
                     <Radio className="size-3" />{job.correlationId}
                   </p>

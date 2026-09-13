@@ -13,4 +13,21 @@ export const IndentService = {
   }) {
     return indentRepository.createFromSalesOrder(input);
   },
+  findByExecutionPlanId(workspaceId: WorkspaceId, executionPlanId: string) {
+    return indentRepository.findByExecutionPlanId(workspaceId, executionPlanId);
+  },
+  createFromExecutionPlan(input: {
+    workspaceId: WorkspaceId;
+    executionPlanId: string;
+    planNumber: string;
+    vehicleType?: string;
+    orderCount: number;
+    totalWeightKg: number;
+    totalAmount: number;
+    pickupSummary: string;
+    dropSummary: string;
+    requestedBy: string;
+  }) {
+    return indentRepository.createFromExecutionPlan(input);
+  },
 };

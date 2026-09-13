@@ -16,6 +16,10 @@ import { createEntityMetadata } from '@/lib/entity-metadata';
 export interface PublishExecutionPlanCommand {
   tenant:            TenantContext;
   meta:              EntityMetadata;
+  /** Real platform org id — distinct from tenant.organizationId, which is a display-only constant. */
+  workspaceId:       string;
+  /** Real requesting user id (auth.users). */
+  requestedBy:       string;
   executionPlanId:   string;
   planNumber:        string;
   vehicleType:       string;
@@ -58,7 +62,7 @@ export interface PublishOrderPayload {
   orderId:     string;
   orderNumber: string;
   customer:    { id: string; name: string; email: string };
-  lineItems:   { sku: string; name: string; qty: number; unitPrice: number }[];
+  lineItems:   { id: string; sku: string; name: string; qty: number; unitPrice: number; weightKg: number; volumeM3: number }[];
   amount:      number;
   weightKg:    number;
   volumeM3:    number;
@@ -72,6 +76,8 @@ export function buildPublishExecutionPlanPayload(
   orders: Order[],
   tenant: TenantContext,
   createdBy: string,
+  workspaceId: string,
+  requestedBy: string,
 ): PublishExecutionPlanCommand {
   const orderById = new Map(orders.map(o => [o.id, o]));
   const meta = plan.meta ?? createEntityMetadata({
@@ -87,6 +93,8 @@ export function buildPublishExecutionPlanPayload(
   return {
     tenant,
     meta,
+    workspaceId,
+    requestedBy,
     executionPlanId: plan.id,
     planNumber:      plan.plan_number,
     vehicleType:     plan.constraints.vehicle_type ?? '32FT',
@@ -117,7 +125,8 @@ export function buildPublishExecutionPlanPayload(
         orderNumber: o.order_number,
         customer:    { id: o.customer_id, name: o.customer_name, email: o.customer_email },
         lineItems:   o.line_items.map(li => ({
-          sku: li.sku, name: li.product_name, qty: li.qty, unitPrice: li.unit_price,
+          id: li.id, sku: li.sku, name: li.product_name, qty: li.qty, unitPrice: li.unit_price,
+          weightKg: li.weight_kg, volumeM3: li.volume_m3,
         })),
         amount:   o.total_amount,
         weightKg: o.total_weight_kg,

@@ -14,4 +14,7 @@ export const OrderService = {
   markPlanned(workspaceId: WorkspaceId, orderId: string): Promise<void> {
     return orderRepository.updateStatus(workspaceId, orderId, 'Planned');
   },
+  markPlannedForExecutionPlan(workspaceId: WorkspaceId, orderIds: string[], executionPlanId: string): Promise<void> {
+    return orderRepository.markPlannedForExecutionPlan(workspaceId, orderIds, executionPlanId);
+  },
 };

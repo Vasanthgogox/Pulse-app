@@ -51,6 +51,12 @@ export type {
   PublishIndentCommand,
   PublishIndentCommandPayload,
   PublishIndentResult,
+  PublishExecutionPlanCommand,
+  PublishExecutionPlanCommandPayload,
+  PublishExecutionPlanStopInput,
+  PublishExecutionPlanAllocationInput,
+  PublishExecutionPlanOrderInput,
+  PublishExecutionPlanResult,
   OrchestrationError,
   OrchestrationErrorCode,
 } from './orchestration/types';

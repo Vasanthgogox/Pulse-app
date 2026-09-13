@@ -233,7 +233,7 @@ export function mirrorExecutionJobFromPublishedPlan(
   const existing = getJobByPlanId(plan.id);
   if (existing) return existing;
 
-  const command = buildPublishExecutionPlanPayload(plan, orders, tenant, createdBy);
+  const command = buildPublishExecutionPlanPayload(plan, orders, tenant, createdBy, '', '');
   const correlationId = plan.correlation_id ?? crypto.randomUUID();
   const indentCode = `IND-${plan.plan_number.replace('EP-', '')}`;
 

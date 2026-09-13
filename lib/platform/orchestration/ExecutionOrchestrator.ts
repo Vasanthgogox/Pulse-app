@@ -1,12 +1,16 @@
 import { getPlatformEventBus } from '../events/InProcessEventBus';
 import type { EventBus } from '../events/EventBus.contract';
 import { CustomerService } from '../services/CustomerService';
+import { ExecutionPlanService } from '../services/ExecutionPlanService';
 import { IndentService } from '../services/IndentService';
 import { OrderService } from '../services/OrderService';
 import { WarehouseService } from '../services/WarehouseService';
+import { indentRepository } from '../repositories/indentRepository';
 import type { ExecutionOrchestrator } from './ExecutionOrchestrator.contract';
 import type {
   OrchestrationError,
+  PublishExecutionPlanCommand,
+  PublishExecutionPlanResult,
   PublishIndentCommand,
   PublishIndentResult,
 } from './types';
@@ -121,6 +125,86 @@ export function createExecutionOrchestrator(eventBus: EventBus = getPlatformEven
         indentId: indent.id,
         orderId: order.id,
         correlationId,
+      };
+    },
+
+    async publishExecutionPlan(command: PublishExecutionPlanCommand): Promise<PublishExecutionPlanResult> {
+      const correlationId = requireCorrelationId(command.correlationId, 'missing-correlation-id');
+      const { workspaceId, requestedBy, payload } = command;
+
+      if (!payload.orders.length) {
+        fail('INVALID_COMMAND', 'Execution plan has no orders', correlationId);
+      }
+
+      const existingPlan = await ExecutionPlanService.findByClientPlanId(workspaceId, payload.clientPlanId);
+      if (existingPlan) {
+        const existingIndent = await indentRepository.findByExecutionPlanId(workspaceId, existingPlan.id);
+        if (existingIndent) {
+          return {
+            executionPlanId: existingPlan.id,
+            planNumber: existingPlan.planNumber,
+            indentId: existingIndent.id,
+            indentCode: existingIndent.indentCode,
+            correlationId,
+            alreadyPublished: true,
+          };
+        }
+      }
+
+      const plan = existingPlan ?? await ExecutionPlanService.createWithGraph({
+        workspaceId,
+        clientPlanId: payload.clientPlanId,
+        vehicleType: payload.vehicleType,
+        stops: payload.stops,
+        route: payload.route,
+        allocations: payload.allocations,
+        orders: payload.orders,
+      });
+
+      const orderIds = payload.orders.map(o => o.orderId);
+      const totalAmount = payload.orders.reduce((s, o) => s + o.totalAmount, 0);
+      const pickupLabels = [...new Set(payload.stops.filter(s => s.type === 'pickup').map(s => s.label))];
+      const dropLabels = [...new Set(payload.stops.filter(s => s.type === 'drop').map(s => s.label))];
+
+      const indent = await IndentService.createFromExecutionPlan({
+        workspaceId,
+        executionPlanId: plan.id,
+        planNumber: plan.planNumber,
+        vehicleType: payload.vehicleType,
+        orderCount: payload.orders.length,
+        totalWeightKg: payload.totalWeightKg,
+        totalAmount,
+        pickupSummary: pickupLabels.length > 1 ? `${pickupLabels.length} pickups (${pickupLabels.join(', ')})` : pickupLabels[0] ?? 'Pickup',
+        dropSummary: dropLabels.length > 1 ? `${dropLabels.length} drops (${dropLabels.join(', ')})` : dropLabels[0] ?? 'Drop',
+        requestedBy,
+      });
+
+      await ExecutionPlanService.markPublished(plan.id);
+      await OrderService.markPlannedForExecutionPlan(workspaceId, orderIds, plan.id);
+
+      await eventBus.publish({
+        name: 'OrderReadyForDispatch',
+        workspaceId,
+        correlationId,
+        occurredAt: new Date().toISOString(),
+        payload: { orderIds, requestedBy },
+      });
+
+      await eventBus.publish({
+        name: 'IndentCreated',
+        workspaceId,
+        correlationId,
+        occurredAt: new Date().toISOString(),
+        payload: { orderIds, indentId: indent.id, executionPlanId: plan.id },
+      });
+
+      return {
+        executionPlanId: plan.id,
+        planNumber: plan.planNumber,
+        indentId: indent.id,
+        indentCode: indent.indentCode,
+        correlationId,
+        alreadyPublished: false,
       };
     },
   };
