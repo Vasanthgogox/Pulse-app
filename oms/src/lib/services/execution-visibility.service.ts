@@ -299,6 +299,7 @@ export function toExecutionJob(exec: CommerceExecution, organizationId: string):
         orderCount:    exec.orderCount,
         totalAmount:   exec.totalAmount,
         totalWeightKg: exec.totalWeightKg,
+        totalVolumeM3: 0,
         currency:      'INR',
       },
     },
