@@ -5,13 +5,16 @@ import { useExecution } from '@/context/ExecutionProvider';
 import { formatCurrency } from '@/lib/utils';
 import { coreIndentUrl, coreTripUrl } from '@/lib/core-navigation';
 import {
+  bidObservabilityLabel,
+  circulationLabel,
+  commerceTripStatusLabel,
+  fulfillmentOrderStatusLabel,
   indentStatusLabel,
   lifecycleStages,
-  orderDeliveryStatusLabel,
   orderProgressLabel,
   orderStatusGlyph,
   primaryStatusLabel,
-  commerceTripStatusLabel,
+  transportCostDisplay,
   transportCostStatusLabel,
   tripStatusLabel,
 } from '@/lib/commerce-execution-status';
@@ -88,7 +91,7 @@ function StatusDetail({ exec }: { exec: CommerceExecution }) {
             <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground">Current status</p>
             <p className="text-lg font-semibold mt-0.5">{primaryStatusLabel(exec)}</p>
             <p className="text-2xs text-muted-foreground mt-1">
-              {exec.orderCount} {exec.orderCount === 1 ? 'order' : 'orders'} · {exec.stopCount} {exec.stopCount === 1 ? 'stop' : 'stops'} · Sales {formatCurrency(exec.totalAmount)}
+              {exec.orderCount} {exec.orderCount === 1 ? 'order' : 'orders'} · {exec.stopCount} {exec.stopCount === 1 ? 'stop' : 'stops'} · Order value {formatCurrency(exec.totalAmount)}
             </p>
           </div>
         </div>
@@ -115,6 +118,9 @@ function StatusDetail({ exec }: { exec: CommerceExecution }) {
               {exec.indent.indentNumber} <ExternalLink className="size-3" />
             </a>
             <span className="text-muted-foreground"> · {indentStatusLabel(exec.indent.status)}</span>
+            {exec.indent.circulationTarget && (
+              <span className="text-muted-foreground"> · {circulationLabel(exec.indent.circulationTarget)}</span>
+            )}
           </p>
         ) : (
           <p className="text-2xs text-muted-foreground">Indent not created yet.</p>
@@ -131,13 +137,29 @@ function StatusDetail({ exec }: { exec: CommerceExecution }) {
           <p className="text-2xs text-muted-foreground">No trip assigned yet.</p>
         )}
         <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-2xs">
+          <span className="text-muted-foreground">Bids received</span>
+          <span className="text-right font-medium">{bidObservabilityLabel(exec)}</span>
+          <span className="text-muted-foreground">Best bid</span>
+          <span className="text-right font-medium">
+            {exec.bestBidAmount != null ? formatCurrency(exec.bestBidAmount) : '—'}
+          </span>
           <span className="text-muted-foreground">Trip status</span>
           <span className="text-right font-medium">{commerceTripStatusLabel(exec)}</span>
           <span className="text-muted-foreground">Supplier</span>
           <span className="text-right font-medium">{exec.trip?.supplierName ?? 'Not assigned'}</span>
+          <span className="text-muted-foreground">Driver</span>
+          <span className="text-right font-medium">{exec.trip?.driverName ?? '—'}</span>
+          <span className="text-muted-foreground">Vehicle</span>
+          <span className="text-right font-medium">{exec.trip?.vehicleNumber ?? '—'}</span>
+          <span className="text-muted-foreground">Route</span>
+          <span className="text-right font-medium truncate">
+            {exec.trip
+              ? `${exec.trip.pickupArea || '—'} → ${exec.trip.dropLocation || '—'}`
+              : '—'}
+          </span>
           <span className="text-muted-foreground">Transport cost</span>
           <span className="text-right font-medium">
-            {exec.trip ? formatCurrency(exec.trip.supplierRate) : 'Awaiting bid'}
+            {transportCostDisplay(exec) != null ? formatCurrency(transportCostDisplay(exec)!) : 'Not awarded'}
           </span>
           <span className="text-muted-foreground">Award</span>
           <span className="text-right font-medium">{transportCostStatusLabel(exec)}</span>
@@ -161,7 +183,7 @@ function StatusDetail({ exec }: { exec: CommerceExecution }) {
                 <span className="text-muted-foreground truncate flex-1">{o.customerName}</span>
                 <span className="tabular-nums">{formatCurrency(o.amount)}</span>
                 <span className="text-muted-foreground shrink-0">
-                  {exec.trip ? orderDeliveryStatusLabel(o.deliveryStatus) : 'Awaiting Trip'}
+                  {fulfillmentOrderStatusLabel(exec, o)}
                 </span>
               </li>
             ))}

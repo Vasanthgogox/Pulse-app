@@ -27,10 +27,22 @@ import type { CommerceExecution, CommerceExecutionOrder } from './services/execu
 export type CommerceLifecycleStage =
   | 'orders'
   | 'planned'
-  | 'indent_created'
-  | 'awaiting_trip'
+  | 'indent'
+  | 'receiving_bids'
+  | 'assigned'
   | 'in_transit'
   | 'delivered';
+
+export type CoreFulfillmentPhase =
+  | 'preparing'
+  | 'indent_created'
+  | 'receiving_bids'
+  | 'assigned'
+  | 'in_transit'
+  | 'delivered';
+
+const RECEIVING_BIDS_INDENT_STATUSES = new Set(['broadcast', 'open', 'pending', 'quoted']);
+const AWARDED_INDENT_STATUSES = new Set(['awarded']);
 
 const INDENT_STATUS_LABELS: Record<string, string> = {
   draft:     'Preparing',
@@ -96,20 +108,43 @@ export function isFulfillmentDelivered(exec: CommerceExecution): boolean {
   return exec.orders.length > 0 && exec.orders.every(o => isOrderDelivered(o.deliveryStatus));
 }
 
-/** The single primary status shown for an execution — the most specific real state known. */
+/**
+ * Authoritative Commerce phase from Core indent → trip → drop SES.
+ * Quote count is never a phase transition.
+ */
+export function coreFulfillmentPhase(exec: CommerceExecution): CoreFulfillmentPhase {
+  if (isFulfillmentDelivered(exec)) return 'delivered';
+
+  const trip = exec.trip && !isTripCancelled(exec.trip.status) ? exec.trip : null;
+  if (trip && isTripInTransit(trip.status)) return 'in_transit';
+  if (trip && isTripDelivered(trip.status)) return 'in_transit';
+  if (trip) return 'assigned';
+
+  const indentStatus = exec.indent?.status ?? null;
+  if (indentStatus && AWARDED_INDENT_STATUSES.has(indentStatus)) return 'assigned';
+  if (indentStatus && RECEIVING_BIDS_INDENT_STATUSES.has(indentStatus)) return 'receiving_bids';
+  if (exec.indent) return 'indent_created';
+  return 'preparing';
+}
+
 export function primaryStatusLabel(exec: CommerceExecution): string {
-  if (isFulfillmentDelivered(exec)) return 'Delivered';
-  if (exec.trip) {
-    if (isTripDelivered(exec.trip.status) && exec.orders.length === 0) {
-      return 'Trip completed · No orders';
-    }
-    if (isTripDelivered(exec.trip.status)) {
-      return `Trip completed · ${orderProgressLabel(exec) ?? 'Awaiting Delivery'}`;
-    }
-    return tripStatusLabel(exec.trip.status);
+  const phase = coreFulfillmentPhase(exec);
+  if (phase === 'delivered') return 'Delivered';
+  if (phase === 'in_transit' && exec.trip && isTripDelivered(exec.trip.status)) {
+    if (exec.orders.length === 0) return 'Trip completed · No orders';
+    return `Trip completed · ${orderProgressLabel(exec) ?? 'Awaiting Delivery'}`;
   }
-  if (exec.indent) return `${indentStatusLabel(exec.indent.status)} · Awaiting Trip`;
+  if (phase === 'in_transit') return exec.trip ? tripStatusLabel(exec.trip.status) : 'In Transit';
+  if (phase === 'assigned') return 'Assigned';
+  if (phase === 'receiving_bids') return 'Receiving Bids';
+  if (phase === 'indent_created') return 'Indent Created';
   return 'Preparing Indent';
+}
+
+/** Supplementary quote line — never used as the primary lifecycle state. */
+export function bidObservabilityLabel(exec: CommerceExecution): string {
+  if (exec.bidCount <= 0) return 'Awaiting bids';
+  return exec.bidCount === 1 ? '1 bid received' : `${exec.bidCount} bids received`;
 }
 
 /** Ordered lifecycle stages with completion state, driven only by real persisted data. */
@@ -121,30 +156,37 @@ export function commerceTripStatusLabel(exec: CommerceExecution): string {
 
 /** Ordered lifecycle stages with completion state, driven only by real persisted data. */
 export function lifecycleStages(exec: CommerceExecution): { stage: CommerceLifecycleStage; label: string; done: boolean; current: boolean }[] {
-  const hasIndent = exec.indent != null;
-  const hasTrip = exec.trip != null && !isTripCancelled(exec.trip.status);
-  const fulfillmentDelivered = isFulfillmentDelivered(exec);
-  const tripDone = hasTrip && isTripDelivered(exec.trip!.status);
-  const inTransit = hasTrip && !tripDone && isTripInTransit(exec.trip!.status);
+  const phase = coreFulfillmentPhase(exec);
+  const phaseRank: Record<CoreFulfillmentPhase, number> = {
+    preparing: 0,
+    indent_created: 1,
+    receiving_bids: 2,
+    assigned: 3,
+    in_transit: 4,
+    delivered: 5,
+  };
+  const rank = phaseRank[phase];
 
   const stages: { stage: CommerceLifecycleStage; label: string; done: boolean }[] = [
-    { stage: 'orders',         label: 'Orders',            done: exec.orders.length > 0 },
-    { stage: 'planned',        label: 'Execution Planned', done: true },
-    { stage: 'indent_created', label: 'Indent Created',    done: hasIndent },
-    { stage: 'awaiting_trip',  label: hasTrip ? 'Trip Assigned' : 'Awaiting Trip', done: hasTrip },
-    { stage: 'in_transit',     label: 'In Transit',        done: inTransit || tripDone || fulfillmentDelivered },
-    { stage: 'delivered',      label: 'Delivered',         done: fulfillmentDelivered },
+    { stage: 'orders',          label: 'Orders',          done: exec.orders.length > 0 },
+    { stage: 'planned',         label: 'Planned',         done: true },
+    { stage: 'indent',          label: 'Indent Created',  done: rank >= 1 },
+    { stage: 'receiving_bids',  label: 'Receiving Bids',  done: rank >= 2 },
+    { stage: 'assigned',        label: 'Assigned',        done: rank >= 3 },
+    { stage: 'in_transit',      label: 'In Transit',      done: rank >= 4 },
+    { stage: 'delivered',       label: 'Delivered',       done: rank >= 5 },
   ];
 
-  let currentStage: CommerceLifecycleStage;
-  if (fulfillmentDelivered) currentStage = 'delivered';
-  else if (tripDone) currentStage = 'delivered';
-  else if (inTransit) currentStage = 'in_transit';
-  else if (hasTrip || hasIndent) currentStage = 'awaiting_trip';
-  else if (exec.orders.length > 0) currentStage = 'indent_created';
-  else currentStage = 'orders';
+  const currentByPhase: Record<CoreFulfillmentPhase, CommerceLifecycleStage> = {
+    preparing: 'indent',
+    indent_created: 'indent',
+    receiving_bids: 'receiving_bids',
+    assigned: 'assigned',
+    in_transit: 'in_transit',
+    delivered: 'delivered',
+  };
 
-  return stages.map(s => ({ ...s, current: s.stage === currentStage }));
+  return stages.map(s => ({ ...s, current: s.stage === currentByPhase[phase] }));
 }
 
 const ORDER_DELIVERY_STATUS_LABELS: Record<string, string> = {
@@ -159,6 +201,17 @@ const ORDER_DELIVERY_STATUS_LABELS: Record<string, string> = {
 export function orderDeliveryStatusLabel(deliveryStatus: string | null): string {
   if (deliveryStatus == null) return 'Awaiting Delivery';
   return ORDER_DELIVERY_STATUS_LABELS[deliveryStatus] ?? deliveryStatus;
+}
+
+/** Per-order fulfillment label. Never uses trips.status. */
+export function fulfillmentOrderStatusLabel(
+  exec: CommerceExecution,
+  order: CommerceExecutionOrder,
+): string {
+  if (isOrderDelivered(order.deliveryStatus)) return 'Delivered';
+  if (!exec.trip) return 'Awaiting Trip';
+  if (isOrderArrived(order.deliveryStatus)) return 'Arrived';
+  return 'On Trip';
 }
 
 export function isOrderDelivered(deliveryStatus: string | null): boolean {
@@ -183,11 +236,26 @@ export function orderProgressLabel(exec: CommerceExecution): string | null {
 export type TransportCostStatus = 'awarded' | 'awaiting_bid';
 
 export function transportCostStatus(exec: CommerceExecution): TransportCostStatus {
-  return exec.trip ? 'awarded' : 'awaiting_bid';
+  if (exec.trip || exec.indent?.assignedSupplierRate) return 'awarded';
+  return 'awaiting_bid';
 }
 
 export function transportCostStatusLabel(exec: CommerceExecution): string {
-  return exec.trip ? 'Awarded' : 'Awaiting Bid';
+  if (exec.trip || exec.indent?.assignedSupplierRate) return 'Awarded';
+  return 'Awaiting bids';
+}
+
+export function transportCostDisplay(exec: CommerceExecution): number | null {
+  if (exec.trip && exec.trip.supplierRate > 0) return exec.trip.supplierRate;
+  if (exec.indent?.assignedSupplierRate) return exec.indent.assignedSupplierRate;
+  return null;
+}
+
+export function circulationLabel(target: string | null | undefined): string {
+  if (target === 'marketplace') return 'Marketplace';
+  if (target === 'integrated_supplier') return 'Integrated supplier';
+  if (target === 'both') return 'Marketplace + supplier';
+  return 'Shared';
 }
 
 /** Display lifecycle for the Plans table — Core indent/trip/order SES, not frozen plan.status. */

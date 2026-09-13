@@ -39,6 +39,7 @@
  * stop completed, confirmed by direct audit of the trip-completion code).
  */
 import { getIdentityDb as getSupabase } from '@/lib/supabase';
+import { indentRepository } from '@pulse-platform/repositories/indentRepository';
 import { DEFAULT_TENANT } from '@/types/platform';
 import { createEntityMetadata } from '@/lib/entity-metadata';
 import type { ExecutionJob } from '@/types/execution';
@@ -61,6 +62,9 @@ export interface CommerceExecutionIndent {
   dropLocation:   string;
   /** Target/asking transport rate set at indent creation — NEVER an authoritative cost. Null if unset/zero. */
   supplierTarget: number | null;
+  circulationTarget: string | null;
+  assignedSupplierId: string | null;
+  assignedSupplierRate: number | null;
 }
 
 export interface CommerceExecutionTrip {
@@ -71,6 +75,10 @@ export interface CommerceExecutionTrip {
   /** Authoritative transport cost once a trip exists. */
   supplierRate: number;
   supplierName: string | null;
+  driverName:   string | null;
+  vehicleNumber: string | null;
+  pickupArea:   string;
+  dropLocation: string;
 }
 
 export interface CommerceExecutionOrder {
@@ -96,6 +104,9 @@ export interface CommerceExecution {
   stops:           CommerceExecutionStop[];
   indent:          CommerceExecutionIndent | null;
   trip:            CommerceExecutionTrip | null;
+  /** Supplementary quote observability — not a lifecycle driver. */
+  bidCount:        number;
+  bestBidAmount:   number | null;
   orders:          CommerceExecutionOrder[];
 }
 
@@ -115,6 +126,10 @@ interface TripRow {
   trip_number: string | null;
   status: string;
   supplier_rate: number | null;
+  driver_display_name: string | null;
+  vehicle_display_number: string | null;
+  pickup_area: string | null;
+  drop_location: string | null;
   suppliers: { name: string | null } | { name: string | null }[] | null;
 }
 
@@ -125,6 +140,9 @@ interface IndentRow {
   pickup_area: string | null;
   drop_location: string | null;
   supplier_target: number | null;
+  circulation_target: string | null;
+  assigned_supplier_id: string | null;
+  assigned_supplier_rate: number | null;
   trips: TripRow[] | TripRow | null;
 }
 
@@ -158,7 +176,8 @@ const PERSISTED_PLAN_SELECT = `
   stops:execution_plan_stops(id, stop_type, sequence, label, display_name, city, source_type, pod_required),
   indents(
     id, indent_number, status, pickup_area, drop_location, supplier_target,
-    trips!trips_indent_id_fkey(id, trip_number, status, supplier_rate, suppliers(name))
+    circulation_target, assigned_supplier_id, assigned_supplier_rate,
+    trips!trips_indent_id_fkey(id, trip_number, status, supplier_rate, driver_display_name, vehicle_display_number, pickup_area, drop_location, suppliers(name))
   )
 `.trim();
 
@@ -225,6 +244,7 @@ function planRowToCommerceExecution(
   row: PlanRow,
   orderSummary: { count: number; amount: number; weightKg: number },
   orders: CommerceExecutionOrder[],
+  quotes: { bidCount: number; bestBidAmount: number | null },
 ): CommerceExecution {
   const indentRow = pickBestIndent(row.indents);
   const tripRow = indentRow ? pickBestTrip(indentRow.trips) : null;
@@ -250,6 +270,11 @@ function planRowToCommerceExecution(
       pickupArea:     indentRow.pickup_area ?? '',
       dropLocation:   indentRow.drop_location ?? '',
       supplierTarget: indentRow.supplier_target && indentRow.supplier_target > 0 ? indentRow.supplier_target : null,
+      circulationTarget: indentRow.circulation_target ?? null,
+      assignedSupplierId: indentRow.assigned_supplier_id ?? null,
+      assignedSupplierRate: indentRow.assigned_supplier_rate && indentRow.assigned_supplier_rate > 0
+        ? indentRow.assigned_supplier_rate
+        : null,
     } : null,
     trip: tripRow ? {
       id:           tripRow.id,
@@ -257,7 +282,13 @@ function planRowToCommerceExecution(
       status:       tripRow.status,
       supplierRate: tripRow.supplier_rate ?? 0,
       supplierName: supplier?.name ?? null,
+      driverName:   tripRow.driver_display_name ?? null,
+      vehicleNumber: tripRow.vehicle_display_number ?? null,
+      pickupArea:   tripRow.pickup_area ?? indentRow?.pickup_area ?? '',
+      dropLocation: tripRow.drop_location ?? indentRow?.drop_location ?? '',
     } : null,
+    bidCount: quotes.bidCount,
+    bestBidAmount: quotes.bestBidAmount,
     orders,
   };
 }
@@ -327,7 +358,7 @@ async function hydrateTripsFromIndentLinks(planRows: PlanRow[]): Promise<void> {
 
   const { data, error } = await sb
     .from('trips')
-    .select('id, trip_number, status, supplier_rate, indent_id, source_indent_id, suppliers(name)')
+    .select('id, trip_number, status, supplier_rate, driver_display_name, vehicle_display_number, pickup_area, drop_location, indent_id, source_indent_id, suppliers(name)')
     .or(`indent_id.in.(${indentIds.join(',')}),source_indent_id.in.(${indentIds.join(',')})`);
   if (error || !data?.length) return;
 
@@ -444,13 +475,27 @@ async function queryCommerceExecutions(organizationId: string): Promise<Commerce
     ordersByPlan.set(o.execution_plan_id, list);
   }
 
-  return planRows.map(row =>
-    planRowToCommerceExecution(
+  const indentIdByPlanId = new Map<string, string>();
+  for (const row of planRows) {
+    const indent = pickBestIndent(row.indents);
+    if (indent) indentIdByPlanId.set(row.id, indent.id);
+  }
+  const quoteIndentIds = [...new Set(indentIdByPlanId.values())];
+  const quoteSummaries = await indentRepository.listQuoteSummaries(quoteIndentIds);
+  const quoteByIndent = new Map(quoteSummaries.map(q => [q.indentId, q]));
+
+  return planRows.map(row => {
+    const indentId = indentIdByPlanId.get(row.id);
+    const quotes = indentId
+      ? quoteByIndent.get(indentId) ?? { bidCount: 0, bestBidAmount: null }
+      : { bidCount: 0, bestBidAmount: null };
+    return planRowToCommerceExecution(
       row,
       summaryByPlan.get(row.id) ?? { count: 0, amount: 0, weightKg: 0 },
       ordersByPlan.get(row.id) ?? [],
-    ),
-  );
+      quotes,
+    );
+  });
 }
 
 /** Rich, lifecycle-oriented shape for the Commerce Execution UI (plan → orders → stops → indent → trip). */

@@ -130,4 +130,34 @@ export const indentRepository = {
     }
     return { id: String(data.id), salesOrderId: data.sales_order_id as string | null };
   },
+
+  /**
+   * Read-only quote observability for Commerce. Does not change indent status.
+   * One quote is not a Core lifecycle transition.
+   */
+  async listQuoteSummaries(
+    indentIds: string[],
+  ): Promise<{ indentId: string; bidCount: number; bestBidAmount: number | null }[]> {
+    if (!indentIds.length) return [];
+    const { data, error } = await requirePlatformDb()
+      .from('direct_quotes')
+      .select('indent_id, amount')
+      .in('indent_id', indentIds);
+    if (error) throw new Error(error.message);
+
+    const byIndent = new Map<string, { bidCount: number; bestBidAmount: number | null }>();
+    for (const id of indentIds) {
+      byIndent.set(id, { bidCount: 0, bestBidAmount: null });
+    }
+    for (const row of (data ?? []) as { indent_id: string; amount: number | null }[]) {
+      const cur = byIndent.get(row.indent_id);
+      if (!cur) continue;
+      const amount = Number(row.amount);
+      cur.bidCount += 1;
+      if (Number.isFinite(amount) && amount > 0) {
+        cur.bestBidAmount = cur.bestBidAmount == null ? amount : Math.min(cur.bestBidAmount, amount);
+      }
+    }
+    return [...byIndent.entries()].map(([indentId, summary]) => ({ indentId, ...summary }));
+  },
 };
