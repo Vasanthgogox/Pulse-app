@@ -21,6 +21,7 @@ import { useOptionalDriverAvatar } from "@/contexts/DriverAvatarContext";
 import { DriverDailySummaryCard } from "@/features/driver/components/DriverDailySummaryCard";
 import { DriverDashboardMapPreview } from "@/features/driver/components/DriverDashboardMapPreview";
 import { DriverExpenseCaptureFab } from "@/features/driver/components/DriverExpenseCaptureFab";
+import { DriverCommerceMissionEntry } from "@/features/driver/commerce-mission/DriverCommerceMissionEntry";
 import { DriverTripFlowCard } from "@/features/driver/components/DriverTripFlowCard";
 import { PilotRelationshipSummary } from "@/features/driver/components/PilotRelationshipSummary";
 import Layout from "@/constants/Layout";
@@ -4804,6 +4805,7 @@ export default function DriverRadarScreen() {
       {showDriverTripDashboard ? (
         activeMission ? (
           <>
+            <DriverCommerceMissionEntry tripId={activeMission.id} />
             <DriverTripFlowCard
               trip={activeMission}
               commissionAmount={activeMissionCommission}
@@ -4849,6 +4851,7 @@ export default function DriverRadarScreen() {
           String(effectiveFirstIncoming.id).toLowerCase() ===
             String(acceptedTripId).toLowerCase() ? (
           <>
+            <DriverCommerceMissionEntry tripId={effectiveFirstIncoming.id} />
             <DriverTripFlowCard
               trip={effectiveFirstIncoming}
               commissionAmount={newAssignmentCommission}
