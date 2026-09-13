@@ -2141,22 +2141,17 @@ export function ChatScreen() {
     const hit = conversations.find((c) => c.id === convIdParam);
     if (hit) {
       deepLinkAppliedRef.current = deepLinkKey;
-      void (async () => {
-        await useChatStore.getState().hydrateTripMessagesIfNeeded(hit.trip_id, {
-          conversationId: hit.id,
-        });
-        const tripsSnap = useChatStore.getState().trips;
-        const inferred = tripHubHasIntegratedPartition(hit, tripsSnap) ? "indent" : "trips";
-        const targetTab: TabId =
-          tabParamRawNorm === "indent" ? "indent" : tabParamRawNorm === "trips" ? "trips" : inferred;
-        const resolvedTab: TabId =
-          targetTab === "trips" && inferred === "indent" ? "indent" : targetTab;
-        setActiveTab(resolvedTab);
-        setSelectedConvId(convIdParam);
-        setSelectedNetId(null);
-        void markTripThreadsRead(hit.trip_id);
-        if (shouldOpenDetail && !isDesktop) setIsMobileDetail(true);
-      })();
+      const tripsSnap = useChatStore.getState().trips;
+      const inferred = tripHubHasIntegratedPartition(hit, tripsSnap) ? "indent" : "trips";
+      const targetTab: TabId =
+        tabParamRawNorm === "indent" ? "indent" : tabParamRawNorm === "trips" ? "trips" : inferred;
+      const resolvedTab: TabId =
+        targetTab === "trips" && inferred === "indent" ? "indent" : targetTab;
+      setActiveTab(resolvedTab);
+      setSelectedConvId(convIdParam);
+      setSelectedNetId(null);
+      void markTripThreadsRead(hit.trip_id);
+      if (shouldOpenDetail && !isDesktop) setIsMobileDetail(true);
       return;
     }
     // Wait for bootstrap; once conversations update this effect re-runs.
@@ -2292,10 +2287,9 @@ export function ChatScreen() {
   const openConversation = useCallback(
     async (conv: TripConversation) => {
       setPlatformTripRoomId(null);
-      await useChatStore.getState().hydrateTripMessagesIfNeeded(conv.trip_id, {
-        conversationId: conv.id,
-      });
-      // DetailPanel always pulls newest page once on open — avoid a second force RPC.
+      // Paint the known conversation shell immediately. DetailPanel loads the
+      // newest message page once on open — do not await hydration here (that
+      // blocked first paint and duplicated the same getMessagesByConversation).
       chatStore.switchParty(conv.trip_id, conv.party_type);
       setSelectedConvId(conv.id);
       setFocusedTripPartyKey(tripPartyPeopleKey(conv));
@@ -3812,10 +3806,6 @@ export function ChatScreen() {
                       ? (trip.rows.find((r) => r.party_type === storedParty) ??
                         trip.rows[0])
                       : trip.rows[0];
-                    await useChatStore.getState().hydrateTripMessagesIfNeeded(
-                      trip.tripId,
-                      { conversationId: preferred!.id },
-                    );
                     await openConversation(preferred!);
                   };
                   const chatEntry = chatTrips[trip.tripId];
@@ -8571,9 +8561,6 @@ function TripConversationDetailLoaded({
 
     const target = partyConversationMap[partyType];
     if (target) {
-      await useChatStore.getState().hydrateTripMessagesIfNeeded(liveConv.trip_id, {
-        conversationId: target.id,
-      });
       onSelectConversation(target.id);
       void markTripThreadsRead(liveConv.trip_id);
       return;
@@ -8645,13 +8632,8 @@ function TripConversationDetailLoaded({
       const targetParty = s ? "supplier" : "driver";
       if (target?.id) {
         chatStore.switchParty(liveConv.trip_id, targetParty);
-        void (async () => {
-          await useChatStore.getState().hydrateTripMessagesIfNeeded(liveConv.trip_id, {
-            conversationId: target.id,
-          });
-          onSelectConversation(target.id);
-          void markTripThreadsRead(liveConv.trip_id);
-        })();
+        onSelectConversation(target.id);
+        void markTripThreadsRead(liveConv.trip_id);
       }
       return;
     }
@@ -8667,13 +8649,8 @@ function TripConversationDetailLoaded({
       const targetParty = c ? "client" : "driver";
       if (target?.id) {
         chatStore.switchParty(liveConv.trip_id, targetParty);
-        void (async () => {
-          await useChatStore.getState().hydrateTripMessagesIfNeeded(liveConv.trip_id, {
-            conversationId: target.id,
-          });
-          onSelectConversation(target.id);
-          void markTripThreadsRead(liveConv.trip_id);
-        })();
+        onSelectConversation(target.id);
+        void markTripThreadsRead(liveConv.trip_id);
       }
     }
   }, [
