@@ -92,15 +92,19 @@ export function deriveWorkflowState(events: TripWorkflowEvent[]): TripWorkflowSt
 
 // ─── Read ─────────────────────────────────────────────────────────────────────
 
-export async function getTripWorkflowEvents(tripId: string): Promise<{
+export async function getTripWorkflowEvents(
+  tripId: string,
+  signal?: AbortSignal,
+): Promise<{
   error: Error | null;
   events: TripWorkflowEvent[];
 }> {
-  const { data, error } = await supabase()
+  const query = supabase()
     .from('trip_workflow_events')
     .select('*')
     .eq('trip_id', tripId)
     .order('created_at', { ascending: true });
+  const { data, error } = await (signal ? query.abortSignal(signal) : query);
 
   if (error) return { error: new Error(error.message), events: [] };
   return { error: null, events: (data ?? []) as TripWorkflowEvent[] };

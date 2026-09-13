@@ -459,22 +459,26 @@ export async function syncDriversWithCache(orgId: string, currentRows: DriverRow
 export async function getDriverById(
   orgId: string,
   driverId: string,
+  signal?: AbortSignal,
 ): Promise<{ error: Error | null; driver: DriverRow | null }> {
-  const { data, error } = await supabase()
+  const query = supabase()
     .from("drivers")
     .select(DRIVER_COLUMNS)
     .eq("organization_id", orgId)
-    .eq("id", driverId)
-    .maybeSingle();
+    .eq("id", driverId);
+  const { data, error } = await (signal ? query.abortSignal(signal) : query).maybeSingle();
   if (error) return { error: new Error(error.message), driver: null };
   const row = data as DriverRow | null;
   let driver = row ? normalizeDriverRow(row) : null;
   if (driver && !(driver.email ?? "").trim()) {
     try {
-      const { data: rows, error: rpcError } = await supabase().rpc(
-        "get_driver_coalesced_email_for_org",
-        { p_org_id: orgId, p_driver_id: driverId },
-      );
+      const emailQuery = supabase().rpc("get_driver_coalesced_email_for_org", {
+        p_org_id: orgId,
+        p_driver_id: driverId,
+      });
+      const { data: rows, error: rpcError } = await (signal
+        ? emailQuery.abortSignal(signal)
+        : emailQuery);
       if (!rpcError && Array.isArray(rows) && rows.length > 0) {
         const e = (rows[0] as { email?: string | null }).email;
         if (e != null && String(e).trim() !== "") {

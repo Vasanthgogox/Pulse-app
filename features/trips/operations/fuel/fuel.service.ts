@@ -33,13 +33,15 @@ function toNullablePositive(value: number | null | undefined): number | null {
 
 export async function getTripFuelEntries(
   tripId: string,
+  signal?: AbortSignal,
 ): Promise<{ error: Error | null; entries: TripFuelEntry[] }> {
-  const { data, error } = await supabase()
+  const query = supabase()
     .from("trip_fuel_entries")
     .select("*")
     .eq("trip_id", tripId)
     .eq("status", "active")
     .order("entered_at", { ascending: false });
+  const { data, error } = await (signal ? query.abortSignal(signal) : query);
   if (error) return { error: new Error(error.message), entries: [] };
   return { error: null, entries: (data ?? []) as TripFuelEntry[] };
 }

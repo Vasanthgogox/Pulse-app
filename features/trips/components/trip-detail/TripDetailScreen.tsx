@@ -43,6 +43,7 @@ import { useMemberAccess } from "@/lib/useMemberAccess";
 import { formatINR, formatIndianVehicleNumber } from "@/lib/format";
 import { formatPhoneForDisplay } from "@/lib/phoneLookup";
 import { supabase } from "@/lib/supabase";
+import { throwIfCancelled } from "@/lib/supabaseAbort.util";
 import { notifyTripChatMessagesChanged } from "@/lib/tripChatInvalidate";
 import { getOptimalRoute } from "@/lib/routingService";
 import * as tripDocumentsService from "@/features/trips/services/tripDocuments.service";
@@ -662,11 +663,13 @@ export default function TripDetailScreen({
       !!tripForAssetFinance.organization_id &&
       !!tripForAssetFinance &&
       isAssetExecutionTrip(tripForAssetFinance),
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const res = await getDriverById(
         tripForAssetFinance!.organization_id,
         tripForAssetFinance!.driver_id!,
+        signal,
       );
+      throwIfCancelled(signal, res.error);
       if (res.error) throw res.error;
       return res.driver;
     },
@@ -733,13 +736,15 @@ export default function TripDetailScreen({
     // Already on an asset trip, or owner, or no indent — nothing to redirect.
     if (!isMover || !indentId || String(t.source ?? "") === "mover_asset") return;
     let cancelled = false;
-    getMoverAssetTripIdForIndent(viewerOrgId, indentId).then((assetTripId) => {
+    const abort = new AbortController();
+    getMoverAssetTripIdForIndent(viewerOrgId, indentId, abort.signal).then((assetTripId) => {
       if (cancelled || !assetTripId || assetTripId === t.id) return;
       moverAssetRedirectedRef.current = true;
       router.replace(ROUTES.tripDetail(assetTripId) as never);
     });
     return () => {
       cancelled = true;
+      abort.abort();
     };
   }, [detail.trip, currentOrganization?.id, router]);
 
@@ -2098,6 +2103,8 @@ export default function TripDetailScreen({
     [openVaultChatPreview],
   );
 
+  // Spinner only when there is no list/cache seed and no trip yet.
+  // Bundle may still be in flight; do not block first paint when `trip` is seeded.
   if (detail.loading && !detail.trip) {
     return <CenteredLoadingView message="Loading trip…" />;
   }

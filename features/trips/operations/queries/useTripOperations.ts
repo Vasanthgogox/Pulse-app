@@ -94,12 +94,16 @@ import {
   enqueueTollPhoto,
 } from "../offline/outbox";
 import { supabase } from "@/lib/supabase";
+import { throwIfCancelled, withAbortSignal } from "@/lib/supabaseAbort.util";
 import { getTripExecutionModel } from "@/features/trips/domain/tripExecutionModel";
 import { isDcoOperatingTrip } from "@/features/trips/domain/tripDcoOperating";
 
 const reviewInFlightKeys = new Set<string>();
 
-async function fetchTripLedgerBySource(tripId: string): Promise<{
+async function fetchTripLedgerBySource(
+  tripId: string,
+  signal?: AbortSignal,
+): Promise<{
   fuel: Record<string, string>;
   toll: Record<string, string>;
   other: Record<string, string>;
@@ -109,11 +113,15 @@ async function fetchTripLedgerBySource(tripId: string): Promise<{
     toll: Record<string, string>;
     other: Record<string, string>;
   } = { fuel: {}, toll: {}, other: {} };
-  const { data: ledgerRows, error: ledgerError } = await supabase()
-    .from("vehicle_ledger_entries")
-    .select("id,source_type,source_id")
-    .eq("trip_id", tripId)
-    .in("source_type", ["fuel", "toll", "manual_adjustment"]);
+  const { data: ledgerRows, error: ledgerError } = await withAbortSignal(
+    supabase()
+      .from("vehicle_ledger_entries")
+      .select("id,source_type,source_id")
+      .eq("trip_id", tripId)
+      .in("source_type", ["fuel", "toll", "manual_adjustment"]),
+    signal,
+  );
+  throwIfCancelled(signal, ledgerError);
   if (ledgerError) return empty;
   const ledgerBySource = { ...empty };
   for (const row of ledgerRows ?? []) {
@@ -136,8 +144,9 @@ export function useTripFuelEntries(tripId: string | null, opts?: { enabled?: boo
   const enabled = (opts?.enabled ?? true) && !!tripId;
   return useQuery({
     queryKey: tripId ? queryKeys.trips.fuelEntries(tripId) : ["q", "trips", "fuel", "noop"],
-    queryFn: async () => {
-      const res = await getTripFuelEntries(tripId!);
+    queryFn: async ({ signal }) => {
+      const res = await getTripFuelEntries(tripId!, signal);
+      throwIfCancelled(signal, res.error);
       if (res.error) throw res.error;
       return res.entries;
     },
@@ -150,8 +159,9 @@ export function useTripTollEntries(tripId: string | null, opts?: { enabled?: boo
   const enabled = (opts?.enabled ?? true) && !!tripId;
   return useQuery({
     queryKey: tripId ? queryKeys.trips.tollEntries(tripId) : ["q", "trips", "toll", "noop"],
-    queryFn: async () => {
-      const res = await getTripTollEntries(tripId!);
+    queryFn: async ({ signal }) => {
+      const res = await getTripTollEntries(tripId!, signal);
+      throwIfCancelled(signal, res.error);
       if (res.error) throw res.error;
       return res.entries;
     },
@@ -164,8 +174,9 @@ export function useTripOtherExpenses(tripId: string | null, opts?: { enabled?: b
   const enabled = (opts?.enabled ?? true) && !!tripId;
   return useQuery({
     queryKey: tripId ? queryKeys.trips.otherEntries(tripId) : ["q", "trips", "other", "noop"],
-    queryFn: async () => {
-      const res = await getTripOtherExpenses(tripId!);
+    queryFn: async ({ signal }) => {
+      const res = await getTripOtherExpenses(tripId!, signal);
+      throwIfCancelled(signal, res.error);
       if (res.error) throw res.error;
       return res.entries;
     },
@@ -180,18 +191,19 @@ export function useTripOperationsSummary(tripId: string | null, opts?: { enabled
     queryKey: tripId
       ? queryKeys.trips.operationsSummary(tripId)
       : ["q", "trips", "operations", "summary", "noop"],
-    queryFn: async () => {
+    queryFn: async ({ signal }) => {
       const [tripRes, fuelRes, tollRes, otherRes] = await Promise.all([
-        getTripRowByIdLight(tripId!),
-        getTripFuelEntries(tripId!),
-        getTripTollEntries(tripId!),
-        getTripOtherExpenses(tripId!),
+        getTripRowByIdLight(tripId!, signal),
+        getTripFuelEntries(tripId!, signal),
+        getTripTollEntries(tripId!, signal),
+        getTripOtherExpenses(tripId!, signal),
       ]);
       // A genuine DB/transport error should surface (retry + report). A 0-row result is not an
       // error here: the trip is known to exist at the call site (callers pass an existing trip),
       // so an empty read means the row isn't visible yet under RLS (anon/expired session, cross-org
       // replication lag). Return null so consumers fall back to their empty state instead of
       // throwing a false "Trip not found" into Sentry.
+      throwIfCancelled(signal, tripRes.error ?? fuelRes.error ?? tollRes.error ?? otherRes.error);
       if (tripRes.error) throw tripRes.error;
       if (!tripRes.trip) return null;
       const fuelEntries = fuelRes.error ? [] : fuelRes.entries;
@@ -203,10 +215,12 @@ export function useTripOperationsSummary(tripId: string | null, opts?: { enabled
               organizationId: tripRes.trip.organization_id,
               vehicleId: tripRes.trip.vehicle_id,
               limit: 200,
+              signal,
             })
           : { error: null, entries: [] };
+      throwIfCancelled(signal, maintenanceRes.error);
       const maintenanceEntries = maintenanceRes.error ? [] : maintenanceRes.entries;
-      const ledgerBySource = await fetchTripLedgerBySource(tripId!);
+      const ledgerBySource = await fetchTripLedgerBySource(tripId!, signal);
       const mileage = computeTripMileageMetrics({
         trip: tripRes.trip,
         fuelEntries,

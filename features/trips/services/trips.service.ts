@@ -460,17 +460,18 @@ export function getTripDisplayMeta(
 export async function getMoverAssetTripIdForIndent(
   moverOrgId: string,
   indentId: string,
+  signal?: AbortSignal,
 ): Promise<string | null> {
   if (!moverOrgId || !indentId) return null;
-  const { data, error } = await supabase()
+  const query = supabase()
     .from("trips")
     .select("id")
     .eq("organization_id", moverOrgId)
     .eq("source", "mover_asset")
     .eq("source_indent_id", indentId)
     .is("deleted_at", null)
-    .limit(1)
-    .maybeSingle();
+    .limit(1);
+  const { data, error } = await (signal ? query.abortSignal(signal) : query).maybeSingle();
   if (error || !data) return null;
   return (data as { id: string }).id ?? null;
 }
@@ -552,12 +553,10 @@ export async function getDriverTripById(
 /** Trip row without indent embeds — safe for driver operations summaries under indent RLS. */
 export async function getTripRowByIdLight(
   tripId: string,
+  signal?: AbortSignal,
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
-  const { data, error } = await supabase()
-    .from("trips")
-    .select("*")
-    .eq("id", tripId)
-    .maybeSingle();
+  const query = supabase().from("trips").select("*").eq("id", tripId);
+  const { data, error } = await (signal ? query.abortSignal(signal) : query).maybeSingle();
   if (error) return { error: new Error(error.message), trip: null };
   // 0 rows is not an error: the row may be RLS-invisible (expired/anon session,
   // cross-org). Callers distinguish transport error (throw + report) from a

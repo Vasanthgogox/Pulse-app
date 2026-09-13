@@ -8,6 +8,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryKeys';
 import { getCheckpointDistanceSumsForTrips } from '@/features/tracking/services/trackingCheckpoint.service';
+import { throwIfCancelled } from '@/lib/supabaseAbort.util';
 
 const POLL_MS = 30_000;
 
@@ -18,8 +19,12 @@ export function useTripCheckpointDistanceQuery(tripId: string | null): {
 } {
   const query = useQuery({
     queryKey: queryKeys.trips.checkpointDistance(tripId ?? ''),
-    queryFn: async () => {
-      const { distanceMByTripId, error } = await getCheckpointDistanceSumsForTrips([tripId!]);
+    queryFn: async ({ signal }) => {
+      const { distanceMByTripId, error } = await getCheckpointDistanceSumsForTrips(
+        [tripId!],
+        signal,
+      );
+      throwIfCancelled(signal, error);
       if (error) throw error;
       return distanceMByTripId.get(tripId!) ?? 0;
     },

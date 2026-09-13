@@ -9,6 +9,7 @@
  */
 import { useQuery } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
+import { throwIfCancelled, withAbortSignal } from '@/lib/supabaseAbort.util';
 import { queryKeys } from '@/lib/queryKeys';
 
 // ── Feature flag ─────────────────────────────────────────────────────────────
@@ -224,11 +225,16 @@ export interface TripDetailBundle {
 async function fetchTripDetailBundle(
   tripId: string,
   viewerOrgId: string,
+  signal?: AbortSignal,
 ): Promise<TripDetailBundle | null> {
-  const { data, error } = await supabase().rpc('get_trip_detail_bundle', {
-    p_trip_id: tripId,
-    p_viewer_org_id: viewerOrgId,
-  });
+  const { data, error } = await withAbortSignal(
+    supabase().rpc('get_trip_detail_bundle', {
+      p_trip_id: tripId,
+      p_viewer_org_id: viewerOrgId,
+    }),
+    signal,
+  );
+  throwIfCancelled(signal, error);
   if (error) throw new Error(error.message);
   const bundle = (data as TripDetailBundle | null) ?? null;
   const tripIdFromBundle = bundle?.trip?.id;
@@ -239,11 +245,14 @@ async function fetchTripDetailBundle(
     Object.prototype.hasOwnProperty.call(bundle.trip, "operating_mode") &&
     Object.prototype.hasOwnProperty.call(bundle.trip, "dco_payee_id");
   if (hasDcoContract) return bundle;
-  const extra = await supabase()
-    .from("trips")
-    .select("operating_mode, dco_payee_id")
-    .eq("id", tripIdFromBundle)
-    .maybeSingle();
+  const extra = await withAbortSignal(
+    supabase()
+      .from("trips")
+      .select("operating_mode, dco_payee_id")
+      .eq("id", tripIdFromBundle),
+    signal,
+  ).maybeSingle();
+  throwIfCancelled(signal, extra.error);
   if (extra.data) {
     bundle.trip = {
       ...bundle.trip,
@@ -271,7 +280,7 @@ export function useTripDetailBundleQuery(
 ): { bundle: TripDetailBundle | null | undefined; isBundleLoading: boolean; bundleError: Error | null } {
   const { data, isLoading, error } = useQuery({
     queryKey: queryKeys.trips.bundle(tripId ?? ''),
-    queryFn: () => fetchTripDetailBundle(tripId!, viewerOrgId!),
+    queryFn: ({ signal }) => fetchTripDetailBundle(tripId!, viewerOrgId!, signal),
     enabled: isBundleEnabled(viewerOrgId) && !!tripId && !!viewerOrgId,
     staleTime: 60_000,
     gcTime: 5 * 60_000,

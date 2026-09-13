@@ -131,14 +131,15 @@ export async function syncVehiclesWithCache(orgId: string, currentRows: VehicleR
 
 export async function getVehicleById(
   orgId: string,
-  vehicleId: string
+  vehicleId: string,
+  signal?: AbortSignal,
 ): Promise<{ error: Error | null; vehicle: VehicleRow | null }> {
-  const { data, error } = await supabase()
+  const query = supabase()
     .from('vehicles')
     .select('*')
     .eq('organization_id', orgId)
-    .eq('id', vehicleId)
-    .maybeSingle();
+    .eq('id', vehicleId);
+  const { data, error } = await (signal ? query.abortSignal(signal) : query).maybeSingle();
   if (error) return { error: new Error(error.message), vehicle: null };
   return { error: null, vehicle: data as VehicleRow | null };
 }

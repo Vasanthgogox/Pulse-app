@@ -54,11 +54,13 @@ export async function recordTrackingCheckpoint(params: {
  */
 export async function getCheckpointDistanceSumsForTrips(
   tripIds: string[],
+  signal?: AbortSignal,
 ): Promise<{ error: Error | null; distanceMByTripId: Map<string, number> }> {
   if (tripIds.length === 0) return { error: null, distanceMByTripId: new Map() };
-  const { data, error } = await supabase().rpc('get_trip_checkpoint_distance_sums', {
+  const query = supabase().rpc('get_trip_checkpoint_distance_sums', {
     p_trip_ids: tripIds,
   });
+  const { data, error } = await (signal ? query.abortSignal(signal) : query);
   if (error) return { error: new Error(error.message), distanceMByTripId: new Map() };
 
   const distanceMByTripId = new Map<string, number>();

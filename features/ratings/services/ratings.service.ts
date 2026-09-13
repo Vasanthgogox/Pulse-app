@@ -292,16 +292,20 @@ export async function getRatingsForSuppliers(supplierIds: string[]): Promise<{
   return { error: null, bySupplierId };
 }
 
-export async function getRatingsForDriver(driverId: string): Promise<{
+export async function getRatingsForDriver(
+  driverId: string,
+  signal?: AbortSignal,
+): Promise<{
   error: Error | null;
   ratings: RatingRow[];
 }> {
-  const { data, error } = await supabase()
+  const query = supabase()
     .from('ratings')
     .select('*')
     .eq('rated_type', 'driver')
     .eq('rated_id', driverId)
     .order('created_at', { ascending: false });
+  const { data, error } = await (signal ? query.abortSignal(signal) : query);
 
   if (error) return { error: new Error(error.message), ratings: [] };
   return { error: null, ratings: (data ?? []) as RatingRow[] };

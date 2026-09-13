@@ -1,4 +1,5 @@
 import { supabase } from "@/lib/supabase";
+import { throwIfCancelled, withAbortSignal } from "@/lib/supabaseAbort.util";
 import {
   getTripWorkflowEvents,
   getTripWorkflowEventsForTrips,
@@ -96,12 +97,16 @@ function mapGeofenceRow(row: GeofenceEventRow): TripTimelineEvent | null {
 
 async function getGeofenceTimelineEvents(
   tripId: string,
+  signal?: AbortSignal,
 ): Promise<{ error: Error | null; events: TripTimelineEvent[] }> {
-  const { data, error } = await supabase()
-    .from("geofence_events")
-    .select("id, trip_id, event_type, latitude, longitude, recorded_at")
-    .eq("trip_id", tripId)
-    .order("recorded_at", { ascending: true });
+  const { data, error } = await withAbortSignal(
+    supabase()
+      .from("geofence_events")
+      .select("id, trip_id, event_type, latitude, longitude, recorded_at")
+      .eq("trip_id", tripId)
+      .order("recorded_at", { ascending: true }),
+    signal,
+  );
 
   if (error) return { error: new Error(error.message), events: [] };
   const events = ((data ?? []) as GeofenceEventRow[])
@@ -152,13 +157,17 @@ function mapDriverAcceptedRow(row: DriverAcceptedAuditRow): TripTimelineEvent {
 
 async function getDriverAcceptedTimelineEvents(
   tripId: string,
+  signal?: AbortSignal,
 ): Promise<{ error: Error | null; events: TripTimelineEvent[] }> {
-  const { data, error } = await supabase()
-    .from("trip_assignment_audit")
-    .select("id, trip_id, changed_at")
-    .eq("trip_id", tripId)
-    .eq("event_type", "driver_accepted")
-    .order("changed_at", { ascending: true });
+  const { data, error } = await withAbortSignal(
+    supabase()
+      .from("trip_assignment_audit")
+      .select("id, trip_id, changed_at")
+      .eq("trip_id", tripId)
+      .eq("event_type", "driver_accepted")
+      .order("changed_at", { ascending: true }),
+    signal,
+  );
 
   if (error) return { error: new Error(error.message), events: [] };
   const events = ((data ?? []) as DriverAcceptedAuditRow[]).map(mapDriverAcceptedRow);
@@ -215,8 +224,9 @@ function mapWorkflowRow(row: TripWorkflowEvent): TripTimelineEvent | null {
 
 async function getWorkflowTimelineEvents(
   tripId: string,
+  signal?: AbortSignal,
 ): Promise<{ error: Error | null; events: TripTimelineEvent[] }> {
-  const { error, events: workflowEvents } = await getTripWorkflowEvents(tripId);
+  const { error, events: workflowEvents } = await getTripWorkflowEvents(tripId, signal);
   if (error) return { error, events: [] };
   const events = workflowEvents
     .map(mapWorkflowRow)
@@ -266,15 +276,20 @@ function mergeSorted(...groups: TripTimelineEvent[][]): TripTimelineEvent[] {
 export async function getTripTimeline(params: {
   tripId: string;
   assignedAt: string | null;
+  signal?: AbortSignal;
 }): Promise<{ error: Error | null; events: TripTimelineEvent[] }> {
+  const signal = params.signal;
   const [geofence, accepted, workflow] = await Promise.all([
-    getGeofenceTimelineEvents(params.tripId),
-    getDriverAcceptedTimelineEvents(params.tripId),
-    getWorkflowTimelineEvents(params.tripId),
+    getGeofenceTimelineEvents(params.tripId, signal),
+    getDriverAcceptedTimelineEvents(params.tripId, signal),
+    getWorkflowTimelineEvents(params.tripId, signal),
   ]);
 
   const error = geofence.error ?? accepted.error ?? workflow.error;
-  if (error) return { error, events: [] };
+  if (error) {
+    throwIfCancelled(signal, error);
+    return { error, events: [] };
+  }
 
   const events = mergeSorted(
     assignedEvent(params.tripId, params.assignedAt),

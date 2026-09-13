@@ -191,8 +191,9 @@ export async function getDocumentsByEntity(
   orgId: string,
   entityType: EntityType,
   entityId: string,
+  signal?: AbortSignal,
 ): Promise<{ error: Error | null; documents: DocumentRow[] }> {
-  const { data, error } = await supabase()
+  const query = supabase()
     .from("entity_documents")
     .select("*")
     .eq("organization_id", orgId)
@@ -200,6 +201,7 @@ export async function getDocumentsByEntity(
     .eq("entity_id", entityId)
     .neq("status", "replaced")
     .order("expiry_date", { ascending: true, nullsFirst: false });
+  const { data, error } = await (signal ? query.abortSignal(signal) : query);
 
   return {
     error: (error as Error | null) ?? null,

@@ -42,7 +42,7 @@ export function useManifestRefAssetInsights({
     queryKey: ["manifest-ref-asset-insights", org, driver, vehicle],
     enabled: !!org && (!!driver || !!vehicle),
     staleTime: 60_000,
-    queryFn: async (): Promise<ManifestRefAssetInsights> => {
+    queryFn: async ({ signal }): Promise<ManifestRefAssetInsights> => {
       const result: ManifestRefAssetInsights = {
         driver: { ...EMPTY_PARTY },
         vehicle: { ...EMPTY_PARTY },
@@ -54,8 +54,8 @@ export function useManifestRefAssetInsights({
         tasks.push(
           (async () => {
             const [ratingsRes, docsRes] = await Promise.all([
-              getRatingsForDriver(driver),
-              getDocumentsByEntity(org, "driver", driver),
+              getRatingsForDriver(driver, signal),
+              getDocumentsByEntity(org, "driver", driver, signal),
             ]);
             const ratings = ratingsRes.error ? [] : ratingsRes.ratings;
             result.driver.ratingAvg = averageScoreDeduped(ratings);
@@ -71,8 +71,8 @@ export function useManifestRefAssetInsights({
         tasks.push(
           (async () => {
             const [docsRes, vehicleRes] = await Promise.all([
-              getDocumentsByEntity(org, "vehicle", vehicle),
-              getVehicleById(org, vehicle),
+              getDocumentsByEntity(org, "vehicle", vehicle, signal),
+              getVehicleById(org, vehicle, signal),
             ]);
             const entityDocs = docsRes.error ? [] : docsRes.documents;
             const legacyDocs = vehicleRes.error

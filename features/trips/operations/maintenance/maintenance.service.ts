@@ -22,8 +22,9 @@ export async function getVehicleMaintenanceEntries(input: {
   organizationId: string;
   vehicleId: string;
   limit?: number;
+  signal?: AbortSignal;
 }): Promise<{ error: Error | null; entries: VehicleMaintenanceEntry[] }> {
-  const { data, error } = await supabase()
+  const query = supabase()
     .from("vehicle_maintenance_entries")
     .select("*")
     .eq("organization_id", input.organizationId)
@@ -31,6 +32,7 @@ export async function getVehicleMaintenanceEntries(input: {
     .eq("status", "active")
     .order("entered_at", { ascending: false })
     .limit(input.limit ?? 60);
+  const { data, error } = await (input.signal ? query.abortSignal(input.signal) : query);
   if (error) return { error: new Error(error.message), entries: [] };
   return { error: null, entries: (data ?? []) as VehicleMaintenanceEntry[] };
 }

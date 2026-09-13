@@ -53,13 +53,15 @@ function toNullableText(value: string | null | undefined): string | null {
 
 export async function getTripOtherExpenses(
   tripId: string,
+  signal?: AbortSignal,
 ): Promise<{ error: Error | null; entries: TripOtherExpenseEntry[] }> {
-  const { data, error } = await supabase()
+  const query = supabase()
     .from("trip_other_expenses")
     .select("*")
     .eq("trip_id", tripId)
     .eq("status", "active")
     .order("entered_at", { ascending: false });
+  const { data, error } = await (signal ? query.abortSignal(signal) : query);
   if (error) return { error: new Error(error.message), entries: [] };
   return { error: null, entries: (data ?? []) as TripOtherExpenseEntry[] };
 }

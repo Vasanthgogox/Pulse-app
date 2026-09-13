@@ -18,6 +18,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { queryKeys } from '@/lib/queryKeys';
 import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
 import { getTripTimeline, type TripTimelineEvent } from '@/features/trips/domain';
+import { throwIfCancelled } from '@/lib/supabaseAbort.util';
 
 export function useTripTimelineQuery(
   tripId: string | null,
@@ -33,8 +34,13 @@ export function useTripTimelineQuery(
 
   const query = useQuery({
     queryKey: key,
-    queryFn: async () => {
-      const { events, error } = await getTripTimeline({ tripId: tripId!, assignedAt });
+    queryFn: async ({ signal }) => {
+      const { events, error } = await getTripTimeline({
+        tripId: tripId!,
+        assignedAt,
+        signal,
+      });
+      throwIfCancelled(signal, error);
       if (error) throw error;
       return events;
     },
