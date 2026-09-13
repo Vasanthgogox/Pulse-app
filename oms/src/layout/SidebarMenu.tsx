@@ -7,8 +7,7 @@ import { cn } from '@/lib/utils';
 import { Badge } from '@/components/ui/badge';
 import { useCommerce } from '@/context/CommerceProvider';
 import { useExecution } from '@/context/ExecutionProvider';
-import { getActiveWorkspace } from '@/types/workspaces';
-import { isExecutionWorkspacePath, isNavPathActive } from '@/lib/workspace-routes';
+import { isNavPathActive } from '@/lib/workspace-routes';
 
 type NavHeading = { heading: string };
 type NavLink = { title: string; path: string; icon: React.ComponentType<{ className?: string }> };
@@ -18,6 +17,7 @@ function isNavHeading(item: NavItem): item is NavHeading {
   return 'heading' in item;
 }
 
+/** One continuous Commerce application flow — no separate "workspace" to switch into. */
 const COMMERCE_NAV: NavItem[] = [
   { title: 'Dashboard', path: '/dashboard', icon: LayoutGrid },
   { heading: 'Catalog & CRM' },
@@ -27,25 +27,18 @@ const COMMERCE_NAV: NavItem[] = [
   { heading: 'Orders & Planning' },
   { title: 'Orders', path: '/orders', icon: ShoppingCart },
   { title: 'Plan Builder', path: '/execution-plans/build', icon: GitMerge },
-  { title: 'Published Plans', path: '/execution-plans', icon: GitMerge },
+  { title: 'Operations', path: '/execution', icon: Truck },
+  { title: 'Plan History', path: '/execution-plans', icon: GitMerge },
   { heading: 'Platform' },
   { title: 'Observatory', path: '/observatory', icon: Telescope },
   { title: 'Settings', path: '/settings', icon: Settings },
-];
-
-const EXECUTION_NAV: NavItem[] = [
-  { title: 'Execution Home', path: '/execution', icon: Truck },
 ];
 
 export function SidebarMenu() {
   const { pathname } = useLocation();
   const { orders, selectedOrderIds } = useCommerce();
   const { pendingJobs } = useExecution();
-  const isExecution = isExecutionWorkspacePath(pathname);
-  const workspace = isExecution
-    ? ({ label: 'Pulse Execution', description: 'Fleet, driver, POD, trips' })
-    : getActiveWorkspace();
-  const nav = isExecution ? EXECUTION_NAV : COMMERCE_NAV;
+  const nav = COMMERCE_NAV;
   const pendingCount = orders.filter(o => o.status === 'Pending Consolidation').length;
 
   const isActive = useCallback((path: string) => isNavPathActive(pathname, path), [pathname]);
@@ -64,7 +57,9 @@ export function SidebarMenu() {
       ? selectedOrderIds.length
       : item.path === '/orders' && pendingCount > 0
         ? pendingCount
-        : undefined;
+        : item.path === '/execution' && pendingJobs.length > 0
+          ? pendingJobs.length
+          : undefined;
 
     return (
       <div key={idx} className="px-2">
@@ -92,30 +87,12 @@ export function SidebarMenu() {
       <div className="px-4 pb-3 mb-1 border-b border-border/60">
         <div className="flex items-center gap-2">
           <Radio className="size-3 text-[var(--pulse-hero-blue)]" />
-          <span className="text-3xs font-bold uppercase tracking-wider text-[var(--pulse-hero-blue)]">{workspace.label} Workspace</span>
+          <span className="text-3xs font-bold uppercase tracking-wider text-[var(--pulse-hero-blue)]">Pulse Commerce</span>
         </div>
-        <p className="text-[10px] text-muted-foreground mt-1 leading-snug">{workspace.description}</p>
+        <p className="text-[10px] text-muted-foreground mt-1 leading-snug">Catalog, orders, planning &amp; fulfillment</p>
       </div>
 
       {nav.map((item, idx) => buildItem(item, idx))}
-
-      <div className="px-4 pt-5 mt-2 border-t border-border/60">
-        <span className="text-[10px] font-bold uppercase tracking-[0.1em] text-muted-foreground/50">Workspaces</span>
-        <div className="mt-2 space-y-1">
-          <Link
-            to="/dashboard"
-            className={`block px-2 py-1 rounded-md text-3xs ${!isExecution ? 'text-[var(--pulse-hero-blue)] font-medium' : 'text-muted-foreground hover:text-foreground'}`}
-          >
-            Commerce
-          </Link>
-          <Link
-            to="/execution"
-            className={`block px-2 py-1 rounded-md text-3xs ${isExecution ? 'text-[var(--pulse-hero-blue)] font-medium' : 'text-muted-foreground hover:text-foreground'}`}
-          >
-            Operations / Execution {pendingJobs.length > 0 && !isExecution ? `· ${pendingJobs.length} to dispatch` : ''}
-          </Link>
-        </div>
-      </div>
     </nav>
   );
 }

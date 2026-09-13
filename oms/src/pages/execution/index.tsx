@@ -5,7 +5,10 @@ import { KpiCard, LottieIcon, RouteTimeline, StatusBadge } from '@/components/pu
 import { useExecution } from '@/context/ExecutionProvider';
 import { formatCurrency } from '@/lib/utils';
 import { coreIndentUrl, coreTripUrl } from '@/lib/core-navigation';
-import { isTripDelivered, isTripInTransit, lifecycleStages, primaryStatusLabel } from '@/lib/commerce-execution-status';
+import {
+  isTripDelivered, isTripInTransit, lifecycleStages, orderDeliveryStatusLabel,
+  orderProgressLabel, orderStatusGlyph, primaryStatusLabel, transportCostStatusLabel,
+} from '@/lib/commerce-execution-status';
 import type { CommerceExecution } from '@/lib/services/execution-visibility.service';
 
 function formatTimestamp(iso: string): string {
@@ -36,6 +39,74 @@ function StopsPreview({ exec }: { exec: CommerceExecution }) {
   );
 }
 
+/** Sales value (Commerce) vs. transport cost (Core) are distinct concepts — never derive one from the other. */
+function TransportationSection({ exec }: { exec: CommerceExecution }) {
+  const supplierName = exec.trip?.supplierName ?? null;
+  return (
+    <div className="text-2xs">
+      <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Transportation</p>
+      <div className="grid grid-cols-2 gap-x-3 gap-y-1">
+        <span className="text-muted-foreground">Supplier</span>
+        <span className="text-right font-medium truncate">{supplierName ?? 'Not assigned'}</span>
+
+        {exec.trip ? (
+          <>
+            <span className="text-muted-foreground">Transport Cost</span>
+            <span className="text-right font-medium">{formatCurrency(exec.trip.supplierRate)}</span>
+          </>
+        ) : (
+          <>
+            <span className="text-muted-foreground">Transport Cost</span>
+            <span className="text-right font-medium text-muted-foreground">Awaiting Bid</span>
+            {exec.indent?.supplierTarget != null && (
+              <>
+                <span className="text-muted-foreground">Transport Target</span>
+                <span className="text-right font-medium">{formatCurrency(exec.indent.supplierTarget)}</span>
+              </>
+            )}
+          </>
+        )}
+
+        <span className="text-muted-foreground">Status</span>
+        <span className="text-right font-medium">{transportCostStatusLabel(exec)}</span>
+      </div>
+    </div>
+  );
+}
+
+function DeliverySection({ exec }: { exec: CommerceExecution }) {
+  const progress = orderProgressLabel(exec);
+  if (!progress) return null;
+  return (
+    <div className="text-2xs">
+      <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Delivery</p>
+      <p className="font-medium">{progress}</p>
+    </div>
+  );
+}
+
+function OrdersList({ exec }: { exec: CommerceExecution }) {
+  if (!exec.orders.length) return null;
+  return (
+    <div className="text-2xs">
+      <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Orders</p>
+      <ul className="divide-y divide-border/60">
+        {exec.orders.map(o => (
+          <li key={o.id} className="flex items-center gap-2 py-1">
+            <span aria-hidden="true">{orderStatusGlyph(o)}</span>
+            <span className="font-mono">{o.orderNumber}</span>
+            <span className="text-muted-foreground truncate flex-1">{o.customerName}</span>
+            <span className="text-muted-foreground">
+              {exec.trip ? orderDeliveryStatusLabel(o.deliveryStatus) : 'Awaiting Trip'}
+              <span className="sr-only"> delivery status</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 function ExecutionCard({ exec }: { exec: CommerceExecution }) {
   const stages = lifecycleStages(exec);
 
@@ -45,8 +116,9 @@ function ExecutionCard({ exec }: { exec: CommerceExecution }) {
         <div className="min-w-0">
           <p className="font-mono font-bold text-sm">{exec.planNumber}</p>
           <p className="text-2xs text-muted-foreground mt-0.5">
-            {exec.orderCount} {exec.orderCount === 1 ? 'Order' : 'Orders'} · {exec.stopCount} {exec.stopCount === 1 ? 'Stop' : 'Stops'} · {formatCurrency(exec.totalAmount)}
+            {exec.orderCount} {exec.orderCount === 1 ? 'Order' : 'Orders'} · {exec.stopCount} {exec.stopCount === 1 ? 'Stop' : 'Stops'}
           </p>
+          <p className="text-2xs text-muted-foreground mt-0.5">Sales Value <span className="font-medium text-foreground">{formatCurrency(exec.totalAmount)}</span></p>
           <StopsPreview exec={exec} />
         </div>
         <span className="text-2xs font-medium px-2.5 py-1 rounded-full bg-primary/10 text-primary shrink-0">
@@ -100,6 +172,22 @@ function ExecutionCard({ exec }: { exec: CommerceExecution }) {
           </span>
         ))}
       </div>
+
+      <div className="border-t border-border/60 pt-3">
+        <TransportationSection exec={exec} />
+      </div>
+
+      {orderProgressLabel(exec) && (
+        <div className="border-t border-border/60 pt-3">
+          <DeliverySection exec={exec} />
+        </div>
+      )}
+
+      {exec.orders.length > 0 && (
+        <div className="border-t border-border/60 pt-3">
+          <OrdersList exec={exec} />
+        </div>
+      )}
 
       <div className="flex items-center justify-between text-3xs text-muted-foreground pt-2 border-t border-border/60">
         <span>Published {formatTimestamp(exec.publishedAt)}</span>
