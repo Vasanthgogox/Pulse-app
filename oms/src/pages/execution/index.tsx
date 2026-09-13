@@ -1,9 +1,12 @@
 import { Link } from 'react-router-dom';
-import { ArrowRight, Radio, Truck, User } from 'lucide-react';
+import { ArrowRight, ExternalLink, Radio, Truck, User } from 'lucide-react';
 import { PageToolbar } from '@/components/commerce/PageToolbar';
 import { KpiCard, LottieIcon, RouteTimeline, StatusBadge } from '@/components/pulse-ui';
 import { useExecution } from '@/context/ExecutionProvider';
 import { formatCurrency } from '@/lib/utils';
+import { coreIndentUrl, coreTripUrl } from '@/lib/core-navigation';
+import { isTripDelivered, isTripInTransit, lifecycleStages, primaryStatusLabel } from '@/lib/commerce-execution-status';
+import type { CommerceExecution } from '@/lib/services/execution-visibility.service';
 
 function formatTimestamp(iso: string): string {
   try {
@@ -13,55 +16,143 @@ function formatTimestamp(iso: string): string {
   }
 }
 
+function CommerceTag() {
+  return (
+    <span className="text-3xs font-sans font-semibold tracking-wide text-muted-foreground border border-border rounded px-1 py-0.5 shrink-0">
+      COMMERCE
+    </span>
+  );
+}
+
+function StopsPreview({ exec }: { exec: CommerceExecution }) {
+  if (!exec.stops.length) return null;
+  const pickups = exec.stops.filter(s => s.type === 'pickup').map(s => s.label);
+  const drops = exec.stops.filter(s => s.type === 'drop').map(s => s.label);
+  if (!pickups.length && !drops.length) return null;
+  return (
+    <p className="text-3xs text-muted-foreground truncate">
+      {pickups.join(', ') || '—'} <ArrowRight className="inline size-2.5 mx-0.5" /> {drops.join(', ') || '—'}
+    </p>
+  );
+}
+
+function ExecutionCard({ exec }: { exec: CommerceExecution }) {
+  const stages = lifecycleStages(exec);
+
+  return (
+    <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-3">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="font-mono font-bold text-sm">{exec.planNumber}</p>
+          <p className="text-2xs text-muted-foreground mt-0.5">
+            {exec.orderCount} {exec.orderCount === 1 ? 'Order' : 'Orders'} · {exec.stopCount} {exec.stopCount === 1 ? 'Stop' : 'Stops'} · {formatCurrency(exec.totalAmount)}
+          </p>
+          <StopsPreview exec={exec} />
+        </div>
+        <span className="text-2xs font-medium px-2.5 py-1 rounded-full bg-primary/10 text-primary shrink-0">
+          {primaryStatusLabel(exec)}
+        </span>
+      </div>
+
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-2sm">
+        {exec.indent ? (
+          <a
+            href={coreIndentUrl(exec.indent.id)}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Open indent ${exec.indent.indentNumber} in Pulse Core`}
+            className="inline-flex items-center gap-1.5 font-mono text-primary hover:underline"
+          >
+            {exec.indent.indentNumber}
+            <CommerceTag />
+            <ExternalLink className="size-3" aria-hidden="true" />
+          </a>
+        ) : (
+          <span className="text-2xs text-muted-foreground">Preparing indent…</span>
+        )}
+
+        {exec.trip ? (
+          <a
+            href={coreTripUrl(exec.trip.id)}
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label={`Open trip ${exec.trip.tripNumber} in Pulse Core`}
+            className="inline-flex items-center gap-1.5 font-mono text-primary hover:underline"
+          >
+            {exec.trip.tripNumber}
+            <CommerceTag />
+            <ExternalLink className="size-3" aria-hidden="true" />
+          </a>
+        ) : exec.indent ? (
+          <span className="text-2xs text-muted-foreground">Awaiting trip assignment</span>
+        ) : null}
+      </div>
+
+      <div className="flex items-center flex-wrap gap-x-1.5 gap-y-1.5 text-2xs" role="list" aria-label="Fulfillment lifecycle">
+        {stages.map((s, i) => (
+          <span key={s.stage} className="inline-flex items-center gap-1" role="listitem">
+            <span aria-hidden="true">{s.done ? '✓' : s.current ? '●' : '○'}</span>
+            <span className={s.done ? 'text-foreground' : s.current ? 'text-primary font-medium' : 'text-muted-foreground'}>
+              {s.label}
+              <span className="sr-only">{s.done ? ' (complete)' : s.current ? ' (current)' : ' (pending)'}</span>
+            </span>
+            {i < stages.length - 1 && <span className="text-muted-foreground mx-0.5" aria-hidden="true">→</span>}
+          </span>
+        ))}
+      </div>
+
+      <div className="flex items-center justify-between text-3xs text-muted-foreground pt-2 border-t border-border/60">
+        <span>Published {formatTimestamp(exec.publishedAt)}</span>
+        {exec.correlationId && (
+          <span className="font-mono flex items-center gap-1" title="Correlation ID — technical/debug reference">
+            <Radio className="size-2.5" aria-hidden="true" />{exec.correlationId}
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
+
 export function ExecutionDashboardPage() {
-  const { pendingJobs, activeJobs, completedJobs } = useExecution();
+  const { activeJobs, commerceExecutions, commerceExecutionsLoaded, commerceExecutionsError } = useExecution();
+
+  const awaitingTrip = commerceExecutions.filter(e => !e.trip).length;
+  const inTransit = commerceExecutions.filter(e => e.trip && isTripInTransit(e.trip.status)).length;
+  const delivered = commerceExecutions.filter(e => e.trip && isTripDelivered(e.trip.status)).length;
+  const totalValue = commerceExecutions.reduce((sum, e) => sum + e.totalAmount, 0);
+
+  const hasAnyContent = commerceExecutions.length > 0 || activeJobs.length > 0;
 
   return (
     <div className="container-fluid pb-8">
       <PageToolbar
-        title="Pulse Operations"
-        breadcrumb={['Pulse Platform', 'Operations']}
-        description="Dispatch assigns org fleet · Driver completes sequential PODs · Execution Service owns state"
+        title="Commerce Operations"
+        breadcrumb={['Pulse Commerce', 'Operations']}
+        description="Orders merged into execution plans, posted as Indents, and moved as Trips in Pulse Core"
       />
 
-      <div className="grid gap-4 sm:grid-cols-3 mb-6">
-        <KpiCard label="Awaiting dispatch" value={String(pendingJobs.length)} lottie="logistics" />
-        <KpiCard label="Active trips" value={String(activeJobs.length)} lottie="delivery" />
-        <KpiCard label="Completed" value={String(completedJobs.length)} lottie="success" />
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4 mb-6">
+        <KpiCard label="Awaiting Trip" value={String(awaitingTrip)} lottie="logistics" />
+        <KpiCard label="In Transit" value={String(inTransit)} lottie="delivery" />
+        <KpiCard label="Delivered" value={String(delivered)} lottie="success" />
+        <KpiCard label="Order Value" value={formatCurrency(totalValue)} lottie="success" />
       </div>
 
-      {pendingJobs.length > 0 && (
+      {commerceExecutionsError && (
+        <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/5 p-4 mb-6 text-2sm text-destructive">
+          Could not load the latest fulfillment status from Pulse Core. This is a read failure, not a data problem — try refreshing.
+        </div>
+      )}
+
+      {commerceExecutions.length > 0 && (
         <section className="mb-6">
           <h2 className="font-semibold mb-3 flex items-center gap-2">
             <LottieIcon name="planning" size={32} />
-            Incoming execution plans
+            Fulfillment
           </h2>
           <div className="space-y-3">
-            {pendingJobs.map(job => (
-              <div key={job.id} className="rounded-xl border border-primary/25 bg-primary/5 p-5 flex flex-wrap items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2">
-                    <p className="font-mono font-bold text-sm">{job.planNumber}</p>
-                    <StatusBadge status={job.status} />
-                  </div>
-                  {job.indentCode && (
-                    <p className="text-2xs font-mono text-primary mt-0.5">Indent: {job.indentCode}</p>
-                  )}
-                  <p className="text-2xs text-muted-foreground mt-1">
-                    {job.command.summary.orderCount} orders · {formatCurrency(job.command.summary.totalAmount)} · {job.stops.length} stops
-                  </p>
-                  <p className="text-2xs text-muted-foreground mt-0.5">Published {formatTimestamp(job.receivedAt)}</p>
-                  <p className="text-2xs font-mono text-primary/80 mt-1 flex items-center gap-1">
-                    <Radio className="size-3" />{job.correlationId}
-                  </p>
-                </div>
-                <Link
-                  to={`/execution/dispatch/${job.id}`}
-                  className="inline-flex items-center gap-2 rounded-lg bg-primary text-primary-foreground px-4 py-2 text-sm font-medium hover:opacity-90"
-                >
-                  Dispatch <ArrowRight className="size-4" />
-                </Link>
-              </div>
+            {commerceExecutions.map(exec => (
+              <ExecutionCard key={exec.executionPlanId} exec={exec} />
             ))}
           </div>
         </section>
@@ -69,7 +160,7 @@ export function ExecutionDashboardPage() {
 
       {activeJobs.length > 0 && (
         <section className="mb-6">
-          <h2 className="font-semibold mb-3">Active trips</h2>
+          <h2 className="font-semibold mb-3">Active trips (local demo)</h2>
           <div className="grid gap-3 lg:grid-cols-2">
             {activeJobs.map(job => (
               <div key={job.id} className="rounded-xl border border-border bg-card p-5 shadow-none">
@@ -107,11 +198,11 @@ export function ExecutionDashboardPage() {
         </section>
       )}
 
-      {pendingJobs.length === 0 && activeJobs.length === 0 && (
+      {commerceExecutionsLoaded && !hasAnyContent && !commerceExecutionsError && (
         <div className="rounded-xl border border-dashed border-border p-10 text-center">
           <LottieIcon name="logistics" size={80} className="mx-auto mb-4" />
-          <p className="font-medium">No active execution jobs</p>
-          <p className="text-2sm text-muted-foreground mt-1">Publish an execution plan from Commerce Workspace to begin M1.</p>
+          <p className="font-medium">No active fulfillment yet</p>
+          <p className="text-2sm text-muted-foreground mt-1">Publish an execution plan from Commerce Workspace to begin fulfilling orders.</p>
           <Link to="/execution-plans/build" className="inline-block mt-4 text-sm text-primary font-medium">Go to Plan Builder →</Link>
         </div>
       )}

@@ -37,6 +37,8 @@ export type IndentReviewHubCardProps = {
   typeLabel: string;
   status: string;
   isDirect: boolean;
+  /** Originated from a Commerce (multi-order e-commerce) execution plan. */
+  isCommerce?: boolean;
   dateLabel: string;
   origin: string;
   destination: string;
@@ -143,6 +145,7 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
   typeLabel,
   status,
   isDirect,
+  isCommerce = false,
   dateLabel,
   origin,
   destination,
@@ -191,6 +194,7 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
         typeLabel={typeLabel}
         status={status}
         isDirect={isDirect}
+        isCommerce={isCommerce}
         loadId={loadId || "—"}
         dateLabel={dateLabel}
         createdAtLabel={createdAtLabel}
@@ -330,6 +334,11 @@ export const IndentReviewHubCard = memo(function IndentReviewHubCard({
             {isDirect ? (
               <View style={styles.directPill}>
                 <Text style={styles.directPillText}>DIRECT</Text>
+              </View>
+            ) : null}
+            {isCommerce ? (
+              <View style={styles.commercePill} accessibilityLabel="Originated from Pulse Commerce">
+                <Text style={styles.commercePillText}>COMMERCE</Text>
               </View>
             ) : null}
           </View>
@@ -632,6 +641,20 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderMedium,
   },
   directPillText: {
+    ...indentReviewHubText.chipLabel,
+    fontSize: 8,
+    color: Theme.textPrimaryDark,
+  },
+  /** Marks an Indent that originated from a Commerce execution plan. Text-based — not color-only. */
+  commercePill: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.borderMedium,
+  },
+  commercePillText: {
     ...indentReviewHubText.chipLabel,
     fontSize: 8,
     color: Theme.textPrimaryDark,

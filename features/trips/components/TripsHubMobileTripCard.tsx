@@ -517,6 +517,13 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
                   {originTagUpper}
                 </Text>
               </View>
+              {trip.is_commerce ? (
+                <View style={styles.commerceTag} accessibilityLabel="Originated from Pulse Commerce">
+                  <Text style={styles.commerceTagText} numberOfLines={1}>
+                    COMMERCE
+                  </Text>
+                </View>
+              ) : null}
               {tripIsDeliveredStatus(trip.status, stageLabel) ? (
                 <TripPodStatusTags
                   compact
@@ -823,6 +830,27 @@ const styles = StyleSheet.create({
   },
   originTagTextDirect: {
     color: Theme.buttonPrimaryText,
+  },
+  /** Marks a Trip that originated from a Commerce execution plan. Text-based — not color-only. */
+  commerceTag: {
+    marginTop: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: Theme.buttonPrimaryRadius,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: REF.muted,
+    alignSelf: "flex-end",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  commerceTagText: {
+    fontSize: 9,
+    lineHeight: 11,
+    fontWeight: "700",
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+    textAlign: "center",
+    color: REF.muted,
   },
   route: {
     flexDirection: "row",

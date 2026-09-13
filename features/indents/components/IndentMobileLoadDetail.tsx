@@ -41,6 +41,8 @@ export type IndentMobileLoadDetailProps = {
   typeLabel: string;
   status: string;
   isDirect: boolean;
+  /** Originated from a Commerce (multi-order e-commerce) execution plan. */
+  isCommerce?: boolean;
   loadId: string;
   dateLabel: string;
   createdAtLabel: string;
@@ -347,6 +349,7 @@ export const IndentMobileLoadDetail = memo(function IndentMobileLoadDetail({
   typeLabel,
   status,
   isDirect,
+  isCommerce = false,
   loadId,
   dateLabel,
   createdAtLabel,
@@ -580,6 +583,13 @@ export const IndentMobileLoadDetail = memo(function IndentMobileLoadDetail({
       {/* Topbar */}
       <View style={styles.topbar}>
         <Text style={styles.title}>{title}</Text>
+        {isCommerce ? (
+          <View style={styles.commercePill} accessibilityLabel="Originated from Pulse Commerce">
+            <Text style={styles.commercePillText} numberOfLines={1}>
+              COMMERCE
+            </Text>
+          </View>
+        ) : null}
         <View style={[styles.pill, pillStyles.wrap]}>
           <Text style={[styles.pillText, pillStyles.text]} numberOfLines={1}>
             {pill.label}
@@ -923,6 +933,22 @@ const styles = StyleSheet.create({
     borderRadius: 6,
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: "transparent",
+  },
+  /** Marks an Indent that originated from a Commerce execution plan. Text-based — not color-only. */
+  commercePill: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: "#F3F4F6",
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: BORDER,
+    flexShrink: 0,
+  },
+  commercePillText: {
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+    color: MUTED,
   },
   pillText: {
     fontSize: 9,

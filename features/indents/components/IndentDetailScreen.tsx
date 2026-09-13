@@ -802,6 +802,8 @@ export function IndentDetailScreen({
   const statusLower = normalizeStatus(indent.status);
   const isDirect =
     (indent.circulation_target || "").toLowerCase() !== "marketplace";
+  /** Originated from a Commerce (multi-order e-commerce) execution plan — no new column, existing FK. */
+  const isCommerce = Boolean(indent.execution_plan_id);
   const isOwner = !!orgId && indent.organization_id === orgId;
   const clientEntityRawName = resolveIndentClientEntityDisplayName(indent, orgId);
   const awardedQuote =
@@ -1202,6 +1204,7 @@ export function IndentDetailScreen({
               }
               status={status}
               isDirect={isDirect}
+              isCommerce={isCommerce}
               dateLabel={dateLabel}
               loadId={displayNumber}
               createdAtLabel={createdAtLabel}

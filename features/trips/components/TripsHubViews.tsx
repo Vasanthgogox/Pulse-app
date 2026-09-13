@@ -386,8 +386,8 @@ export type TripsHubTripCardProps = {
   stageLabel: string;
   /** Legacy press handler — prefer {@link onOpenTrip} for stable list perf. */
   onPress?: () => void;
-  /** Stable `(tripId) => void` from {@link useOpenTripDetail}. */
-  onOpenTrip?: (tripId: string) => void;
+  /** Stable `(tripId, seed?) => void` from {@link useOpenTripDetail}. */
+  onOpenTrip?: (tripId: string, seed?: TripRow) => void;
   /** Precomputed from screen width — avoids per-card `useWindowDimensions`. */
   layoutCompact?: boolean;
   /** Screen/window width from parent for mobile-plan card breakpoint. */
@@ -502,8 +502,8 @@ function TripsHubTripCardInner({
 }: TripsHubTripCardProps) {
   const handlePress = useCallback(() => {
     if (onPress) onPress();
-    else onOpenTrip?.(trip.id);
-  }, [onPress, onOpenTrip, trip.id]);
+    else onOpenTrip?.(trip.id, trip);
+  }, [onPress, onOpenTrip, trip]);
 
   const compactMetricGrid = layoutCompact;
   const hasSupplierLink = isAggregateTrip(trip);
@@ -705,6 +705,11 @@ function TripsHubTripCardInner({
                 <View style={styles.fleetBadgeBlue}>
                   <Text style={styles.fleetBadgeBlueText}>{typeLabel}</Text>
                 </View>
+                {trip.is_commerce ? (
+                  <View style={styles.commerceBadge} accessibilityLabel="Originated from Pulse Commerce">
+                    <Text style={styles.commerceBadgeText}>COMMERCE</Text>
+                  </View>
+                ) : null}
               </View>
               <Text style={styles.fleetTripId}>{tripNo}</Text>
               {tripSecondaryLabel ? (
@@ -1912,6 +1917,16 @@ export function TripsHubTableView({
                                 {typeLabel}
                               </Text>
                             </View>
+                            {t.is_commerce ? (
+                              <View
+                                style={styles.commerceBadge}
+                                accessibilityLabel="Originated from Pulse Commerce"
+                              >
+                                <Text style={styles.commerceBadgeText}>
+                                  COMMERCE
+                                </Text>
+                              </View>
+                            ) : null}
                             {tripIsDeliveredStatus(t.status) ? (
                               <TripPodStatusTags
                                 compact
@@ -3005,6 +3020,22 @@ const styles = StyleSheet.create({
     fontSize: FS_CAPTION,
     fontWeight: "900",
     color: Theme.textPrimaryDark,
+    textTransform: "uppercase",
+    letterSpacing: 0.4,
+  },
+  /** Marks a Trip that originated from a Commerce execution plan. Text-based — not color-only. */
+  commerceBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 6,
+    backgroundColor: Theme.surfaceGray,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+  },
+  commerceBadgeText: {
+    fontSize: FS_CAPTION,
+    fontWeight: "700",
+    color: Theme.textSecondary,
     textTransform: "uppercase",
     letterSpacing: 0.4,
   },

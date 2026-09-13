@@ -149,6 +149,8 @@ export interface TripRow {
   /** Last actor role who advanced status. */
   status_updated_role?: "driver" | "creator" | "system" | null;
   indent_number?: string | null;
+  /** Originated from a Commerce (multi-order e-commerce) execution plan. Derived from the joined indent's execution_plan_id — no new column. */
+  is_commerce?: boolean;
   /** Globally unique booking reference assigned when a trip is created from an indent award (BKG-XXXXXX). */
   booking_ref?: string | null;
   /** Per-supplier-org sequence for indent-awarded trips (Job #N in supplier UI). */
@@ -164,6 +166,8 @@ type TripIndentJoin = {
   indent_operational_code?: string | null;
   indent_number: string | null;
   indent_code?: string | null;
+  /** Set when the indent originated from a Commerce execution plan — see is_commerce below. */
+  execution_plan_id?: string | null;
 };
 
 function normalizeTripRowWithIndent(
@@ -187,6 +191,12 @@ function normalizeTripRowWithIndent(
     row.indent_number ??
     null;
   const tripDisplay = selectTripOperationalReference(row);
+  /** Originated from a Commerce (multi-order e-commerce) execution plan — no new column, existing FK. */
+  const isCommerce = Boolean(
+    row.source_indent?.execution_plan_id ??
+      row.active_indent?.execution_plan_id ??
+      row.indents?.execution_plan_id,
+  );
   return {
     ...row,
     trip_operational_code: row.trip_operational_code ?? null,
@@ -195,6 +205,7 @@ function normalizeTripRowWithIndent(
     indent_number: indentDisplay,
     source_indent_code: indentDisplay,
     indent_reference_code: indentDisplay,
+    is_commerce: isCommerce,
   };
 }
 
@@ -217,7 +228,7 @@ export async function getTripsByOrganization(
   const q = supabase()
     .from("trips")
     .select(
-      "*, active_indent:indents!trips_indent_id_fkey(indent_operational_code, indent_number, indent_code), source_indent:indents!trips_source_indent_id_fkey(indent_operational_code, indent_number, indent_code)",
+      "*, active_indent:indents!trips_indent_id_fkey(indent_operational_code, indent_number, indent_code, execution_plan_id), source_indent:indents!trips_source_indent_id_fkey(indent_operational_code, indent_number, indent_code, execution_plan_id)",
     )
     .eq("organization_id", orgId)
     .order("created_at", { ascending: false });
@@ -503,7 +514,7 @@ export async function getTripById(
   const { data, error } = await supabase()
     .from("trips")
     .select(
-      "*, active_indent:indents!trips_indent_id_fkey(indent_operational_code, indent_number, indent_code), source_indent:indents!trips_source_indent_id_fkey(indent_operational_code, indent_number, indent_code)",
+      "*, active_indent:indents!trips_indent_id_fkey(indent_operational_code, indent_number, indent_code, execution_plan_id), source_indent:indents!trips_source_indent_id_fkey(indent_operational_code, indent_number, indent_code, execution_plan_id)",
     )
     .eq("id", tripId)
     .maybeSingle();
@@ -526,7 +537,7 @@ export async function getTripsByIds(
   const { data, error } = await supabase()
     .from("trips")
     .select(
-      "*, active_indent:indents!trips_indent_id_fkey(indent_operational_code, indent_number, indent_code), source_indent:indents!trips_source_indent_id_fkey(indent_operational_code, indent_number, indent_code)",
+      "*, active_indent:indents!trips_indent_id_fkey(indent_operational_code, indent_number, indent_code, execution_plan_id), source_indent:indents!trips_source_indent_id_fkey(indent_operational_code, indent_number, indent_code, execution_plan_id)",
     )
     .in("id", tripIds);
   if (error) return { error: new Error(error.message), trips: [] };
@@ -593,7 +604,7 @@ export async function getTripByIndentId(
   const { data, error } = await supabase()
     .from("trips")
     .select(
-      "*, active_indent:indents!trips_indent_id_fkey(indent_operational_code, indent_number, indent_code), source_indent:indents!trips_source_indent_id_fkey(indent_operational_code, indent_number, indent_code)",
+      "*, active_indent:indents!trips_indent_id_fkey(indent_operational_code, indent_number, indent_code, execution_plan_id), source_indent:indents!trips_source_indent_id_fkey(indent_operational_code, indent_number, indent_code, execution_plan_id)",
     )
     .eq("indent_id", indentId)
     .order("created_at", { ascending: false })

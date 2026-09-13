@@ -244,7 +244,7 @@ export type LoadCenterHubMobileIndentCardProps = {
   actions?: ReactNode;
   /** Tighter padding for 4-column desktop grid cards. */
   dense?: boolean;
-  /** Stretch card to fill grid cell height. */
+  /** Full column width with a shared min-height; height follows content (do not stretch to fill the column). */
   fillGrid?: boolean;
   /** Soften LOST / CANCELLED / EXPIRED Done cards. */
   dimmed?: boolean;
@@ -338,9 +338,11 @@ export function LoadCenterHubMobileIndentCard({
     commerce?.targetRateInr != null && commerce.targetRateInr > 0
       ? stripCurrencyPrefix(formatINR(commerce.targetRateInr))
       : null;
-  /** OpportunityCard pending-bid footer shows only YOUR BID + amount. */
+  /** OpportunityCard pending-bid footer shows only YOUR BID + amount. Dense kanban matches Get Load: one amount line. */
+  const compactKanbanFooter = dense || fillGrid;
   const referenceTarget =
-    isGetLoadCard && (commerce?.kicker ?? "").toUpperCase() === "YOUR BID"
+    compactKanbanFooter ||
+    (isGetLoadCard && (commerce?.kicker ?? "").toUpperCase() === "YOUR BID")
       ? null
       : rawReferenceTarget;
   const priceHint =
@@ -414,6 +416,13 @@ export function LoadCenterHubMobileIndentCard({
                 {metaLine}
               </Text>
             </View>
+            {Boolean(indent.execution_plan_id) ? (
+              <View style={styles.commerceBadge} accessibilityLabel="Originated from Pulse Commerce">
+                <Text style={styles.commerceBadgeText} numberOfLines={1}>
+                  COMMERCE
+                </Text>
+              </View>
+            ) : null}
             <View
               style={[
                 styles.statusChip,
@@ -595,12 +604,8 @@ export function LoadCenterHubMobileIndentCard({
                   <Text style={styles.priceRef} numberOfLines={1}>
                     {`${commerce?.referenceLabel?.trim() || "Client rate"} · ₹ ${referenceTarget}`}
                   </Text>
-                ) : dense || fillGrid ? (
-                  <Text style={styles.priceRefSpacer} accessible={false}>
-                    {"\u00a0"}
-                  </Text>
                 ) : null}
-                {awardedVendorName && !isGetLoadCard ? (
+                {awardedVendorName && !isGetLoadCard && !compactKanbanFooter ? (
                   <Text style={styles.priceRef} numberOfLines={1}>
                     {`Vendor · ${awardedVendorName}`}
                   </Text>
@@ -642,11 +647,12 @@ const styles = StyleSheet.create({
     opacity: 0.72,
   },
   cardWrapGrid: {
-    flex: 1,
     width: "100%",
     maxWidth: "100%",
     minWidth: 0,
     alignSelf: "stretch",
+    flexGrow: 0,
+    flexShrink: 0,
     marginBottom: 0,
   },
   card: {
@@ -668,12 +674,13 @@ const styles = StyleSheet.create({
     }),
   },
   cardGrid: {
-    flex: 1,
     width: "100%",
     maxWidth: "100%",
     minWidth: 0,
     alignSelf: "stretch",
     minHeight: HUB_GRID_CARD_MIN_HEIGHT,
+    flexGrow: 0,
+    flexShrink: 0,
     flexDirection: "column",
   },
   body: {
@@ -699,7 +706,7 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   bodyGrid: {
-    flex: 1,
+    flexGrow: 0,
     flexDirection: "column",
   },
   bodyPressed: {
@@ -765,6 +772,24 @@ const styles = StyleSheet.create({
     fontSize: 9,
     fontWeight: "700",
     letterSpacing: 0.4,
+    textTransform: "uppercase",
+  },
+  /** Marks an Indent that originated from a Commerce execution plan. Text-based — not color-only. */
+  commerceBadge: {
+    paddingHorizontal: 6,
+    paddingVertical: 3,
+    borderRadius: 5,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: BORDER,
+    backgroundColor: CANVAS_SOFT,
+    flexShrink: 0,
+    alignSelf: "center",
+  },
+  commerceBadgeText: {
+    fontSize: 8,
+    fontWeight: "700",
+    letterSpacing: 0.3,
+    color: MUTED,
     textTransform: "uppercase",
   },
   statusChipTextLive: {
@@ -1087,13 +1112,6 @@ const styles = StyleSheet.create({
     color: MUTED,
     fontVariant: ["tabular-nums"],
     lineHeight: 12,
-  },
-  /** Keeps grid footers level when some cards lack a target / client rate line. */
-  priceRefSpacer: {
-    marginTop: 2,
-    fontSize: 9,
-    lineHeight: 12,
-    color: "transparent",
   },
   priceMuted: {
     fontSize: 12,
