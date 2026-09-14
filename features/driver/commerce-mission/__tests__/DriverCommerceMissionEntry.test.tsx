@@ -1,6 +1,4 @@
 import { DriverCommerceMissionEntry } from '@/features/driver/commerce-mission/DriverCommerceMissionEntry';
-import type { DriverCommerceMissionState } from '@/features/driver/commerce-mission/useDriverCommerceMission';
-import { emptyDriverTripStopOrderMission } from '@/features/driver/commerce-mission/normalizeDriverTripStopOrders';
 import { ROUTES } from '@/lib/routes';
 import { fireEvent, render } from '@testing-library/react-native';
 
@@ -23,19 +21,8 @@ jest.mock('@/contexts/DriverThemeContext', () => ({
 }));
 
 jest.mock('@/features/driver/commerce-mission/useDriverCommerceMission', () => ({
-  useDriverCommerceMission: (tripId: string | null) => mockUseDriverCommerceMission(tripId),
+  useDriverCommerceMission: (...args: unknown[]) => mockUseDriverCommerceMission(...args),
 }));
-
-function readyCommerce(tripId: string): DriverCommerceMissionState {
-  return {
-    status: 'ready',
-    mission: {
-      ...emptyDriverTripStopOrderMission(tripId),
-      indentId: 'indent-1',
-      executionPlanId: 'plan-1',
-    },
-  };
-}
 
 describe('DriverCommerceMissionEntry', () => {
   beforeEach(() => {
@@ -43,49 +30,18 @@ describe('DriverCommerceMissionEntry', () => {
     mockUseDriverCommerceMission.mockReset();
   });
 
-  it('renders CTA when Primitive A returns an execution plan', () => {
-    mockUseDriverCommerceMission.mockReturnValue(readyCommerce('trip-1'));
+  it('renders the CTA without hydrating Primitive A', () => {
     const { getByText, getByTestId } = render(<DriverCommerceMissionEntry tripId="trip-1" />);
     expect(getByTestId('commerce-mission-entry')).toBeTruthy();
     expect(getByText('Delivery Mission')).toBeTruthy();
     expect(getByText('View orders')).toBeTruthy();
+    expect(mockUseDriverCommerceMission).not.toHaveBeenCalled();
   });
 
-  it('renders nothing when the mission has no Commerce plan', () => {
-    mockUseDriverCommerceMission.mockReturnValue({
-      status: 'ready',
-      mission: emptyDriverTripStopOrderMission('trip-core'),
-    });
-    const { queryByTestId } = render(<DriverCommerceMissionEntry tripId="trip-core" />);
-    expect(queryByTestId('commerce-mission-entry')).toBeNull();
-  });
-
-  it('renders nothing while loading', () => {
-    mockUseDriverCommerceMission.mockReturnValue({
-      status: 'loading',
-      mission: emptyDriverTripStopOrderMission('trip-1'),
-    });
-    const { queryByTestId } = render(<DriverCommerceMissionEntry tripId="trip-1" />);
-    expect(queryByTestId('commerce-mission-entry')).toBeNull();
-  });
-
-  it('renders nothing on RPC error', () => {
-    mockUseDriverCommerceMission.mockReturnValue({
-      status: 'error',
-      mission: emptyDriverTripStopOrderMission('trip-1'),
-      error: new Error('permission denied for function get_driver_trip_stop_orders'),
-    });
-    const { queryByTestId, queryByText } = render(
-      <DriverCommerceMissionEntry tripId="trip-1" />,
-    );
-    expect(queryByTestId('commerce-mission-entry')).toBeNull();
-    expect(queryByText(/permission denied/i)).toBeNull();
-  });
-
-  it('navigates to the read-only Commerce mission route', () => {
-    mockUseDriverCommerceMission.mockReturnValue(readyCommerce('trip-9'));
+  it('navigates to the read-only Commerce mission route on press', () => {
     const { getByTestId } = render(<DriverCommerceMissionEntry tripId="trip-9" />);
     fireEvent.press(getByTestId('commerce-mission-entry'));
     expect(mockPush).toHaveBeenCalledWith(ROUTES.driverCommerceMission('trip-9'));
+    expect(mockUseDriverCommerceMission).not.toHaveBeenCalled();
   });
 });

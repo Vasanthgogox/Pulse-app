@@ -1,14 +1,11 @@
 /**
- * Optional Home sibling CTA: open the read-only Commerce Delivery Mission.
+ * Job Card CTA to the read-only Commerce Delivery Mission (explicit route only).
  *
- * Gate is Primitive A only (`hasCommerceExecutionPlan`). Loading / error /
- * non-Commerce render nothing so Home never shows RPC or DB copy.
- *
- * Does not replace DriverTripFlowCard or mutate trip / stop / order state.
+ * Do not mount this on the generic Job Card. Legacy trips must never request
+ * Primitive A or show Commerce widgets. Multi-order trips hydrate orders
+ * from DriverMultiOrderJobCard after SES has chosen that mode.
  */
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
-import { hasCommerceExecutionPlan } from '@/features/driver/commerce-mission/normalizeDriverTripStopOrders';
-import { useDriverCommerceMission } from '@/features/driver/commerce-mission/useDriverCommerceMission';
 import Layout from '@/constants/Layout';
 import { ROUTES } from '@/lib/routes';
 import { useRouter, type Href } from 'expo-router';
@@ -21,10 +18,6 @@ type Props = {
 export function DriverCommerceMissionEntry({ tripId }: Props) {
   const router = useRouter();
   const colors = useDriverThemeColors();
-  const state = useDriverCommerceMission(tripId);
-
-  if (state.status !== 'ready') return null;
-  if (!hasCommerceExecutionPlan(state.mission)) return null;
 
   return (
     <Pressable

@@ -16,8 +16,14 @@ export {
 } from '@/features/driver/commerce-mission/normalizeDriverTripStopOrders';
 export { DriverCommerceMissionView } from '@/features/driver/commerce-mission/DriverCommerceMissionView';
 export { DriverCommerceMissionScreen } from '@/features/driver/commerce-mission/DriverCommerceMissionScreen';
-export { useDriverCommerceMission } from '@/features/driver/commerce-mission/useDriverCommerceMission';
-export type { DriverCommerceMissionState } from '@/features/driver/commerce-mission/useDriverCommerceMission';
+export {
+  driverCommerceMissionQueryKey,
+  useDriverCommerceMission,
+} from '@/features/driver/commerce-mission/useDriverCommerceMission';
+export type {
+  DriverCommerceMissionState,
+  UseDriverCommerceMissionOptions,
+} from '@/features/driver/commerce-mission/useDriverCommerceMission';
 export {
   formatDeliveryWindow,
   formatStopAddress,

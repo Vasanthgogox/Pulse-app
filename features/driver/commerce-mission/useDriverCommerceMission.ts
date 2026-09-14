@@ -1,46 +1,75 @@
-import { useEffect, useState } from 'react';
 import { fetchDriverTripStopOrders } from '@/features/driver/commerce-mission/fetchDriverTripStopOrders';
 import { emptyDriverTripStopOrderMission } from '@/features/driver/commerce-mission/normalizeDriverTripStopOrders';
 import type { DriverTripStopOrderMission } from '@/features/driver/commerce-mission/driverTripStopOrders.types';
+import { queryKeys } from '@/lib/queryKeys';
+import { useQuery } from '@tanstack/react-query';
 
 export type DriverCommerceMissionState =
   | { status: 'loading'; mission: DriverTripStopOrderMission }
   | { status: 'error'; mission: DriverTripStopOrderMission; error: Error }
   | { status: 'ready'; mission: DriverTripStopOrderMission };
 
+export function driverCommerceMissionQueryKey(tripId: string) {
+  return queryKeys.driverApp.commerceMission(tripId);
+}
+
+export type UseDriverCommerceMissionOptions = {
+  /**
+   * Job Card must pass false (or omit the hook). Default true is for the
+   * explicit mission screen only — that is the sole auto-hydrate path.
+   */
+  enabled?: boolean;
+};
+
 /**
- * Thin read-only wrapper around fetchDriverTripStopOrders (Primitive A).
- * No mutation, no polling — a single fetch per tripId, matching the
- * read-only scope of this UI slice.
+ * Primitive A via TanStack Query — one in-flight RPC per tripId.
  */
-export function useDriverCommerceMission(tripId: string | null): DriverCommerceMissionState {
-  const [state, setState] = useState<DriverCommerceMissionState>(() => ({
-    status: 'loading',
-    mission: emptyDriverTripStopOrderMission(tripId ?? ''),
-  }));
+export function useDriverCommerceMission(
+  tripId: string | null,
+  options?: UseDriverCommerceMissionOptions,
+): DriverCommerceMissionState {
+  const id = (tripId ?? '').trim();
+  const enabled = (options?.enabled ?? true) && id.length > 0;
 
-  useEffect(() => {
-    if (!tripId) {
-      setState({ status: 'ready', mission: emptyDriverTripStopOrderMission('') });
-      return;
-    }
+  const query = useQuery({
+    queryKey: driverCommerceMissionQueryKey(id),
+    queryFn: async (): Promise<DriverTripStopOrderMission> => {
+      const result = await fetchDriverTripStopOrders(id);
+      if (!result.ok) throw result.error;
+      return result.mission;
+    },
+    enabled,
+    staleTime: 30_000,
+    gcTime: 10 * 60_000,
+    retry: false,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
+  });
 
-    let cancelled = false;
-    setState({ status: 'loading', mission: emptyDriverTripStopOrderMission(tripId) });
+  if (!id) {
+    return { status: 'ready', mission: emptyDriverTripStopOrderMission('') };
+  }
 
-    fetchDriverTripStopOrders(tripId).then((result) => {
-      if (cancelled) return;
-      setState(
-        result.ok
-          ? { status: 'ready', mission: result.mission }
-          : { status: 'error', mission: result.mission, error: result.error },
-      );
-    });
+  if (!enabled) {
+    return { status: 'ready', mission: emptyDriverTripStopOrderMission(id) };
+  }
 
-    return () => {
-      cancelled = true;
+  if (query.isPending) {
+    return { status: 'loading', mission: emptyDriverTripStopOrderMission(id) };
+  }
+
+  if (query.isError) {
+    const error =
+      query.error instanceof Error ? query.error : new Error(String(query.error));
+    return {
+      status: 'error',
+      mission: emptyDriverTripStopOrderMission(id),
+      error,
     };
-  }, [tripId]);
+  }
 
-  return state;
+  return {
+    status: 'ready',
+    mission: query.data ?? emptyDriverTripStopOrderMission(id),
+  };
 }

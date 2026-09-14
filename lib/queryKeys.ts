@@ -247,6 +247,12 @@ export const queryKeys = {
     /** Phase A5: active/upcoming trip counts for the Pilot relationship summary. */
     pilotWorkSummary: (driverIdsKey: string) =>
       ["q", "driver-app", "pilot-work-summary", driverIdsKey] as const,
+    /** Driver Home + TripOps shared list (getDriverUiTripsByDriverIds). */
+    uiTrips: (userId: string, driverIdsKey = "") =>
+      ["q", "driver-app", userId, "ui-trips", driverIdsKey] as const,
+    /** Primitive A — get_driver_trip_stop_orders, keyed by trip. */
+    commerceMission: (tripId: string) =>
+      ["q", "driver-app", "commerce-mission", tripId] as const,
   },
 
   salaryRequests: (orgId: string, status?: string) =>
