@@ -1,0 +1,1384 @@
+[
+  {
+    "t": 1789380378292,
+    "kind": "log",
+    "msg": "=== SIGN IN ==="
+  },
+  {
+    "t": 1789380379667,
+    "kind": "console",
+    "level": "info",
+    "text": "%cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold"
+  },
+  {
+    "t": 1789380379709,
+    "kind": "console",
+    "level": "log",
+    "text": "Running application \"main\" with appParams:\n {rootTag: #root, hydrate: undefined} \nDevelopment-level warnings: ON.\nPerformance optimizations: OFF."
+  },
+  {
+    "t": 1789380379841,
+    "kind": "console",
+    "level": "warning",
+    "text": "\"shadow*\" style props are deprecated. Use \"boxShadow\"."
+  },
+  {
+    "t": 1789380380345,
+    "kind": "console",
+    "level": "debug",
+    "text": "[NavigationPolicy] wait wait {path: /driver-sign-in}"
+  },
+  {
+    "t": 1789380380347,
+    "kind": "console",
+    "level": "log",
+    "text": "[pulse] Supabase DB: CLOUD — nafxpivddesgsrthmosv.supabase.co"
+  },
+  {
+    "t": 1789380380368,
+    "kind": "console",
+    "level": "info",
+    "text": "[auth] SIGNED_OUT confirmed — session unrecoverable"
+  },
+  {
+    "t": 1789380380368,
+    "kind": "console",
+    "level": "info",
+    "text": "[AuthGuard] auth_state_signed_out_ignored_during_restore {}"
+  },
+  {
+    "t": 1789380380368,
+    "kind": "log",
+    "msg": "CONSOLE[info]: [AuthGuard] auth_state_signed_out_ignored_during_restore {}"
+  },
+  {
+    "t": 1789380380368,
+    "kind": "console",
+    "level": "info",
+    "text": "[AuthGuard] restore_no_session {}"
+  },
+  {
+    "t": 1789380380368,
+    "kind": "log",
+    "msg": "CONSOLE[info]: [AuthGuard] restore_no_session {}"
+  },
+  {
+    "t": 1789380380375,
+    "kind": "requestfailed",
+    "tag": "other",
+    "url": "http://localhost:8081/",
+    "failure": "net::ERR_ABORTED"
+  },
+  {
+    "t": 1789380380375,
+    "kind": "log",
+    "msg": "REQUEST FAILED: http://localhost:8081/ — net::ERR_ABORTED"
+  },
+  {
+    "t": 1789380380375,
+    "kind": "requestfailed",
+    "tag": "other",
+    "url": "http://localhost:8081/",
+    "failure": "net::ERR_ABORTED"
+  },
+  {
+    "t": 1789380380375,
+    "kind": "log",
+    "msg": "REQUEST FAILED: http://localhost:8081/ — net::ERR_ABORTED"
+  },
+  {
+    "t": 1789380380397,
+    "kind": "console",
+    "level": "debug",
+    "text": "[NavigationPolicy] allow public_anonymous {path: /driver-sign-in}"
+  },
+  {
+    "t": 1789380380415,
+    "kind": "requestfailed",
+    "tag": "other",
+    "url": "http://localhost:8081/",
+    "failure": "net::ERR_ABORTED"
+  },
+  {
+    "t": 1789380380415,
+    "kind": "log",
+    "msg": "REQUEST FAILED: http://localhost:8081/ — net::ERR_ABORTED"
+  },
+  {
+    "t": 1789380380721,
+    "kind": "console",
+    "level": "debug",
+    "text": "[NavigationPolicy] allow public_anonymous {path: /driver-sign-in}"
+  },
+  {
+    "t": 1789380385566,
+    "kind": "log",
+    "msg": "phone step body text snippet: +91 | 900 800 8008 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8 | 9 | 0"
+  },
+  {
+    "t": 1789380385602,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "POST",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_email_by_phone"
+  },
+  {
+    "t": 1789380385990,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_email_by_phone"
+  },
+  {
+    "t": 1789380389609,
+    "kind": "log",
+    "msg": "WARNING: could not confirm digit tap \"2\" (expected cumulative \"2\", got \"\")"
+  },
+  {
+    "t": 1789380391157,
+    "kind": "log",
+    "msg": "WARNING: could not confirm digit tap \"2\" (expected cumulative \"22\", got \"\")"
+  },
+  {
+    "t": 1789380392703,
+    "kind": "log",
+    "msg": "WARNING: could not confirm digit tap \"0\" (expected cumulative \"220\", got \"\")"
+  },
+  {
+    "t": 1789380394292,
+    "kind": "log",
+    "msg": "WARNING: could not confirm digit tap \"4\" (expected cumulative \"2204\", got \"\")"
+  },
+  {
+    "t": 1789380395784,
+    "kind": "console",
+    "level": "info",
+    "text": "[auth] SIGNED_OUT confirmed — session unrecoverable"
+  },
+  {
+    "t": 1789380395784,
+    "kind": "console",
+    "level": "info",
+    "text": "[AuthGuard] auth_state_signed_out {requested: false}"
+  },
+  {
+    "t": 1789380395784,
+    "kind": "log",
+    "msg": "CONSOLE[info]: [AuthGuard] auth_state_signed_out {requested: false}"
+  },
+  {
+    "t": 1789380395786,
+    "kind": "request",
+    "tag": "auth/v1/user",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/auth/v1/user"
+  },
+  {
+    "t": 1789380395805,
+    "kind": "console",
+    "level": "debug",
+    "text": "[NavigationPolicy] redirect session_expired {path: /driver-sign-in}"
+  },
+  {
+    "t": 1789380395832,
+    "kind": "console",
+    "level": "debug",
+    "text": "[NavigationPolicy] redirect session_expired {path: /sign-in}"
+  },
+  {
+    "t": 1789380395902,
+    "kind": "response",
+    "tag": "auth/v1/user",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/auth/v1/user"
+  },
+  {
+    "t": 1789380395906,
+    "kind": "console",
+    "level": "info",
+    "text": "[AuthGuard] auth_state_signed_in {uid: 6e31cf96-d1ca-4bf7-87ca-1cba63c563a5, role: driver}"
+  },
+  {
+    "t": 1789380395906,
+    "kind": "log",
+    "msg": "CONSOLE[info]: [AuthGuard] auth_state_signed_in {uid: 6e31cf96-d1ca-4bf7-87ca-1cba63c563a5, role: driver}"
+  },
+  {
+    "t": 1789380395906,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/profiles?select=id%2Cemail%2Cfull_name%2Crole%2Caggregated%2Casset%2Ccompany_name%2Cphone%2Cavatar_url%2Cavatar_seed%2Cbio&id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5"
+  },
+  {
+    "t": 1789380395906,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "POST",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/sync_my_driver_rows_user_id"
+  },
+  {
+    "t": 1789380395928,
+    "kind": "console",
+    "level": "debug",
+    "text": "[NavigationPolicy] allow public_authenticated {path: /sign-in}"
+  },
+  {
+    "t": 1789380395931,
+    "kind": "console",
+    "level": "log",
+    "text": "[realtime] OPEN (new channel): \"active-workspace-membership:6e31cf96-d1ca-4bf7-87ca-1cba63c563a5\" | total=1"
+  },
+  {
+    "t": 1789380395947,
+    "kind": "console",
+    "level": "log",
+    "text": "[realtime] GRACE (last ref gone, scheduling teardown): \"active-workspace-membership:6e31cf96-d1ca-4bf7-87ca-1cba63c563a5\" | total=1"
+  },
+  {
+    "t": 1789380395964,
+    "kind": "console",
+    "level": "info",
+    "text": "[AuthGuard] restore_session_applied {uid: 6e31cf96-d1ca-4bf7-87ca-1cba63c563a5, role: driver}"
+  },
+  {
+    "t": 1789380395964,
+    "kind": "log",
+    "msg": "CONSOLE[info]: [AuthGuard] restore_session_applied {uid: 6e31cf96-d1ca-4bf7-87ca-1cba63c563a5, role: driver}"
+  },
+  {
+    "t": 1789380395964,
+    "kind": "console",
+    "level": "info",
+    "text": "[AuthGuard] restore_skip_refresh_token_fresh {uid: 6e31cf96-d1ca-4bf7-87ca-1cba63c563a5}"
+  },
+  {
+    "t": 1789380395965,
+    "kind": "log",
+    "msg": "CONSOLE[info]: [AuthGuard] restore_skip_refresh_token_fresh {uid: 6e31cf96-d1ca-4bf7-87ca-1cba63c563a5}"
+  },
+  {
+    "t": 1789380395965,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/profiles?select=id%2Cemail%2Cfull_name%2Crole%2Caggregated%2Casset%2Ccompany_name%2Cphone%2Cavatar_url%2Cavatar_seed%2Cbio&id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5"
+  },
+  {
+    "t": 1789380395965,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "POST",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/sync_my_driver_rows_user_id"
+  },
+  {
+    "t": 1789380395978,
+    "kind": "console",
+    "level": "debug",
+    "text": "[NavigationPolicy] allow policy_allow {path: /}"
+  },
+  {
+    "t": 1789380395989,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/organization_members?select=role%2Cstatus%2Cpermissions%2Corganizations%28id%2Cname%2Cslug%2Clogo_url%2Coperating_model%2Caddress_line%2Clocality%2Cpincode%2Ccity%2Cstate%2Czone%2Cbusiness_pan%2Cgstin%2Cgst_not_applicable%2Ccin%2Cverification_status%2Cverified_at%2Ckyc_rejected_reason%29&user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5&status=eq.active"
+  },
+  {
+    "t": 1789380395996,
+    "kind": "console",
+    "level": "info",
+    "text": "[RouteGuard:index] redirect_driver_root {uid: 6e31cf96-d1ca-4bf7-87ca-1cba63c563a5, pathname: /}"
+  },
+  {
+    "t": 1789380395998,
+    "kind": "console",
+    "level": "debug",
+    "text": "[NavigationPolicy] allow policy_allow {path: /}"
+  },
+  {
+    "t": 1789380396038,
+    "kind": "console",
+    "level": "debug",
+    "text": "[driverPerf] session_start +0ms (t=0ms)"
+  },
+  {
+    "t": 1789380396038,
+    "kind": "console",
+    "level": "debug",
+    "text": "[driverPerf] home_first_render +0ms (t=0ms)"
+  },
+  {
+    "t": 1789380396063,
+    "kind": "console",
+    "level": "debug",
+    "text": "[driverPerf] drivers_query_start +25ms (t=25ms)"
+  },
+  {
+    "t": 1789380396067,
+    "kind": "console",
+    "level": "log",
+    "text": "[realtime] OPEN (new channel): \"driver-invites-received-6e31cf96-d1ca-4bf7-87ca-1cba63c563a5\" | total=2"
+  },
+  {
+    "t": 1789380396068,
+    "kind": "console",
+    "level": "debug",
+    "text": "[driverPerf] layout_ready +5ms (t=30ms)"
+  },
+  {
+    "t": 1789380396099,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/organization_members?select=organization_id%2Cstatus%2Crole&user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5&role=eq.driver"
+  },
+  {
+    "t": 1789380396099,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/drivers?select=id%2Corganization_id%2Cuser_id%2Cname%2Cphone%2Cemail%2Clicense_number%2Cemergency_name%2Cemergency_contact%2Cstatus%2Cassigned_vehicle_id%2Ccreated_at%2Cupdated_at%2Cleft_at%2Ctracking_only%2Crelationship_origin%2Crelationship_status%2Cpayable_amount%2Ccommission_percent%2Ccommission_per_km%2Cavatar_url%2Cavatar_seed%2Corganizations%21left%28name%29&user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5&order=created_at.desc&limit=20"
+  },
+  {
+    "t": 1789380396099,
+    "kind": "request",
+    "tag": "get_pending_otp_trips",
+    "method": "POST",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_pending_otp_trips"
+  },
+  {
+    "t": 1789380396099,
+    "kind": "request",
+    "tag": "is_driver_available",
+    "method": "POST",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/is_driver_available"
+  },
+  {
+    "t": 1789380396099,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "POST",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_driver_invites_received"
+  },
+  {
+    "t": 1789380396099,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "POST",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/sync_my_driver_rows_user_id"
+  },
+  {
+    "t": 1789380396119,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/profiles?select=id%2Cemail%2Cfull_name%2Crole%2Caggregated%2Casset%2Ccompany_name%2Cphone%2Cavatar_url%2Cavatar_seed%2Cbio&id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5"
+  },
+  {
+    "t": 1789380396126,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/sync_my_driver_rows_user_id"
+  },
+  {
+    "t": 1789380396144,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/organization_members?select=role%2Cstatus%2Cpermissions%2Corganizations%28id%2Cname%2Cslug%2Clogo_url%2Coperating_model%2Caddress_line%2Clocality%2Cpincode%2Ccity%2Cstate%2Czone%2Cbusiness_pan%2Cgstin%2Cgst_not_applicable%2Ccin%2Cverification_status%2Cverified_at%2Ckyc_rejected_reason%29&user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5&status=eq.active"
+  },
+  {
+    "t": 1789380396167,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/sync_my_driver_rows_user_id"
+  },
+  {
+    "t": 1789380396175,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/sync_my_driver_rows_user_id"
+  },
+  {
+    "t": 1789380396180,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/profiles?select=id%2Cemail%2Cfull_name%2Crole%2Caggregated%2Casset%2Ccompany_name%2Cphone%2Cavatar_url%2Cavatar_seed%2Cbio&id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5"
+  },
+  {
+    "t": 1789380396180,
+    "kind": "console",
+    "level": "info",
+    "text": "[AuthGuard] db_profile_hydrated {uid: 6e31cf96-d1ca-4bf7-87ca-1cba63c563a5, role: driver}"
+  },
+  {
+    "t": 1789380396180,
+    "kind": "log",
+    "msg": "CONSOLE[info]: [AuthGuard] db_profile_hydrated {uid: 6e31cf96-d1ca-4bf7-87ca-1cba63c563a5, role: driver}"
+  },
+  {
+    "t": 1789380396198,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/organization_members?select=organization_id%2Cstatus%2Crole&user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5&role=eq.driver"
+  },
+  {
+    "t": 1789380396213,
+    "kind": "response",
+    "tag": "is_driver_available",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/is_driver_available"
+  },
+  {
+    "t": 1789380396221,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/drivers?select=id%2Corganization_id%2Cuser_id%2Cname%2Cphone%2Cemail%2Clicense_number%2Cemergency_name%2Cemergency_contact%2Cstatus%2Cassigned_vehicle_id%2Ccreated_at%2Cupdated_at%2Cleft_at%2Ctracking_only%2Crelationship_origin%2Crelationship_status%2Cpayable_amount%2Ccommission_percent%2Ccommission_per_km%2Cavatar_url%2Cavatar_seed%2Corganizations%21left%28name%29&user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5&order=created_at.desc&limit=20"
+  },
+  {
+    "t": 1789380396228,
+    "kind": "console",
+    "level": "debug",
+    "text": "[driverPerf] drivers_query_done +160ms (t=190ms)"
+  },
+  {
+    "t": 1789380396230,
+    "kind": "console",
+    "level": "log",
+    "text": "[realtime] OPEN (new channel): \"driver_ledger:driver:4d04bec0-da1f-443c-ae19-97a913398a92\" | total=3"
+  },
+  {
+    "t": 1789380396230,
+    "kind": "console",
+    "level": "log",
+    "text": "[realtime] OPEN (new channel): \"driver_ledger:driver:64783fc5-93ce-4952-946b-b2ec0e8d99ad\" | total=4"
+  },
+  {
+    "t": 1789380396230,
+    "kind": "console",
+    "level": "log",
+    "text": "[realtime] OPEN (new broadcast channel): \"driver-payments:6e31cf96-d1ca-4bf7-87ca-1cba63c563a5\" | total=5"
+  },
+  {
+    "t": 1789380396230,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/drivers?select=organization_id&id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29"
+  },
+  {
+    "t": 1789380396231,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/trip_conversations?select=id%2Corganization_id%2Ctrip_id%2Cparty_type%2Cparty_name%2Cclient_id%2Csupplier_id%2Cdriver_id%2Clast_message_at%2Clast_message_preview%2Cunread_dispatcher_count%2Ccreated_at%2Cupdated_at&driver_id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29&order=last_message_at.desc.nullslast&limit=100"
+  },
+  {
+    "t": 1789380396248,
+    "kind": "console",
+    "level": "debug",
+    "text": "[driverPerf] trips_query_start +20ms (t=210ms)"
+  },
+  {
+    "t": 1789380396248,
+    "kind": "console",
+    "level": "debug",
+    "text": "[driverPerf] map_first_render +1ms (t=211ms)"
+  },
+  {
+    "t": 1789380396249,
+    "kind": "console",
+    "level": "startGroup",
+    "text": "[driverPerf] summary renders=9 map=211ms"
+  },
+  {
+    "t": 1789380396249,
+    "kind": "console",
+    "level": "log",
+    "text": "{startupDurationMs: null, dashboardReadyMs: null, firstMapMs: 211, driversQueryMs: 165, tripsQueryMs: null}"
+  },
+  {
+    "t": 1789380396249,
+    "kind": "console",
+    "level": "log",
+    "text": "  session_start              +    0ms  t=    0ms  "
+  },
+  {
+    "t": 1789380396250,
+    "kind": "console",
+    "level": "log",
+    "text": "  home_first_render          +    0ms  t=    0ms  "
+  },
+  {
+    "t": 1789380396250,
+    "kind": "console",
+    "level": "log",
+    "text": "  drivers_query_start        +   25ms  t=   25ms  ███"
+  },
+  {
+    "t": 1789380396250,
+    "kind": "console",
+    "level": "log",
+    "text": "  layout_ready               +    5ms  t=   30ms  █"
+  },
+  {
+    "t": 1789380396250,
+    "kind": "console",
+    "level": "log",
+    "text": "  drivers_query_done         +  160ms  t=  190ms  ████████████████"
+  },
+  {
+    "t": 1789380396251,
+    "kind": "console",
+    "level": "log",
+    "text": "  trips_query_start          +   20ms  t=  210ms  ██"
+  },
+  {
+    "t": 1789380396251,
+    "kind": "console",
+    "level": "log",
+    "text": "  map_first_render           +    1ms  t=  211ms  "
+  },
+  {
+    "t": 1789380396251,
+    "kind": "console",
+    "level": "endGroup",
+    "text": "console.groupEnd"
+  },
+  {
+    "t": 1789380396253,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/reach_referrals?select=id%2Ccampaign_id%2Cdriver_user_id%2Cfleet_org_id%2Cstatus%2Creward_amount%2Cbid_id%2Ctrip_id%2Ccreated_at%2Cdecided_at%2Crewarded_at&driver_user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5&order=created_at.desc&limit=200"
+  },
+  {
+    "t": 1789380396254,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/drivers?select=id%2Corganization_id&user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5"
+  },
+  {
+    "t": 1789380396254,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/drivers?select=organization_id&id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29"
+  },
+  {
+    "t": 1789380396254,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/driver_fleet_owner_profiles?select=user_id%2Cenabled_at%2Cpreferred_view&user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5"
+  },
+  {
+    "t": 1789380396254,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/dco_profiles?select=user_id%2Cstatus%2Crequested_at%2Creviewed_at%2Cdecision_reason&user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5"
+  },
+  {
+    "t": 1789380396254,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/market_bids?select=id%2Cindent_id%2Cbidder_type%2Cbidder_user_id%2Cbidder_organization_id%2Cowner_vehicle_id%2Camount%2Cnote%2Cstatus%2Cfee_payment_status%2Cplatform_fee_amount%2Ccreated_at%2Cupdated_at%2Caccepted_at&bidder_user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5&order=created_at.desc&limit=50"
+  },
+  {
+    "t": 1789380396254,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/driver_ledger?select=id%2Corganization_id%2Cdriver_id%2Ctrip_id%2Ctype%2Camount%2Ccurrency%2Cdescription%2Ccreated_at%2Ccreated_by&driver_id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29&order=created_at.desc&limit=200"
+  },
+  {
+    "t": 1789380396254,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/drivers?select=organization_id&id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29"
+  },
+  {
+    "t": 1789380396260,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_driver_invites_received"
+  },
+  {
+    "t": 1789380396286,
+    "kind": "response",
+    "tag": "get_pending_otp_trips",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_pending_otp_trips"
+  },
+  {
+    "t": 1789380396391,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/drivers?select=organization_id&id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29"
+  },
+  {
+    "t": 1789380396396,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/trip_conversations?select=id%2Corganization_id%2Ctrip_id%2Cparty_type%2Cparty_name%2Cclient_id%2Csupplier_id%2Cdriver_id%2Clast_message_at%2Clast_message_preview%2Cunread_dispatcher_count%2Ccreated_at%2Cupdated_at&driver_id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29&order=last_message_at.desc.nullslast&limit=100"
+  },
+  {
+    "t": 1789380396397,
+    "kind": "console",
+    "level": "warning",
+    "text": "[.WebGL-0x13400503400]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels"
+  },
+  {
+    "t": 1789380396398,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/drivers?select=id%2Corganization_id&user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5"
+  },
+  {
+    "t": 1789380396398,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/drivers?select=organization_id&id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29"
+  },
+  {
+    "t": 1789380396398,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/driver_fleet_owner_profiles?select=user_id%2Cenabled_at%2Cpreferred_view&user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5"
+  },
+  {
+    "t": 1789380396398,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/dco_profiles?select=user_id%2Cstatus%2Crequested_at%2Creviewed_at%2Cdecision_reason&user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5"
+  },
+  {
+    "t": 1789380396398,
+    "kind": "console",
+    "level": "warning",
+    "text": "[.WebGL-0x13400503400]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels"
+  },
+  {
+    "t": 1789380396399,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/organization_members?select=role%2Cstatus%2Cpermissions%2Corganizations%28id%2Cname%2Cslug%2Clogo_url%2Coperating_model%2Caddress_line%2Clocality%2Cpincode%2Ccity%2Cstate%2Czone%2Cbusiness_pan%2Cgstin%2Cgst_not_applicable%2Ccin%2Cverification_status%2Cverified_at%2Ckyc_rejected_reason%29&user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5&status=eq.active"
+  },
+  {
+    "t": 1789380396401,
+    "kind": "request",
+    "tag": "trips_driver_view",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/trips_driver_view?select=*&driver_id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29&order=created_at.desc"
+  },
+  {
+    "t": 1789380396401,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/trip_messages?select=id%2Cconversation_id%2Cmessage_type%2Cmetadata%2Ccontent%2Ccreated_at%2Cis_deleted&conversation_id=in.%28eae011c4-9926-4a59-9fff-cbb4c3aff448%2Cee157400-7c2f-4577-a673-f00738b279e6%2C2b50f756-e52b-41e5-8292-8713dbe579b6%29&message_type=in.%28image%2Cdocument_share%2Cdocument_upload%29&is_deleted=eq.false&order=created_at.desc&limit=15"
+  },
+  {
+    "t": 1789380396401,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/trips?select=id%2Ctrip_operational_code%2Ctrip_code%2Cdisplay_trip_id%2Ctrip_number%2Cdriver_display_trip_id%2Cpickup_area%2Cdrop_location%2Cpickup_date%2Ccreated_at&id=in.%288b84f286-8ffa-429e-8ba9-1579480a0a8d%2Cf1616486-f32c-455d-b3e9-1e88640f4f8b%2C037fa7dd-0ffa-4660-b926-b92ee84a69a5%29"
+  },
+  {
+    "t": 1789380396401,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/driver_ledger?select=id%2Corganization_id%2Cdriver_id%2Ctrip_id%2Camount%2Cdescription%2Ccreated_at&driver_id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29&type=eq.reward&reference_type=eq.reach_referral&order=created_at.desc&limit=200"
+  },
+  {
+    "t": 1789380396401,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/driver_salary_requests?select=id%2Corganization_id%2Cdriver_id%2Camount%2Cstatus%2Ccreated_at&driver_id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29&request_type=eq.reward&order=created_at.desc&limit=200"
+  },
+  {
+    "t": 1789380396401,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/organizations?select=id%2Cname&id=in.%28dc771ec3-0e6b-4397-a599-924d2259acd4%2Caad4d03c-a05a-4d66-9fd2-78d87275186b%29"
+  },
+  {
+    "t": 1789380396401,
+    "kind": "request",
+    "tag": "trips_driver_view",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/trips_driver_view?select=*&driver_id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29&order=created_at.desc&offset=0&limit=101"
+  },
+  {
+    "t": 1789380396431,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/owner_vehicles?select=*&owner_user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5&deleted_at=is.null&order=created_at.desc"
+  },
+  {
+    "t": 1789380396431,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "POST",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/list_open_marketplace_loads_for_fleet_owner"
+  },
+  {
+    "t": 1789380396434,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/driver_ledger?select=id%2Corganization_id%2Cdriver_id%2Ctrip_id%2Ctype%2Camount%2Ccurrency%2Cdescription%2Ccreated_at%2Ccreated_by&driver_id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29&order=created_at.desc&limit=200"
+  },
+  {
+    "t": 1789380396434,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/market_bids?select=id%2Cindent_id%2Cbidder_type%2Cbidder_user_id%2Cbidder_organization_id%2Cowner_vehicle_id%2Camount%2Cnote%2Cstatus%2Cfee_payment_status%2Cplatform_fee_amount%2Ccreated_at%2Cupdated_at%2Caccepted_at&bidder_user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5&order=created_at.desc&limit=50"
+  },
+  {
+    "t": 1789380396434,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/reach_referrals?select=id%2Ccampaign_id%2Cdriver_user_id%2Cfleet_org_id%2Cstatus%2Creward_amount%2Cbid_id%2Ctrip_id%2Ccreated_at%2Cdecided_at%2Crewarded_at&driver_user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5&order=created_at.desc&limit=200"
+  },
+  {
+    "t": 1789380396619,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/drivers?select=organization_id&id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29"
+  },
+  {
+    "t": 1789380396620,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/organization_members?select=role%2Cstatus%2Cpermissions%2Corganizations%28id%2Cname%2Cslug%2Clogo_url%2Coperating_model%2Caddress_line%2Clocality%2Cpincode%2Ccity%2Cstate%2Czone%2Cbusiness_pan%2Cgstin%2Cgst_not_applicable%2Ccin%2Cverification_status%2Cverified_at%2Ckyc_rejected_reason%29&user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5&status=eq.active"
+  },
+  {
+    "t": 1789380396620,
+    "kind": "console",
+    "level": "warning",
+    "text": "[.WebGL-0x13400503400]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels"
+  },
+  {
+    "t": 1789380396620,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/organizations?select=id%2Cname&id=in.%28dc771ec3-0e6b-4397-a599-924d2259acd4%2Caad4d03c-a05a-4d66-9fd2-78d87275186b%29"
+  },
+  {
+    "t": 1789380396620,
+    "kind": "response",
+    "tag": "trips_driver_view",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/trips_driver_view?select=*&driver_id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29&order=created_at.desc"
+  },
+  {
+    "t": 1789380396620,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/driver_ledger?select=id%2Corganization_id%2Cdriver_id%2Ctrip_id%2Camount%2Cdescription%2Ccreated_at&driver_id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29&type=eq.reward&reference_type=eq.reach_referral&order=created_at.desc&limit=200"
+  },
+  {
+    "t": 1789380396620,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/owner_vehicles?select=*&owner_user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5&deleted_at=is.null&order=created_at.desc"
+  },
+  {
+    "t": 1789380396620,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/driver_salary_requests?select=id%2Corganization_id%2Cdriver_id%2Camount%2Cstatus%2Ccreated_at&driver_id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29&request_type=eq.reward&order=created_at.desc&limit=200"
+  },
+  {
+    "t": 1789380396620,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/trips?select=id%2Ctrip_operational_code%2Ctrip_code%2Cdisplay_trip_id%2Ctrip_number%2Cdriver_display_trip_id%2Cpickup_area%2Cdrop_location%2Cpickup_date%2Ccreated_at&id=in.%288b84f286-8ffa-429e-8ba9-1579480a0a8d%2Cf1616486-f32c-455d-b3e9-1e88640f4f8b%2C037fa7dd-0ffa-4660-b926-b92ee84a69a5%29"
+  },
+  {
+    "t": 1789380396620,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/list_open_marketplace_loads_for_fleet_owner"
+  },
+  {
+    "t": 1789380396635,
+    "kind": "console",
+    "level": "warning",
+    "text": "[.WebGL-0x13400503400]GL Driver Message (OpenGL, Performance, GL_CLOSE_PATH_NV, High): GPU stall due to ReadPixels (this message will no longer repeat)"
+  },
+  {
+    "t": 1789380396639,
+    "kind": "request",
+    "tag": "trips_driver_view",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/trips_driver_view?select=*&driver_id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29&order=created_at.desc&offset=0&limit=51"
+  },
+  {
+    "t": 1789380396657,
+    "kind": "response",
+    "tag": "trips_driver_view",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/trips_driver_view?select=*&driver_id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29&order=created_at.desc&offset=0&limit=101"
+  },
+  {
+    "t": 1789380396665,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/trip_messages?select=id%2Cconversation_id%2Cmessage_type%2Cmetadata%2Ccontent%2Ccreated_at%2Cis_deleted&conversation_id=in.%28eae011c4-9926-4a59-9fff-cbb4c3aff448%2Cee157400-7c2f-4577-a673-f00738b279e6%2C2b50f756-e52b-41e5-8292-8713dbe579b6%29&message_type=in.%28image%2Cdocument_share%2Cdocument_upload%29&is_deleted=eq.false&order=created_at.desc&limit=15"
+  },
+  {
+    "t": 1789380396733,
+    "kind": "console",
+    "level": "debug",
+    "text": "[driverPerf] gps_request_start +468ms (t=678ms)"
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "debug",
+    "text": "[driverPerf] trips_query_done +2ms (t=680ms)"
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "debug",
+    "text": "[driverPerf] dashboard_interactive +0ms (t=680ms)"
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "startGroup",
+    "text": "[driverPerf] summary renders=17 startup=680ms map=211ms"
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "log",
+    "text": "{startupDurationMs: 680, dashboardReadyMs: 680, firstMapMs: 211, driversQueryMs: 165, tripsQueryMs: 470}"
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "log",
+    "text": "  session_start              +    0ms  t=    0ms  "
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "log",
+    "text": "  home_first_render          +    0ms  t=    0ms  "
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "log",
+    "text": "  drivers_query_start        +   25ms  t=   25ms  ███"
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "log",
+    "text": "  layout_ready               +    5ms  t=   30ms  █"
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "log",
+    "text": "  drivers_query_done         +  160ms  t=  190ms  ████████████████"
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "log",
+    "text": "  trips_query_start          +   20ms  t=  210ms  ██"
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "log",
+    "text": "  map_first_render           +    1ms  t=  211ms  "
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "log",
+    "text": "  gps_request_start          +  468ms  t=  678ms  ████████████████████████████████████████"
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "log",
+    "text": "  trips_query_done           +    2ms  t=  680ms  "
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "log",
+    "text": "  dashboard_interactive      +    0ms  t=  680ms  "
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "endGroup",
+    "text": "console.groupEnd"
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "debug",
+    "text": "[driverPerf] active_trip_first_render +6ms (t=686ms)"
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "startGroup",
+    "text": "[driverPerf] summary renders=17 startup=680ms map=211ms"
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "log",
+    "text": "{startupDurationMs: 680, dashboardReadyMs: 680, firstMapMs: 211, driversQueryMs: 165, tripsQueryMs: 470}"
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "log",
+    "text": "  session_start              +    0ms  t=    0ms  "
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "log",
+    "text": "  home_first_render          +    0ms  t=    0ms  "
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "log",
+    "text": "  drivers_query_start        +   25ms  t=   25ms  ███"
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "log",
+    "text": "  layout_ready               +    5ms  t=   30ms  █"
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "log",
+    "text": "  drivers_query_done         +  160ms  t=  190ms  ████████████████"
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "log",
+    "text": "  trips_query_start          +   20ms  t=  210ms  ██"
+  },
+  {
+    "t": 1789380396734,
+    "kind": "console",
+    "level": "log",
+    "text": "  map_first_render           +    1ms  t=  211ms  "
+  },
+  {
+    "t": 1789380396736,
+    "kind": "console",
+    "level": "log",
+    "text": "  gps_request_start          +  468ms  t=  678ms  ████████████████████████████████████████"
+  },
+  {
+    "t": 1789380396736,
+    "kind": "console",
+    "level": "log",
+    "text": "  trips_query_done           +    2ms  t=  680ms  "
+  },
+  {
+    "t": 1789380396736,
+    "kind": "console",
+    "level": "log",
+    "text": "  dashboard_interactive      +    0ms  t=  680ms  "
+  },
+  {
+    "t": 1789380396738,
+    "kind": "console",
+    "level": "log",
+    "text": "  active_trip_first_render   +    6ms  t=  686ms  █"
+  },
+  {
+    "t": 1789380396738,
+    "kind": "console",
+    "level": "endGroup",
+    "text": "console.groupEnd"
+  },
+  {
+    "t": 1789380396744,
+    "kind": "request",
+    "tag": "stop_execution_state",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/stop_execution_state?select=trip_id%2Cstop_id%2Csequence%2Cstatus%2Cdriver_id%2Carrived_at%2Ccompleted_at%2Cskip_reason%2Cfailure_reason%2Cexecution_plan_stops%21stop_execution_state_stop_id_fkey%28id%2Cstop_type%2Cdisplay_name%2Clabel%2Caddress_line%2Ccity%2Cstate%2Cpincode%2Clatitude%2Clongitude%2Ccontact_name%2Ccontact_phone%2Cpod_required%29&trip_id=eq.8b84f286-8ffa-429e-8ba9-1579480a0a8d"
+  },
+  {
+    "t": 1789380396745,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "POST",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_trip_assigner_displays_for_driver"
+  },
+  {
+    "t": 1789380396745,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "POST",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_latest_assignment_audit_by_trip_ids"
+  },
+  {
+    "t": 1789380396745,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/driver_locations?select=latitude%2Clongitude%2Crecorded_at&trip_id=eq.8b84f286-8ffa-429e-8ba9-1579480a0a8d&order=recorded_at.desc&limit=3"
+  },
+  {
+    "t": 1789380396745,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "POST",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_latest_driver_location_for_trip"
+  },
+  {
+    "t": 1789380396776,
+    "kind": "console",
+    "level": "debug",
+    "text": "[chatPerf] inbox_parallel_fetch 378ms {tripCount: 3, convCount: 3}"
+  },
+  {
+    "t": 1789380396776,
+    "kind": "console",
+    "level": "debug",
+    "text": "[chatPerf] inbox_load 547ms {convCount: 3, driverCount: 2}"
+  },
+  {
+    "t": 1789380396901,
+    "kind": "response",
+    "tag": "trips_driver_view",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/trips_driver_view?select=*&driver_id=in.%2864783fc5-93ce-4952-946b-b2ec0e8d99ad%2C4d04bec0-da1f-443c-ae19-97a913398a92%29&order=created_at.desc&offset=0&limit=51"
+  },
+  {
+    "t": 1789380396956,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_latest_driver_location_for_trip"
+  },
+  {
+    "t": 1789380396973,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/driver_locations?select=latitude%2Clongitude%2Caccuracy%2Crecorded_at&driver_id=eq.64783fc5-93ce-4952-946b-b2ec0e8d99ad&order=recorded_at.desc&limit=1"
+  },
+  {
+    "t": 1789380397002,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/driver_locations?select=latitude%2Clongitude%2Crecorded_at&trip_id=eq.8b84f286-8ffa-429e-8ba9-1579480a0a8d&order=recorded_at.desc&limit=3"
+  },
+  {
+    "t": 1789380397005,
+    "kind": "console",
+    "level": "log",
+    "text": "[DEV] Last 3 pinned coordinates for trip 8b84f286-8ffa-429e-8ba9-1579480a0a8d [Object, Object, Object]"
+  },
+  {
+    "t": 1789380397334,
+    "kind": "log",
+    "msg": "signed in — at http://localhost:8081/"
+  },
+  {
+    "t": 1789380397334,
+    "kind": "log",
+    "msg": "=== TEST 1: DRIVER HOME STARTUP ==="
+  },
+  {
+    "t": 1789380397535,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_latest_assignment_audit_by_trip_ids"
+  },
+  {
+    "t": 1789380397536,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_trip_assigner_displays_for_driver"
+  },
+  {
+    "t": 1789380397536,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/driver_locations?select=latitude%2Clongitude%2Caccuracy%2Crecorded_at&driver_id=eq.64783fc5-93ce-4952-946b-b2ec0e8d99ad&order=recorded_at.desc&limit=1"
+  },
+  {
+    "t": 1789380397790,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/organization_members?select=role%2Cstatus%2Cpermissions%2Corganizations%28id%2Cname%2Cslug%2Clogo_url%2Coperating_model%2Caddress_line%2Clocality%2Cpincode%2Ccity%2Cstate%2Czone%2Cbusiness_pan%2Cgstin%2Cgst_not_applicable%2Ccin%2Cverification_status%2Cverified_at%2Ckyc_rejected_reason%29&user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5&status=eq.active"
+  },
+  {
+    "t": 1789380397822,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/organizations?select=id%2Cname&id=in.%28dc771ec3-0e6b-4397-a599-924d2259acd4%29"
+  },
+  {
+    "t": 1789380397925,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "POST",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_trip_assigner_displays_for_driver"
+  },
+  {
+    "t": 1789380398068,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/organization_members?select=role%2Cstatus%2Cpermissions%2Corganizations%28id%2Cname%2Cslug%2Clogo_url%2Coperating_model%2Caddress_line%2Clocality%2Cpincode%2Ccity%2Cstate%2Czone%2Cbusiness_pan%2Cgstin%2Cgst_not_applicable%2Ccin%2Cverification_status%2Cverified_at%2Ckyc_rejected_reason%29&user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5&status=eq.active"
+  },
+  {
+    "t": 1789380398704,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/organizations?select=id%2Cname&id=in.%28dc771ec3-0e6b-4397-a599-924d2259acd4%29"
+  },
+  {
+    "t": 1789380398792,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "POST",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_org_branding_for_driver"
+  },
+  {
+    "t": 1789380398861,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/organization_members?select=role%2Cstatus%2Cpermissions%2Corganizations%28id%2Cname%2Cslug%2Clogo_url%2Coperating_model%2Caddress_line%2Clocality%2Cpincode%2Ccity%2Cstate%2Czone%2Cbusiness_pan%2Cgstin%2Cgst_not_applicable%2Ccin%2Cverification_status%2Cverified_at%2Ckyc_rejected_reason%29&user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5&status=eq.active"
+  },
+  {
+    "t": 1789380400439,
+    "kind": "response",
+    "tag": "stop_execution_state",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/stop_execution_state?select=trip_id%2Cstop_id%2Csequence%2Cstatus%2Cdriver_id%2Carrived_at%2Ccompleted_at%2Cskip_reason%2Cfailure_reason%2Cexecution_plan_stops%21stop_execution_state_stop_id_fkey%28id%2Cstop_type%2Cdisplay_name%2Clabel%2Caddress_line%2Ccity%2Cstate%2Cpincode%2Clatitude%2Clongitude%2Ccontact_name%2Ccontact_phone%2Cpod_required%29&trip_id=eq.8b84f286-8ffa-429e-8ba9-1579480a0a8d"
+  },
+  {
+    "t": 1789380400469,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_trip_assigner_displays_for_driver"
+  },
+  {
+    "t": 1789380400473,
+    "kind": "console",
+    "level": "log",
+    "text": "[realtime] OPEN (new channel): \"trip_timeline_geofence:8b84f286-8ffa-429e-8ba9-1579480a0a8d\" | total=6"
+  },
+  {
+    "t": 1789380400474,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/reach_referrals?select=id%2Ccampaign_id%2Cdriver_user_id%2Cfleet_org_id%2Cstatus%2Creward_amount%2Cbid_id%2Ctrip_id%2Ccreated_at%2Cdecided_at%2Crewarded_at&trip_id=eq.8b84f286-8ffa-429e-8ba9-1579480a0a8d&driver_user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5"
+  },
+  {
+    "t": 1789380400474,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/geofence_events?select=id%2Ctrip_id%2Cevent_type%2Clatitude%2Clongitude%2Crecorded_at&trip_id=eq.8b84f286-8ffa-429e-8ba9-1579480a0a8d&order=recorded_at.asc"
+  },
+  {
+    "t": 1789380400474,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/trip_assignment_audit?select=id%2Ctrip_id%2Cchanged_at&trip_id=eq.8b84f286-8ffa-429e-8ba9-1579480a0a8d&event_type=eq.driver_accepted&order=changed_at.asc"
+  },
+  {
+    "t": 1789380400474,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/trip_workflow_events?select=*&trip_id=eq.8b84f286-8ffa-429e-8ba9-1579480a0a8d&order=created_at.asc"
+  },
+  {
+    "t": 1789380400474,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "POST",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_trip_checkpoint_distance_sums"
+  },
+  {
+    "t": 1789380400474,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/driver_presence?select=driver_id%2Ctrip_id%2Clatitude%2Clongitude%2Caccuracy%2Cheading%2Cspeed_kmh%2Crecorded_at%2Csession_id&trip_id=eq.8b84f286-8ffa-429e-8ba9-1579480a0a8d"
+  },
+  {
+    "t": 1789380400493,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "GET",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/organizations?select=id%2Cname&id=in.%28dc771ec3-0e6b-4397-a599-924d2259acd4%29"
+  },
+  {
+    "t": 1789380400987,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/organizations?select=id%2Cname&id=in.%28dc771ec3-0e6b-4397-a599-924d2259acd4%29"
+  },
+  {
+    "t": 1789380400988,
+    "kind": "request",
+    "tag": "other-supabase",
+    "method": "POST",
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_org_branding_for_driver"
+  },
+  {
+    "t": 1789380401040,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/driver_presence?select=driver_id%2Ctrip_id%2Clatitude%2Clongitude%2Caccuracy%2Cheading%2Cspeed_kmh%2Crecorded_at%2Csession_id&trip_id=eq.8b84f286-8ffa-429e-8ba9-1579480a0a8d"
+  },
+  {
+    "t": 1789380401040,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/geofence_events?select=id%2Ctrip_id%2Cevent_type%2Clatitude%2Clongitude%2Crecorded_at&trip_id=eq.8b84f286-8ffa-429e-8ba9-1579480a0a8d&order=recorded_at.asc"
+  },
+  {
+    "t": 1789380401073,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/reach_referrals?select=id%2Ccampaign_id%2Cdriver_user_id%2Cfleet_org_id%2Cstatus%2Creward_amount%2Cbid_id%2Ctrip_id%2Ccreated_at%2Cdecided_at%2Crewarded_at&trip_id=eq.8b84f286-8ffa-429e-8ba9-1579480a0a8d&driver_user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5"
+  },
+  {
+    "t": 1789380401112,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_org_branding_for_driver"
+  },
+  {
+    "t": 1789380401168,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/trip_assignment_audit?select=id%2Ctrip_id%2Cchanged_at&trip_id=eq.8b84f286-8ffa-429e-8ba9-1579480a0a8d&event_type=eq.driver_accepted&order=changed_at.asc"
+  },
+  {
+    "t": 1789380401168,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/trip_workflow_events?select=*&trip_id=eq.8b84f286-8ffa-429e-8ba9-1579480a0a8d&order=created_at.asc"
+  },
+  {
+    "t": 1789380401200,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_trip_checkpoint_distance_sums"
+  },
+  {
+    "t": 1789380401410,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/rpc/get_org_branding_for_driver"
+  },
+  {
+    "t": 1789380401410,
+    "kind": "response",
+    "tag": "other-supabase",
+    "status": 200,
+    "url": "https://nafxpivddesgsrthmosv.supabase.co/rest/v1/organization_members?select=role%2Cstatus%2Cpermissions%2Corganizations%28id%2Cname%2Cslug%2Clogo_url%2Coperating_model%2Caddress_line%2Clocality%2Cpincode%2Ccity%2Cstate%2Czone%2Cbusiness_pan%2Cgstin%2Cgst_not_applicable%2Ccin%2Cverification_status%2Cverified_at%2Ckyc_rejected_reason%29&user_id=eq.6e31cf96-d1ca-4bf7-87ca-1cba63c563a5&status=eq.active"
+  },
+  {
+    "t": 1789380401454,
+    "kind": "log",
+    "msg": "Home URL: http://localhost:8081/"
+  },
+  {
+    "t": 1789380401458,
+    "kind": "log",
+    "msg": "PLATFORM_HEALTH before opening any card: {\"capturedAt\":\"2026-09-14T10:06:41.456Z\",\"realtime\":{\"status\":\"live\",\"activeChannels\":6,\"staleChannelCount\":0,\"capUtilizationPct\":12,\"activeRegistryEntries\":6,\"activeSupabaseChannels\":6,\"opens\":6,\"closes\":0,\"attaches\":1,\"detaches\":0,\"capBreaches\":0,\"staleSweeps\":0,\"graceReattaches\":1,\"postgresDeliveries\":0,\"broadcastDeliveries\":0,\"channels\":[{\"key\":\"active-workspace-membership:6e31cf96-d1ca-4bf7-87ca-1cba63c563a5\",\"refs\":1,\"transport\":\"postgres_changes\",\"listenerCount\":1,\"ageMs\":5528},{\"key\":\"driver_ledger:driver:4d04bec0-da1f-443c-ae19-97a913398a92\",\"refs\":1,\"transport\":\"postgres_changes\",\"listenerCount\":1,\"ageMs\":5228},{\"key\":\"driver_ledger:driver:64783fc5-93ce-4952-946b-b2ec0e8d99ad\",\"refs\":1,\"transport\":\"postgres_changes\",\"listenerCount\":1,\"ageMs\":5228},{\"key\":\"driver-invites-received-6e31cf96-d1ca-4bf7-87ca-1cba63c563a5\",\"refs\":1,\"transport\":\"postgres_changes\",\"listenerCount\":1,\"ageMs\":5390},{\"key\":\"driver-payments:6e31cf96-d1ca-4bf7-87ca-1cba63c563a5\",\"refs\":1,\"transport\":\"broadcast\",\"listenerCount\":1,\"ageMs\":5227},{\"key\":\"trip_timeline_geofence:8b84f286-8ffa-429e-8ba9-1579480a0a8d\",\"refs\":1,\"transport\":\"postgres_changes\",\"listenerCount\":1,\"ageMs\":987}]},\"cache\":{\"invalidateQueries\":1,\"setQueryData\":0,\"refetchQueries\":1,\"invalidationStorms\":0,\"invalidationsLastWindow\":0,\"windowStartedAt\":1789380401456},\"budgets\":{\"subscription\":{\"home\":5,\"tripDetail\":8,\"chat\":4,\"marketplace\":6,\"finance\":4,\"fleetTracking\":6},\"successTargets\":{\"dbCpuAt50UsersPct\":70,\"poolUtilizationPct\":70,\"realtimeCallbacksPerEvent\":5,\"cacheInvalidationsPerEvent\":2,\"uiRendersPerEvent\":5,\"chatP95Ms\":300,\"bidP95Ms\":500,\"failedRealtimeDeliveries\":0,\"hiddenScreenSubscriptions\":0}},\"database\":{\"source\":\"supabase-dashboard\",\"note\":\"Use Supabase Advisors + Database → Reports for CPU, pool, locks, slow queries until server metrics are wired.\"},\"chat\":{\"openThreads\":0,\"realtimeChannels\":0,\"markConversationReadCalls\":0,\"markMessagesSeenCalls\":0,\"imagesOpened\":0,\"imagesFailed\":0,\"avgChatOpenMs\":null,\"warnings\":[]}}"
+  },
+  {
+    "t": 1789380401464,
+    "kind": "log",
+    "msg": "visible markers on Home: DeliveryMissionCTA=false Arrive=false CompleteStop=false Pickup=true"
+  },
+  {
+    "t": 1789380401464,
+    "kind": "log",
+    "msg": "requests fired during Home settle: [\"other-supabase\",\"other-supabase\",\"other-supabase\",\"other-supabase\",\"other-supabase\",\"other-supabase\",\"other-supabase\",\"other-supabase\",\"other-supabase\",\"other-supabase\",\"other-supabase\",\"other-supabase\",\"other-supabase\"]"
+  },
+  {
+    "t": 1789380401466,
+    "kind": "log",
+    "msg": "PLATFORM_HEALTH after Home settle (no card opened yet): {\"capturedAt\":\"2026-09-14T10:06:41.465Z\",\"realtime\":{\"status\":\"live\",\"activeChannels\":6,\"staleChannelCount\":0,\"capUtilizationPct\":12,\"activeRegistryEntries\":6,\"activeSupabaseChannels\":6,\"opens\":6,\"closes\":0,\"attaches\":1,\"detaches\":0,\"capBreaches\":0,\"staleSweeps\":0,\"graceReattaches\":1,\"postgresDeliveries\":0,\"broadcastDeliveries\":0,\"channels\":[{\"key\":\"active-workspace-membership:6e31cf96-d1ca-4bf7-87ca-1cba63c563a5\",\"refs\":1,\"transport\":\"postgres_changes\",\"listenerCount\":1,\"ageMs\":5537},{\"key\":\"driver_ledger:driver:4d04bec0-da1f-443c-ae19-97a913398a92\",\"refs\":1,\"transport\":\"postgres_changes\",\"listenerCount\":1,\"ageMs\":5237},{\"key\":\"driver_ledger:driver:64783fc5-93ce-4952-946b-b2ec0e8d99ad\",\"refs\":1,\"transport\":\"postgres_changes\",\"listenerCount\":1,\"ageMs\":5237},{\"key\":\"driver-invites-received-6e31cf96-d1ca-4bf7-87ca-1cba63c563a5\",\"refs\":1,\"transport\":\"postgres_changes\",\"listenerCount\":1,\"ageMs\":5399},{\"key\":\"driver-payments:6e31cf96-d1ca-4bf7-87ca-1cba63c563a5\",\"refs\":1,\"transport\":\"broadcast\",\"listenerCount\":1,\"ageMs\":5236},{\"key\":\"trip_timeline_geofence:8b84f286-8ffa-429e-8ba9-1579480a0a8d\",\"refs\":1,\"transport\":\"postgres_changes\",\"listenerCount\":1,\"ageMs\":996}]},\"cache\":{\"invalidateQueries\":1,\"setQueryData\":0,\"refetchQueries\":1,\"invalidationStorms\":0,\"invalidationsLastWindow\":0,\"windowStartedAt\":1789380401456},\"budgets\":{\"subscription\":{\"home\":5,\"tripDetail\":8,\"chat\":4,\"marketplace\":6,\"finance\":4,\"fleetTracking\":6},\"successTargets\":{\"dbCpuAt50UsersPct\":70,\"poolUtilizationPct\":70,\"realtimeCallbacksPerEvent\":5,\"cacheInvalidationsPerEvent\":2,\"uiRendersPerEvent\":5,\"chatP95Ms\":300,\"bidP95Ms\":500,\"failedRealtimeDeliveries\":0,\"hiddenScreenSubscriptions\":0}},\"database\":{\"source\":\"supabase-dashboard\",\"note\":\"Use Supabase Advisors + Database → Reports for CPU, pool, locks, slow queries until server metrics are wired.\"},\"chat\":{\"openThreads\":0,\"realtimeChannels\":0,\"markConversationReadCalls\":0,\"markMessagesSeenCalls\":0,\"imagesOpened\":0,\"imagesFailed\":0,\"avgChatOpenMs\":null,\"warnings\":[]}}"
+  }
+]
