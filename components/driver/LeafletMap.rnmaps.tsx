@@ -6,7 +6,8 @@ import Theme from '@/constants/Theme';
 import { DriverMapAvatarMarker } from '@/components/driver/DriverMapAvatarMarker';
 import { LeafletMapZoomControls } from '@/components/driver/LeafletMapZoomControls';
 import { isExpoGo } from '@/lib/expoGoMaps';
-import { tripMapMarkerRoleFromId } from '@/lib/mapMarkerIcons.util';
+import { kindIndexFromMarkerId, tripMapMarkerRoleFromId } from '@/lib/mapMarkerIcons.util';
+import { RoutePlanMapPin } from '@/features/driver/job-card/parts/RoutePlanMapPin';
 import { withAlpha } from '@/lib/color';
 import React, { useCallback, useImperativeHandle, useMemo, useRef } from 'react';
 import { Pressable, StyleSheet, Text, View } from 'react-native';
@@ -48,6 +49,7 @@ function MarkerContent({
   color,
   label,
   highlighted,
+  kindIndex,
   avatarUri,
   avatarSeed,
   isOnline,
@@ -57,6 +59,7 @@ function MarkerContent({
   color?: string;
   label?: string;
   highlighted?: boolean;
+  kindIndex?: number;
   avatarUri?: string | null;
   avatarSeed?: string | null;
   isOnline?: boolean;
@@ -88,6 +91,17 @@ function MarkerContent({
   }
   if (role === 'origin' || role === 'destination') {
     const isDrop = role === 'destination';
+    const index = kindIndex ?? kindIndexFromMarkerId(markerId);
+    if (index != null) {
+      return (
+        <RoutePlanMapPin
+          kind={isDrop ? 'drop' : 'pickup'}
+          index={index}
+          caption={label?.trim() || undefined}
+          emphasized={highlighted}
+        />
+      );
+    }
     return (
       <View style={styles.pinMarkerWrap}>
         {label?.trim() ? (
@@ -299,6 +313,7 @@ export const LeafletMapRnMaps = React.forwardRef<
                   color={m.color}
                   label={m.label}
                   highlighted={m.highlighted}
+                  kindIndex={m.kindIndex}
                   avatarUri={m.avatarUri}
                   avatarSeed={m.avatarSeed}
                   isOnline={m.isOnline}

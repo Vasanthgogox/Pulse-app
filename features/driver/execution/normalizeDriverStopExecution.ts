@@ -20,6 +20,7 @@ export function emptyDriverStopExecution(tripId: string): DriverStopExecutionBun
   return { tripId, stops: [] };
 }
 
+/** True when this trip has Core SES rows — Job Card multi-order mode. */
 export function shouldShowDriverMultiStop(stops: readonly DriverStopExecutionStop[]): boolean {
   return stops.length > 0;
 }

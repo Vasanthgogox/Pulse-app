@@ -21,8 +21,17 @@ import { useOptionalDriverAvatar } from "@/contexts/DriverAvatarContext";
 import { DriverDailySummaryCard } from "@/features/driver/components/DriverDailySummaryCard";
 import { DriverDashboardMapPreview } from "@/features/driver/components/DriverDashboardMapPreview";
 import { DriverExpenseCaptureFab } from "@/features/driver/components/DriverExpenseCaptureFab";
-import { DriverCommerceMissionEntry } from "@/features/driver/commerce-mission/DriverCommerceMissionEntry";
-import { DriverTripFlowCard } from "@/features/driver/components/DriverTripFlowCard";
+import { DriverJobCard } from "@/features/driver/job-card/DriverJobCard";
+import type { DriverRoutePlanMap } from "@/features/driver/job-card/driverRoutePlanMap";
+import {
+  buildDriverRoutePlanMap,
+  buildTripRowRoutePlanMap,
+  routePlanLeafletMarkerId,
+  routePlanPolyline,
+  routePlanStopCaption,
+} from "@/features/driver/job-card/driverRoutePlanMap";
+import { RoutePlanMapPin } from "@/features/driver/job-card/parts/RoutePlanMapPin";
+import { fetchDriverStopExecution } from "@/features/driver/execution/fetchDriverStopExecution";
 import { PilotRelationshipSummary } from "@/features/driver/components/PilotRelationshipSummary";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
@@ -43,6 +52,7 @@ import { markDriverPerfPhase } from "@/lib/driverPerfMetrics";
 import { claimTripByOtp } from "@/features/trips/services/tripOtp.service";
 import { useDriverHomeDriversQuery } from "@/lib/queries/useDriverHomeDriversQuery";
 import { useInvalidateDriverHomeDashboard } from "@/lib/queries/useInvalidateDriverHomeDashboard";
+import { useDriverUiTripsQuery } from "@/lib/queries/useDriverUiTripsQuery";
 import { usePendingOtpTripsQuery } from "@/lib/queries/usePendingOtpTripsQuery";
 import {
   getLatestAssignmentAuditByTripIds,
@@ -275,9 +285,7 @@ export default function DriverRadarScreen() {
   const { profile } = useAuth();
   const uid = profile?.uid ?? null;
   const invalidateDriverHome = useInvalidateDriverHomeDashboard();
-  const lastTripsSyncKeyRef = useRef<string | null>(null);
   const refreshDashboard = useCallback(() => {
-    lastTripsSyncKeyRef.current = null;
     if (uid) void invalidateDriverHome(uid);
   }, [uid, invalidateDriverHome]);
   const patchTripInDashboard = useCallback((updated: tripsService.TripRow) => {
@@ -297,6 +305,7 @@ export default function DriverRadarScreen() {
     );
   }, []);
   const linkedDriversQuery = useDriverHomeDriversQuery(uid);
+  const tripsQuery = useDriverUiTripsQuery(uid);
   const linkedDriver = linkedDriversQuery.primaryDriver;
   const pendingOtpQuery = usePendingOtpTripsQuery(uid);
   const pendingOtpTrips = pendingOtpQuery.pendingTrips;
@@ -367,6 +376,7 @@ export default function DriverRadarScreen() {
   // Stays false until the AsyncStorage check completes so we never flash the
   // accept-trip card for a driver who already accepted this trip.
   const [acceptedTripIdResolved, setAcceptedTripIdResolved] = useState(false);
+  const [routePlanMap, setRoutePlanMap] = useState<DriverRoutePlanMap | null>(null);
   // Bumped whenever we explicitly clear acceptedTripId so an in-flight
   // AsyncStorage read from before the clear can't resurrect the stale value.
   const acceptedTripIdClearTokenRef = useRef(0);
@@ -613,7 +623,7 @@ export default function DriverRadarScreen() {
     });
   }, []);
 
-  const tripsSyncGenRef = useRef(0);
+  const lastOtpClaimingRef = useRef(isOtpClaiming);
   const lastDriverMapCommitAtRef = useRef(0);
   const driverMapPositionRef = useRef<{
     latitude: number;
@@ -655,8 +665,6 @@ export default function DriverRadarScreen() {
   );
 
   const driverIdsKey = linkedDriversQuery.driverIdsKey;
-  const driversDataUpdatedAt = linkedDriversQuery.dataUpdatedAt;
-  const driversFetchStatus = linkedDriversQuery.fetchStatus;
   const driversQueryFailed =
     linkedDriversQuery.isError &&
     linkedDriversQuery.isFetched &&
@@ -668,12 +676,10 @@ export default function DriverRadarScreen() {
   }, [linkedDriver?.id, linkedDriver]);
 
   /**
-   * Trips by driver ids — keyed on primitive query signals only (never callback/array deps).
-   * Skips redundant fetches when driverIdsKey + dataUpdatedAt unchanged.
+   * Apply the shared ui-trips query (same cache as DriverTripOpsProvider).
+   * First paint waits on linked-drivers only — not the trip list.
    */
   useEffect(() => {
-    let cancelled = false;
-
     const finishLoading = () => {
       setLoading(false);
       initialLoadDoneRef.current = true;
@@ -681,143 +687,115 @@ export default function DriverRadarScreen() {
       setRefreshing(false);
     };
 
-    const run = async () => {
-      if (!uid) {
-        setLoading(false);
-        return;
-      }
+    if (!uid) {
+      setLoading(false);
+      return;
+    }
 
-      setAcceptError(null);
-      if (!initialLoadDoneRef.current && !isRefreshingRef.current) {
-        setLoading(true);
-      }
+    setAcceptError(null);
+    if (!initialLoadDoneRef.current && !isRefreshingRef.current) {
+      setLoading(true);
+    }
 
-      if (driversQueryFailed) {
-        if (!cancelled) {
-          setAcceptError(
-            linkedDriversQuery.error instanceof Error
-              ? linkedDriversQuery.error.message
-              : "Could not load your fleet. Pull down to retry.",
-          );
-          finishLoading();
-        }
-        return;
-      }
-
-      // First paint: wait only until we have a linked-drivers result (or cached
-      // placeholder). Do not block on background refetch — that left the dashboard
-      // blank for minutes during schema-cache / AbortError storms.
-      if (linkedDriversQuery.isPending && !linkedDriversQuery.isFetched) {
-        return;
-      }
-
-      const syncKey = `${driverIdsKey}|${driversDataUpdatedAt}|${isOtpClaiming ? 1 : 0}`;
-      if (
-        lastTripsSyncKeyRef.current === syncKey &&
-        initialLoadDoneRef.current &&
-        !isRefreshingRef.current
-      ) {
-        return;
-      }
-
-      const active = linkedDriversQuery.activeLinkedDrivers;
-      const gen = ++tripsSyncGenRef.current;
-
-      if (active.length === 0) {
-        if (!cancelled) {
-          setDriver((prev) => (prev === null ? prev : null));
-          setAllTrips((prev) => (prev.length === 0 ? prev : []));
-          setIsOnline((prev) => (prev === false ? prev : false));
-          previousTripsRef.current = new Map();
-          finishLoading();
-          lastTripsSyncKeyRef.current = syncKey;
-        }
-        return;
-      }
-
-      const primaryDriver = active[0];
-      const driverIds = active.map((d) => d.id);
-
-      setDriver((prev) =>
-        prev?.id === primaryDriver.id ? prev : primaryDriver,
+    if (driversQueryFailed) {
+      setAcceptError(
+        linkedDriversQuery.error instanceof Error
+          ? linkedDriversQuery.error.message
+          : "Could not load your fleet. Pull down to retry.",
       );
+      finishLoading();
+      return;
+    }
 
-      if (!initialLoadDoneRef.current) {
-        finishLoading();
+    if (linkedDriversQuery.isPending && !linkedDriversQuery.isFetched) {
+      return;
+    }
+
+    const active = linkedDriversQuery.activeLinkedDrivers;
+    if (active.length === 0) {
+      setDriver((prev) => (prev === null ? prev : null));
+      setAllTrips((prev) => (prev.length === 0 ? prev : []));
+      setIsOnline((prev) => (prev === false ? prev : false));
+      previousTripsRef.current = new Map();
+      setTripsSyncing(false);
+      finishLoading();
+      return;
+    }
+
+    const primaryDriver = active[0];
+    setDriver((prev) =>
+      prev?.id === primaryDriver.id ? prev : primaryDriver,
+    );
+
+    if (!initialLoadDoneRef.current) {
+      finishLoading();
+    }
+
+    setTripsSyncing(tripsQuery.isFetching);
+
+    if (!tripsQuery.isFetched && tripsQuery.isPending) {
+      return;
+    }
+
+    const trips = tripsQuery.trips;
+    const tripSyncFingerprint = (list: tripsService.TripRow[]) =>
+      list
+        .map(
+          (t) =>
+            `${t.id}:${String(t.status ?? "").toLowerCase()}:${t.updated_at ?? ""}`,
+        )
+        .sort()
+        .join("|");
+
+    const seqByTrip = buildDriverTripNumberMap(trips);
+    previousTripsRef.current = new Map(
+      trips.map((t) => [t.id, getDriverTripDisplayNumber(t, seqByTrip)]),
+    );
+
+    setAllTrips((prev) =>
+      tripSyncFingerprint(prev) === tripSyncFingerprint(trips) ? prev : trips,
+    );
+
+    const normalizedDriverStatus = String(primaryDriver.status ?? "").toLowerCase();
+    const hasActiveTrip = trips.some((t) => isTripInProgress(t));
+    const nextOnline =
+      normalizedDriverStatus === "online" ||
+      normalizedDriverStatus === "on_trip" ||
+      hasActiveTrip;
+    setIsOnline((prev) => (prev || nextOnline ? true : prev));
+
+    finishLoading();
+
+    setAcceptedTripId((prev) => {
+      if (prev == null) return prev;
+      const trip = trips.find((t) => t.id === prev);
+      if (!isOtpClaiming && trip && isCompletedStatus(trip.status)) {
+        acceptedTripIdClearTokenRef.current += 1;
+        void AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
+        return null;
       }
-
-      setTripsSyncing(true);
-      try {
-        const tRes = await tripsService.getDriverUiTripsByDriverIds(driverIds);
-        if (cancelled || tripsSyncGenRef.current !== gen) return;
-
-        const trips = tRes.trips ?? [];
-        // Include status/updated_at so in-place progress (e.g. in_transit → at_drop)
-        // is not dropped when the trip id set is unchanged.
-        const tripSyncFingerprint = (list: tripsService.TripRow[]) =>
-          list
-            .map(
-              (t) =>
-                `${t.id}:${String(t.status ?? "").toLowerCase()}:${t.updated_at ?? ""}`,
-            )
-            .sort()
-            .join("|");
-
-        const seqByTrip = buildDriverTripNumberMap(trips);
-        previousTripsRef.current = new Map(
-          trips.map((t) => [t.id, getDriverTripDisplayNumber(t, seqByTrip)]),
-        );
-
-        setDriver((prev) =>
-          prev?.id === primaryDriver.id ? prev : primaryDriver,
-        );
-        setAllTrips((prev) =>
-          tripSyncFingerprint(prev) === tripSyncFingerprint(trips) ? prev : trips,
-        );
-
-        const normalizedDriverStatus = String(primaryDriver.status ?? "").toLowerCase();
-        const hasActiveTrip = trips.some((t) => isTripInProgress(t));
-        const nextOnline =
-          normalizedDriverStatus === "online" ||
-          normalizedDriverStatus === "on_trip" ||
-          hasActiveTrip;
-        setIsOnline((prev) => (prev || nextOnline ? true : prev));
-
-        finishLoading();
-        lastTripsSyncKeyRef.current = syncKey;
-
-        setAcceptedTripId((prev) => {
-          if (prev == null) return prev;
-          const trip = trips.find((t) => t.id === prev);
-          if (!isOtpClaiming && trip && isCompletedStatus(trip.status)) {
-            acceptedTripIdClearTokenRef.current += 1;
-            void AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
-            return null;
-          }
-          return prev;
-        });
-      } finally {
-        if (!cancelled && tripsSyncGenRef.current === gen) {
-          setTripsSyncing(false);
-        }
-      }
-    };
-
-    void run();
-    return () => {
-      cancelled = true;
-    };
+      return prev;
+    });
   }, [
     uid,
     driverIdsKey,
-    driversDataUpdatedAt,
-    driversFetchStatus,
     driversQueryFailed,
     linkedDriversQuery.isFetched,
     linkedDriversQuery.isPending,
-    linkedDriversQuery.isError,
+    linkedDriversQuery.error,
+    linkedDriversQuery.activeLinkedDrivers,
+    tripsQuery.isFetched,
+    tripsQuery.isPending,
+    tripsQuery.isFetching,
+    tripsQuery.trips,
     isOtpClaiming,
   ]);
+
+  useEffect(() => {
+    if (lastOtpClaimingRef.current === isOtpClaiming) return;
+    lastOtpClaimingRef.current = isOtpClaiming;
+    void tripsQuery.refetch();
+  }, [isOtpClaiming, tripsQuery.refetch]);
 
   useEffect(() => {
     if (!loading) return;
@@ -1036,7 +1014,6 @@ export default function DriverRadarScreen() {
       // Camera / gallery for POD & LR briefly flips AppState inactive → active.
       // A full invalidate remounts the mission sheet and flashes the map underneath.
       if (hasActiveMissionRef.current) return;
-      lastTripsSyncKeyRef.current = null;
       void invalidateDriverHome(uid);
     });
   }, [uid, invalidateDriverHome]);
@@ -1058,7 +1035,6 @@ export default function DriverRadarScreen() {
   const handleRefresh = useCallback(() => {
     setRefreshing(true);
     isRefreshingRef.current = true;
-    lastTripsSyncKeyRef.current = null;
     setLocationStatus("loading");
     Promise.all([
       uid
@@ -2291,7 +2267,10 @@ export default function DriverRadarScreen() {
       !otpClaimTripId &&
       !showNewAssignmentCard,
   );
-  const missionSheetCollapsed = canMinimizeMissionSheet && missionSheetIndex <= 0;
+  /** Incoming assignment: peek so “View trip plan” can show the full route. */
+  const canPeekAssignmentSheet = Boolean(showNewAssignmentCard && !otpClaimTripId);
+  const canPeekSheetForMap = canMinimizeMissionSheet || canPeekAssignmentSheet;
+  const missionSheetCollapsed = canPeekSheetForMap && missionSheetIndex <= 0;
   useEffect(() => {
     if (!canMinimizeMissionSheet) return;
     setMissionSheetIndex(1);
@@ -2325,6 +2304,40 @@ export default function DriverRadarScreen() {
     loop.start();
     return () => loop.stop();
   }, [showNewAssignmentCard, newAssignmentBlinkAnim]);
+
+  useEffect(() => {
+    if (activeMission) return;
+    const trip = showNewAssignmentCard ? effectiveFirstIncoming : null;
+    if (!trip?.id) {
+      setRoutePlanMap(null);
+      return;
+    }
+    let cancelled = false;
+    const pickup = getTripStopCoordinate(trip, "pickup");
+    const drop = getTripStopCoordinate(trip, "drop");
+    const fallback = buildTripRowRoutePlanMap(
+      trip.id,
+      pickup ? { ...pickup, label: trip.pickup_area?.trim() || "Pickup" } : null,
+      drop ? { ...drop, label: trip.drop_location?.trim() || "Drop" } : null,
+    );
+    if (fallback.stops.length > 0) setRoutePlanMap(fallback);
+    void fetchDriverStopExecution(trip.id).then((result) => {
+      if (cancelled) return;
+      if (!result.ok || result.bundle.stops.length === 0) return;
+      const fromStops = buildDriverRoutePlanMap(
+        trip.id,
+        result.bundle.stops,
+        null,
+        "pickup",
+        null,
+        true,
+      );
+      if (fromStops.stops.length > 0) setRoutePlanMap(fromStops);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeMission, showNewAssignmentCard, effectiveFirstIncoming?.id]);
 
   // Show map shell for active mission, incoming assignment (including load-based pending OTP),
   // or assignment feedback.
@@ -2402,7 +2415,7 @@ export default function DriverRadarScreen() {
     return Math.min(raw, Math.round(screenHeight * 0.62));
   })();
   const sheetSnapPoints = useMemo(() => {
-    if (canMinimizeMissionSheet) {
+    if (canPeekSheetForMap) {
       const maxExpanded = Math.min(
         Math.round(screenHeight * 0.52),
         Math.max(280, screenHeight - insets.top - driverSheetBottomInset - 120),
@@ -2442,7 +2455,7 @@ export default function DriverRadarScreen() {
     screenHeight,
     insets.top,
     shouldUseStaticMapSheetCard,
-    canMinimizeMissionSheet,
+    canPeekSheetForMap,
     measuredSheetHeight,
     driverSheetBottomInset,
   ]);
@@ -3191,8 +3204,15 @@ export default function DriverRadarScreen() {
       const tripForBounds = defaultBoundsTrip;
       const pickup = defaultBoundsPickup;
       const drop = defaultBoundsDrop;
+      const planCoords =
+        routePlanMap?.overview && routePlanMap.stops.length > 0
+          ? routePlanMap.stops.map((s) => ({
+              latitude: s.latitude,
+              longitude: s.longitude,
+            }))
+          : null;
 
-      if (!tripForBounds || !pickup || !drop) return;
+      if (!planCoords && (!tripForBounds || !pickup || !drop)) return;
 
       const isFullScreen = options?.isFullScreen === true;
 
@@ -3239,9 +3259,14 @@ export default function DriverRadarScreen() {
       // "which stage". At the endpoints the goal is a tight look at driver +
       // that one stop, not the whole corridor -- the corridor belongs to transit.
       const isTightStopFit =
-        activeGuidanceStep === "pickup" || activeGuidanceStep === "reached";
+        !planCoords &&
+        (activeGuidanceStep === "pickup" || activeGuidanceStep === "reached");
 
       const coordsForFit = (() => {
+        if (planCoords && planCoords.length > 0) {
+          const live = navStartCoordinate ?? driverMapPosition ?? truckPosition;
+          return live ? [...planCoords, live] : planCoords;
+        }
         const merged: { latitude: number; longitude: number }[] = [];
         const pushCoords = (coords: { latitude: number; longitude: number }[] | undefined) => {
           if (!coords?.length) return;
@@ -3270,7 +3295,9 @@ export default function DriverRadarScreen() {
         }
         return [pickup, drop];
       })();
-      const baseFitKey = `${tripForBounds.id}:${pickup.latitude}:${pickup.longitude}:${drop.latitude}:${drop.longitude}`;
+      const baseFitKey = planCoords
+        ? `plan:${routePlanMap?.tripId}:${planCoords.length}`
+        : `${tripForBounds!.id}:${pickup!.latitude}:${pickup!.longitude}:${drop!.latitude}:${drop!.longitude}`;
       const fitKey = `${baseFitKey}:step:${activeGuidanceStep ?? ""}:nav:${
         shouldShowDriverApproachRoute(activeGuidanceStep)
           ? approachRoute?.coordinates?.length ?? 0
@@ -3291,8 +3318,8 @@ export default function DriverRadarScreen() {
       // pulling so far that the corridor feels lost in the city.
       const bounds = inflateMapBounds(
         rawBounds,
-        isTightStopFit ? 0.5 : 1.05,
-        isTightStopFit ? 0.032 : 0.07,
+        planCoords ? 1.35 : isTightStopFit ? 0.5 : 1.05,
+        planCoords ? 0.12 : isTightStopFit ? 0.032 : 0.07,
       );
 
       const showLeaflet =
@@ -3352,6 +3379,7 @@ export default function DriverRadarScreen() {
       useLeafletFallback,
       insets.top,
       insets.bottom,
+      routePlanMap,
     ],
   );
 
@@ -3387,6 +3415,18 @@ export default function DriverRadarScreen() {
     },
     [],
   );
+  const handleViewTripPlan = useCallback(() => {
+    setMissionSheetIndex(0);
+    try {
+      bottomSheetRef.current?.snapToIndex(0);
+    } catch {
+      /* ignore */
+    }
+    inlineMapUserInteractedRef.current = false;
+    fullMapUserInteractedRef.current = false;
+    setIsFollowingLocation(false);
+    scheduleFit(mapRef, { force: true }, 220);
+  }, [scheduleFit]);
   useEffect(
     () => () => {
       if (pendingFitTimerRef.current) clearTimeout(pendingFitTimerRef.current);
@@ -3407,6 +3447,21 @@ export default function DriverRadarScreen() {
     scheduleFit,
     isFollowingLocation,
     missionSheetCollapsed,
+  ]);
+
+  // Fit the full trip plan (all stops) when it loads or stop count changes.
+  useEffect(() => {
+    if (!shouldShowMap) return;
+    if (!routePlanMap?.overview || routePlanMap.stops.length === 0) return;
+    if (isFollowingLocation) return;
+    scheduleFit(mapRef, { force: true }, 200);
+  }, [
+    routePlanMap?.tripId,
+    routePlanMap?.overview,
+    routePlanMap?.stops.length,
+    shouldShowMap,
+    scheduleFit,
+    isFollowingLocation,
   ]);
 
   // Re-center into the open map band once the job card height is known.
@@ -3515,7 +3570,7 @@ export default function DriverRadarScreen() {
    */
   const missionPeekZoomArmedRef = useRef(false);
   useEffect(() => {
-    if (!shouldShowMap || !canMinimizeMissionSheet) {
+    if (!shouldShowMap || !canPeekSheetForMap) {
       missionPeekZoomArmedRef.current = false;
       return;
     }
@@ -3544,7 +3599,7 @@ export default function DriverRadarScreen() {
   }, [
     missionSheetCollapsed,
     shouldShowMap,
-    canMinimizeMissionSheet,
+    canPeekSheetForMap,
     scheduleFit,
     isFollowingLocation,
   ]);
@@ -3760,7 +3815,19 @@ export default function DriverRadarScreen() {
       });
     }
     // Approach: Pickup is the hero. Transit+: Drop is the hero (pickup muted).
-    if (pickup && showApproachRoute) {
+    const planStops = routePlanMap?.stops?.length ? routePlanMap.stops : [];
+    if (planStops.length > 0) {
+      for (const stop of planStops) {
+        leafletMarkers.push({
+          id: routePlanLeafletMarkerId(stop),
+          coordinate: { latitude: stop.latitude, longitude: stop.longitude },
+          label: routePlanStopCaption(stop),
+          color: stop.kind === "drop" ? Theme.driverGold : Theme.driverEmerald,
+          highlighted: stop.isCurrent,
+          kindIndex: stop.kindIndex,
+        });
+      }
+    } else if (pickup && showApproachRoute) {
       leafletMarkers.push({
         id: "pickup",
         coordinate: pickup,
@@ -3795,7 +3862,7 @@ export default function DriverRadarScreen() {
         highlighted: highlightedTarget === "pickup",
       });
     }
-    if (drop) {
+    if (planStops.length === 0 && drop) {
       leafletMarkers.push({
         id: "drop",
         coordinate: drop,
@@ -3836,6 +3903,17 @@ export default function DriverRadarScreen() {
     });
 
     const mapPolylines: LeafletPolylineLayer[] = [];
+    const planLine = routePlanPolyline(routePlanMap);
+    if (planLine.length >= 2) {
+      mapPolylines.push({
+        id: "trip-plan",
+        coordinates: planLine,
+        color: Theme.driverEmerald,
+        dashed: true,
+        width: 5,
+        glowWidth: 9,
+      });
+    }
     const pickupDropSpanM =
       pickup && drop
         ? distanceMeters(
@@ -4330,7 +4408,24 @@ export default function DriverRadarScreen() {
               );
             })}
 
-            {shouldShowMap && routeContextTrip && (
+            {shouldShowMap && routePlanMap && routePlanMap.stops.length > 0 ? (
+              <>
+                {routePlanMap.stops.map((stop) => (
+                  <MapMarker
+                    key={stop.stopId}
+                    coordinate={{ latitude: stop.latitude, longitude: stop.longitude }}
+                    anchor={{ x: 0.5, y: 1 }}
+                  >
+                    <RoutePlanMapPin
+                      kind={stop.kind}
+                      index={stop.kindIndex}
+                      caption={routePlanStopCaption(stop)}
+                      emphasized={stop.isCurrent}
+                    />
+                  </MapMarker>
+                ))}
+              </>
+            ) : shouldShowMap && routeContextTrip ? (
               <>
                 {pickup &&
                   (!toDropNav ||
@@ -4384,6 +4479,10 @@ export default function DriverRadarScreen() {
                     </View>
                   </MapMarker>
                 )}
+              </>
+            ) : null}
+            {shouldShowMap ? (
+              <>
                 {mapPolylines.map((layer) => {
                   const color = layer.color ?? Theme.driverPrimary;
                   const mainWidth = layer.width ?? 5;
@@ -4422,7 +4521,7 @@ export default function DriverRadarScreen() {
                   </MapMarker>
                 ))}
               </>
-            )}
+            ) : null}
           </MapView>
         )}
 
@@ -4547,6 +4646,33 @@ export default function DriverRadarScreen() {
                 </TouchableOpacity>
               </View>
             </View>
+
+            {routePlanMap && routePlanMap.stops.length > 0 ? (
+              <View
+                pointerEvents="none"
+                style={[
+                  styles.mapGuidanceChip,
+                  {
+                    top:
+                      controlsVariant === "embedded"
+                        ? insets.top + 168
+                        : insets.top + 88,
+                    left: 16,
+                    right: 88,
+                    backgroundColor: colors.surface,
+                    borderColor: colors.border,
+                  },
+                ]}
+              >
+                <Text style={[styles.mapGuidanceTitle, { color: colors.text }]} numberOfLines={1}>
+                  Trip plan · {routePlanMap.stops.length}{" "}
+                  {routePlanMap.stops.length === 1 ? "stop" : "stops"}
+                </Text>
+                <Text style={[styles.mapGuidanceSubtitle, { color: colors.textMuted }]} numberOfLines={1}>
+                  Full route · pickup and delivery in order
+                </Text>
+              </View>
+            ) : null}
 
             {/* Route summary panel — readable pickup/drop addresses */}
             {showRouteSummary && (activeMission || effectiveFirstIncoming) ? (() => {
@@ -4805,8 +4931,7 @@ export default function DriverRadarScreen() {
       {showDriverTripDashboard ? (
         activeMission ? (
           <>
-            <DriverCommerceMissionEntry tripId={activeMission.id} />
-            <DriverTripFlowCard
+            <DriverJobCard
               trip={activeMission}
               commissionAmount={activeMissionCommission}
               assignedBy={activeFlowAssigner}
@@ -4816,6 +4941,8 @@ export default function DriverRadarScreen() {
               driverLocationLabel={locationLabel}
               onRefresh={refreshDashboard}
               onTripUpdated={patchTripInDashboard}
+              onRoutePlanMapChange={setRoutePlanMap}
+              onShowRouteOnMap={handleViewTripPlan}
               onTripCompleted={() => {
                 justCompletedTripRef.current = true;
                 setSelectedIncomingTripId(null);
@@ -4851,8 +4978,7 @@ export default function DriverRadarScreen() {
           String(effectiveFirstIncoming.id).toLowerCase() ===
             String(acceptedTripId).toLowerCase() ? (
           <>
-            <DriverCommerceMissionEntry tripId={effectiveFirstIncoming.id} />
-            <DriverTripFlowCard
+            <DriverJobCard
               trip={effectiveFirstIncoming}
               commissionAmount={newAssignmentCommission}
               assignedBy={jobCardAssigner}
@@ -4862,6 +4988,8 @@ export default function DriverRadarScreen() {
               driverLocationLabel={locationLabel}
               onRefresh={refreshDashboard}
               onTripUpdated={patchTripInDashboard}
+              onRoutePlanMapChange={setRoutePlanMap}
+              onShowRouteOnMap={handleViewTripPlan}
               onTripCompleted={() => {
                 justCompletedTripRef.current = true;
                 setSelectedIncomingTripId(null);
@@ -5122,6 +5250,8 @@ export default function DriverRadarScreen() {
             }
             onAccept={() => handleAcceptMission(effectiveFirstIncoming)}
             onDecline={() => handleDeclineAssignment(effectiveFirstIncoming.id)}
+            onViewTripPlan={handleViewTripPlan}
+            tripPlanAvailable={Boolean(routePlanMap && routePlanMap.stops.length > 0)}
             requireOtp={firstIncomingRequiresOtp}
             disabled={acceptLoading || declineLoading}
             earningsAmountColor={jobRequestSheetPrimary}
@@ -5506,7 +5636,7 @@ export default function DriverRadarScreen() {
             <BottomSheet
               snapPoints={sheetSnapPoints}
               index={
-                canMinimizeMissionSheet
+                canPeekSheetForMap
                   ? missionSheetIndex
                   : sheetSnapPoints.length === 1
                     ? 0
@@ -5517,16 +5647,16 @@ export default function DriverRadarScreen() {
               animatedPosition={missionSheetAnimatedPosition}
               enablePanDownToClose={false}
               enableHandlePanningGesture={
-                !shouldUseStaticMapSheetCard || canMinimizeMissionSheet
+                !shouldUseStaticMapSheetCard || canPeekSheetForMap
               }
               enableContentPanningGesture={
-                !shouldUseStaticMapSheetCard || canMinimizeMissionSheet
+                !shouldUseStaticMapSheetCard || canPeekSheetForMap
               }
               enableOverDrag={
-                !shouldUseStaticMapSheetCard || canMinimizeMissionSheet
+                !shouldUseStaticMapSheetCard || canPeekSheetForMap
               }
               enableDynamicSizing={
-                shouldUseStaticMapSheetCard && !canMinimizeMissionSheet
+                shouldUseStaticMapSheetCard && !canPeekSheetForMap
               }
               maxDynamicContentSize={sheetMaxDynamicContentSize}
               ref={bottomSheetRef}
@@ -5534,7 +5664,7 @@ export default function DriverRadarScreen() {
               keyboardBlurBehavior="restore"
               android_keyboardInputMode="adjustResize"
               onChange={(index) => {
-                if (canMinimizeMissionSheet && index >= 0) {
+                if (canPeekSheetForMap && index >= 0) {
                   setMissionSheetIndex(index);
                 }
                 // Only dismiss keyboard if we're snapping to a very low point or closing
@@ -5546,23 +5676,23 @@ export default function DriverRadarScreen() {
               // No gray handle chrome — mission card green hero is the sheet top
               // again (drag via content pan / card surface).
               handleComponent={
-                shouldUseStaticMapSheetCard || canMinimizeMissionSheet
+                shouldUseStaticMapSheetCard || canPeekSheetForMap
                   ? () => null
                   : undefined
               }
               backgroundStyle={{
                 backgroundColor:
-                  canMinimizeMissionSheet && missionSheetCollapsed
+                  canPeekSheetForMap && missionSheetCollapsed
                     ? colors.surface
-                    : shouldUseStaticMapSheetCard || canMinimizeMissionSheet
+                    : shouldUseStaticMapSheetCard || canPeekSheetForMap
                       ? "transparent"
                       : colors.surface,
                 borderTopLeftRadius:
-                  shouldUseStaticMapSheetCard || canMinimizeMissionSheet
+                  shouldUseStaticMapSheetCard || canPeekSheetForMap
                     ? 28
                     : 28,
                 borderTopRightRadius:
-                  shouldUseStaticMapSheetCard || canMinimizeMissionSheet
+                  shouldUseStaticMapSheetCard || canPeekSheetForMap
                     ? 28
                     : 28,
                 overflow: "hidden",
@@ -8383,6 +8513,11 @@ const styles = withWebSafeShadows(
     height: 34,
     borderRadius: 17,
     borderWidth: 3,
+  },
+  planMapMarkerText: {
+    color: "white",
+    fontSize: 12,
+    fontWeight: "800",
   },
   pinHistoryDot: {
     width: 10,

@@ -218,4 +218,30 @@ describe('normalizeDriverTripStopOrders', () => {
     expect(mission.stops[0].stopType).toBe('pickup');
     expect(mission.stops[0].orders[0].orderCompletedDropStopCount).toBe(0);
   });
+
+  it('passes through catalog name and image path without inventing them', () => {
+    const tripId = 'trip-cat';
+    const mission = normalizeDriverTripStopOrders(tripId, [
+      row({
+        trip_id: tripId,
+        stop_id: 'drop-1',
+        sequence: 1,
+        ...orderFields('so-1', 'line-1', 1, 'drop'),
+        product_id: 'prod-1',
+        product_name: 'Nvidia GPU kit',
+        product_sku: 'NV-A',
+        product_image_path: 'product-images/org/p.jpg',
+      }),
+    ]);
+    expect(mission.stops[0].orders[0].lines).toEqual([
+      {
+        salesOrderLineId: 'line-1',
+        quantity: 1,
+        productId: 'prod-1',
+        productName: 'Nvidia GPU kit',
+        productSku: 'NV-A',
+        productImagePath: 'product-images/org/p.jpg',
+      },
+    ]);
+  });
 });

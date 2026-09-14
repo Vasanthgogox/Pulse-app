@@ -64,69 +64,41 @@ export function createExecutionOrchestrator(eventBus: EventBus = getPlatformEven
   return {
     async publishIndent(command: PublishIndentCommand): Promise<PublishIndentResult> {
       const correlationId = requireCorrelationId(command.correlationId, 'missing-correlation-id');
-      const { workspaceId, requestedBy, payload } = command;
+      const { workspaceId, payload } = command;
 
       const order = await OrderService.getForPublish(workspaceId, payload.orderId);
       if (!order) {
         fail('ORDER_NOT_FOUND', 'Sales order not found', correlationId);
       }
 
-      const existingIndent = await IndentService.findBySalesOrderId(workspaceId, order.id);
+      if (order.executionPlanId) {
+        const planIndent = await IndentService.findByExecutionPlanId(workspaceId, order.executionPlanId);
+        if (planIndent) {
+          return { indentId: planIndent.id, orderId: order.id, correlationId };
+        }
+      }
 
-      if (order.status === 'Planned') {
-        if (!existingIndent) {
-          fail(
-            'ORDER_NOT_DISPATCHABLE',
-            'Order is Planned but has no linked indent',
-            correlationId,
-          );
+      const existingIndent = await IndentService.findBySalesOrderId(workspaceId, order.id);
+      if (existingIndent) {
+        if (order.status !== 'Planned' && OrderService.isDispatchable(order.status)) {
+          await OrderService.markPlanned(workspaceId, order.id);
         }
         return { indentId: existingIndent.id, orderId: order.id, correlationId };
       }
 
-      if (!OrderService.isDispatchable(order.status)) {
-        fail('ORDER_NOT_DISPATCHABLE', `Order status "${order.status}" is not dispatchable`, correlationId);
-      }
-      if (!order.customerId) {
-        fail('MISSING_CUSTOMER', 'Order has no customer', correlationId);
-      }
-      if (!order.pickupWarehouseId) {
-        fail('MISSING_WAREHOUSE', 'Order has no pickup warehouse', correlationId);
+      if (order.status === 'Planned' || order.executionPlanId) {
+        fail(
+          'ORDER_NOT_DISPATCHABLE',
+          'Order is already planned. Open the existing fulfillment — do not create another indent.',
+          correlationId,
+        );
       }
 
-      const customer = await CustomerService.findClientRecord(workspaceId, order.customerId);
-      if (!customer) {
-        fail('MISSING_CUSTOMER', 'Customer record not found', correlationId);
-      }
-      const warehouse = await WarehouseService.findWarehouseRecordById(order.pickupWarehouseId);
-      if (!warehouse) {
-        fail('MISSING_WAREHOUSE', 'Pickup warehouse not found', correlationId);
-      }
-
-      const indent =
-        existingIndent ??
-        (await IndentService.createFromSalesOrder({
-          workspaceId,
-          order,
-          requestedBy,
-        }));
-
-      await OrderService.markPlanned(workspaceId, order.id);
-
-      await publishDispatchEvents(eventBus, {
-        workspaceId,
+      fail(
+        'INVALID_COMMAND',
+        'Create an execution plan to publish this order. A lone order indent is not allowed.',
         correlationId,
-        orderId: order.id,
-        orderNumber: order.orderNumber,
-        indentId: indent.id,
-        requestedBy,
-      });
-
-      return {
-        indentId: indent.id,
-        orderId: order.id,
-        correlationId,
-      };
+      );
     },
 
     async publishExecutionPlan(command: PublishExecutionPlanCommand): Promise<PublishExecutionPlanResult> {

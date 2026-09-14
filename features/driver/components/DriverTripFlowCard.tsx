@@ -12,6 +12,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { useInvalidateDriverHomeDashboard } from '@/lib/queries/useInvalidateDriverHomeDashboard';
+import { driverUiTripsQueryKey } from '@/lib/queries/useDriverUiTripsQuery';
 import { useDriverChat } from '@/features/chat/contexts/DriverChatContext';
 import {
   sendDocumentShareMessage,
@@ -20,6 +21,7 @@ import {
 import { invalidateChatDocumentUrlCaches } from '@/features/chat/utils/resolveChatDocumentUrl.util';
 import { useDriverReferralForTripQuery } from '@/lib/queries/useReachCampaignsQuery';
 import type { JobCardAssignerPayload } from '@/features/trips/utils/driverAssignerDisplay.util';
+import type { DriverRoutePlanMap } from '@/features/driver/job-card/driverRoutePlanMap';
 import type { DriverFlowStepId as StepId } from '@/features/driver/utils/driverTripStatusNotes.util';
 import { deriveDriverFlowStepFromTrip } from '@/features/driver/utils/driverTripStatusNotes.util';
 import {
@@ -283,6 +285,15 @@ export interface DriverTripFlowCardProps {
    * - "page": frameless page inside the existing bottom sheet container
    */
   variant?: 'card' | 'page';
+  /**
+   * When true, this card is the legacy Pickup → Drop path only.
+   * Skip SES hydrate here — the Job Card wrapper already used SES to choose mode.
+   */
+  skipStopExecution?: boolean;
+  /** Multi-order SES stops for the map. Legacy card never publishes this. */
+  onRoutePlanMapChange?: (plan: DriverRoutePlanMap | null) => void;
+  /** Peek the sheet and frame pickup/drop plan markers. Optional stopId focuses one pin. */
+  onShowRouteOnMap?: (stopId?: string | null) => void;
 }
 
 function fmtKm(km: number): string {
@@ -378,6 +389,7 @@ export function DriverTripFlowCard({
   edgeToEdge = false,
   assignedBy = null,
   variant = 'card',
+  skipStopExecution = false,
 }: DriverTripFlowCardProps) {
   const colors = useDriverThemeColors();
   const { profile } = useAuth();
@@ -393,8 +405,8 @@ export function DriverTripFlowCard({
     mutating: stopMutating,
     arrive: arriveCurrentStop,
     complete: completeCurrentStop,
-  } = useDriverStopExecution(trip.id);
-  const showMultiStop = shouldShowDriverMultiStop(executionStops);
+  } = useDriverStopExecution(skipStopExecution ? null : trip.id);
+  const showMultiStop = !skipStopExecution && shouldShowDriverMultiStop(executionStops);
   const [step, setStep] = useState<StepId>(() => deriveDriverFlowStepFromTrip(trip));
   const [stepLoading, setStepLoading] = useState(false);
   const [stepError, setStepError] = useState<string | null>(null);
@@ -1361,7 +1373,7 @@ export function DriverTripFlowCard({
     // sole backend authority; this only catches the client's cache up to it.
     if (profile?.uid) {
       void invalidateDriverHomeDashboard(profile.uid);
-      void queryClient.invalidateQueries({ queryKey: ['driver-ops-trips', profile.uid] });
+      void queryClient.invalidateQueries({ queryKey: driverUiTripsQueryKey(profile.uid) });
     }
     onTripCompleted?.();
     setShipperFeedbackOpen(true);

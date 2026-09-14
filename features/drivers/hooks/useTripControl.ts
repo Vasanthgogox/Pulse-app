@@ -9,6 +9,7 @@ import {
 } from "@/features/drivers/services/tripControlProgress.storage";
 import { useAuth } from "@/contexts/AuthContext";
 import { useInvalidateDriverHomeDashboard } from "@/lib/queries/useInvalidateDriverHomeDashboard";
+import { driverUiTripsQueryKey } from "@/lib/queries/useDriverUiTripsQuery";
 
 export const STEPS = [
   { id: "accepted", label: "Start", icon: "compass" as const },
@@ -279,7 +280,7 @@ export function useTripControl(tripId: string | undefined) {
     // authority; this only catches the client's cache up to it promptly.
     if (profile?.uid) {
       void invalidateDriverHomeDashboard(profile.uid);
-      void queryClient.invalidateQueries({ queryKey: ["driver-ops-trips", profile.uid] });
+      void queryClient.invalidateQueries({ queryKey: driverUiTripsQueryKey(profile.uid) });
     }
   };
 

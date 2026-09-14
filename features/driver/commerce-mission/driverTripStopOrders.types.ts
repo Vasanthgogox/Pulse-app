@@ -48,11 +48,20 @@ export type DriverTripStopOrderRpcRow = {
   stop_distinct_drop_order_count: number | null;
   order_distinct_drop_stop_count: number | null;
   order_completed_drop_stop_count: number | null;
+  /** Catalog fields — optional so older RPC payloads still normalize. */
+  product_id?: string | null;
+  product_name?: string | null;
+  product_sku?: string | null;
+  product_image_path?: string | null;
 };
 
 export type DriverTripStopOrderLine = {
   salesOrderLineId: string;
   quantity: number | null;
+  productId?: string | null;
+  productName?: string | null;
+  productSku?: string | null;
+  productImagePath?: string | null;
 };
 
 export type DriverTripStopOrder = {

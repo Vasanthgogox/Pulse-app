@@ -1,6 +1,15 @@
 import { DriverMapAvatarMarker } from '@/components/driver/DriverMapAvatarMarker';
 import { DriverHeader } from '@/components/driver/DriverHeader';
-import { DriverTripFlowCard } from '@/features/driver/components/DriverTripFlowCard';
+import { DriverJobCard } from '@/features/driver/job-card/DriverJobCard';
+import type { DriverRoutePlanMap } from '@/features/driver/job-card/driverRoutePlanMap';
+import {
+  buildDriverRoutePlanMap,
+  buildTripRowRoutePlanMap,
+  routePlanPolyline,
+  routePlanStopCaption,
+} from '@/features/driver/job-card/driverRoutePlanMap';
+import { RoutePlanMapPin } from '@/features/driver/job-card/parts/RoutePlanMapPin';
+import { fetchDriverStopExecution } from '@/features/driver/execution/fetchDriverStopExecution';
 import { JobRequestCard } from '@/components/JobRequestCard';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
@@ -73,6 +82,8 @@ type BottomSheetComponentProps = {
   index?: number;
   enablePanDownToClose?: boolean;
   bottomInset?: number;
+  onChange?: (index: number) => void;
+  ref?: unknown;
   backgroundStyle?: ComponentProps<typeof View>['style'];
   handleIndicatorStyle?: ComponentProps<typeof View>['style'];
 };
@@ -364,6 +375,9 @@ export default function DriverDashboard() {
   const [otpSubmitting, setOtpSubmitting] = useState(false);
   const [otpError, setOtpError] = useState<string | null>(null);
   const [isAssignmentSheetExpanded, setIsAssignmentSheetExpanded] = useState(false);
+  const [routePlanMap, setRoutePlanMap] = useState<DriverRoutePlanMap | null>(null);
+  const driverSheetRef = useRef<{ snapToIndex?: (index: number) => void } | null>(null);
+  const planCameraHoldUntilRef = useRef(0);
   const [_reassignedTripLabels, setReassignedTripLabels] = useState<string[]>([]);
   const previousTripsRef = useRef<Map<string, string>>(new Map());
   const searchPulseAnim = useRef(new Animated.Value(0)).current;
@@ -1103,6 +1117,39 @@ export default function DriverDashboard() {
   // Option A: Ola shell only during assignment → completion.
   // When driver is online but has no incoming assignment yet, keep the existing (offline) layout unchanged.
   const shouldShowMap = Boolean(activeMission || (isOnline && effectiveFirstIncoming));
+
+  useEffect(() => {
+    if (activeMission) return;
+    const trip = showNewAssignmentCard ? effectiveFirstIncoming : null;
+    if (!trip?.id) {
+      setRoutePlanMap(null);
+      return;
+    }
+    let cancelled = false;
+    const pickup = getTripStopCoordinate(trip, 'pickup');
+    const drop = getTripStopCoordinate(trip, 'drop');
+    const fallback = buildTripRowRoutePlanMap(
+      trip.id,
+      pickup
+        ? { ...pickup, label: trip.pickup_area?.trim() || 'Pickup' }
+        : null,
+      drop
+        ? { ...drop, label: trip.drop_location?.trim() || 'Drop' }
+        : null,
+    );
+    if (fallback.stops.length > 0) setRoutePlanMap(fallback);
+
+    void fetchDriverStopExecution(trip.id).then((result) => {
+      if (cancelled) return;
+      if (!result.ok || result.bundle.stops.length === 0) return;
+      const fromStops = buildDriverRoutePlanMap(trip.id, result.bundle.stops, null, 'pickup', null, true);
+      if (fromStops.stops.length > 0) setRoutePlanMap(fromStops);
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeMission, showNewAssignmentCard, effectiveFirstIncoming?.id]);
   const activeGuidanceStep = activeGuidanceTrip ? deriveDriverGuidanceStep(activeGuidanceTrip) : null;
   const activeGuidance =
     activeGuidanceTrip && activeGuidanceStep
@@ -1152,11 +1199,58 @@ export default function DriverDashboard() {
   const lastCameraAnimTsRef = useRef(0);
   const lastCameraCenterRef = useRef<{ latitude: number; longitude: number } | null>(null);
 
+  const handleShowRouteOnMap = useCallback((stopId?: string | null) => {
+    setIsAssignmentSheetExpanded(false);
+    driverSheetRef.current?.snapToIndex?.(0);
+    planCameraHoldUntilRef.current = Date.now() + 16000;
+    const coords = [
+      ...(routePlanMap?.stops.map((s) => ({
+        latitude: s.latitude,
+        longitude: s.longitude,
+      })) ?? []),
+      ...(driverMapPosition ? [driverMapPosition] : []),
+    ];
+    const preview = stopId
+      ? routePlanMap?.stops.find((s) => s.stopId === stopId)
+      : null;
+    try {
+      if (coords.length >= 1 && mapRef.current && (!preview || routePlanMap?.overview !== false)) {
+        mapRef.current.fitToCoordinates(coords, {
+          edgePadding: { top: 96, right: 40, bottom: 168, left: 40 },
+          animated: true,
+        });
+        return;
+      }
+      if (preview && mapRef.current) {
+        const mapAny = mapRef.current as { animateCamera?: (cam: object, duration?: number) => void } | null;
+        mapAny?.animateCamera?.(
+          {
+            center: { latitude: preview.latitude, longitude: preview.longitude },
+            zoom: 14,
+            pitch: 0,
+            heading: 0,
+          },
+          450,
+        );
+      }
+    } catch {
+      // ignore camera failures
+    }
+  }, [driverMapPosition, routePlanMap]);
+
+  useEffect(() => {
+    if (!shouldShowMap || !routePlanMap?.stops.length) return;
+    const timer = setTimeout(() => handleShowRouteOnMap(), 350);
+    return () => clearTimeout(timer);
+  }, [handleShowRouteOnMap, routePlanMap?.tripId, routePlanMap?.stops.length, shouldShowMap]);
+
   // Smoothly follow the driver marker with `animateCamera` (avoid jitter from `fitToCoordinates`).
   useEffect(() => {
     if (!shouldShowMap) return;
     if (!driverMapPosition) return;
     if (!mapRef.current) return;
+    if (Date.now() < planCameraHoldUntilRef.current) return;
+    if (routePlanMap?.overview) return;
 
     const now = Date.now();
     // Throttle to prevent over-animating on frequent GPS updates.
@@ -1194,7 +1288,7 @@ export default function DriverDashboard() {
     } catch {
       // ignore camera animation failures
     }
-  }, [driverMapPosition?.latitude, driverMapPosition?.longitude, shouldShowMap]);
+  }, [driverMapPosition?.latitude, driverMapPosition?.longitude, routePlanMap?.overview, shouldShowMap]);
 
   const [optimalRoute, setOptimalRoute] = useState<RouteResult | null>(null);
 
@@ -1541,6 +1635,7 @@ export default function DriverDashboard() {
       options?: { isFullScreen?: boolean; force?: boolean }
     ) => {
       if (!targetRef.current) return;
+      if (routePlanMap && routePlanMap.stops.length > 0) return;
       const tripForBounds = defaultBoundsTrip;
       const pickup = defaultBoundsPickup;
       const drop = defaultBoundsDrop;
@@ -1572,7 +1667,7 @@ export default function DriverDashboard() {
       });
       lastFitKeyRef.current = fitKey;
     },
-    [defaultBoundsDrop, defaultBoundsPickup, defaultBoundsTrip]
+    [defaultBoundsDrop, defaultBoundsPickup, defaultBoundsTrip, olaMapBottomPaddingPx, routePlanMap, shouldShowMap]
   );
 
   // Fit inline map once per trip bounds so OTP/state updates do not re-center the camera.
@@ -1778,7 +1873,57 @@ export default function DriverDashboard() {
             </Marker>
           )}
 
-          {shouldShowMap && (effectiveFirstIncoming || activeMission) && (
+          {shouldShowMap && routePlanMap && routePlanMap.stops.length > 0 ? (
+            <>
+              {routePlanPolyline(routePlanMap).length >= 2 ? (
+                <Polyline
+                  coordinates={routePlanPolyline(routePlanMap)}
+                  strokeColor={Theme.driverEmerald}
+                  strokeWidth={3}
+                  lineDashPattern={[8, 6]}
+                  lineCap="round"
+                />
+              ) : null}
+              {routePlanMap.stops.map((stop) => {
+                const inFocus = stop.kind === routePlanMap.focusKind;
+                const emphasized = stop.isCurrent || routePlanMap.previewStopId === stop.stopId;
+                return (
+                  <Marker
+                    key={stop.stopId}
+                    coordinate={{ latitude: stop.latitude, longitude: stop.longitude }}
+                    anchor={{ x: 0.5, y: 1 }}
+                    opacity={routePlanMap.overview || inFocus ? 1 : 0.55}
+                    zIndex={emphasized ? 30 : inFocus ? 20 : 10}
+                  >
+                    <RoutePlanMapPin
+                      kind={stop.kind}
+                      index={stop.kindIndex}
+                      caption={routePlanStopCaption(stop)}
+                      emphasized={emphasized}
+                    />
+                    <Callout>
+                      <View
+                        style={[
+                          styles.assignedMapCallout,
+                          { backgroundColor: Theme.buttonDark, borderColor: 'rgba(255,255,255,0.16)' },
+                        ]}
+                      >
+                        <Text style={[styles.assignedMapCalloutTitle, { color: Theme.buttonDarkText }]}>
+                          {routePlanStopCaption(stop)}
+                        </Text>
+                        <Text
+                          style={[styles.assignedMapCalloutSub, { color: Theme.textOnDarkMuted }]}
+                          numberOfLines={2}
+                        >
+                          {stop.label}
+                        </Text>
+                      </View>
+                    </Callout>
+                  </Marker>
+                );
+              })}
+            </>
+          ) : shouldShowMap && (effectiveFirstIncoming || activeMission) ? (
             <>
               {getTripStopCoordinate((activeMission || effectiveFirstIncoming) as tripsService.TripRow, 'pickup') && (
                 <Marker
@@ -1900,10 +2045,27 @@ export default function DriverDashboard() {
                 </Marker>
               ) : null}
             </>
-          )}
+          ) : null}
         </MapView>
 
-        {activeGuidance ? (
+        {routePlanMap && routePlanMap.stops.length > 0 ? (
+          <View
+            style={[
+              styles.mapGuidanceChip,
+              isFullScreen
+                ? { top: insets.top + 16, left: 16, right: 76 }
+                : { left: 14, right: 72, bottom: 18 },
+              { backgroundColor: colors.surface, borderColor: colors.border, pointerEvents: 'none' },
+            ]}
+          >
+            <Text style={[styles.mapGuidanceTitle, { color: colors.text }]} numberOfLines={1}>
+              Trip plan · {routePlanMap.stops.length} {routePlanMap.stops.length === 1 ? 'stop' : 'stops'}
+            </Text>
+            <Text style={[styles.mapGuidanceSubtitle, { color: colors.textMuted }]} numberOfLines={1}>
+              Full route · pickup and delivery in order
+            </Text>
+          </View>
+        ) : activeGuidance ? (
           <View
             style={[
               styles.mapGuidanceChip,
@@ -2135,9 +2297,11 @@ export default function DriverDashboard() {
             </TouchableWithoutFeedback>
 
             <BottomSheetComponent
+              ref={driverSheetRef as never}
               snapPoints={['20%', '45%', '88%']}
               index={0}
               enablePanDownToClose={false}
+              onChange={(nextIndex) => setIsAssignmentSheetExpanded(nextIndex >= 1)}
               bottomInset={driverSheetBottomInset}
               backgroundStyle={{
                 backgroundColor: colors.surface,
@@ -2155,7 +2319,7 @@ export default function DriverDashboard() {
               <BottomSheetScrollViewComponent
                 keyboardShouldPersistTaps="handled"
                 showsVerticalScrollIndicator={false}
-                contentContainerStyle={[styles.olaSheetContent, { paddingBottom: 8 }]}
+                contentContainerStyle={[styles.olaSheetContent, { paddingBottom: 28 }]}
               >
                 {!hasNativeBottomSheetSupport ? (
                   <View
@@ -2225,6 +2389,8 @@ export default function DriverDashboard() {
                                 earnings={firstIncomingIsAggregate ? '—' : formatINR(Math.max(0, newAssignmentCommission))}
                                 onAccept={() => handleAcceptMission(effectiveFirstIncoming)}
                                 onDecline={() => handleDeclineAssignment(effectiveFirstIncoming.id)}
+                                onViewTripPlan={() => handleShowRouteOnMap()}
+                                tripPlanAvailable={(routePlanMap?.stops.length ?? 0) > 0}
                                 requireOtp={firstIncomingRequiresOtp}
                                 disabled={acceptLoading || declineLoading}
                                 accentColor={colors.emerald}
@@ -2246,7 +2412,7 @@ export default function DriverDashboard() {
                         (activeMission || (effectiveFirstIncoming && effectiveFirstIncoming.id === acceptedTripId))
                       ? activeMission
                         ? (
-                            <DriverTripFlowCard
+                            <DriverJobCard
                               edgeToEdge
                                 variant="page"
                               trip={activeMission}
@@ -2259,6 +2425,8 @@ export default function DriverDashboard() {
                               onTripCompleted={() => setJustCompletedTrip(true)}
                               onToggleCollapse={() => setIsAssignmentSheetExpanded((v) => !v)}
                               collapsed={!isAssignmentSheetExpanded}
+                              onRoutePlanMapChange={setRoutePlanMap}
+                              onShowRouteOnMap={handleShowRouteOnMap}
                               onBackToDashboard={async () => {
                                 await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
                                 setAcceptedTripId(null);
@@ -2270,7 +2438,7 @@ export default function DriverDashboard() {
                           )
                         : effectiveFirstIncoming
                           ? (
-                              <DriverTripFlowCard
+                              <DriverJobCard
                                 edgeToEdge
                                     variant="page"
                                 trip={effectiveFirstIncoming}
@@ -2283,6 +2451,8 @@ export default function DriverDashboard() {
                                 onTripCompleted={() => setJustCompletedTrip(true)}
                                 onToggleCollapse={() => setIsAssignmentSheetExpanded((v) => !v)}
                                 collapsed={!isAssignmentSheetExpanded}
+                                onRoutePlanMapChange={setRoutePlanMap}
+                                onShowRouteOnMap={handleShowRouteOnMap}
                                 onBackToDashboard={async () => {
                                   await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
                                   setAcceptedTripId(null);
@@ -2751,7 +2921,7 @@ export default function DriverDashboard() {
             )}
             {showDriverTripDashboard ? (
               activeMission ? (
-          <DriverTripFlowCard
+          <DriverJobCard
             trip={activeMission}
             commissionAmount={activeMissionCommission}
             driverLatitude={(truckPosition ?? driverMapPosition)?.latitude ?? null}
@@ -2760,6 +2930,8 @@ export default function DriverDashboard() {
             onRefresh={() => void fetch({ soft: true })}
             onTripUpdated={patchTripInDashboard}
             onTripCompleted={() => setJustCompletedTrip(true)}
+            onRoutePlanMapChange={setRoutePlanMap}
+            onShowRouteOnMap={handleShowRouteOnMap}
             onBackToDashboard={async () => {
               await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
               setAcceptedTripId(null);
@@ -2806,7 +2978,7 @@ export default function DriverDashboard() {
             </View>
           </View>
         ) : effectiveFirstIncoming && effectiveFirstIncoming.id === acceptedTripId ? (
-          <DriverTripFlowCard
+          <DriverJobCard
             trip={effectiveFirstIncoming}
             commissionAmount={newAssignmentCommission}
             driverLatitude={(truckPosition ?? driverMapPosition)?.latitude ?? null}
@@ -2815,6 +2987,8 @@ export default function DriverDashboard() {
             onRefresh={() => void fetch({ soft: true })}
             onTripUpdated={patchTripInDashboard}
             onTripCompleted={() => setJustCompletedTrip(true)}
+            onRoutePlanMapChange={setRoutePlanMap}
+            onShowRouteOnMap={handleShowRouteOnMap}
             onBackToDashboard={async () => {
               await AsyncStorage.removeItem(DRIVER_ACCEPTED_TRIP_ID_KEY);
               setAcceptedTripId(null);
@@ -2833,6 +3007,8 @@ export default function DriverDashboard() {
             earnings={firstIncomingIsAggregate ? '—' : formatINR(Math.max(0, newAssignmentCommission))}
             onAccept={() => handleAcceptMission(effectiveFirstIncoming)}
             onDecline={() => handleDeclineAssignment(effectiveFirstIncoming.id)}
+            onViewTripPlan={() => handleShowRouteOnMap()}
+            tripPlanAvailable={(routePlanMap?.stops.length ?? 0) > 0}
             requireOtp={firstIncomingRequiresOtp}
             disabled={acceptLoading || declineLoading}
             accentColor={colors.emerald}
@@ -2858,6 +3034,8 @@ export default function DriverDashboard() {
             earnings={firstIncomingIsAggregate ? '—' : formatINR(Math.max(0, newAssignmentCommission))}
             onAccept={() => handleAcceptMission(effectiveFirstIncoming)}
             onDecline={() => handleDeclineAssignment(effectiveFirstIncoming.id)}
+            onViewTripPlan={() => handleShowRouteOnMap()}
+            tripPlanAvailable={(routePlanMap?.stops.length ?? 0) > 0}
             requireOtp={firstIncomingRequiresOtp}
             disabled={acceptLoading || declineLoading}
             accentColor={colors.emerald}
@@ -4904,6 +5082,11 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
+  },
+  planMapMarkerText: {
+    color: Theme.textOnPrimary,
+    fontSize: 11,
+    fontWeight: '800',
   },
   customMapMarkerActive: {
     width: 30,

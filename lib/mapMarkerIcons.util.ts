@@ -100,7 +100,23 @@ export const MAP_TRUCK_MARKER_ICON_SIZE = MAP_DRIVER_AVATAR_MARKER_ICON_SIZE;
 /** @deprecated Use {@link MAP_DRIVER_AVATAR_MARKER_ICON_ANCHOR}. */
 export const MAP_TRUCK_MARKER_ICON_ANCHOR = MAP_DRIVER_AVATAR_MARKER_ICON_ANCHOR;
 
-export const MAP_PING_DOT_HTML = `<div style="width:12px;height:12px;border-radius:50%;background:#fb923c;border:2px solid #c2410c;box-shadow:0 1px 4px rgba(0,0,0,0.25);"></div>`;
+export function numberedMapPinHtml(kind: 'pickup' | 'drop', index: number): string {
+  const n = Math.max(1, Math.min(99, Math.floor(index)));
+  if (kind === 'drop') {
+    return `<svg width="28" height="40" viewBox="0 0 28 40" style="filter:drop-shadow(0 3px 8px rgba(180,83,9,0.28));">
+  <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 26 14 26s14-15.5 14-26c0-7.73-6.27-14-14-14z" fill="#b45309"/>
+  <path d="M14 2C7.37 2 2 7.37 2 14c0 9.25 12 24 12 24s12-14.75 12-24c0-6.63-5.37-12-12-12z" fill="#f59e0b"/>
+  <circle cx="14" cy="14" r="8" fill="#fff"/>
+  <text x="14" y="18" text-anchor="middle" font-size="11" font-weight="700" font-family="system-ui,sans-serif" fill="#b45309">${n}</text>
+</svg>`;
+  }
+  return `<svg width="28" height="40" viewBox="0 0 28 40" style="filter:drop-shadow(0 3px 6px rgba(0,0,0,0.16));">
+  <path d="M14 0C6.27 0 0 6.27 0 14c0 10.5 14 26 14 26s14-15.5 14-26c0-7.73-6.27-14-14-14z" fill="#059669"/>
+  <path d="M14 2C7.37 2 2 7.37 2 14c0 9.25 12 24 12 24s12-14.75 12-24c0-6.63-5.37-12-12-12z" fill="#10b981"/>
+  <circle cx="14" cy="14" r="8" fill="#fff"/>
+  <text x="14" y="18" text-anchor="middle" font-size="11" font-weight="700" font-family="system-ui,sans-serif" fill="#059669">${n}</text>
+</svg>`;
+}
 
 export type TripMapMarkerRole =
   | 'origin'
@@ -113,12 +129,23 @@ export type TripMapMarkerRole =
   | 'default';
 
 export function tripMapMarkerRoleFromId(id: string): TripMapMarkerRole {
-  if (id === 'origin' || id === 'pickup') return 'origin';
-  if (id === 'destination' || id === 'drop') return 'destination';
+  if (id === 'origin' || id === 'pickup' || id.startsWith('pickup-') || id.startsWith('plan-pickup')) {
+    return 'origin';
+  }
+  if (id === 'destination' || id === 'drop' || id.startsWith('drop-') || id.startsWith('plan-drop')) {
+    return 'destination';
+  }
   if (id === 'you') return 'driver';
   if (id === 'live' || id === 'truck') return 'truck';
   if (id.startsWith('ping-') || id.startsWith('past-')) return id.startsWith('ping-') ? 'ping' : 'past';
   return 'default';
+}
+
+export function kindIndexFromMarkerId(id: string): number | null {
+  const match = /^(?:pickup|drop)-(\d+)$/.exec(id);
+  if (!match) return null;
+  const n = Number(match[1]);
+  return Number.isFinite(n) && n > 0 ? n : null;
 }
 
 export type DriverMapMarkerOptions = {
@@ -127,13 +154,14 @@ export type DriverMapMarkerOptions = {
   isOnline?: boolean;
   /** Pulse ring on pickup/drop when this stop is the active guidance target. */
   highlighted?: boolean;
+  kindIndex?: number;
 };
 
 let tripMapMarkerStylesInjected = false;
 
 function ensureTripMapMarkerStyles(): void {
   if (typeof document === 'undefined' || tripMapMarkerStylesInjected) return;
-  const id = 'pulse-trip-map-marker-styles';
+  const id = 'pulse-trip-map-marker-styles-v2';
   if (document.getElementById(id)) {
     tripMapMarkerStylesInjected = true;
     return;
@@ -204,9 +232,13 @@ export function createTripMapMarkerElement(
     iconHost.style.setProperty('--pin-accent', role === 'destination' ? '#f59e0b' : Theme.driverPrimary);
   }
   if (role === 'origin') {
-    iconHost.innerHTML = MAP_SOURCE_PIN_HTML;
+    const n = driverOptions?.kindIndex;
+    iconHost.innerHTML =
+      n != null && n > 0 ? numberedMapPinHtml('pickup', n) : MAP_SOURCE_PIN_HTML;
   } else if (role === 'destination') {
-    iconHost.innerHTML = MAP_DESTINATION_PIN_HTML;
+    const n = driverOptions?.kindIndex;
+    iconHost.innerHTML =
+      n != null && n > 0 ? numberedMapPinHtml('drop', n) : MAP_DESTINATION_PIN_HTML;
   } else if (role === 'truck' || role === 'live' || role === 'driver') {
     iconHost.innerHTML = buildDriverAvatarMarkerHtml(
       driverOptions?.avatarUri,

@@ -1,6 +1,5 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
-import { useQuery } from "@tanstack/react-query";
 import {
   createContext,
   useCallback,
@@ -19,7 +18,7 @@ import {
   resolveDriverOpsActiveTrip,
 } from "@/features/driver/utils/driverActiveOpsTrip.util";
 import * as tripsService from "@/features/trips/services/trips.service";
-import { useDriverHomeDriversQuery } from "@/lib/queries/useDriverHomeDriversQuery";
+import { useDriverUiTripsQuery } from "@/lib/queries/useDriverUiTripsQuery";
 import { usePendingOtpTripsQuery } from "@/lib/queries/usePendingOtpTripsQuery";
 import { ROUTES } from "@/lib/routes";
 
@@ -39,38 +38,12 @@ type DriverTripOpsContextValue = {
 
 const DriverTripOpsContext = createContext<DriverTripOpsContextValue | null>(null);
 
-function useDriverOpsTripsQuery(userId: string | null, driverIdsKey: string, enabled: boolean) {
-  const linked = useDriverHomeDriversQuery(userId);
-  const driverIds = useMemo(
-    () => linked.activeLinkedDrivers.map((d) => d.id),
-    [linked.activeLinkedDrivers],
-  );
-
-  return useQuery({
-    queryKey: ["driver-ops-trips", userId, driverIdsKey],
-    queryFn: async () => {
-      if (driverIds.length === 0) return [] as tripsService.TripRow[];
-      const res = await tripsService.getDriverUiTripsByDriverIds(driverIds);
-      if (res.error) throw res.error;
-      return res.trips ?? [];
-    },
-    enabled: enabled && !!userId && linked.isFetched && driverIds.length > 0,
-    staleTime: 30_000,
-    gcTime: 5 * 60_000,
-  });
-}
-
 export function DriverTripOpsProvider({ children }: { children: ReactNode }) {
   const router = useRouter();
   const { profile } = useAuth();
   const uid = profile?.uid ?? null;
-  const linkedDriversQuery = useDriverHomeDriversQuery(uid);
   const pendingOtpQuery = usePendingOtpTripsQuery(uid);
-  const tripsQuery = useDriverOpsTripsQuery(
-    uid,
-    linkedDriversQuery.driverIdsKey,
-    !!uid,
-  );
+  const tripsQuery = useDriverUiTripsQuery(uid, !!uid);
 
   const [acceptedTripId, setAcceptedTripId] = useState<string | null>(null);
   const [contextTrip, setContextTrip] = useState<tripsService.TripRow | null>(null);
@@ -88,7 +61,7 @@ export function DriverTripOpsProvider({ children }: { children: ReactNode }) {
     }, [tripsQuery.refetch]),
   );
 
-  const allTrips = tripsQuery.data ?? [];
+  const allTrips = tripsQuery.trips;
   const pendingTrips = pendingOtpQuery.pendingTrips;
 
   const activeTrip = useMemo(

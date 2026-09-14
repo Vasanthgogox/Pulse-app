@@ -13,11 +13,12 @@ export type SalesOrderForPublish = {
   dropLocation: string;
   totalWeightKg: number;
   clientPrice: number;
+  executionPlanId: string | null;
 };
 
 const ORDER_FOR_PUBLISH_SELECT = `
   id, order_number, organization_id, status, customer_id, pickup_warehouse_id,
-  total_amount, total_weight_kg,
+  execution_plan_id, total_amount, total_weight_kg,
   customer:clients!customer_id(id,name,legal_name,trade_name),
   pickup_warehouse:client_warehouses!pickup_warehouse_id(id,name,city,state,address),
   drop_warehouse:client_warehouses!drop_warehouse_id(id,name,city,state,address)
@@ -44,6 +45,7 @@ function mapOrderRow(row: Record<string, unknown>): SalesOrderForPublish {
     dropLocation,
     totalWeightKg: Number(row.total_weight_kg ?? 0) || 1,
     clientPrice: Number(row.total_amount ?? 0),
+    executionPlanId: row.execution_plan_id ? String(row.execution_plan_id) : null,
   };
 }
 

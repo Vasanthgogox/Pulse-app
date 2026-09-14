@@ -29,6 +29,8 @@ export type LeafletMarker = {
   isOnline?: boolean;
   /** Active guidance target — subtle pulse on pickup/drop. */
   highlighted?: boolean;
+  /** Pickup 1 / Drop 2 numbering for multi-stop plans. */
+  kindIndex?: number;
   /** Tap marker (or online status chip) to focus / open location. */
   onPress?: () => void;
 };

@@ -1,7 +1,8 @@
 import Theme from '@/constants/Theme';
 import { DriverMapAvatarMarker } from '@/components/driver/DriverMapAvatarMarker';
 import { LeafletMapZoomControls } from '@/components/driver/LeafletMapZoomControls';
-import { tripMapMarkerRoleFromId } from '@/lib/mapMarkerIcons.util';
+import { kindIndexFromMarkerId, tripMapMarkerRoleFromId } from '@/lib/mapMarkerIcons.util';
+import { RoutePlanMapPin } from '@/features/driver/job-card/parts/RoutePlanMapPin';
 // Migrated to @maplibre/maplibre-react-native v11 API: MapView->Map,
 // PointAnnotation->Marker (lngLat), ShapeSource->GeoJSONSource, setCamera->setStop.
 import {
@@ -47,6 +48,9 @@ const MAP_STYLE = 'https://basemaps.cartocdn.com/gl/positron-gl-style/style.json
 function MarkerContent({
   markerId,
   color,
+  label,
+  highlighted,
+  kindIndex,
   avatarUri,
   avatarSeed,
   isOnline,
@@ -54,6 +58,9 @@ function MarkerContent({
 }: {
   markerId: string;
   color?: string;
+  label?: string;
+  highlighted?: boolean;
+  kindIndex?: number;
   avatarUri?: string | null;
   avatarSeed?: string | null;
   isOnline?: boolean;
@@ -70,6 +77,20 @@ function MarkerContent({
         onPressStatus={onPress}
       />
     );
+  }
+  if (role === 'origin' || role === 'destination') {
+    const isDrop = role === 'destination';
+    const index = kindIndex ?? kindIndexFromMarkerId(markerId);
+    if (index != null) {
+      return (
+        <RoutePlanMapPin
+          kind={isDrop ? 'drop' : 'pickup'}
+          index={index}
+          caption={label?.trim() || undefined}
+          emphasized={highlighted}
+        />
+      );
+    }
   }
   return (
     <Pressable
@@ -238,6 +259,9 @@ export const LeafletMapMapLibre = React.forwardRef<
               <MarkerContent
                 markerId={m.id}
                 color={m.color}
+                label={m.label}
+                highlighted={m.highlighted}
+                kindIndex={m.kindIndex}
                 avatarUri={m.avatarUri}
                 avatarSeed={m.avatarSeed}
                 isOnline={m.isOnline}

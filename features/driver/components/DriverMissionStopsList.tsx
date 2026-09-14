@@ -1,17 +1,19 @@
 /**
  * Multi-stop mission list. Arrive/complete only on the current stop.
- * No skip/fail/POD.
+ * Presentation follows a shipment-card pattern (current stop, Pickup/Delivery
+ * chips, full-width CTA) using Driver theme colors — not a new execution path.
  */
-import Theme from '@/constants/Theme';
+import Layout from '@/constants/Layout';
 import type { DriverStopExecutionStop } from '@/features/driver/execution/driverStopExecution.types';
 import {
   canShowArriveAction,
   canShowCompleteAction,
 } from '@/features/driver/execution/resolveDriverStopTransition';
-import { FLOW_EMERALD, TRIP_SHEET_BODY_PAD } from '@/components/driver/DriverTripSheetLayout';
+import { useDriverThemeColors } from '@/contexts/DriverThemeContext';
 import { LoadingIndicator } from '@/components/LoadingIndicator';
-import React from 'react';
-import { Pressable, StyleSheet, Text, View } from 'react-native';
+import { MapPin, Phone } from 'lucide-react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { Linking, Pressable, StyleSheet, Text, View } from 'react-native';
 
 function formatAddress(stop: DriverStopExecutionStop): string | null {
   const parts = [stop.addressLine, stop.city, stop.state, stop.pincode]
@@ -20,16 +22,35 @@ function formatAddress(stop: DriverStopExecutionStop): string | null {
   return parts.length ? parts.join(', ') : null;
 }
 
-function formatStopType(stopType: string): string {
+function stopKind(stopType: string): 'pickup' | 'drop' | 'other' {
   const t = stopType.trim().toLowerCase();
-  if (t === 'pickup') return 'Pickup';
-  if (t === 'drop') return 'Drop';
+  if (t === 'pickup') return 'pickup';
+  if (t === 'drop') return 'drop';
+  return 'other';
+}
+
+function formatStopType(stopType: string): string {
+  const kind = stopKind(stopType);
+  if (kind === 'pickup') return 'Pickup';
+  if (kind === 'drop') return 'Delivery';
   return stopType.trim() || 'Stop';
 }
 
 function formatStatus(status: string): string {
-  if (!status) return 'Pending';
+  const s = status.trim().toLowerCase();
+  if (s === 'pending') return 'Awaiting';
+  if (s === 'arrived') return 'On site';
+  if (s === 'completed') return 'Done';
+  if (!status) return 'Awaiting';
   return status.charAt(0).toUpperCase() + status.slice(1);
+}
+
+function actionLabel(stop: DriverStopExecutionStop, arrive: boolean): string {
+  const kind = stopKind(String(stop.stopType));
+  if (arrive) {
+    return kind === 'pickup' ? 'Ready to pickup' : 'Arrive at stop';
+  }
+  return kind === 'drop' ? 'Confirm delivery' : 'Complete pickup';
 }
 
 export function DriverMissionStopsList({
@@ -45,143 +66,365 @@ export function DriverMissionStopsList({
   onComplete?: () => void;
   actionBusy?: boolean;
 }) {
+  const colors = useDriverThemeColors();
+  const current = useMemo(
+    () => stops.find((s) => s.stopId === currentStopId) ?? null,
+    [stops, currentStopId],
+  );
+  const [focusKind, setFocusKind] = useState<'pickup' | 'drop'>(() =>
+    current && stopKind(String(current.stopType)) === 'drop' ? 'drop' : 'pickup',
+  );
+
+  useEffect(() => {
+    if (!current) return;
+    const kind = stopKind(String(current.stopType));
+    if (kind === 'pickup' || kind === 'drop') setFocusKind(kind);
+  }, [current]);
+
   if (stops.length === 0) return null;
 
+  const focusedStops = stops.filter((s) => {
+    if (s.stopId === currentStopId) return false;
+    const kind = stopKind(String(s.stopType));
+    if (kind === 'other') return focusKind === 'pickup';
+    return kind === focusKind;
+  });
+
+  const showArrive = !!current && !!onArrive && canShowArriveAction(current, currentStopId);
+  const showComplete =
+    !!current && !!onComplete && canShowCompleteAction(current, currentStopId);
+  const address = current ? formatAddress(current) : null;
+  const phone = current?.contactPhone?.trim() || null;
+
   return (
-    <View style={styles.wrap} accessibilityRole="summary">
-      <Text style={styles.heading}>Stops</Text>
-      {stops.map((stop) => {
-        const isCurrent = stop.stopId === currentStopId;
-        const address = formatAddress(stop);
-        const showArrive = !!onArrive && canShowArriveAction(stop, currentStopId);
-        const showComplete = !!onComplete && canShowCompleteAction(stop, currentStopId);
-        return (
-          <View
-            key={stop.stopId}
-            style={[styles.row, isCurrent && styles.rowCurrent]}
-          >
-            <View style={styles.seqBadge}>
-              <Text style={styles.seqText}>{stop.sequence}</Text>
-            </View>
-            <View style={styles.body}>
-              <Text style={styles.meta} numberOfLines={1}>
-                {formatStopType(String(stop.stopType))}
-                {' · '}
-                {formatStatus(stop.status)}
-                {isCurrent ? ' · Current' : ''}
+    <View style={[styles.wrap, { backgroundColor: colors.surface }]} accessibilityRole="summary">
+      <View
+        style={[styles.segment, { backgroundColor: colors.surfaceElevated, borderColor: colors.border }]}
+      >
+        {(['pickup', 'drop'] as const).map((kind) => {
+          const selected = focusKind === kind;
+          return (
+            <Pressable
+              key={kind}
+              onPress={() => setFocusKind(kind)}
+              accessibilityRole="button"
+              accessibilityState={{ selected }}
+              accessibilityLabel={kind === 'pickup' ? 'Pickup stops' : 'Delivery stops'}
+              style={[
+                styles.segmentBtn,
+                selected && { backgroundColor: colors.surface, borderColor: colors.border },
+              ]}
+            >
+              <Text
+                style={[
+                  styles.segmentText,
+                  { color: selected ? colors.text : colors.textMuted },
+                ]}
+              >
+                {kind === 'pickup' ? 'Pickup' : 'Delivery'}
               </Text>
-              <Text style={styles.name} numberOfLines={2}>
-                {stop.displayName}
-              </Text>
-              {address ? (
-                <Text style={styles.address} numberOfLines={2}>
-                  {address}
-                </Text>
-              ) : null}
-              {showArrive || showComplete ? (
-                <Pressable
-                  onPress={showArrive ? onArrive : onComplete}
-                  disabled={actionBusy}
-                  accessibilityRole="button"
-                  accessibilityLabel={showArrive ? 'Arrive at stop' : 'Complete stop'}
-                  style={({ pressed }) => [
-                    styles.actionBtn,
-                    { opacity: actionBusy ? 0.6 : pressed ? 0.85 : 1 },
+            </Pressable>
+          );
+        })}
+      </View>
+
+      <View style={styles.progressRow}>
+        {stops.map((stop, index) => {
+          const done = stop.status === 'completed' || stop.status === 'skipped';
+          const isCurrent = stop.stopId === currentStopId;
+          return (
+            <React.Fragment key={stop.stopId}>
+              {index > 0 ? (
+                <View
+                  style={[
+                    styles.progressLine,
+                    { backgroundColor: done || isCurrent ? colors.emerald : colors.border },
                   ]}
-                >
-                  {actionBusy ? (
-                    <LoadingIndicator size="small" color={Theme.textOnPrimary} />
-                  ) : (
-                    <Text style={styles.actionText}>
-                      {showArrive ? 'Arrive' : 'Complete'}
-                    </Text>
-                  )}
-                </Pressable>
+                />
               ) : null}
+              <View
+                style={[
+                  styles.progressDot,
+                  {
+                    backgroundColor: done
+                      ? colors.emerald
+                      : isCurrent
+                        ? colors.primary
+                        : colors.surfaceElevated,
+                    borderColor: isCurrent ? colors.primary : colors.border,
+                  },
+                ]}
+              />
+            </React.Fragment>
+          );
+        })}
+      </View>
+
+      {current ? (
+        <View
+          style={[
+            styles.currentCard,
+            { backgroundColor: colors.surfaceElevated, borderColor: colors.border },
+          ]}
+        >
+          <View style={styles.currentTop}>
+            <View
+              style={[
+                styles.kindPill,
+                { backgroundColor: colors.emeraldMuted, borderColor: colors.emeraldBorder },
+              ]}
+            >
+              <Text style={[styles.kindPillText, { color: colors.emerald }]}>
+                {formatStopType(String(current.stopType))}
+              </Text>
             </View>
+            <Text style={[styles.statusText, { color: colors.textMuted }]}>
+              {formatStatus(current.status)}
+              {' · '}
+              {current.sequence}/{stops.length}
+            </Text>
           </View>
-        );
-      })}
+          <Text style={[styles.currentName, { color: colors.text }]} numberOfLines={2}>
+            {current.displayName}
+          </Text>
+          {current.contactName?.trim() ? (
+            <Text style={[styles.contact, { color: colors.text }]} numberOfLines={1}>
+              {current.contactName.trim()}
+            </Text>
+          ) : null}
+          {address ? (
+            <View style={styles.addressRow}>
+              <MapPin size={14} color={colors.textMuted} strokeWidth={2} />
+              <Text style={[styles.address, { color: colors.textMuted }]} numberOfLines={2}>
+                {address}
+              </Text>
+            </View>
+          ) : null}
+          {phone ? (
+            <Pressable
+              onPress={() => void Linking.openURL(`tel:${phone}`)}
+              accessibilityRole="button"
+              accessibilityLabel="Call stop contact"
+              hitSlop={Layout.touchTargetHitSlop}
+              style={[styles.callBtn, { borderColor: colors.border }]}
+            >
+              <Phone size={16} color={colors.emerald} strokeWidth={2} />
+              <Text style={[styles.callText, { color: colors.emerald }]}>Call</Text>
+            </Pressable>
+          ) : null}
+          {showArrive || showComplete ? (
+            <Pressable
+              onPress={showArrive ? onArrive : onComplete}
+              disabled={actionBusy}
+              accessibilityRole="button"
+              accessibilityLabel={actionLabel(current, showArrive)}
+              style={({ pressed }) => [
+                styles.actionBtn,
+                { backgroundColor: colors.emerald, opacity: actionBusy ? 0.6 : pressed ? 0.88 : 1 },
+              ]}
+            >
+              {actionBusy ? (
+                <LoadingIndicator size="small" color={colors.textOnPrimary} />
+              ) : (
+                <Text style={[styles.actionText, { color: colors.textOnPrimary }]}>
+                  {actionLabel(current, showArrive)}
+                </Text>
+              )}
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
+
+      {focusedStops.length > 0 ? (
+        <View style={styles.queue}>
+          {focusedStops.map((stop) => {
+            const isCurrent = stop.stopId === currentStopId;
+            const line = formatAddress(stop);
+            return (
+              <View
+                key={stop.stopId}
+                style={[
+                  styles.queueRow,
+                  {
+                    borderColor: isCurrent ? colors.emeraldBorder : colors.border,
+                    backgroundColor: colors.surface,
+                  },
+                ]}
+              >
+                <Text style={[styles.queueSeq, { color: colors.textMuted }]}>{stop.sequence}</Text>
+                <View style={styles.queueBody}>
+                  <Text style={[styles.queueName, { color: colors.text }]} numberOfLines={1}>
+                    {stop.displayName}
+                  </Text>
+                  {line ? (
+                    <Text style={[styles.queueAddr, { color: colors.textMuted }]} numberOfLines={1}>
+                      {line}
+                    </Text>
+                  ) : null}
+                </View>
+                <Text style={[styles.queueStatus, { color: colors.textMuted }]}>
+                  {formatStatus(stop.status)}
+                </Text>
+              </View>
+            );
+          })}
+        </View>
+      ) : null}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   wrap: {
-    paddingHorizontal: TRIP_SHEET_BODY_PAD.horizontal,
-    paddingTop: 4,
-    paddingBottom: 8,
-    gap: 8,
-    backgroundColor: Theme.surface,
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 8,
+    paddingBottom: 12,
+    gap: 12,
   },
-  heading: {
-    fontSize: 11,
-    fontWeight: '800',
-    letterSpacing: 0.7,
-    color: Theme.textMuted,
-    textTransform: 'uppercase',
-  },
-  row: {
+  segment: {
     flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: 10,
-    paddingVertical: 8,
-    paddingHorizontal: 10,
-    borderRadius: 10,
+    borderRadius: 22,
     borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.border,
-    backgroundColor: Theme.cardWhite,
+    padding: 4,
+    gap: 4,
   },
-  rowCurrent: {
-    borderColor: Theme.primary,
-    backgroundColor: Theme.surfaceLight,
-  },
-  seqBadge: {
-    width: 28,
-    height: 28,
-    borderRadius: 8,
+  segmentBtn: {
+    flex: 1,
+    minHeight: Layout.minTouchTargetSize,
+    borderRadius: 18,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: Theme.surfaceLight,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: 'transparent',
+  },
+  segmentText: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  progressRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 4,
+  },
+  progressDot: {
+    width: 10,
+    height: 10,
+    borderRadius: 5,
+    borderWidth: StyleSheet.hairlineWidth,
     flexShrink: 0,
   },
-  seqText: {
-    fontSize: 13,
-    fontWeight: '800',
-    color: Theme.textPrimaryDark,
-  },
-  body: {
+  progressLine: {
     flex: 1,
-    minWidth: 0,
-    gap: 2,
+    height: 2,
+    marginHorizontal: 4,
   },
-  meta: {
+  currentCard: {
+    borderRadius: 16,
+    borderWidth: StyleSheet.hairlineWidth,
+    padding: 14,
+    gap: 8,
+  },
+  currentTop: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+  },
+  kindPill: {
+    borderRadius: 999,
+    borderWidth: StyleSheet.hairlineWidth,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+  },
+  kindPillText: {
     fontSize: 11,
-    fontWeight: '700',
-    color: Theme.textMuted,
+    fontWeight: '800',
+    letterSpacing: 0.3,
   },
-  name: {
+  statusText: {
+    fontSize: 12,
+    fontWeight: '600',
+    flexShrink: 1,
+  },
+  currentName: {
+    fontSize: 18,
+    fontWeight: '800',
+  },
+  contact: {
     fontSize: 15,
-    fontWeight: '700',
-    color: Theme.textPrimaryDark,
+    fontWeight: '600',
+  },
+  addressRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 6,
   },
   address: {
-    fontSize: 12,
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
     fontWeight: '500',
-    color: Theme.textSecondary,
+    lineHeight: 18,
+  },
+  callBtn: {
+    alignSelf: 'flex-start',
+    minHeight: Layout.minTouchTargetSize,
+    minWidth: Layout.minTouchTargetSize,
+    paddingHorizontal: 12,
+    borderRadius: 22,
+    borderWidth: StyleSheet.hairlineWidth,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+  },
+  callText: {
+    fontSize: 14,
+    fontWeight: '700',
   },
   actionBtn: {
-    marginTop: 8,
-    minHeight: 44,
-    borderRadius: 10,
+    marginTop: 4,
+    minHeight: Layout.minTouchTargetSize,
+    borderRadius: 14,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: FLOW_EMERALD,
     paddingHorizontal: 14,
   },
   actionText: {
-    fontSize: 14,
+    fontSize: 15,
     fontWeight: '800',
-    color: Theme.textOnPrimary,
+  },
+  queue: {
+    gap: 8,
+  },
+  queueRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: StyleSheet.hairlineWidth,
+  },
+  queueSeq: {
+    fontSize: 13,
+    fontWeight: '800',
+    width: 20,
+  },
+  queueBody: {
+    flex: 1,
+    minWidth: 0,
+  },
+  queueName: {
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  queueAddr: {
+    fontSize: 12,
+    fontWeight: '500',
+    marginTop: 2,
+  },
+  queueStatus: {
+    fontSize: 11,
+    fontWeight: '700',
   },
 });

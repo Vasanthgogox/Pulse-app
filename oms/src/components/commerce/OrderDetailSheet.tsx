@@ -1,17 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useState } from 'react';
+import { Link } from 'react-router-dom';
 import { ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EntityFlexSheet } from '@/components/commerce/EntityFlexSheet';
 import { FormField, SpecRow, selectClass } from '@/components/commerce/FormField';
 import { StatusDotBadge, type StatusDotTone } from '@/components/commerce/StatusDotBadge';
 import { useCommerce } from '@/context/CommerceProvider';
+import { useExecution } from '@/context/ExecutionProvider';
 import { useOrganization } from '@/context/OrganizationProvider';
-import { useUserProfile } from '@/hooks/useUserProfile';
 import { coreIndentUrl } from '@/lib/core-navigation';
-import { publishIndentForOrder } from '@/lib/orchestration/publish-indent';
+import {
+  findCommerceExecutionForPlan,
+  fulfillmentOrderStatusLabel,
+  primaryStatusLabel,
+} from '@/lib/commerce-execution-status';
 import type { OrderStatus } from '@/types/commerce';
-import { IndentService, verifyPublishIndentAcceptance } from '@pulse-platform/index';
-import type { PublishIndentResult } from '@pulse-platform/index';
 import { cn, formatCurrency } from '@/lib/utils';
 
 const ORDER_STATUS: Record<OrderStatus, { label: string; tone: StatusDotTone }> = {
@@ -31,49 +34,29 @@ interface OrderDetailSheetProps {
 }
 
 export function OrderDetailSheet({ orderId, open, onClose }: OrderDetailSheetProps) {
-  const { orders, updateOrder, deleteOrder, refreshOrders } = useCommerce();
+  const { orders, updateOrder, deleteOrder } = useCommerce();
+  const { commerceExecutions } = useExecution();
   const org = useOrganization();
-  const { user } = useUserProfile();
   const order = orders.find(o => o.id === orderId) ?? null;
+  const exec = order?.execution_plan_id
+    ? findCommerceExecutionForPlan(commerceExecutions, {
+        id: order.execution_plan_id,
+        plan_number: commerceExecutions.find(e => e.executionPlanId === order.execution_plan_id)?.planNumber
+          ?? order.execution_plan_id,
+      })
+    : undefined;
+  const orderOnExec = exec?.orders.find(o => o.id === order?.id);
 
   const [editing, setEditing] = useState(false);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [status, setStatus] = useState<OrderStatus>('Pending Consolidation');
   const [notes, setNotes] = useState('');
-  const [publishing, setPublishing] = useState(false);
-  const publishingRef = useRef(false);
-  const [publishError, setPublishError] = useState<string | null>(null);
-  const [linkedIndentId, setLinkedIndentId] = useState<string | null>(null);
-  const [publishTrace, setPublishTrace] = useState<{
-    result: PublishIndentResult;
-    publishAttempt: number;
-    eventOk: boolean;
-    eventErrors: string[];
-  } | null>(null);
-  const publishAttemptRef = useRef(0);
 
   useEffect(() => {
     if (!order || editing) return;
     setStatus(order.status);
     setNotes(order.notes ?? '');
   }, [order, editing]);
-
-  useEffect(() => {
-    const workspaceId = org.platformOrganization?.id;
-    if (!order || order.status !== 'Planned' || !workspaceId) {
-      setLinkedIndentId(null);
-      return;
-    }
-
-    let cancelled = false;
-    void IndentService.findBySalesOrderId(workspaceId, order.id).then((indent) => {
-      if (!cancelled) setLinkedIndentId(indent?.id ?? null);
-    });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [order?.id, order?.status, org.platformOrganization?.id]);
 
   useEffect(() => {
     if (!open) { setEditing(false); setDeleteConfirm(false); }
@@ -83,6 +66,7 @@ export function OrderDetailSheet({ orderId, open, onClose }: OrderDetailSheetPro
 
   const statusMeta = ORDER_STATUS[order.status];
   const canDelete = order.status !== 'Fulfilled';
+  const alreadyPlanned = Boolean(order.execution_plan_id);
 
   function resetDraft() {
     setStatus(order!.status);
@@ -98,43 +82,6 @@ export function OrderDetailSheet({ orderId, open, onClose }: OrderDetailSheetPro
     deleteOrder(order!.id);
     setDeleteConfirm(false);
     onClose();
-  }
-
-  async function handlePublishIndent() {
-    const workspaceId = org.platformOrganization?.id;
-    const requestedBy = user?.id;
-    if (!workspaceId || !requestedBy || publishingRef.current) return;
-
-    publishingRef.current = true;
-    setPublishing(true);
-    setPublishError(null);
-    try {
-      const result = await publishIndentForOrder(order!.id, { workspaceId, requestedBy });
-      publishAttemptRef.current += 1;
-      const verification = verifyPublishIndentAcceptance(result.correlationId, {
-        workspaceId,
-        orderId: result.orderId,
-        indentId: result.indentId,
-      });
-      const isRepublish = publishAttemptRef.current > 1;
-      setPublishTrace({
-        result,
-        publishAttempt: publishAttemptRef.current,
-        eventOk: isRepublish ? verification.events.length === 0 : verification.ok,
-        eventErrors: isRepublish
-          ? verification.events.length > 0
-            ? [`Republish emitted ${verification.events.length} unexpected event(s)`]
-            : []
-          : verification.errors,
-      });
-      setLinkedIndentId(result.indentId);
-      await refreshOrders();
-    } catch (e) {
-      setPublishError(e instanceof Error ? e.message : 'Failed to publish indent');
-    } finally {
-      publishingRef.current = false;
-      setPublishing(false);
-    }
   }
 
   return (
@@ -207,65 +154,40 @@ export function OrderDetailSheet({ orderId, open, onClose }: OrderDetailSheetPro
             {formatCurrency(order.total_amount)}
           </p>
 
-          {(order.status === 'Pending Consolidation' || order.status === 'Planned') && (
-            <div className="mt-4 space-y-2">
-              <Button
-                className="w-full"
-                disabled={publishing || !org.platformOrganization?.id || !user?.id}
-                onClick={() => void handlePublishIndent()}
-              >
-                {publishing
-                  ? 'Publishing…'
-                  : order.status === 'Planned'
-                    ? 'Republish (idempotency check)'
-                    : 'Publish to execution'}
-              </Button>
-              {publishError && (
-                <p className="text-2xs text-destructive">{publishError}</p>
-              )}
-            </div>
-          )}
-
-          {(order.status === 'Planned' || publishTrace) && (
+          {alreadyPlanned ? (
             <div className="mt-4 space-y-3 rounded-lg border border-border bg-muted/20 p-3">
-              <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Execution lineage
+              <p className="text-2xs font-semibold uppercase tracking-wide text-muted-foreground">Fulfillment</p>
+              <p className="font-mono font-semibold text-sm">
+                {exec?.planNumber ?? 'Existing plan'}
               </p>
-              {org.platformOrganization?.id && (
-                <SpecRow label="Organization">
-                  <span className="font-mono text-3xs break-all">{org.platformOrganization.id}</span>
-                </SpecRow>
-              )}
-              {linkedIndentId && (
-                <SpecRow label="Indent ID">
-                  <span className="font-mono text-3xs break-all">{linkedIndentId}</span>
-                </SpecRow>
-              )}
-              {publishTrace && (
-                <>
-                  <SpecRow label="Publish #">{String(publishTrace.publishAttempt)}</SpecRow>
-                  <SpecRow label="correlationId">
-                    <span className="font-mono text-3xs break-all">{publishTrace.result.correlationId}</span>
-                  </SpecRow>
-                  <SpecRow label="Events">
-                    <span className={publishTrace.eventOk ? 'text-emerald-600' : 'text-destructive'}>
-                      {publishTrace.publishAttempt === 1
-                        ? (publishTrace.eventOk ? '2 events · payloads OK' : publishTrace.eventErrors.join('; '))
-                        : (publishTrace.eventOk ? '0 events (idempotent)' : publishTrace.eventErrors.join('; '))}
-                    </span>
-                  </SpecRow>
-                </>
-              )}
-              {linkedIndentId && (
-                <Button variant="outline" className="w-full gap-2" asChild>
-                  <a href={coreIndentUrl(linkedIndentId)} target="_blank" rel="noopener noreferrer">
-                    <ExternalLink className="size-4" />
-                    Open indent in Core
+              {exec?.indent && (
+                <p className="text-2xs">
+                  Indent{' '}
+                  <a href={coreIndentUrl(exec.indent.id)} target="_blank" rel="noopener noreferrer" className="font-mono text-primary hover:underline inline-flex items-center gap-1">
+                    {exec.indent.indentNumber} <ExternalLink className="size-3" />
                   </a>
+                </p>
+              )}
+              <p className="text-2xs text-muted-foreground">
+                Status {exec ? primaryStatusLabel(exec) : 'Planned'}
+                {orderOnExec && exec ? ` · ${fulfillmentOrderStatusLabel(exec, orderOnExec)}` : ''}
+              </p>
+              {exec && (
+                <Button className="w-full" size="sm" asChild>
+                  <Link to={`/execution/plan/${exec.executionPlanId}`}>View execution</Link>
                 </Button>
               )}
             </div>
-          )}
+          ) : order.status === 'Pending Consolidation' ? (
+            <div className="mt-4">
+              <Button className="w-full" size="sm" asChild>
+                <Link to="/execution-plans/build">Fulfill / Create plan</Link>
+              </Button>
+              <p className="text-3xs text-muted-foreground mt-2">
+                One plan creates one Core indent. Do not publish a second indent for this order.
+              </p>
+            </div>
+          ) : null}
         </>
       )}
     </EntityFlexSheet>

@@ -60,9 +60,28 @@ function upsertLine(
   lines: DriverTripStopOrderLine[],
   salesOrderLineId: string,
   quantity: number | null,
+  catalog: Pick<
+    DriverTripStopOrderLine,
+    'productId' | 'productName' | 'productSku' | 'productImagePath'
+  >,
 ): void {
-  if (lines.some((line) => line.salesOrderLineId === salesOrderLineId)) return;
-  lines.push({ salesOrderLineId, quantity });
+  const existing = lines.find((line) => line.salesOrderLineId === salesOrderLineId);
+  if (existing) {
+    if (existing.quantity == null && quantity != null) existing.quantity = quantity;
+    if (!existing.productId && catalog.productId) existing.productId = catalog.productId;
+    if (!existing.productName && catalog.productName) existing.productName = catalog.productName;
+    if (!existing.productSku && catalog.productSku) existing.productSku = catalog.productSku;
+    if (!existing.productImagePath && catalog.productImagePath) {
+      existing.productImagePath = catalog.productImagePath;
+    }
+    return;
+  }
+  const line: DriverTripStopOrderLine = { salesOrderLineId, quantity };
+  if (catalog.productId) line.productId = catalog.productId;
+  if (catalog.productName) line.productName = catalog.productName;
+  if (catalog.productSku) line.productSku = catalog.productSku;
+  if (catalog.productImagePath) line.productImagePath = catalog.productImagePath;
+  lines.push(line);
 }
 
 function upsertOrder(
@@ -95,7 +114,14 @@ function upsertOrder(
   }
 
   const lineId = trimOrNull(row.sales_order_line_id);
-  if (lineId) upsertLine(order.lines, lineId, asNullableNumber(row.quantity));
+  if (lineId) {
+    upsertLine(order.lines, lineId, asNullableNumber(row.quantity), {
+      productId: trimOrNull(row.product_id),
+      productName: trimOrNull(row.product_name),
+      productSku: trimOrNull(row.product_sku),
+      productImagePath: trimOrNull(row.product_image_path),
+    });
+  }
 }
 
 /**

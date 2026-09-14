@@ -7,7 +7,7 @@
  * location logic. See docs from A7.2 design approval.
  *
  * This screen never renders while a trip is active — app/(driver)/index.tsx
- * routes to the legacy DriverHomeScreen (DriverTripFlowCard, unchanged) for
+ * routes to DriverHomeScreen (DriverJobCard: legacy vs multi-order) for
  * that case. Reappearing here after trip completion is automatic: completion
  * already invalidates driverApp.availability via useInvalidateDriverHomeDashboard,
  * so no completion-flow change was needed.

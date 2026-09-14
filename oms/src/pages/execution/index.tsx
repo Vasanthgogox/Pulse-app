@@ -6,9 +6,12 @@ import { useExecution } from '@/context/ExecutionProvider';
 import { formatCurrency } from '@/lib/utils';
 import { coreIndentUrl, coreTripUrl } from '@/lib/core-navigation';
 import {
+  circulationLabel,
   commerceTripStatusLabel,
-  isFulfillmentDelivered, isTripInTransit, lifecycleStages, orderDeliveryStatusLabel,
-  orderProgressLabel, orderStatusGlyph, primaryStatusLabel, transportCostStatusLabel,
+  fulfillmentOrderStatusLabel,
+  isFulfillmentDelivered, isTripInTransit, lifecycleStages,
+  orderProgressLabel, orderStatusGlyph, primaryStatusLabel,
+  transportCostDisplay, transportCostStatusLabel,
 } from '@/lib/commerce-execution-status';
 import type { CommerceExecution } from '@/lib/services/execution-visibility.service';
 
@@ -42,34 +45,31 @@ function StopsPreview({ exec }: { exec: CommerceExecution }) {
 
 /** Sales value (Commerce) vs. transport cost (Core) are distinct concepts — never derive one from the other. */
 function TransportationSection({ exec }: { exec: CommerceExecution }) {
+  const cost = transportCostDisplay(exec);
   const supplierName = exec.trip?.supplierName ?? null;
   return (
     <div className="text-2xs">
-      <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Transportation</p>
+      <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground mb-1">Transport</p>
+      {exec.trip ? (
+        <p className="font-mono font-medium mb-1">
+          <a href={coreTripUrl(exec.trip.id)} target="_blank" rel="noopener noreferrer" className="text-primary hover:underline inline-flex items-center gap-1">
+            {exec.trip.tripNumber} <ExternalLink className="size-3" />
+          </a>
+        </p>
+      ) : (
+        <p className="text-muted-foreground mb-1">No trip yet</p>
+      )}
       <div className="grid grid-cols-2 gap-x-3 gap-y-1">
         <span className="text-muted-foreground">Supplier</span>
         <span className="text-right font-medium truncate">{supplierName ?? 'Not assigned'}</span>
-
-        {exec.trip ? (
-          <>
-            <span className="text-muted-foreground">Transport Cost</span>
-            <span className="text-right font-medium">{formatCurrency(exec.trip.supplierRate)}</span>
-          </>
-        ) : (
-          <>
-            <span className="text-muted-foreground">Transport Cost</span>
-            <span className="text-right font-medium text-muted-foreground">Awaiting Bid</span>
-            {exec.indent?.supplierTarget != null && (
-              <>
-                <span className="text-muted-foreground">Transport Target</span>
-                <span className="text-right font-medium">{formatCurrency(exec.indent.supplierTarget)}</span>
-              </>
-            )}
-          </>
-        )}
-
-        <span className="text-muted-foreground">Trip status</span>
+        <span className="text-muted-foreground">Driver</span>
+        <span className="text-right font-medium truncate">{exec.trip?.driverName ?? '—'}</span>
+        <span className="text-muted-foreground">Vehicle</span>
+        <span className="text-right font-medium truncate">{exec.trip?.vehicleNumber ?? '—'}</span>
+        <span className="text-muted-foreground">Status</span>
         <span className="text-right font-medium">{commerceTripStatusLabel(exec)}</span>
+        <span className="text-muted-foreground">Transport cost</span>
+        <span className="text-right font-medium">{cost != null ? formatCurrency(cost) : 'Not awarded'}</span>
         <span className="text-muted-foreground">Award</span>
         <span className="text-right font-medium">{transportCostStatusLabel(exec)}</span>
       </div>
@@ -100,7 +100,7 @@ function OrdersList({ exec }: { exec: CommerceExecution }) {
             <span className="font-mono">{o.orderNumber}</span>
             <span className="text-muted-foreground truncate flex-1">{o.customerName}</span>
             <span className="text-muted-foreground">
-              {exec.trip ? orderDeliveryStatusLabel(o.deliveryStatus) : 'Awaiting Trip'}
+              {fulfillmentOrderStatusLabel(exec, o)}
               <span className="sr-only"> delivery status</span>
             </span>
           </li>
@@ -117,11 +117,12 @@ function ExecutionCard({ exec }: { exec: CommerceExecution }) {
     <div className="rounded-xl border border-border bg-card p-5 flex flex-col gap-3">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0">
+          <p className="text-3xs font-semibold uppercase tracking-wide text-muted-foreground">Fulfillment</p>
           <p className="font-mono font-bold text-sm">{exec.planNumber}</p>
           <p className="text-2xs text-muted-foreground mt-0.5">
             {exec.orderCount} {exec.orderCount === 1 ? 'Order' : 'Orders'} · {exec.stopCount} {exec.stopCount === 1 ? 'Stop' : 'Stops'}
           </p>
-          <p className="text-2xs text-muted-foreground mt-0.5">Sales Value <span className="font-medium text-foreground">{formatCurrency(exec.totalAmount)}</span></p>
+          <p className="text-2xs text-muted-foreground mt-0.5">Order Value <span className="font-medium text-foreground">{formatCurrency(exec.totalAmount)}</span></p>
           <StopsPreview exec={exec} />
         </div>
         <div className="flex flex-col items-end gap-1.5 shrink-0">
@@ -152,6 +153,12 @@ function ExecutionCard({ exec }: { exec: CommerceExecution }) {
           </a>
         ) : (
           <span className="text-2xs text-muted-foreground">Preparing indent…</span>
+        )}
+        {exec.indent?.circulationTarget && (
+          <span className="text-2xs text-muted-foreground">{circulationLabel(exec.indent.circulationTarget)}</span>
+        )}
+        {exec.bidCount > 0 && (
+          <span className="text-2xs text-muted-foreground">{exec.bidCount} {exec.bidCount === 1 ? 'bid' : 'bids'} received</span>
         )}
 
         {exec.trip ? (

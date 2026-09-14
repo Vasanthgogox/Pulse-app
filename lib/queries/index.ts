@@ -106,6 +106,11 @@ export {
   useInvalidateDriverHomeDrivers,
   driverHomeLinkedDriversQueryKey,
 } from './useDriverHomeDriversQuery';
+export {
+  useDriverUiTripsQuery,
+  useInvalidateDriverUiTrips,
+  driverUiTripsQueryKey,
+} from './useDriverUiTripsQuery';
 export { useInvalidateDriverHomeDashboard } from './useInvalidateDriverHomeDashboard';
 export {
   useTripLiveTrackingSeedQuery,

@@ -17,22 +17,27 @@ import { logger } from '@/lib/logger';
 
 export type DriverStopMutationKind = DriverStopTransition | null;
 
-/**
- * Background SES hydrate + arrive/complete on the current stop.
- * Starts empty so Mission first paint stays on the existing TripRow shell.
- */
-export function useDriverStopExecution(tripId: string | null | undefined): {
+export type DriverStopExecutionController = {
   tripId: string;
   stops: DriverStopExecutionBundle['stops'];
   currentStop: ReturnType<typeof deriveCurrentStop>;
   nextStop: ReturnType<typeof deriveNextStop>;
   mutating: DriverStopMutationKind;
+  hydrated: boolean;
   arrive: () => Promise<{ ok: boolean; ignored?: boolean; error?: Error }>;
   complete: () => Promise<{ ok: boolean; ignored?: boolean; error?: Error }>;
-} {
+};
+
+/**
+ * Background SES hydrate + arrive/complete on the current stop.
+ * `hydrated` is false until the first fetch settles so Job Card can pick
+ * legacy vs multi-order without flashing the wrong card.
+ */
+export function useDriverStopExecution(tripId: string | null | undefined): DriverStopExecutionController {
   const [bundle, setBundle] = useState<DriverStopExecutionBundle>(() =>
     emptyDriverStopExecution(tripId ?? ''),
   );
+  const [hydrated, setHydrated] = useState(() => !tripId);
   const [mutating, setMutating] = useState<DriverStopMutationKind>(null);
 
   const tripIdRef = useRef(tripId);
@@ -48,7 +53,11 @@ export function useDriverStopExecution(tripId: string | null | undefined): {
     busyRef.current = false;
     setMutating(null);
     setBundle(emptyDriverStopExecution(activeTripId));
-    if (!activeTripId) return;
+    if (!activeTripId) {
+      setHydrated(true);
+      return;
+    }
+    setHydrated(false);
 
     let cancelled = false;
     void fetchDriverStopExecution(activeTripId).then((result) => {
@@ -59,9 +68,11 @@ export function useDriverStopExecution(tripId: string | null | undefined): {
           error: result.error,
         });
         setBundle(emptyDriverStopExecution(activeTripId));
+        setHydrated(true);
         return;
       }
       setBundle(result.bundle);
+      setHydrated(true);
     });
 
     return () => {
@@ -142,6 +153,7 @@ export function useDriverStopExecution(tripId: string | null | undefined): {
     currentStop,
     nextStop,
     mutating,
+    hydrated,
     arrive,
     complete,
   };

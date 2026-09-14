@@ -15,6 +15,7 @@ import type { QueryClient } from '@tanstack/react-query';
 const CONV_STALE_MS = 30_000;
 const THREAD_STALE_MS = 30_000;
 
+/** Finger-down / navigation warmup only — DriverChatProvider already mounts the inbox query. */
 export function preloadDriverChatConversations(
   queryClient: QueryClient,
   driverIds: string[],

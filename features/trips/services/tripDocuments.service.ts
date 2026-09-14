@@ -410,6 +410,7 @@ export async function uploadTripDocument(
   file: { arrayBuffer: ArrayBuffer; fileName: string; mimeType: string },
   documentType: TripDocumentType = 'pod',
   documentNumber?: string,
+  options?: { stopId?: string | null },
 ): Promise<UploadTripDocumentResult> {
   if (!file.arrayBuffer?.byteLength) {
     return { doc: null, error: new Error("File is empty") };
@@ -440,6 +441,7 @@ export async function uploadTripDocument(
   }
 
   const trimmedDocumentNumber = documentNumber?.trim() || null;
+  const stopId = options?.stopId?.trim() || null;
 
   const { data: row, error: insertError } = await supabase()
     .from("trip_documents")
@@ -452,6 +454,7 @@ export async function uploadTripDocument(
       uploaded_by: uploadedBy,
       document_type: documentType,
       document_number: trimmedDocumentNumber,
+      ...(stopId ? { stop_id: stopId } : {}),
     })
     .select("id, trip_id, file_name, storage_path, mime_type, size_bytes, uploaded_at, uploaded_by, document_type, document_number, ocr_job_id")
     .single();

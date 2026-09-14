@@ -41,6 +41,15 @@ function buildHtml(payload: {
   <style>
     html, body, #map { margin:0; padding:0; width:100%; height:100%; background:#e2e8f0; }
     .leaflet-control-attribution { font-size:9px !important; }
+    .pulse-pin { display:flex; flex-direction:column; align-items:center; gap:4px; }
+    .pulse-pin-chip { background:#fff; font:700 10px/1.2 system-ui,sans-serif; padding:3px 8px; border-radius:999px; border:1px solid #d1d5db; white-space:nowrap; max-width:108px; overflow:hidden; text-overflow:ellipsis; }
+    .pulse-pin-chip.pickup { color:#059669; border-color:#a7f3d0; }
+    .pulse-pin-chip.drop { color:#b45309; border-color:#fcd34d; }
+    .pulse-pin-head { width:28px; height:28px; border-radius:14px; border:2px solid #fff; color:#fff; font:800 12px/24px system-ui,sans-serif; text-align:center; box-shadow:0 2px 8px rgba(15,23,42,.18); }
+    .pulse-pin-head.pickup { background:#10b981; }
+    .pulse-pin-head.drop { background:#f59e0b; }
+    .pulse-pin-tail { width:0; height:0; border-left:6px solid transparent; border-right:6px solid transparent; border-top:8px solid #10b981; margin-top:-1px; }
+    .pulse-pin-tail.drop { border-top-color:#f59e0b; }
   </style>
 </head>
 <body>
@@ -72,9 +81,25 @@ function buildHtml(payload: {
       });
       (data.markers || []).forEach((m) => {
         if (!m || !m.coordinate) return;
+        const id = String(m.id || '');
+        const isYou = id === 'you' || id === 'driver';
+        const isDrop = id === 'drop' || id.indexOf('drop-') === 0;
+        const isPickup = id === 'pickup' || id.indexOf('pickup-') === 0;
+        const kindMatch = /^(?:pickup|drop)-(\\d+)$/.exec(id);
+        const n = m.kindIndex != null ? m.kindIndex : (kindMatch ? kindMatch[1] : '');
+        if ((isPickup || isDrop) && !isYou) {
+          const kind = isDrop ? 'drop' : 'pickup';
+          const fallback = n ? (isDrop ? 'Drop ' : 'Pickup ') + n : (isDrop ? 'Drop' : 'Pickup');
+          const caption = String(m.label || fallback).replace(/[<>]/g, '');
+          const html = '<div class="pulse-pin"><div class="pulse-pin-chip ' + kind + '">' + caption + '</div><div class="pulse-pin-head ' + kind + '">' + (n || '') + '</div><div class="pulse-pin-tail ' + kind + '"></div></div>';
+          L.marker([m.coordinate.latitude, m.coordinate.longitude], {
+            icon: L.divIcon({ className: '', html: html, iconSize: [108, 56], iconAnchor: [54, 56] }),
+          }).addTo(markerLayer);
+          return;
+        }
         const color = m.color || '#059669';
         const circle = L.circleMarker([m.coordinate.latitude, m.coordinate.longitude], {
-          radius: m.id === 'you' || m.id === 'driver' ? 8 : 7,
+          radius: isYou ? 8 : 7,
           color: '#fff',
           weight: 2,
           fillColor: color,

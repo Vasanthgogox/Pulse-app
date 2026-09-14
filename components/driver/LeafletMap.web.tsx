@@ -5,6 +5,7 @@ import { boundsFromCoordinates } from "@/features/trips/utils/mapRouteViewport.u
 import {
   createRouteDistanceLabelElement,
   createTripMapMarkerElement,
+  kindIndexFromMarkerId,
   tripMapMarkerRoleFromId,
 } from "@/lib/mapMarkerIcons.util";
 import React, { useCallback, useEffect, useRef } from "react";
@@ -569,6 +570,7 @@ export const LeafletMap = React.forwardRef<LeafletMapRef, LeafletMapProps>(
               avatarSeed: m.avatarSeed,
               isOnline: m.isOnline,
               highlighted: m.highlighted,
+              kindIndex: m.kindIndex ?? kindIndexFromMarkerId(m.id) ?? undefined,
             });
             if (m.onPress) {
               el.style.cursor = "pointer";

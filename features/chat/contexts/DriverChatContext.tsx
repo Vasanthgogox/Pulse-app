@@ -30,7 +30,6 @@ import type { DriverChatMessagesPage } from '@/features/chat/utils/driverChatMes
 import { useQueryClient } from '@tanstack/react-query';
 import { getLinkedDriversForCurrentUser } from '@/features/drivers/services/drivers.service';
 import { getTripOperationalDisplay } from "@/features/operations/display";
-import { preloadDriverChatConversations } from '@/lib/preloadDriverChatWarmup';
 
 /**
  * Accepts either a full `TripRow` or a `trips_driver_view` row — the driver path
@@ -127,11 +126,6 @@ export function DriverChatProvider({
     isLoading,
     refreshConversations: refetchConversations,
   } = useDriverChatConversationsQuery(isActive ? driverIds : []);
-
-  useEffect(() => {
-    if (!isActive || driverIds.length === 0) return;
-    preloadDriverChatConversations(queryClient, driverIds);
-  }, [isActive, driverIds, queryClient]);
 
   const patchConversationListPreview = useCallback(
     (conversationId: string, preview: string, at: string) => {

@@ -14,6 +14,7 @@ import {
   TripDetailsStrip,
 } from "@/components/driver/DriverTripSheetLayout";
 import Theme from "@/constants/Theme";
+import Layout from "@/constants/Layout";
 import type { JobCardAssignerPayload } from "@/features/trips/utils/driverAssignerDisplay.util";
 import { LinearGradient } from "expo-linear-gradient";
 import {
@@ -72,6 +73,8 @@ export interface JobRequestCardProps {
   OtpInputComponent?: ComponentType<TextInputProps>;
   onOtpFocus?: () => void;
   otpKeyboardInset?: number;
+  onViewTripPlan?: () => void;
+  tripPlanAvailable?: boolean;
 }
 
 export function JobRequestCard({
@@ -106,6 +109,8 @@ export function JobRequestCard({
   OtpInputComponent: OtpInput = TextInput,
   onOtpFocus,
   otpKeyboardInset = 0,
+  onViewTripPlan,
+  tripPlanAvailable = false,
 }: JobRequestCardProps) {
   const [isAccepted, setIsAccepted] = useState(false);
   const acceptedOnceRef = useRef(false);
@@ -382,6 +387,21 @@ export function JobRequestCard({
                 </Text>
               ) : null}
 
+              {onViewTripPlan ? (
+                <TouchableOpacity
+                  onPress={onViewTripPlan}
+                  disabled={disabled}
+                  activeOpacity={0.85}
+                  accessibilityRole="button"
+                  accessibilityLabel="View trip plan"
+                  style={styles.planBtn}
+                >
+                  <Text style={[styles.planBtnText, { color: accentColor }]}>
+                    {tripPlanAvailable ? 'View trip plan on map' : 'View trip plan'}
+                  </Text>
+                </TouchableOpacity>
+              ) : null}
+
               <View style={styles.footer}>
                 <View style={styles.actions}>
                   {onDecline != null && !isAccepted ? (
@@ -585,6 +605,16 @@ const styles = StyleSheet.create({
   errorText: {
     fontSize: 11,
     fontWeight: "600",
+  },
+  planBtn: {
+    minHeight: Layout.minTouchTargetSize,
+    alignItems: "center",
+    justifyContent: "center",
+    marginTop: 4,
+  },
+  planBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   footer: {
     paddingTop: 0,
