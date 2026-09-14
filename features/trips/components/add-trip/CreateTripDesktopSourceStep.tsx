@@ -47,6 +47,9 @@ export type CreateTripDesktopSourceStepProps = {
   onAddPartner: () => void;
   /** Full-width source cards + stacked partner grid on mobile. */
   compact?: boolean;
+  /** `source` = Asset vs Market only. `partner` = existing supplier + rate. */
+  variant?: "source" | "partner";
+  allowedSupplyModes?: readonly ("asset" | "aggregate")[];
 };
 
 export const CreateTripDesktopSourceStep = memo(function CreateTripDesktopSourceStep({
@@ -61,9 +64,13 @@ export const CreateTripDesktopSourceStep = memo(function CreateTripDesktopSource
   onSelectPartner,
   onAddPartner,
   compact = false,
+  variant = "source",
+  allowedSupplyModes = ["asset", "aggregate"],
 }: CreateTripDesktopSourceStepProps) {
   const isAsset = state.supplySource === "asset";
   const isAggregate = state.supplySource === "aggregate";
+  const partnerOnly = variant === "partner";
+  const sourceOnly = variant === "source";
   const [rateModalOpen, setRateModalOpen] = useState(false);
   const [rateDoneAttempted, setRateDoneAttempted] = useState(false);
   const [partySearch, setPartySearch] = useState("");
@@ -89,7 +96,7 @@ export const CreateTripDesktopSourceStep = memo(function CreateTripDesktopSource
   );
 
   const showMobilePartnerRateKeypad =
-    compact && isAggregate && Boolean(state.supplierId);
+    compact && (partnerOnly || isAggregate) && Boolean(state.supplierId) && !sourceOnly;
 
   const rateDisplay = formatInr(state.supplierRate);
   const advanceDisplay = formatInr(state.advancePaid);
@@ -156,97 +163,106 @@ export const CreateTripDesktopSourceStep = memo(function CreateTripDesktopSource
 
   return (
     <View style={[s.stepBody, compact && s.compactStepBody]}>
-      <View style={s.stepSection}>
-        {compact ? (
-          <SupplyAllocationModeBar
-            variant="wizard"
-            layout="stack"
-            mode={isAsset ? "asset" : "aggregate"}
-            onModeChange={(mode) => setters.setSupplySource(mode)}
-            assignLater={state.assignLater}
-            onAssignLaterChange={setters.setAssignLater}
-            showAssignLater={false}
-          />
-        ) : (
-          <>
-            <DesktopSectionHeading>Supply source *</DesktopSectionHeading>
-            <View style={s.sourceModeRow}>
-              <Pressable
-                style={[s.sourceModeCard, isAsset && s.sourceModeCardActive]}
-                onPress={() => setters.setSupplySource("asset")}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isAsset }}
-              >
-                <View
-                  style={[
-                    s.sourceModeIcon,
-                    isAsset && s.sourceModeIconActive,
-                  ]}
-                >
-                  <Truck
-                    size={20}
-                    color={isAsset ? Theme.textOnPrimary : Theme.textRouteCard}
-                    strokeWidth={2.25}
-                  />
-                </View>
-                <View style={s.sourceModeCopy}>
-                  <Text
-                    style={[
-                      s.sourceModeTitle,
-                      isAsset && s.sourceModeTitleActive,
-                    ]}
+      {!partnerOnly ? (
+        <View style={s.stepSection}>
+          {compact ? (
+            <SupplyAllocationModeBar
+              variant="wizard"
+              layout="stack"
+              mode={isAsset ? "asset" : "aggregate"}
+              onModeChange={(mode) => setters.setSupplySource(mode)}
+              assignLater={state.assignLater}
+              onAssignLaterChange={setters.setAssignLater}
+              showAssignLater={false}
+              allowedModes={allowedSupplyModes}
+              aggregateTitle="Market"
+              aggregateSubtitle="Existing supplier or share for bidding"
+            />
+          ) : (
+            <>
+              <DesktopSectionHeading>Supply source *</DesktopSectionHeading>
+              <View style={s.sourceModeRow}>
+                {allowedSupplyModes.includes("asset") ? (
+                  <Pressable
+                    style={[s.sourceModeCard, isAsset && s.sourceModeCardActive]}
+                    onPress={() => setters.setSupplySource("asset")}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isAsset }}
                   >
-                    Asset
-                  </Text>
-                  <Text style={s.sourceModeSub}>
-                    Use your own drivers and vehicles
-                  </Text>
-                </View>
-              </Pressable>
+                    <View
+                      style={[
+                        s.sourceModeIcon,
+                        isAsset && s.sourceModeIconActive,
+                      ]}
+                    >
+                      <Truck
+                        size={20}
+                        color={isAsset ? Theme.textOnPrimary : Theme.textRouteCard}
+                        strokeWidth={2.25}
+                      />
+                    </View>
+                    <View style={s.sourceModeCopy}>
+                      <Text
+                        style={[
+                          s.sourceModeTitle,
+                          isAsset && s.sourceModeTitleActive,
+                        ]}
+                      >
+                        Asset
+                      </Text>
+                      <Text style={s.sourceModeSub}>
+                        Use your own drivers and vehicles
+                      </Text>
+                    </View>
+                  </Pressable>
+                ) : null}
 
-              <Pressable
-                style={[
-                  s.sourceModeCard,
-                  isAggregate && s.sourceModeCardActive,
-                ]}
-                onPress={() => setters.setSupplySource("aggregate")}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isAggregate }}
-              >
-                <View
-                  style={[
-                    s.sourceModeIcon,
-                    isAggregate && s.sourceModeIconActive,
-                  ]}
-                >
-                  <Building2
-                    size={20}
-                    color={
-                      isAggregate ? Theme.textOnPrimary : Theme.textRouteCard
-                    }
-                    strokeWidth={2.25}
-                  />
-                </View>
-                <View style={s.sourceModeCopy}>
-                  <Text
+                {allowedSupplyModes.includes("aggregate") ? (
+                  <Pressable
                     style={[
-                      s.sourceModeTitle,
-                      isAggregate && s.sourceModeTitleActive,
+                      s.sourceModeCard,
+                      isAggregate && s.sourceModeCardActive,
                     ]}
+                    onPress={() => setters.setSupplySource("aggregate")}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isAggregate }}
                   >
-                    Aggregate
-                  </Text>
-                  <Text style={s.sourceModeSub}>
-                    Book a transport partner at a set rate
-                  </Text>
-                </View>
-              </Pressable>
-            </View>
-          </>
-        )}
-      </View>
+                    <View
+                      style={[
+                        s.sourceModeIcon,
+                        isAggregate && s.sourceModeIconActive,
+                      ]}
+                    >
+                      <Building2
+                        size={20}
+                        color={
+                          isAggregate ? Theme.textOnPrimary : Theme.textRouteCard
+                        }
+                        strokeWidth={2.25}
+                      />
+                    </View>
+                    <View style={s.sourceModeCopy}>
+                      <Text
+                        style={[
+                          s.sourceModeTitle,
+                          isAggregate && s.sourceModeTitleActive,
+                        ]}
+                      >
+                        Market
+                      </Text>
+                      <Text style={s.sourceModeSub}>
+                        Existing supplier or share for bidding
+                      </Text>
+                    </View>
+                  </Pressable>
+                ) : null}
+              </View>
+            </>
+          )}
+        </View>
+      ) : null}
 
-      {isAsset ? (
+      {sourceOnly && isAsset ? (
         <View
           style={[
             s.sourceGuidanceBanner,
@@ -273,7 +289,33 @@ export const CreateTripDesktopSourceStep = memo(function CreateTripDesktopSource
         </View>
       ) : null}
 
-      {isAggregate ? (
+      {sourceOnly && isAggregate ? (
+        <View
+          style={[
+            s.sourceGuidanceBanner,
+            compact && s.compactSourceGuidanceBanner,
+          ]}
+        >
+          <Text
+            style={[
+              s.sourceGuidanceTitle,
+              compact && s.compactSourceGuidanceTitle,
+            ]}
+          >
+            Next: Market
+          </Text>
+          <Text
+            style={[
+              s.sourceGuidanceText,
+              compact && s.compactSourceGuidanceText,
+            ]}
+          >
+            Choose an existing supplier or share this requirement for bidding.
+          </Text>
+        </View>
+      ) : null}
+
+      {partnerOnly ? (
         <View style={[s.sourceAggregatePanel, compact && { gap: 10 }]}>
           {compact ? (
             <View style={s.compactPartyToolbar}>

@@ -39,6 +39,8 @@ export type MutualAvatarStackProps = {
   overflowColor?: string;
   /** Tighter caption for discover cards. */
   compact?: boolean;
+  /** Sit in a row (indent / trip cards) instead of stretching to 100% width. */
+  inline?: boolean;
 };
 
 export function MutualAvatarStack({
@@ -52,6 +54,7 @@ export function MutualAvatarStack({
   faceSize = NETWORK_DISCOVER_MUTUAL_FACE_SIZE,
   overflowColor = Theme.textPrimaryDark,
   compact = false,
+  inline = false,
 }: MutualAvatarStackProps) {
   const visibleFaces = Math.min(MAX_VISIBLE, Math.max(0, mutualCount));
   const overflow = mutualCount > MAX_VISIBLE ? mutualCount - MAX_VISIBLE : 0;
@@ -279,7 +282,11 @@ export function MutualAvatarStack({
 
   return (
     <View
-      style={[styles.section, compact && styles.sectionCompact]}
+      style={[
+        styles.section,
+        compact && styles.sectionCompact,
+        inline && styles.sectionInline,
+      ]}
       accessibilityLabel={caption}
       accessibilityRole="text"
     >
@@ -309,6 +316,12 @@ const styles = StyleSheet.create({
   },
   sectionCompact: {
     gap: 2,
+  },
+  sectionInline: {
+    width: "auto",
+    maxWidth: "100%",
+    alignItems: "flex-start",
+    alignSelf: "flex-start",
   },
   faceImage: {
     borderWidth: 0,

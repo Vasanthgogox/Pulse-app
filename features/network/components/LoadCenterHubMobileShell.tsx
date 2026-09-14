@@ -58,6 +58,7 @@ export function LoadCenterHubMobileShell({
   onCreateIndentPress,
   findLoadsAction,
   embedInPageScroll = false,
+  showCreateAction = true,
 }: {
   searchQuery: string;
   onSearchChange: (q: string) => void;
@@ -76,6 +77,7 @@ export function LoadCenterHubMobileShell({
   findLoadsAction?: ReactNode;
   /** Horizontal padding already applied by page-scroll chrome. */
   embedInPageScroll?: boolean;
+  showCreateAction?: boolean;
 }) {
   const searchInputRef = useRef<TextInput>(null);
   const [searchOpen, setSearchOpen] = useState(() => searchQuery.trim().length > 0);
@@ -106,7 +108,7 @@ export function LoadCenterHubMobileShell({
 
   const hasSearchQuery = searchQuery.trim().length > 0;
   const { can: canSurface } = useMemberAccess();
-  const canCreateIndent = canSurface("tripops.indents.create");
+  const canCreateIndent = showCreateAction && canSurface("tripops.indents.create");
 
   return (
     <View style={[chrome.shell, embedInPageScroll && styles.shellInPageScroll]}>

@@ -1022,6 +1022,18 @@ export type TripsHubTableViewProps = {
    * (toolbar, search/sort, and Filters panel behave like table mode).
    */
   renderBody?: (templateTrips: TripRow[]) => ReactNode;
+  /**
+   * Lifecycle rows (e.g. INDENT cards) that belong above the trip table/cards
+   * but below the shared hub toolbar.
+   */
+  renderAboveBody?: ReactNode;
+  /** Hide trip table/cards while keeping the shared search/date toolbar. */
+  hideBody?: boolean;
+  /** Override the toolbar "Showing n of m" label (e.g. INDENT loads). */
+  toolbarCountLabel?: string;
+  /** Controlled hub search. When omitted, the table keeps internal search state. */
+  searchQuery?: string;
+  onSearchQueryChange?: (next: string) => void;
   dateRangeFilter?:
     | "all"
     | "today"
@@ -1108,6 +1120,11 @@ export function TripsHubTableView({
   financeAdjustmentsByTripId,
   subcontractRateByTripId,
   renderBody,
+  renderAboveBody,
+  hideBody = false,
+  toolbarCountLabel,
+  searchQuery: searchQueryProp,
+  onSearchQueryChange,
   dateRangeFilter = "all",
   onDateRangeFilterChange,
   onOpenDateRangePicker,
@@ -1130,7 +1147,9 @@ export function TripsHubTableView({
     Record<TripsHubTableColumnId, boolean>
   >(() => ({ ...DEFAULT_TRIPS_HUB_TABLE_COLUMNS }));
   const [columnPickerOpen, setColumnPickerOpen] = useState(false);
-  const [tableQuery, setTableQuery] = useState("");
+  const [internalQuery, setInternalQuery] = useState("");
+  const tableQuery = searchQueryProp ?? internalQuery;
+  const setTableQuery = onSearchQueryChange ?? setInternalQuery;
   const [sortKey, setSortKey] = useState<"recent" | "due_desc" | "sales_desc">(
     "recent",
   );
@@ -1259,7 +1278,9 @@ export function TripsHubTableView({
   };
 
   const mobileCardList = Boolean(renderBody);
-  const tripsCountLabel = `Showing ${rowsForTableBody.length} of ${displayedTrips.length} trips`;
+  const tripsCountLabel =
+    toolbarCountLabel ??
+    `Showing ${rowsForTableBody.length} of ${displayedTrips.length} trips`;
 
   const desktopDatePresets = (
     [
@@ -1638,7 +1659,9 @@ export function TripsHubTableView({
         )}
       </View>
 
-      {renderBody ? (
+      {renderAboveBody}
+
+      {hideBody ? null : renderBody ? (
         <View style={styles.auditCardListBody}>
           {renderBody(rowsForTableBody)}
         </View>

@@ -26,6 +26,9 @@ import type { ClientRow } from "@/features/clients/services/clients.service";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import {
   giveLoadIndentAvatarProps,
+  indentClientFacesFromParties,
+  isSyntheticMergedOrdersClientName,
+  uniqueClientNameFromCustomers,
   marketLoadIndentAvatarProps,
 } from "@/features/network/utils/indentCardAvatar.util";
 import { isTripTrackingActive } from "@/features/trips/utils/tripTrackingStatus.util";
@@ -63,9 +66,12 @@ import {
     resolveGetLoadTicketCommerce,
     resolveGiveLoadMobileDisplayStatus,
     resolveGiveLoadTicketCommerce,
+    loadCenterShowsStandaloneChrome,
+    restrictIndentsToIds,
     STATUS_TABS,
     statusMatchesFilter,
     type DoneSubTab,
+    type LoadCenterPresentation,
     type LoadSubTab,
     type StatusFilterTab,
 } from "@/features/network/utils/loadCenter.model";
@@ -74,6 +80,7 @@ import {
   type LoadCenterDriverProfile,
 } from "@/features/network/utils/loadCenterTripAllocation.util";
 import { useAwardQuote } from "@/features/network/hooks/useAwardQuote";
+import { useExecutionPlanClients } from "@/features/network/hooks/useExecutionPlanClientNames";
 import { useExecutionPlanRouteSummaries } from "@/features/network/hooks/useExecutionPlanRouteSummaries";
 import { useLoadCenterFilters } from "@/features/network/hooks/useLoadCenterFilters";
 import { useSuccessToast } from "@/features/network/hooks/useSuccessToast";
@@ -177,6 +184,24 @@ interface LoadCenterViewProps {
    * shows all three, unchanged from before this prop existed.
    */
   hiddenSubTabs?: readonly LoadSubTab[];
+  /** Hide header Add Load when the parent already shows that CTA. */
+  hideCreateButton?: boolean;
+  /**
+   * When set, restricts GIVE_LOAD rendering (both the desktop kanban and the
+   * mobile/grid list) to exactly this id set instead of this component's own
+   * OPEN/QUOTED/AWARDED/DONE status-tab filtering. Callers that already
+   * derive an authoritative membership set (e.g. Trips → INDENT's
+   * `unallocatedIndents`) pass it here so the rendered rows are guaranteed to
+   * match that set — no independent status filter can hide a qualifying
+   * indent or show one that no longer belongs.
+   */
+  restrictToIndentIds?: ReadonlySet<string> | null;
+  /**
+   * `trips` hides Load Center chrome (header, My Load, search, idle capacity,
+   * kanban stage board) and renders existing indent cards into the Trips page
+   * scroll. Standalone `/pulse-loads` stays the default.
+   */
+  presentation?: LoadCenterPresentation;
 }
 
 const TESLA_BLACK = "#171A20";
@@ -189,7 +214,12 @@ export function LoadCenterView({
   highlightedIndentId,
   initialSubTab = "GIVE_LOAD",
   hiddenSubTabs = [],
+  hideCreateButton = false,
+  restrictToIndentIds = null,
+  presentation = "standalone",
 }: LoadCenterViewProps) {
+  const isTripsPresentation = presentation === "trips";
+  const showLoadCenterChrome = loadCenterShowsStandaloneChrome(presentation);
   const insets = useSafeAreaInsets();
   const layout = useLayoutInsets();
   const { width, height: windowHeight } = useWindowDimensions();
@@ -238,7 +268,10 @@ export function LoadCenterView({
     isError: marketError,
     isRefetching: marketRefetching,
     refetch: refetchMarketIndents,
-  } = useMarketIndentsQuery(orgId, { urgent: true });
+  } = useMarketIndentsQuery(orgId, {
+    urgent: true,
+    enabled: !isTripsPresentation,
+  });
   const commercePlanIds = useMemo(() => {
     const ids: string[] = [];
     for (const row of [...indents, ...marketIndents]) {
@@ -251,6 +284,10 @@ export function LoadCenterView({
     return ids;
   }, [indents, marketIndents]);
   const { data: planRouteById } = useExecutionPlanRouteSummaries(
+    orgId,
+    commercePlanIds,
+  );
+  const { data: planClientsById } = useExecutionPlanClients(
     orgId,
     commercePlanIds,
   );
@@ -344,9 +381,9 @@ export function LoadCenterView({
 
   useFocusEffect(
     useCallback(() => {
-      if (!orgId) return;
+      if (!orgId || isTripsPresentation) return;
       void refetchMarketIndents();
-    }, [orgId, refetchMarketIndents]),
+    }, [orgId, isTripsPresentation, refetchMarketIndents]),
   );
 
   const isClaimedTab = loadSubTab === "AWARDED";
@@ -362,7 +399,8 @@ export function LoadCenterView({
   const useGridLayout = Platform.OS === "web" && width >= HUB_GRID_MIN_WIDTH;
   const isMobileView = width < 820;
   /** Desktop: Suggested partners sit in a Network-style left sidebar. */
-  const usePartnerSidebar = Boolean(orgId) && isGiveGetTab && !isMobileView;
+  const usePartnerSidebar =
+    Boolean(orgId) && isGiveGetTab && !isMobileView && showLoadCenterChrome;
   /**
    * Same board height for Give Load + Get Load: at least the measured left
    * rail, floored by remaining viewport so neither tab looks short.
@@ -447,6 +485,32 @@ export function LoadCenterView({
     loadMatchesSearch,
   } = filters;
 
+  /**
+   * `restrictToIndentIds` membership overrides this component's own
+   * OPEN/QUOTED/AWARDED/DONE status-tab filtering for GIVE_LOAD — the caller
+   * already knows exactly which indents belong (see prop doc above).
+   */
+  const effectiveHirePartnerLoads = useMemo(
+    () =>
+      restrictToIndentIds
+        ? restrictIndentsToIds(hirePartnerLoads, restrictToIndentIds)
+        : hirePartnerLoads,
+    [hirePartnerLoads, restrictToIndentIds],
+  );
+
+  const effectiveFilteredHirePartnerLoads = useMemo(() => {
+    if (!restrictToIndentIds) return filteredHirePartnerLoads;
+    return effectiveHirePartnerLoads.filter((load) =>
+      loadMatchesSearch(load, searchQuery),
+    );
+  }, [
+    restrictToIndentIds,
+    effectiveHirePartnerLoads,
+    filteredHirePartnerLoads,
+    loadMatchesSearch,
+    searchQuery,
+  ]);
+
   const supplierNameByOrgId = useMemo(
     () => supplierNameByLinkedOrgId(suppliers),
     [suppliers],
@@ -505,19 +569,28 @@ export function LoadCenterView({
   );
 
   const giveLoadKanbanColumns = useMemo(() => {
-    const buckets = bucketGiveLoadIndentsForKanban(hirePartnerLoads, quoteCounts, {
-      searchQuery,
-      matchesSearch: loadMatchesSearch,
-      tripStage: (indentId) =>
-        giveLoadTripKanbanStage(tripByIndentId.get(indentId)),
-    });
+    const buckets = bucketGiveLoadIndentsForKanban(
+      effectiveHirePartnerLoads,
+      quoteCounts,
+      {
+        searchQuery,
+        matchesSearch: loadMatchesSearch,
+        tripStage: (indentId) =>
+          giveLoadTripKanbanStage(tripByIndentId.get(indentId)),
+      },
+    );
     const accents = {
       OPEN: Theme.primary,
       QUOTED: Theme.aggregatePillText,
       AWARDED: Theme.positive,
       DONE: Theme.textMuted,
     } as const;
-    return GIVE_LOAD_KANBAN_COLUMNS.map((id) => {
+    // Restricted to unallocated indents (e.g. Trips → INDENT): DONE never has
+    // members by construction (allocated/terminal indents are excluded from
+    // the set), so drop the column instead of showing a permanently empty one.
+    return GIVE_LOAD_KANBAN_COLUMNS.filter(
+      (id) => !(restrictToIndentIds && id === "DONE"),
+    ).map((id) => {
       if (id === "DONE") {
         return {
           id,
@@ -547,11 +620,12 @@ export function LoadCenterView({
       };
     });
   }, [
-    hirePartnerLoads,
+    effectiveHirePartnerLoads,
     quoteCounts,
     searchQuery,
     loadMatchesSearch,
     tripByIndentId,
+    restrictToIndentIds,
   ]);
 
   const getLoadKanbanColumns = useMemo(() => {
@@ -626,11 +700,11 @@ export function LoadCenterView({
           {
             key: "GIVE_LOAD" as const,
             label: "My load",
-            count: hirePartnerLoads.length,
+            count: effectiveHirePartnerLoads.length,
           },
           {
             key: "GET_LOAD" as const,
-            label: "Get load",
+            label: "Load from network",
             count: findWorkLoads.length,
           },
           {
@@ -640,7 +714,12 @@ export function LoadCenterView({
           },
         ] as const
       ).filter((t) => !hiddenSubTabs.includes(t.key)),
-    [hirePartnerLoads.length, findWorkLoads.length, claimedTabCount, hiddenSubTabs],
+    [
+      effectiveHirePartnerLoads.length,
+      findWorkLoads.length,
+      claimedTabCount,
+      hiddenSubTabs,
+    ],
   );
 
   const driverProfileById = useMemo(() => {
@@ -700,6 +779,7 @@ export function LoadCenterView({
   );
 
   const integratedLoadsCanvas =
+    showLoadCenterChrome &&
     showIntegratedPartiesBanner &&
     (loadSubTab === "GIVE_LOAD" || loadSubTab === "GET_LOAD");
 
@@ -753,7 +833,7 @@ export function LoadCenterView({
     posts: getLoadOpportunityPosts,
     viewerBidByPostId: getLoadOppViewerBids,
   } = useLoadCenterOpportunityPosts(
-    orgId,
+    showLoadCenterChrome ? orgId : null,
     "get",
     connectedSupplierOrgIds,
     connectedClientOrgIds,
@@ -946,8 +1026,9 @@ export function LoadCenterView({
   const loadCenterPartnerDisplayIds = useMemo(() => {
     const set = new Set(marketCreatorOrgIds);
     for (const id of missingAwardedOrgIds) set.add(id);
+    if (orgId) set.add(orgId);
     return Array.from(set).sort();
-  }, [marketCreatorOrgIds, missingAwardedOrgIds]);
+  }, [marketCreatorOrgIds, missingAwardedOrgIds, orgId]);
 
   const loadCenterPartnerDisplay = useLinkedOrgDisplayMap(
     loadCenterPartnerDisplayIds,
@@ -1082,7 +1163,9 @@ export function LoadCenterView({
                 />
               ) : null}
               <View style={styles.loadsSearchCluster}>
-                {loadSubTab === "GIVE_LOAD" ? renderAddLoadButton() : null}
+                {loadSubTab === "GIVE_LOAD" && !hideCreateButton
+                  ? renderAddLoadButton()
+                  : null}
                 <View style={[chatChrome.searchWrap, styles.loadsSearchWrapInline]}>
                   <FontAwesome
                     name="search"
@@ -1100,7 +1183,19 @@ export function LoadCenterView({
                     autoCorrect={false}
                   />
                 </View>
-                {renderFindLoadsButton()}
+                {loadSubTab !== "GIVE_LOAD" ? (
+                  <PulsePillButton
+                    label="Marketplace Loads"
+                    size="compact"
+                    variant="outline"
+                    showPlusIcon
+                    IconComponent={Compass}
+                    onPress={() =>
+                      router.push(ROUTES.FIND_LOADS as import("expo-router").Href)
+                    }
+                    accessibilityLabel="Marketplace Loads — open Marketplace opportunities"
+                  />
+                ) : null}
               </View>
             </View>
           </View>
@@ -1108,22 +1203,6 @@ export function LoadCenterView({
         </View>
       </View>
     </View>
-  );
-
-  const openFindLoads = () => {
-    router.push(ROUTES.FIND_LOADS as import("expo-router").Href);
-  };
-
-  const renderFindLoadsButton = (size: "compact" | "default" = "default") => (
-    <PulsePillButton
-      label="Find Loads"
-      size={size}
-      variant="outline"
-      showPlusIcon
-      IconComponent={Compass}
-      onPress={openFindLoads}
-      accessibilityLabel="Find Loads — open Marketplace opportunities"
-    />
   );
 
   const renderAddLoadButton = () => {
@@ -1412,7 +1491,39 @@ export function LoadCenterView({
               );
       const vehicleDetail = (load.vehicle_type || "—").toUpperCase();
       const loadTypeDetail = (load.load_type || "General").toUpperCase();
-      const clientName = (load.client_name || "—").trim() || "—";
+      const planId =
+        typeof load.execution_plan_id === "string"
+          ? load.execution_plan_id.trim()
+          : "";
+      const linkedAvatarMap = {
+        ...linkedOrgByOrganizationId,
+        ...(orgId && creatorOrgProfileMap[orgId]
+          ? { [orgId]: creatorOrgProfileMap[orgId] }
+          : {}),
+      };
+      const planParties = planId ? (planClientsById?.[planId] ?? []) : [];
+      const clientFaces = indentClientFacesFromParties(
+        planParties,
+        clientById,
+        linkedAvatarMap,
+      );
+      const orderClientName = uniqueClientNameFromCustomers(
+        planParties.map((p) => p.name),
+      );
+      const clientName = isSyntheticMergedOrdersClientName(load.client_name)
+        ? clientFaces.length > 1
+          ? (load.client_name || "—").trim() || "—"
+          : orderClientName || (load.client_name || "—").trim() || "—"
+        : (load.client_name || "—").trim() || "—";
+      const avatarLoad =
+        isSyntheticMergedOrdersClientName(load.client_name) &&
+        clientFaces.length === 1
+          ? {
+              ...load,
+              client_id: clientFaces[0]?.id ?? load.client_id,
+              client_name: clientFaces[0]?.name ?? orderClientName,
+            }
+          : load;
       const awardedAmount = resolveGiveLoadAwardedAmountInr({
         assignedSupplierRate: load["assigned_supplier_rate"],
         awardedAmount: load["awarded_amount"],
@@ -1424,14 +1535,23 @@ export function LoadCenterView({
         supplierTarget: load.supplier_target,
       });
       const showPulseToNetwork =
-        indentCanBroadcastToPulseNetwork(load) &&
         !isDone &&
-        !isDraft;
+        !isDraft &&
+        (indentCanBroadcastToPulseNetwork(load) ||
+          indentStoryStates[load.id]?.isLive === true);
 
       const avatar = giveLoadIndentAvatarProps(
-        load,
+        avatarLoad,
         clientById,
-        linkedOrgByOrganizationId,
+        linkedAvatarMap,
+        {
+          id: orgId,
+          name: currentOrganization?.name,
+          logoUrl: currentOrganization?.logo_url,
+        },
+        trip
+          ? { client_id: trip.client_id, client_name: trip.client_name }
+          : null,
       );
 
       const ticketCommerce = resolveGiveLoadTicketCommerce(
@@ -1481,6 +1601,8 @@ export function LoadCenterView({
           organizationImageUrl={avatar.organizationImageUrl}
           organizationAvatarSeed={avatar.organizationAvatarSeed}
           initialsColorSeed={avatar.initialsColorSeed}
+          avatarPartyName={avatar.partyName}
+          clientFaces={clientFaces.length > 1 ? clientFaces : null}
           tripAllocation={tripAllocationForLoad(load.id)}
           onPress={
             layout.fillGrid && !isMobileView
@@ -1536,6 +1658,9 @@ export function LoadCenterView({
       indentStoryStates,
       isMobileView,
       linkedOrgByOrganizationId,
+      creatorOrgProfileMap,
+      currentOrganization,
+      orgId,
       handleCardIndentPress,
       handleViewTrip,
       marketplaceToggleBusyId,
@@ -1546,6 +1671,7 @@ export function LoadCenterView({
       tripByIndentId,
       supplierById,
       planRouteById,
+      planClientsById,
     ],
   );
 
@@ -1859,12 +1985,50 @@ export function LoadCenterView({
     ],
   );
 
-  return (
-    <HubScreenShell footer={null}>
+  const renderGiveLoadTripsCards = () => {
+    const loads = effectiveHirePartnerLoads;
+    if (loads.length === 0) return null;
+    if (isMobileView) {
+      return (
+        <LoadCenterHubMobileListCanvas>
+          {loads.map((load) => (
+            <View
+              key={load.id}
+              style={
+                highlightedIndentId === load.id
+                  ? styles.highlightedIndentCard
+                  : undefined
+              }
+            >
+              {renderGiveLoadMobileCard(load)}
+            </View>
+          ))}
+        </LoadCenterHubMobileListCanvas>
+      );
+    }
+    return (
+      <View style={styles.gridList}>
+        {loads.map((load) => (
+          <View
+            key={load.id}
+            style={[
+              styles.gridCardWrap,
+              highlightedIndentId === load.id && styles.highlightedIndentCard,
+            ]}
+          >
+            {renderGiveLoadGridCard(load)}
+          </View>
+        ))}
+      </View>
+    );
+  };
+
+  const loadCenterBody = (
     <View
       style={[
         styles.container,
         isMobileView && styles.containerMobileHub,
+        isTripsPresentation && styles.tripsPresentationRoot,
         { paddingTop: contentTopPadding },
       ]}
     >
@@ -1875,8 +2039,30 @@ export function LoadCenterView({
           isClaimedTab && styles.loadContentWrapClaimed,
           isMobileView && styles.loadContentWrapMobileHub,
           integratedLoadsCanvas && styles.loadCanvasIntegratedEmpty,
+          isTripsPresentation && styles.tripsLoadContentWrap,
         ]}
       >
+        {isTripsPresentation ? (
+          <View
+            style={[
+              styles.tripsEmbedContent,
+              isMobileView && styles.scrollContentMobileHub,
+            ]}
+          >
+            {loadSubTab === "GIVE_LOAD" && (
+              <>
+                {isLoading ? (
+                  <View style={styles.loadingWrap}>
+                    <ActivityIndicator size="small" color={Theme.primary} />
+                    <Text style={styles.loadingText}>Loading…</Text>
+                  </View>
+                ) : (
+                  renderGiveLoadTripsCards()
+                )}
+              </>
+            )}
+          </View>
+        ) : (
         <ScrollView
           style={[
             styles.scroll,
@@ -1902,7 +2088,7 @@ export function LoadCenterView({
             ) : undefined
           }
         >
-          {isMobileView ? (
+          {isMobileView && showLoadCenterChrome ? (
             <View style={hubChrome.bodyFiltersMobileInLayout}>
               <LoadCenterHubMobileShell
                 embedInPageScroll
@@ -1916,13 +2102,31 @@ export function LoadCenterView({
                 onStatusTabChange={(id) =>
                   setStatusFilterTab(id as StatusFilterTab)
                 }
-                showStatusTabs={!isClaimedTab}
+                showStatusTabs={
+                  !isClaimedTab &&
+                  !(restrictToIndentIds && loadSubTab === "GIVE_LOAD")
+                }
                 showDoneSubTabs={statusFilterTab === "DONE" && !isClaimedTab}
                 doneSubTabs={mobileDoneSubTabs}
                 activeDoneSubTab={doneSubTab}
                 onDoneSubTabChange={(id) => setDoneSubTab(id as DoneSubTab)}
                 onCreateIndentPress={onCreateIndentPress}
-                findLoadsAction={renderFindLoadsButton("compact")}
+                showCreateAction={!hideCreateButton}
+                findLoadsAction={
+                  loadSubTab === "GIVE_LOAD" ? undefined : (
+                  <PulsePillButton
+                    label="Marketplace Loads"
+                    size="compact"
+                    variant="outline"
+                    showPlusIcon
+                    IconComponent={Compass}
+                    onPress={() =>
+                      router.push(ROUTES.FIND_LOADS as import("expo-router").Href)
+                    }
+                    accessibilityLabel="Marketplace Loads — open Marketplace opportunities"
+                  />
+                  )
+                }
               />
               {loadSubTab === "GIVE_LOAD" || loadSubTab === "GET_LOAD" ? (
                 <View style={styles.mobileNetworkToolbarRowInScroll}>
@@ -1975,7 +2179,9 @@ export function LoadCenterView({
               ) : null}
             </View>
           ) : null}
-          {!isMobileView ? renderDesktopFilterPanel() : null}
+          {!isMobileView && showLoadCenterChrome
+            ? renderDesktopFilterPanel()
+            : null}
           {isGiveGetTab ? (
             <View
               style={
@@ -2065,7 +2271,10 @@ export function LoadCenterView({
                 }
               >
                 {/* Opportunity cards open via search icon → Find drawer (mobile only). */}
-                {!usePartnerSidebar && orgId && !isMobileView ? (
+                {!usePartnerSidebar &&
+                orgId &&
+                !isMobileView &&
+                showLoadCenterChrome ? (
                   <View style={styles.loadPartnerRecsMobile}>
                     <LoadCenterPartnerRecommendations
                       orgId={orgId}
@@ -2082,8 +2291,10 @@ export function LoadCenterView({
                   <ActivityIndicator size="small" color={Theme.primary} />
                   <Text style={styles.loadingText}>Loading…</Text>
                 </View>
+              ) : isTripsPresentation ? (
+                renderGiveLoadTripsCards()
               ) : !isMobileView ? (
-                hirePartnerLoads.length === 0 ? (
+                effectiveHirePartnerLoads.length === 0 ? (
                   renderLoadCenterEmptyPromo()
                 ) : (
                   <LoadCenterKanbanBoard
@@ -2095,7 +2306,7 @@ export function LoadCenterView({
                     onColumnPress={(col) => openKanbanColumn("give", col)}
                   />
                 )
-              ) : filteredHirePartnerLoads.length === 0 ? (
+              ) : effectiveFilteredHirePartnerLoads.length === 0 ? (
                 renderLoadCenterEmptyPromo()
               ) : useGridLayout ? (
                 <View style={styles.gridList}>
@@ -2115,7 +2326,7 @@ export function LoadCenterView({
                       is live; red Pulse reboosts after expiry.
                     </Text>
                   </View>
-                  {filteredHirePartnerLoads.map((load) => (
+                  {effectiveFilteredHirePartnerLoads.map((load) => (
                         <View
                           key={load.id}
                           style={[
@@ -2148,7 +2359,7 @@ export function LoadCenterView({
                       </Text>
                     </View>
                   ) : null}
-                  {filteredHirePartnerLoads.map((load) => (
+                  {effectiveFilteredHirePartnerLoads.map((load) => (
                     <View
                       key={load.id}
                       style={
@@ -2168,6 +2379,7 @@ export function LoadCenterView({
           )}
 
           {loadSubTab === "GET_LOAD" &&
+            showLoadCenterChrome &&
             (marketLoading ? (
               <View style={styles.loadingWrap}>
                 <ActivityIndicator size="small" color={Theme.primary} />
@@ -2254,6 +2466,7 @@ export function LoadCenterView({
           ) : null}
 
           {loadSubTab === "AWARDED" &&
+            showLoadCenterChrome &&
             (displayedClaimedLoads.length === 0 ? (
               renderLoadCenterEmptyPromo()
             ) : useGridLayout ? (
@@ -2314,6 +2527,7 @@ export function LoadCenterView({
               </LoadCenterHubMobileListCanvas>
             ))}
         </ScrollView>
+        )}
       </View>
 
       {/* Success overlay */}
@@ -2522,7 +2736,12 @@ export function LoadCenterView({
       ) : null}
 
     </View>
-    </HubScreenShell>
+  );
+
+  return isTripsPresentation ? (
+    loadCenterBody
+  ) : (
+    <HubScreenShell footer={null}>{loadCenterBody}</HubScreenShell>
   );
 }
 
@@ -2531,6 +2750,41 @@ const LOAD_CONTENT_BG = LOADS_HUB_PAGE_BG;
 
 const styles = StyleSheet.create({
   container: { flex: 1, minHeight: 0, backgroundColor: LOADS_HUB_PAGE_BG },
+  tripsPresentationRoot: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "100%",
+    backgroundColor: "transparent",
+    ...Platform.select({
+      web: { height: "auto", minHeight: "auto" },
+    }),
+  },
+  tripsEmbedScroll: {
+    flexGrow: 0,
+    backgroundColor: "transparent",
+  },
+  tripsEmbedContent: {
+    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingTop: 4,
+    paddingBottom: 8,
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "100%",
+    backgroundColor: "transparent",
+    ...Platform.select({
+      web: { height: "auto", minHeight: "auto" },
+    }),
+  },
+  tripsLoadContentWrap: {
+    flexGrow: 0,
+    flexShrink: 0,
+    width: "100%",
+    backgroundColor: "transparent",
+    overflow: "visible",
+    ...Platform.select({
+      web: { height: "auto", minHeight: "auto" },
+    }),
+  },
   containerMobileHub: {
     backgroundColor: LOADS_HUB_PAGE_BG,
   },

@@ -345,6 +345,14 @@ export type TripsHubMobileTripCardProps = {
   inTransitPing?: TripHubInTransitPingMeta | null;
   softPodReceived?: boolean;
   hardPodReceived?: boolean;
+  /** Override origin tags (e.g. NETWORK / MARKETPLACE on unallocated indents). */
+  originTags?: string[];
+  /** Override the ref line (indent operational code). */
+  displayNumber?: string;
+  /** Hide supplier/driver chips for pre-trip indent cards. */
+  hidePartyRow?: boolean;
+  /** Load spec under the route (vehicle · weight · material). */
+  specLine?: string | null;
 };
 
 export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
@@ -383,8 +391,14 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
   inTransitPing,
   softPodReceived = false,
   hardPodReceived = false,
+  originTags,
+  displayNumber,
+  hidePartyRow = false,
+  specLine = null,
 }: TripsHubMobileTripCardProps) {
-  const tripNo = asLabel(getTripDisplayNumber(trip, viewerOrgId));
+  const tripNo = asLabel(
+    displayNumber?.trim() || getTripDisplayNumber(trip, viewerOrgId),
+  );
   const schedule = formatMobileTripSchedule(
     pickupIso ?? trip.pickup_date ?? trip.created_at,
   );
@@ -436,10 +450,12 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
   const stageUpper = asLabel(stageLabel).toUpperCase();
   /** Product term: Indent = created from indent→trip; Direct = created as a trip. */
   const fromIndent = isLoadBasedTrip(trip);
-  const originTagLabel = fromIndent
-    ? tr("tripOriginIndent")
-    : tr("tripOriginDirect");
-  const originTagUpper = asLabel(originTagLabel).toUpperCase();
+  const originTagItems = (
+    originTags !== undefined
+      ? originTags
+      : [fromIndent ? tr("tripOriginIndent") : tr("tripOriginDirect")]
+  ).map((label) => asLabel(label).toUpperCase());
+  const originTagJoined = originTagItems.join(" ");
 
   return (
     <View style={[styles.cardWrap, fillGrid && styles.cardWrapGrid, style]}>
@@ -459,7 +475,7 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
             pressed && styles.bodyPressed,
           ]}
           accessibilityRole="button"
-          accessibilityLabel={`${tripNo} ${clientName}, ${originTagUpper}, ${asLabel(origin)} to ${asLabel(dest)}`}
+          accessibilityLabel={`${tripNo} ${clientName}, ${originTagJoined}, ${asLabel(origin)} to ${asLabel(dest)}`}
         >
           <View style={[styles.head, fillGrid && styles.headGrid]}>
             <View
@@ -498,25 +514,38 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
               <Text style={styles.headMeta} numberOfLines={1}>
                 {stageUpper}
               </Text>
-              <View
-                style={[
-                  styles.originTag,
-                  fromIndent ? styles.originTagIndent : styles.originTagDirect,
-                ]}
-                accessibilityLabel={`Created from ${originTagLabel}`}
-              >
-                <Text
-                  style={[
-                    styles.originTagText,
-                    fromIndent
-                      ? styles.originTagTextIndent
-                      : styles.originTagTextDirect,
-                  ]}
-                  numberOfLines={1}
-                >
-                  {originTagUpper}
-                </Text>
+              {originTagItems.length > 0 ? (
+              <View style={styles.originTagsRow}>
+                {originTagItems.map((tag) => {
+                  const indentLook =
+                    tag === "INDENT" || tag === "NETWORK";
+                  return (
+                    <View
+                      key={tag}
+                      style={[
+                        styles.originTag,
+                        indentLook
+                          ? styles.originTagIndent
+                          : styles.originTagDirect,
+                      ]}
+                      accessibilityLabel={`Created from ${tag}`}
+                    >
+                      <Text
+                        style={[
+                          styles.originTagText,
+                          indentLook
+                            ? styles.originTagTextIndent
+                            : styles.originTagTextDirect,
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {tag}
+                      </Text>
+                    </View>
+                  );
+                })}
               </View>
+              ) : null}
               {trip.is_commerce ? (
                 <View style={styles.commerceTag} accessibilityLabel="Originated from Pulse Commerce">
                   <Text style={styles.commerceTagText} numberOfLines={1}>
@@ -557,6 +586,11 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
               dense={dense || fillGrid}
             />
           </View>
+          {specLine ? (
+            <Text style={styles.specLine} numberOfLines={1}>
+              {specLine}
+            </Text>
+          ) : null}
 
           <View style={[styles.divider, fillGrid && styles.dividerGrid]} />
 
@@ -567,33 +601,33 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
                 <Text style={styles.refLine} numberOfLines={1}>
                   <Text style={styles.refId}>{tripNo}</Text>
                   <Text style={styles.refMuted}>{` · ${schedule.scheduleLine}`}</Text>
+                  {secondaryLabel ? (
+                    <Text style={styles.refJob}>{` · ${secondaryLabel}`}</Text>
+                  ) : null}
                 </Text>
               </View>
-              {secondaryLabel ? (
-                <Text style={styles.secondaryLabel} numberOfLines={1}>
-                  {secondaryLabel}
-                </Text>
-              ) : null}
-              <View style={[styles.partyRow, styles.partyRowGrid]}>
-                <PartyChip
-                  name={supplierChipName}
-                  entityType={leftChipEntityType}
-                  avatarUrl={leftChipAvatarUrl}
-                  avatarSeed={leftChipAvatarSeed}
-                  initialsColorSeed={leftChipInitialsSeed}
-                  organizationImageUrl={leftChipOrgImageUrl}
-                  organizationAvatarSeed={leftChipOrgAvatarSeed}
-                />
-                <PartyChip
-                  name={driverChipName}
-                  entityType="driver"
-                  avatarUrl={driverAvatarUrl}
-                  avatarSeed={driverAvatarSeed}
-                  initialsColorSeed={driverFb}
-                  alignEnd
-                  presencePing={inTransitPing}
-                />
-              </View>
+              {hidePartyRow ? null : (
+                <View style={[styles.partyRow, styles.partyRowGrid]}>
+                  <PartyChip
+                    name={supplierChipName}
+                    entityType={leftChipEntityType}
+                    avatarUrl={leftChipAvatarUrl}
+                    avatarSeed={leftChipAvatarSeed}
+                    initialsColorSeed={leftChipInitialsSeed}
+                    organizationImageUrl={leftChipOrgImageUrl}
+                    organizationAvatarSeed={leftChipOrgAvatarSeed}
+                  />
+                  <PartyChip
+                    name={driverChipName}
+                    entityType="driver"
+                    avatarUrl={driverAvatarUrl}
+                    avatarSeed={driverAvatarSeed}
+                    initialsColorSeed={driverFb}
+                    alignEnd
+                    presencePing={inTransitPing}
+                  />
+                </View>
+              )}
             </View>
           ) : (
             <>
@@ -601,33 +635,33 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
                 <Text style={styles.refLine} numberOfLines={1}>
                   <Text style={styles.refId}>{tripNo}</Text>
                   <Text style={styles.refMuted}>{` · ${schedule.scheduleLine}`}</Text>
+                  {secondaryLabel ? (
+                    <Text style={styles.refJob}>{` · ${secondaryLabel}`}</Text>
+                  ) : null}
                 </Text>
               </View>
-              {secondaryLabel ? (
-                <Text style={styles.secondaryLabel} numberOfLines={1}>
-                  {secondaryLabel}
-                </Text>
-              ) : null}
-              <View style={styles.partyRow}>
-                <PartyChip
-                  name={supplierChipName}
-                  entityType={leftChipEntityType}
-                  avatarUrl={leftChipAvatarUrl}
-                  avatarSeed={leftChipAvatarSeed}
-                  initialsColorSeed={leftChipInitialsSeed}
-                  organizationImageUrl={leftChipOrgImageUrl}
-                  organizationAvatarSeed={leftChipOrgAvatarSeed}
-                />
-                <PartyChip
-                  name={driverChipName}
-                  entityType="driver"
-                  avatarUrl={driverAvatarUrl}
-                  avatarSeed={driverAvatarSeed}
-                  initialsColorSeed={driverFb}
-                  alignEnd
-                  presencePing={inTransitPing}
-                />
-              </View>
+              {hidePartyRow ? null : (
+                <View style={styles.partyRow}>
+                  <PartyChip
+                    name={supplierChipName}
+                    entityType={leftChipEntityType}
+                    avatarUrl={leftChipAvatarUrl}
+                    avatarSeed={leftChipAvatarSeed}
+                    initialsColorSeed={leftChipInitialsSeed}
+                    organizationImageUrl={leftChipOrgImageUrl}
+                    organizationAvatarSeed={leftChipOrgAvatarSeed}
+                  />
+                  <PartyChip
+                    name={driverChipName}
+                    entityType="driver"
+                    avatarUrl={driverAvatarUrl}
+                    avatarSeed={driverAvatarSeed}
+                    initialsColorSeed={driverFb}
+                    alignEnd
+                    presencePing={inTransitPing}
+                  />
+                </View>
+              )}
             </>
           )}
         </Pressable>
@@ -798,6 +832,14 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
     letterSpacing: 0.25,
   },
+  originTagsRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "flex-end",
+    gap: 4,
+    maxWidth: 168,
+    alignSelf: "flex-end",
+  },
   originTag: {
     paddingHorizontal: 8,
     paddingVertical: 3,
@@ -866,6 +908,13 @@ const styles = StyleSheet.create({
   routeGrid: {
     minHeight: HUB_GRID_ROUTE_MIN_HEIGHT,
     flexShrink: 0,
+  },
+  specLine: {
+    marginTop: 8,
+    fontSize: 11,
+    lineHeight: 14,
+    fontWeight: "500",
+    color: REF.muted,
   },
   leg: {
     flex: 1,
@@ -988,11 +1037,11 @@ const styles = StyleSheet.create({
     lineHeight: 12,
     fontVariant: ["tabular-nums"],
   },
-  secondaryLabel: {
-    marginTop: 2,
+  refJob: {
     fontSize: 9,
     fontWeight: "600",
     color: REF.inkMid,
+    lineHeight: 12,
     letterSpacing: 0.2,
   },
   partyRow: {

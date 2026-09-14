@@ -56,15 +56,16 @@ export function resolvedDraftVehicleCount(stored: string | null | undefined): st
 
 /**
  * Multiple shared copies have no single indent detail page to land on — send
- * the user to Trips → Indents (own-org indent list) instead of Loads, which
- * no longer shows "My Load" (Slice 1, Trips IA). Same deep-link mechanism
- * TripsScreen already reads for the Indents sub-view (`?view=indents`).
+ * the user to Trips, pre-filtered to the INDENT stage (own-org, unallocated
+ * indents), instead of Loads, which no longer shows "My Load" (Trips IA
+ * correction). Same deep-link mechanism TripsScreen already reads for the
+ * INDENT metric tab (`?stage=indent`).
  */
 export function indentShareSuccessPath(
   requestedCount: number,
   firstIndentId: string,
-): "/(tabs)/trips?view=indents" | `/indent/${string}` {
-  if (requestedCount > 1) return "/(tabs)/trips?view=indents";
+): "/(tabs)/trips?stage=indent" | `/indent/${string}` {
+  if (requestedCount > 1) return "/(tabs)/trips?stage=indent";
   return `/indent/${firstIndentId}`;
 }
 

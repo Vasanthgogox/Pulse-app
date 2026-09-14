@@ -7,7 +7,20 @@ import type { TripRow } from "@/features/trips/services/trips.service";
  * - `unloading`: explicit `unloading` / `arrived` / `at_destination` without doc, or `at_drop` without doc (drop-off, POD not on file yet).
  * - `delivered_docs_pending`: at destination with at least one `trip_documents` row (proof on file; trip still open / docs).
  */
+/**
+ * `indent` is the FIRST stage of this same lifecycle, not a separate branch:
+ * a requirement starts as an INDENT, crosses the allocation boundary
+ * (`trips.indent_id` gets set — see `isIndentUnallocated` in
+ * `features/network/utils/loadCenter.model.ts`) and becomes an actual trip,
+ * landing on UNASSIGNED, then progresses through the stages below exactly
+ * as it always has. Because an indent record and a trip record are
+ * different tables, `classifyTripMetric`/`countTripsByMetric` (which only
+ * ever look at real trip rows) cannot themselves place something into
+ * `"indent"` — the caller (TripsScreen) fills that one count in from the
+ * indents list before this same lifecycle rail renders it as stage one.
+ */
 export type TripMetricId =
+  | "indent"
   | "unassigned"
   | "assigned"
   | "loading"
@@ -16,6 +29,7 @@ export type TripMetricId =
   | "delivered_docs_pending";
 
 export const TRIP_METRIC_ORDER: TripMetricId[] = [
+  "indent",
   "unassigned",
   "assigned",
   "loading",
@@ -86,6 +100,9 @@ export function countTripsByMetric(
   tripIdsWithAnyDocument: Set<string>,
 ): Record<TripMetricId, number> {
   const counts: Record<TripMetricId, number> = {
+    // Populated by the caller from the indents list (see file-header note),
+    // never by classifyTripMetric — an actual trip is never "indent".
+    indent: 0,
     unassigned: 0,
     assigned: 0,
     loading: 0,

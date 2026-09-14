@@ -16,7 +16,9 @@ import {
 import { getTripOtpForDisplay } from '@/features/trips/services/tripOtp.service';
 import type { AddTripCompleteResult } from '@/features/trips/components/add-trip/types';
 import { useInvalidateTrips } from '@/lib/queries/useTripsQuery';
-import { useVisibleIndentQuery } from '@/lib/queries/useIndentsQuery';
+import { createIndent } from '@/features/indents/services/indents.service';
+import type { CreateIndentInput } from '@/features/indents/services/indents.service';
+import { useInvalidateIndents, useVisibleIndentQuery } from '@/lib/queries/useIndentsQuery';
 import { useMemberAccess } from '@/lib/useMemberAccess';
 import { useRouter, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
@@ -28,19 +30,20 @@ export default function AddTripPage() {
   const canAddTrip =
     canSurface('tripops.trips.create_asset') ||
     canSurface('tripops.trips.create_aggregate');
+  const canCreateIndent = canSurface('tripops.indents.create');
 
   if (isMemberAccessLoading) {
     return <View style={{ flex: 1 }} />;
   }
 
-  if (!canAddTrip) {
+  if (!canAddTrip && !canCreateIndent) {
     return (
       <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 24 }}>
         <Text style={{ fontSize: 18, fontWeight: '700', textAlign: 'center', marginBottom: 8 }}>
           No access
         </Text>
         <Text style={{ fontSize: 14, color: '#6b7280', textAlign: 'center' }}>
-          You don't have permission to create trips.
+          You don't have permission to create trips or share loads.
         </Text>
       </View>
     );
@@ -57,6 +60,7 @@ function AddTripPageContent() {
   const { data: sourceIndent } = useVisibleIndentQuery(orgId, indentId ?? null);
   const { user, profile } = useAuth();
   const invalidateTrips = useInvalidateTrips();
+  const invalidateIndents = useInvalidateIndents();
 
   const closeAndGoBack = () => {
     // If we're coming from Ops Agent or want to force Trips view:
@@ -286,6 +290,31 @@ function AddTripPageContent() {
     }
   };
 
+  const handleShareIndent = async (data: CreateIndentInput) => {
+    const { orgId, userId } = ensureSessionReady();
+    const { error, indent } = await createIndent(
+      orgId,
+      {
+        ...data,
+        owner_user_id: data.owner_user_id ?? profile?.uid ?? userId,
+        created_by_user_id: data.created_by_user_id ?? profile?.uid ?? userId,
+      },
+      { action: "share" },
+    );
+    if (error) throw error;
+    if (!indent) throw new Error("Indent was not created.");
+    try {
+      invalidateIndents(orgId, { bustPartnerSupplierMarket: true });
+      await refreshTripsAfterCreate(orgId);
+      router.replace(
+        "/(tabs)/trips?stage=indent" as import("expo-router").Href,
+      );
+    } catch (navErr) {
+      console.warn("[add-trip] Indent created but navigation failed:", navErr);
+    }
+    return { created: true as const };
+  };
+
   return (
     <View style={{ flex: 1 }}>
       <StatusBar style="dark" />
@@ -294,6 +323,7 @@ function AddTripPageContent() {
         sourceIndent={sourceIndent ?? null}
         onClose={closeAndGoBack}
         onComplete={handleComplete}
+        onShareIndent={handleShareIndent}
       />
     </View>
   );

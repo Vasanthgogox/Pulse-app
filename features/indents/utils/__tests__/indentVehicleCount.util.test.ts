@@ -68,10 +68,10 @@ describe("indent share success path", () => {
     expect(indentShareSuccessPath(1, "abc")).toBe("/indent/abc");
   });
 
-  it("opens Trips → Indents for N > 1 — Loads no longer shows My Load (Slice 1, Trips IA)", () => {
-    expect(indentShareSuccessPath(2, "abc")).toBe("/(tabs)/trips?view=indents");
-    expect(indentShareSuccessPath(5, "abc")).toBe("/(tabs)/trips?view=indents");
-    expect(indentShareSuccessPath(50, "abc")).toBe("/(tabs)/trips?view=indents");
+  it("opens Trips filtered to the INDENT stage for N > 1 — Loads no longer shows My Load", () => {
+    expect(indentShareSuccessPath(2, "abc")).toBe("/(tabs)/trips?stage=indent");
+    expect(indentShareSuccessPath(5, "abc")).toBe("/(tabs)/trips?stage=indent");
+    expect(indentShareSuccessPath(50, "abc")).toBe("/(tabs)/trips?stage=indent");
   });
 });
 

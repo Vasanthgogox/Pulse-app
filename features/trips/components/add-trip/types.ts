@@ -5,6 +5,9 @@
 
 export type SupplySource = 'asset' | 'aggregate';
 
+/** Market branch after Source: known partner trip vs indent bidding. */
+export type MarketFulfillment = "supplier" | "bid";
+
 export interface AddTripFormData {
   pickup_area: string;
   drop_location: string;
@@ -77,6 +80,16 @@ export interface AddTripFormState {
   laneId: string | null;
   supplierRate: string;
   supplySource: SupplySource;
+  /**
+   * Set after Source = Market. `supplier` → createTrip with partner rate.
+   * `bid` → createIndent (not persisted until Share).
+   */
+  marketFulfillment: MarketFulfillment | null;
+  /** Indent share destination — not the trip supplier_rate. */
+  circulationTarget: "integrated_supplier" | "marketplace" | "both";
+  /** Supplier target rate for bidding (createIndent.supplier_target). */
+  supplierTarget: string;
+  supplierRateBasis: "per_mt" | "per_trip";
   supplierId: string | null;
   /** Display name for chosen supplier (UI; name comes from suppliers row / joins, not always a trips column). */
   supplierDisplayName: string;
@@ -162,6 +175,10 @@ export type AddTripSourceIndent = {
   sale_unit_rate?: number | null;
 };
 
+export interface AddTripShareIndentResult {
+  created: true;
+}
+
 export interface AddTripModalProps {
   organizationId: string | null;
   sourceIndent?: AddTripSourceIndent | null;
@@ -171,4 +188,11 @@ export interface AddTripModalProps {
     data: AddTripFormData,
     options?: AddTripCompleteOptions
   ) => void | Promise<void> | Promise<AddTripCompleteResult | void>;
+  /**
+   * Market → Share for Bidding. Caller must create the indent and navigate.
+   * Modal does not call onClose after success (navigation is the caller's job).
+   */
+  onShareIndent?: (
+    data: import("@/features/indents/services/indents.service").CreateIndentInput,
+  ) => Promise<AddTripShareIndentResult | void>;
 }

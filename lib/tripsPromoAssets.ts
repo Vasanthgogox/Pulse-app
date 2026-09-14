@@ -37,6 +37,20 @@ export type TripsPromoPreset = {
 };
 
 const STATUS_PRESETS: Record<TripMetricId, TripsPromoPreset> = {
+  indent: {
+    illustration: Illustration11,
+    aspect: 580 / 600,
+    title: "No unallocated indents",
+    description:
+      "Requirements waiting to be allocated to a trip show here. Create an indent or wait for one to come in.",
+    ctaLabel: "",
+    bullets: [
+      { label: "Post a requirement", icon: "doc" },
+      { label: "Receive bids", icon: "mail" },
+      { label: "Award to a supplier", icon: "image" },
+      { label: "Becomes a trip", icon: "vector" },
+    ],
+  },
   unassigned: {
     illustration: Illustration11,
     aspect: 580 / 600,
@@ -220,6 +234,34 @@ export const TRIPS_PROMO_PRESETS: Record<TripsPromoVariant, TripsPromoPreset> = 
       { label: "Closed payouts", icon: "doc" },
       { label: "Cost reconciled", icon: "xls" },
       { label: "Archive ready", icon: "zip" },
+    ],
+  },
+  history_pending_soft_pod: {
+    illustration: Illustration20,
+    aspect: 600 / 480,
+    title: "No pending soft copy POD",
+    description:
+      "Completed trips still missing a digital / uploaded POD appear here.",
+    ctaLabel: "",
+    bullets: [
+      { label: "Upload POD photo", icon: "image" },
+      { label: "Soft copy on file", icon: "pdf" },
+      { label: "Proof of delivery", icon: "doc" },
+      { label: "Close documents", icon: "zip" },
+    ],
+  },
+  history_pending_hard_pod: {
+    illustration: Illustration28,
+    aspect: 600 / 564,
+    title: "No pending hard copy POD",
+    description:
+      "Completed trips still waiting for the physical POD card appear here.",
+    ctaLabel: "",
+    bullets: [
+      { label: "Physical POD card", icon: "doc" },
+      { label: "Mark received", icon: "mail" },
+      { label: "Office copy", icon: "pdf" },
+      { label: "Close documents", icon: "zip" },
     ],
   },
   ...STATUS_PRESETS,

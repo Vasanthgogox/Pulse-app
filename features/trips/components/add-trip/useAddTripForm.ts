@@ -35,7 +35,10 @@ export type AddTripIssueField =
   | 'advancePaid'
   | 'notes'
   | 'assetDriver'
-  | 'assetVehicle';
+  | 'assetVehicle'
+  | 'marketFulfillment'
+  | 'circulation'
+  | 'supplierTarget';
 
 export interface AddTripValidationIssue {
   field: AddTripIssueField;
@@ -43,6 +46,12 @@ export interface AddTripValidationIssue {
 }
 
 /** Collects every blocking validation issue (same rules as legacy single-message validation). */
+export function getAddTripValidationIssues(
+  state: AddTripFormState,
+): AddTripValidationIssue[] {
+  return computeValidationIssues(state);
+}
+
 function computeValidationIssues(state: AddTripFormState): AddTripValidationIssue[] {
   const issues: AddTripValidationIssue[] = [];
   const push = (field: AddTripIssueField, message: string) => {
@@ -80,7 +89,9 @@ function computeValidationIssues(state: AddTripFormState): AddTripValidationIssu
     if (errPrice) push("clientPrice", `Client price: ${errPrice}`);
   }
 
-  if (state.supplySource === 'aggregate') {
+  const isBidShare = state.supplySource === 'aggregate' && state.marketFulfillment === 'bid';
+
+  if (state.supplySource === 'aggregate' && !isBidShare) {
     if (!state.supplierId) {
       push('partner', 'Select a transport partner');
     }
@@ -101,6 +112,31 @@ function computeValidationIssues(state: AddTripFormState): AddTripValidationIssu
     }
   }
 
+  if (isBidShare) {
+    const circ = state.circulationTarget;
+    if (
+      circ !== 'integrated_supplier' &&
+      circ !== 'marketplace' &&
+      circ !== 'both'
+    ) {
+      push('circulation', 'Choose Network, Marketplace, or both');
+    }
+    const errTarget = positiveAmount()(state.supplierTarget);
+    if (errTarget) push('supplierTarget', `Supplier target rate: ${errTarget}`);
+    const vt = state.vehicleType.trim();
+    if (!vt) push('vehicleType', 'Vehicle type: required to share for bidding');
+    const lt = state.loadType.trim();
+    if (!lt) push('loadType', 'Load type: required to share for bidding');
+    const tonsTrim = state.tons.trim();
+    if (!tonsTrim) push('tons', 'Weight: required to share for bidding');
+    else {
+      const tonsNum = Number(tonsTrim);
+      if (!Number.isFinite(tonsNum) || tonsNum <= 0) {
+        push('tons', 'Tons: enter a valid weight greater than 0');
+      }
+    }
+  }
+
   if (state.supplySource === 'asset' && !state.assignLater) {
     if (!state.driverId) push('assetDriver', 'Driver: required');
     if (!state.vehicleId) push('assetVehicle', 'Vehicle: required');
@@ -112,13 +148,19 @@ function computeValidationIssues(state: AddTripFormState): AddTripValidationIssu
   }
 
   const notesWithVehicle =
-    state.supplySource === 'aggregate' && state.aggregateVehicleText.trim()
+    state.supplySource === 'aggregate' &&
+    !isBidShare &&
+    state.aggregateVehicleText.trim()
       ? (state.notes.trim() ? state.notes.trim() + '\n' : '') + 'Vehicle: ' + state.aggregateVehicleText.trim()
       : state.notes;
   const err7 = maxLength(VALIDATION.NOTES_MAX_LENGTH)(notesWithVehicle);
   if (err7) push('notes', `Notes: ${err7}`);
 
-  if (state.supplySource === 'aggregate' && state.driverPhone.trim()) {
+  if (
+    state.supplySource === 'aggregate' &&
+    !isBidShare &&
+    state.driverPhone.trim()
+  ) {
     const err8 = validatePhone(state.driverPhone.trim());
     if (err8) push('driverPhone', `Driver for tracking: ${err8}`);
   }
@@ -130,6 +172,7 @@ function computeValidationIssues(state: AddTripFormState): AddTripValidationIssu
   // When there is no platform match, free-text aggregateDriverName is enough.
   if (
     state.supplySource === 'aggregate' &&
+    !isBidShare &&
     !state.assignLater &&
     state.driverPhoneName &&
     !state.driverPhoneConfirmed
@@ -181,6 +224,10 @@ const initialState: AddTripFormState = {
   laneId: null,
   supplierRate: '',
   supplySource: 'asset',
+  marketFulfillment: null,
+  circulationTarget: 'integrated_supplier',
+  supplierTarget: '',
+  supplierRateBasis: 'per_trip',
   supplierId: null,
   supplierDisplayName: '',
   advancePaid: '',
@@ -199,6 +246,103 @@ const initialState: AddTripFormState = {
   aggregateVehicleText: '',
   aggregateDriverCommissionPercent: '',
 };
+
+export const ADD_TRIP_FORM_INITIAL_STATE: AddTripFormState = initialState;
+
+export function buildAddTripPayload(state: AddTripFormState): AddTripFormData {
+  const parseAmount = (raw: string) => {
+    const n = parseFloat(String(raw ?? "").replace(/,/g, ""));
+    return Number.isFinite(n) ? n : 0;
+  };
+  const unitRate = parseAmount(state.saleUnitRate);
+  const tonsNum = parseAmount(state.tons);
+  const clientPrice =
+    state.saleRateBasis === "per_mt"
+      ? computeClientPrice({
+          basis: "per_mt",
+          unitRate,
+          tons: tonsNum,
+        })
+      : parseAmount(state.clientPrice);
+  const supplierRate =
+    state.supplySource === "asset" ? 0 : parseAmount(state.supplierRate);
+  const advancePaid = parseAmount(state.advancePaid);
+  let notes = state.notes.trim();
+  if (state.vehicleType.trim()) {
+    notes =
+      (notes ? notes + "\n" : "") + `Vehicle type: ${state.vehicleType.trim()}`;
+  }
+  if (state.tons.trim()) {
+    notes = (notes ? notes + "\n" : "") + `Load: ${state.tons.trim()} Tons`;
+  }
+  if (state.supplySource === "aggregate" && state.aggregateDriverName.trim()) {
+    notes =
+      (notes ? notes + "\n" : "") +
+      "Driver name (tracking): " +
+      state.aggregateDriverName.trim();
+  }
+  if (state.supplySource === "aggregate" && state.aggregateVehicleText.trim()) {
+    notes =
+      (notes ? notes + "\n" : "") +
+      "Vehicle: " +
+      state.aggregateVehicleText.trim();
+  }
+  return {
+    pickup_area: state.pickupArea.trim(),
+    drop_location: state.dropLocation.trim(),
+    pickup_lat: state.pickupLat ?? undefined,
+    pickup_lon: state.pickupLon ?? undefined,
+    drop_lat: state.dropLat ?? undefined,
+    drop_lon: state.dropLon ?? undefined,
+    pickup_date: state.tripStartDate.trim() || null,
+    distance: state.routeDistanceKm ?? undefined,
+    estimated_duration: state.routeEtaInterval ?? undefined,
+    client_name: state.clientName.trim(),
+    client_id: state.clientId,
+    client_price: clientPrice,
+    sale_rate_basis: state.saleRateBasis,
+    sale_unit_rate:
+      state.saleRateBasis === "per_mt" && unitRate > 0 ? unitRate : null,
+    lane_id: state.laneId,
+    supplier_rate: supplierRate,
+    supplier_id:
+      state.supplySource === "aggregate" ? state.supplierId || null : null,
+    supplier_name:
+      state.supplySource === "aggregate" && state.supplierId
+        ? state.supplierDisplayName.trim() || null
+        : null,
+    advance_paid:
+      state.supplySource === "aggregate" && advancePaid > 0
+        ? advancePaid
+        : undefined,
+    notes: notes || null,
+    driver_id:
+      state.supplySource === "asset" && !state.assignLater
+        ? state.driverId || null
+        : null,
+    driver_commission_percent:
+      state.supplySource === "asset" && !state.assignLater
+        ? state.driverCommissionPercent ?? null
+        : state.supplySource === "aggregate" && !state.assignLater
+          ? Number(state.aggregateDriverCommissionPercent) || null
+          : null,
+    driver_commission_per_km:
+      state.supplySource === "asset" && !state.assignLater
+        ? state.driverCommissionPerKm ?? null
+        : null,
+    vehicle_id:
+      state.supplySource === "asset" && !state.assignLater
+        ? state.vehicleId || null
+        : null,
+    vehicle_display_number:
+      state.supplySource === "aggregate" && state.aggregateVehicleText.trim()
+        ? state.aggregateVehicleText.trim()
+        : undefined,
+    tons: state.tons.trim() || null,
+    load_type: state.loadType.trim() || null,
+    vehicle_type: state.vehicleType.trim() || null,
+  };
+}
 
 export function useAddTripForm(options?: {
   initialSupplySource?: AddTripFormState["supplySource"];
@@ -265,6 +409,7 @@ export function useAddTripForm(options?: {
   const setSupplySource = useCallback((v: AddTripFormState['supplySource']) => setState((s) => ({
     ...s,
     supplySource: v,
+    marketFulfillment: v === 'asset' ? null : s.marketFulfillment,
     supplierId: v === 'aggregate' ? s.supplierId : null,
     supplierDisplayName: v === 'aggregate' ? s.supplierDisplayName : '',
     driverId: v === 'asset' ? s.driverId : null,
@@ -278,6 +423,25 @@ export function useAddTripForm(options?: {
     aggregateDriverCommissionPercent:
       v === 'asset' ? '' : s.aggregateDriverCommissionPercent,
   })), []);
+  const setMarketFulfillment = useCallback(
+    (v: AddTripFormState['marketFulfillment']) =>
+      setState((s) => ({ ...s, marketFulfillment: v })),
+    [],
+  );
+  const setCirculationTarget = useCallback(
+    (v: AddTripFormState['circulationTarget']) =>
+      setState((s) => ({ ...s, circulationTarget: v })),
+    [],
+  );
+  const setSupplierTarget = useCallback(
+    (v: string) => setState((s) => ({ ...s, supplierTarget: v })),
+    [],
+  );
+  const setSupplierRateBasis = useCallback(
+    (v: AddTripFormState['supplierRateBasis']) =>
+      setState((s) => ({ ...s, supplierRateBasis: v })),
+    [],
+  );
   const setSupplierSelection = useCallback(
     (id: string | null, displayName?: string | null) =>
       setState((s) => ({
@@ -513,94 +677,10 @@ export function useAddTripForm(options?: {
     return validationIssues[0]?.message ?? null;
   }, [validationIssues]);
 
-  const buildPayload = useCallback((): AddTripFormData => {
-    const parseAmount = (raw: string) => {
-      const n = parseFloat(String(raw ?? '').replace(/,/g, ''));
-      return Number.isFinite(n) ? n : 0;
-    };
-    const unitRate = parseAmount(state.saleUnitRate);
-    const tonsNum = parseAmount(state.tons);
-    const clientPrice =
-      state.saleRateBasis === "per_mt"
-        ? computeClientPrice({
-            basis: "per_mt",
-            unitRate,
-            tons: tonsNum,
-          })
-        : parseAmount(state.clientPrice);
-    // Asset: no partner; use 0. Aggregate: validated above.
-    const supplierRate = state.supplySource === 'asset' ? 0 : parseAmount(state.supplierRate);
-    const advancePaid = parseAmount(state.advancePaid);
-    let notes = state.notes.trim();
-    if (state.vehicleType.trim()) {
-      notes =
-        (notes ? notes + '\n' : '') +
-        `Vehicle type: ${state.vehicleType.trim()}`;
-    }
-    if (state.tons.trim()) {
-      notes = (notes ? notes + '\n' : '') + `Load: ${state.tons.trim()} Tons`;
-    }
-    if (state.supplySource === 'aggregate' && state.aggregateDriverName.trim()) {
-      notes =
-        (notes ? notes + '\n' : '') +
-        'Driver name (tracking): ' +
-        state.aggregateDriverName.trim();
-    }
-    if (state.supplySource === 'aggregate' && state.aggregateVehicleText.trim()) {
-      notes = (notes ? notes + '\n' : '') + 'Vehicle: ' + state.aggregateVehicleText.trim();
-    }
-    return {
-      pickup_area: state.pickupArea.trim(),
-      drop_location: state.dropLocation.trim(),
-      pickup_lat: state.pickupLat ?? undefined,
-      pickup_lon: state.pickupLon ?? undefined,
-      drop_lat: state.dropLat ?? undefined,
-      drop_lon: state.dropLon ?? undefined,
-      pickup_date: state.tripStartDate.trim() || null,
-      distance: state.routeDistanceKm ?? undefined,
-      estimated_duration: state.routeEtaInterval ?? undefined,
-      client_name: state.clientName.trim(),
-      client_id: state.clientId,
-      client_price: clientPrice,
-      sale_rate_basis: state.saleRateBasis,
-      sale_unit_rate:
-        state.saleRateBasis === "per_mt" && unitRate > 0 ? unitRate : null,
-      lane_id: state.laneId,
-      supplier_rate: supplierRate,
-      supplier_id: state.supplySource === 'aggregate' ? state.supplierId || null : null,
-      supplier_name:
-        state.supplySource === 'aggregate' && state.supplierId
-          ? state.supplierDisplayName.trim() || null
-          : null,
-      advance_paid: state.supplySource === 'aggregate' && advancePaid > 0 ? advancePaid : undefined,
-      notes: notes || null,
-      driver_id:
-        state.supplySource === 'asset' && !state.assignLater
-          ? state.driverId || null
-          : null,
-      driver_commission_percent:
-        state.supplySource === 'asset' && !state.assignLater
-          ? state.driverCommissionPercent ?? null
-          : state.supplySource === 'aggregate' && !state.assignLater
-            ? Number(state.aggregateDriverCommissionPercent) || null
-            : null,
-      driver_commission_per_km:
-        state.supplySource === 'asset' && !state.assignLater
-          ? state.driverCommissionPerKm ?? null
-          : null,
-      vehicle_id:
-        state.supplySource === 'asset' && !state.assignLater
-          ? state.vehicleId || null
-          : null,
-      vehicle_display_number:
-        state.supplySource === 'aggregate' && state.aggregateVehicleText.trim()
-          ? state.aggregateVehicleText.trim()
-          : undefined,
-      tons: state.tons.trim() || null,
-      load_type: state.loadType.trim() || null,
-      vehicle_type: state.vehicleType.trim() || null,
-    };
-  }, [state]);
+  const buildPayload = useCallback(
+    (): AddTripFormData => buildAddTripPayload(state),
+    [state],
+  );
 
   const setters = useMemo(
     () => ({
@@ -623,6 +703,10 @@ export function useAddTripForm(options?: {
       setLaneId,
       setSupplierRate,
       setSupplySource,
+      setMarketFulfillment,
+      setCirculationTarget,
+      setSupplierTarget,
+      setSupplierRateBasis,
       setSupplierSelection,
       setAdvancePaid,
       setAssignLater,
@@ -659,6 +743,10 @@ export function useAddTripForm(options?: {
       setLaneId,
       setSupplierRate,
       setSupplySource,
+      setMarketFulfillment,
+      setCirculationTarget,
+      setSupplierTarget,
+      setSupplierRateBasis,
       setSupplierSelection,
       setAdvancePaid,
       setAssignLater,

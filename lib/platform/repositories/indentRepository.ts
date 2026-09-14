@@ -42,6 +42,7 @@ export const indentRepository = {
     pickupSummary: string;
     dropSummary: string;
     requestedBy: string;
+    clientName?: string | null;
   }): Promise<CreatedPlanIndentRef> {
     await ensurePublicUserRecord(input.requestedBy);
     const { data, error } = await requirePlatformDb()
@@ -52,7 +53,9 @@ export const indentRepository = {
         sales_order_id: null,
         pickup_area: input.pickupSummary,
         drop_location: input.dropSummary,
-        client_name: `${input.orderCount} merged orders`,
+        client_name:
+          (input.clientName ?? "").trim() ||
+          `${input.orderCount} merged orders`,
         client_price: input.totalAmount,
         supplier_target: input.supplierTarget,
         sale_rate_basis: 'per_trip',

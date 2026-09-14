@@ -24,7 +24,11 @@ import {
 } from "@/features/network/utils/executionPlanRouteSummary";
 import { LoadIndentTripPlanPreview } from "@/features/network/components/LoadIndentTripPlanPreview";
 import { formatINR } from "@/lib/format";
-import { ArrowRight } from "lucide-react-native";
+import {
+  MutualAvatarStack,
+  type MutualFace,
+} from "@/features/network/components/MutualAvatarStack";
+import { ArrowRight, Eye, Map } from "lucide-react-native";
 import type { ReactNode } from "react";
 import { useState } from "react";
 import {
@@ -251,6 +255,10 @@ export type LoadCenterHubMobileIndentCardProps = {
   organizationImageUrl?: string | null;
   organizationAvatarSeed?: string | null;
   initialsColorSeed?: string;
+  /** Initials fallback name (own org / client). Defaults to `titleName`. */
+  avatarPartyName?: string | null;
+  /** Merged-order customers — overlapping stack, same pattern as network mutuals. */
+  clientFaces?: MutualFace[] | null;
   /** Shown on Done → Converted to trips (driver + vehicle from linked trip). */
   tripAllocation?: LoadCenterTripAllocation | null;
   /** Opens indent detail. Omit on desktop kanban — CTAs handle navigation. */
@@ -294,6 +302,8 @@ export function LoadCenterHubMobileIndentCard({
   organizationImageUrl,
   organizationAvatarSeed,
   initialsColorSeed,
+  avatarPartyName,
+  clientFaces = null,
   tripAllocation,
   onPress,
   actions,
@@ -308,6 +318,20 @@ export function LoadCenterHubMobileIndentCard({
   const isMultiOrder = isMultiOrderExecutionPlan(routePlan);
   const planStops = routePlan?.stops ?? [];
   const routeHierarchy = buildCommerceRouteHierarchy(planStops);
+  const showPlanInRoute = isMultiOrder && planStops.length > 0;
+  const extraStops = showPlanInRoute ? routeHierarchy.intermediateCount : 0;
+  const pickupValue =
+    showPlanInRoute && routeHierarchy.pickupPlace
+      ? routeHierarchy.pickupPlace
+      : origin;
+  const dropValue =
+    showPlanInRoute && routeHierarchy.finalDropPlace
+      ? routeHierarchy.finalDropPlace
+      : dest;
+  const viaLabel =
+    extraStops > 0
+      ? `+${extraStops} ${extraStops === 1 ? "stop" : "stops"}`
+      : "Plan";
   const displayName = asLabel(titleName);
   const avatarFb =
     (initialsColorSeed ?? avatarSeed ?? "").trim() ||
@@ -315,6 +339,10 @@ export function LoadCenterHubMobileIndentCard({
       ? `client-entity:${String(indent.client_id).trim()}`
       : `indent:${indent.id}`);
 
+  const mergedClientFaces = (clientFaces ?? []).filter((face) =>
+    (face.id ?? "").trim(),
+  );
+  const showMergedClientPile = mergedClientFaces.length > 1;
   const statusChip = resolveStatusChip(statusLabel, sourceTag);
   const channelLabel = resolveChannelLabel(sourceTag, statusLabel);
   const isGetLoadCard = sourceTag != null;
@@ -417,16 +445,50 @@ export function LoadCenterHubMobileIndentCard({
           }
         >
           <View style={styles.cardTop}>
-            <PartyAvatar
-              name={displayName}
-              initialsColorSeed={avatarFb}
-              organizationImageUrl={organizationImageUrl}
-              organizationAvatarSeed={organizationAvatarSeed}
-              avatarUrl={avatarUrl}
-              avatarSeed={avatarSeed}
-              entityType="client"
-              size={32}
-            />
+            {showMergedClientPile ? (
+              <View style={styles.mergedClientsSlot}>
+                <MutualAvatarStack
+                  orgId={indent.id}
+                  mutualCount={mergedClientFaces.length}
+                  mutuals={mergedClientFaces}
+                  faceSize={dense ? 26 : 32}
+                  showLabel={false}
+                  compact
+                  inline
+                  overflowColor={Theme.primary}
+                  onPressOverflow={onPress}
+                />
+                <Pressable
+                  onPress={onPress}
+                  disabled={!onPress}
+                  hitSlop={6}
+                  style={({ pressed }) => [
+                    styles.mergedClientsHint,
+                    Boolean(onPress) && pressed && { opacity: 0.75 },
+                  ]}
+                  accessibilityRole={onPress ? "button" : undefined}
+                  accessibilityLabel={`${mergedClientFaces.length} clients on this load`}
+                >
+                  <Text style={styles.mergedClientsHintText} numberOfLines={1}>
+                    clients
+                  </Text>
+                  {onPress ? (
+                    <Eye size={12} color={Theme.textRouteCard} strokeWidth={2} />
+                  ) : null}
+                </Pressable>
+              </View>
+            ) : (
+              <PartyAvatar
+                name={(avatarPartyName ?? "").trim() || displayName}
+                initialsColorSeed={avatarFb}
+                organizationImageUrl={organizationImageUrl}
+                organizationAvatarSeed={organizationAvatarSeed}
+                avatarUrl={avatarUrl}
+                avatarSeed={avatarSeed}
+                entityType="client"
+                size={32}
+              />
+            )}
             <View style={styles.cardTopText}>
               <Text style={styles.orgName} numberOfLines={1}>
                 {displayName}
@@ -478,81 +540,70 @@ export function LoadCenterHubMobileIndentCard({
             </View>
           </View>
 
-          {isMultiOrder && planStops.length > 0 ? (
-            <View
-              style={styles.multiOrderBlock}
-              testID="commerce-multi-order-route-summary"
-            >
-              {routeHierarchy.pickupPlace ? (
-                <View style={styles.routeHierarchyLeg}>
-                  <Text style={styles.routeLabel}>PICKUP</Text>
-                  <RouteEndpointStack
-                    value={routeHierarchy.pickupPlace}
-                    primaryStyle={styles.routeCity}
-                    secondaryStyle={styles.routeState}
-                  />
-                </View>
-              ) : null}
-              {routeHierarchy.finalDropPlace ? (
-                <View style={styles.routeHierarchyLeg}>
-                  <Text style={styles.routeLabel}>DROP</Text>
-                  <RouteEndpointStack
-                    value={routeHierarchy.finalDropPlace}
-                    primaryStyle={styles.routeCity}
-                    secondaryStyle={styles.routeState}
-                  />
-                  {routeHierarchy.intermediateCount > 0 ? (
-                    <Text
-                      style={styles.routeVia}
-                      numberOfLines={1}
-                      testID="commerce-multi-order-via"
-                    >
-                      {`+ ${routeHierarchy.intermediateCount} ${
-                        routeHierarchy.intermediateCount === 1 ? "stop" : "stops"
-                      }`}
-                      {routeHierarchy.intermediatePlaces.length > 0
-                        ? ` · ${routeHierarchy.intermediatePlaces.join(" · ")}`
-                        : ""}
-                    </Text>
-                  ) : null}
-                </View>
-              ) : null}
+          <View
+            style={[
+              styles.routeGrid,
+              showPlanInRoute ? styles.routeGridWithVia : null,
+            ]}
+            testID={
+              showPlanInRoute
+                ? "commerce-multi-order-route-summary"
+                : undefined
+            }
+          >
+            <View style={styles.routeCol}>
+              <Text style={styles.routeLabel}>PICKUP</Text>
+              <RouteEndpointStack
+                value={pickupValue}
+                primaryStyle={styles.routeCity}
+                secondaryStyle={styles.routeState}
+              />
+            </View>
+            {showPlanInRoute ? (
               <Pressable
                 onPress={() => setTripPlanOpen(true)}
-                style={styles.tripPlanBtn}
-                hitSlop={6}
+                style={[styles.routeSep, styles.routeSepVia]}
+                hitSlop={8}
                 accessibilityRole="button"
-                accessibilityLabel="View trip plan"
+                accessibilityLabel={`View trip plan, ${viaLabel}`}
               >
-                <Text style={styles.tripPlanBtnText}>Trip plan</Text>
+                <View style={styles.routeSepArrowRow} pointerEvents="none">
+                  <View style={styles.routeSepLine} />
+                  <ArrowRight size={11} color={MUTED} strokeWidth={2.4} />
+                  <View style={styles.routeSepLine} />
+                </View>
+                <View style={styles.routeViaChip} pointerEvents="none">
+                  <Map size={8} color={LINK} strokeWidth={2.4} />
+                  <Text
+                    style={styles.routeViaText}
+                    numberOfLines={1}
+                    testID="commerce-multi-order-via"
+                  >
+                    {viaLabel}
+                  </Text>
+                </View>
               </Pressable>
-            </View>
-          ) : (
-            <View style={styles.routeGrid}>
-              <View style={styles.routeCol}>
-                <Text style={styles.routeLabel}>PICKUP</Text>
-                <RouteEndpointStack
-                  value={origin}
-                  primaryStyle={styles.routeCity}
-                  secondaryStyle={styles.routeState}
-                />
-              </View>
-              <View style={styles.routeSep} pointerEvents="none" accessibilityElementsHidden>
+            ) : (
+              <View
+                style={styles.routeSep}
+                pointerEvents="none"
+                accessibilityElementsHidden
+              >
                 <View style={styles.routeSepLine} />
                 <ArrowRight size={11} color={MUTED} strokeWidth={2.4} />
                 <View style={styles.routeSepLine} />
               </View>
-              <View style={[styles.routeCol, styles.routeColEnd]}>
-                <Text style={[styles.routeLabel, styles.routeLabelEnd]}>DROP</Text>
-                <RouteEndpointStack
-                  value={dest}
-                  align="end"
-                  primaryStyle={styles.routeCity}
-                  secondaryStyle={styles.routeState}
-                />
-              </View>
+            )}
+            <View style={[styles.routeCol, styles.routeColEnd]}>
+              <Text style={[styles.routeLabel, styles.routeLabelEnd]}>DROP</Text>
+              <RouteEndpointStack
+                value={dropValue}
+                align="end"
+                primaryStyle={styles.routeCity}
+                secondaryStyle={styles.routeState}
+              />
             </View>
-          )}
+          </View>
           {isCommerce && !isMultiOrder ? (
             <Pressable
               onPress={() => setTripPlanOpen(true)}
@@ -799,6 +850,24 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
   },
+  mergedClientsSlot: {
+    flexShrink: 0,
+    alignItems: "flex-start",
+    justifyContent: "center",
+    gap: 2,
+  },
+  mergedClientsHint: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 4,
+    paddingLeft: 2,
+  },
+  mergedClientsHintText: {
+    fontSize: 9,
+    fontWeight: "600",
+    color: Theme.textMuted,
+    letterSpacing: 0.2,
+  },
   cardTopText: {
     flex: 1,
     minWidth: 0,
@@ -864,7 +933,8 @@ const styles = StyleSheet.create({
     borderWidth: StyleSheet.hairlineWidth,
     borderColor: BORDER,
     backgroundColor: CANVAS_SOFT,
-    flexShrink: 0,
+    flexShrink: 1,
+    maxWidth: 88,
     alignSelf: "center",
   },
   commerceBadgeText: {
@@ -873,20 +943,6 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     color: MUTED,
     textTransform: "uppercase",
-  },
-  multiOrderBlock: {
-    gap: 10,
-    width: "100%",
-  },
-  routeHierarchyLeg: {
-    gap: 2,
-    width: "100%",
-  },
-  routeVia: {
-    marginTop: 2,
-    fontSize: 12,
-    fontWeight: "600",
-    color: MUTED,
   },
   tripPlanBtn: {
     alignSelf: "flex-start",
@@ -940,6 +996,12 @@ const styles = StyleSheet.create({
       gap: 6,
     },
   }),
+  routeGridWithVia: Platform.select({
+    web: {
+      gridTemplateColumns: "minmax(0, 1fr) minmax(56px, auto) minmax(0, 1fr)",
+    } as any,
+    default: {},
+  }),
   routeCol: Platform.select({
     web: {
       minWidth: 0,
@@ -974,6 +1036,46 @@ const styles = StyleSheet.create({
       } as any,
       default: {},
     }),
+  },
+  routeSepVia: {
+    width: 56,
+    minWidth: 56,
+    paddingTop: 12,
+    flexDirection: "column",
+    alignItems: "center",
+    justifyContent: "flex-start",
+    gap: 2,
+    ...Platform.select({
+      web: {
+        display: "flex",
+        flexDirection: "column",
+        alignSelf: "start",
+        width: "auto",
+        minWidth: 56,
+      } as any,
+      default: {},
+    }),
+  },
+  routeSepArrowRow: {
+    width: "100%",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 2,
+  },
+  routeViaChip: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 3,
+    minHeight: 14,
+  },
+  routeViaText: {
+    fontSize: 8,
+    fontWeight: "600",
+    lineHeight: 10,
+    letterSpacing: 0.1,
+    color: LINK,
   },
   routeSepLine: {
     flex: 1,
@@ -1157,6 +1259,7 @@ const styles = StyleSheet.create({
   },
   priceRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "space-between",
     gap: 10,
@@ -1188,9 +1291,10 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   priceActions: {
-    flexShrink: 0,
-    maxWidth: "52%",
-    minWidth: 0,
+    flexShrink: 1,
+    flexGrow: 1,
+    maxWidth: "100%",
+    minWidth: 168,
     alignItems: "flex-end",
     justifyContent: "center",
     alignSelf: "center",

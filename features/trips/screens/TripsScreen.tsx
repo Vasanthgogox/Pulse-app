@@ -43,7 +43,15 @@ import {
     type HistoryTripMetricId,
 } from "@/features/trips/components/TripsHubBentoMetrics";
 import { TripsFilterBottomSheet } from "@/features/trips/components/TripsFilterBottomSheet";
-import { TripsIndentsPanel } from "@/features/trips/components/indents/TripsIndentsPanel";
+import { isIndentUnallocated, isIndentStageDone } from "@/features/network/utils/loadCenter.model";
+import { TripsHubIndentStageCard } from "@/features/trips/components/TripsHubIndentStageCard";
+import { GiveLoadIndentCardActions } from "@/features/network/components/LoadCenterIndentCardActions";
+import { useGiveLoadIndentActions } from "@/features/network/hooks/useGiveLoadIndentActions";
+import type { IndentRow } from "@/features/indents";
+import {
+  useIndentOfferCountsQuery,
+  useIndentsQuery,
+} from "@/lib/queries/useIndentsQuery";
 import { isAttributedFleetTrip } from "@/features/trips/utils/attributedFleetTrip.util";
 import {
   linkedOrgAvatarFields,
@@ -70,6 +78,11 @@ import {
   TRIP_METRIC_ORDER,
   type TripMetricId,
 } from "@/features/trips/utils/tripHubMetrics";
+import {
+  indentMatchesHubDateFilter,
+  indentMatchesHubSearch,
+  tripsHubAllToolbarCountLabel,
+} from "@/features/trips/utils/indentHubToolbarFilter";
 import type { TripHubPartyMeta } from "@/features/trips/utils/tripHubPartyMeta";
 import {
   getTripHubInTransitPing,
@@ -78,7 +91,6 @@ import {
 import { buildTripHubPartyMetaByTripId } from "@/features/trips/utils/tripHubPartyMeta";
 import { tripNonSupplierOutflowTotal } from "@/features/trips/utils/tripManifestFreightCost";
 import { canAccessTrips } from "@/lib/capabilities";
-import { useCapabilities } from "@/lib/useCapabilities";
 import { useMemberAccess } from "@/lib/useMemberAccess";
 import {
   compareTripsByScheduleAsc,
@@ -116,6 +128,7 @@ import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TripsPromoCard } from "@/features/trips/components/TripsPromoCard";
 import {
+    Alert,
     NativeScrollEvent,
     NativeSyntheticEvent,
     Platform,
@@ -232,8 +245,11 @@ export default function TripsScreen() {
       ? 12
       : layout.scrollBottomPadding(40);
   const router = useRouter();
-  /** Deep-link into the Indents sub-view, e.g. `ROUTES.TABS.TRIPS + '?view=indents'`. */
-  const { view: tripsViewParam } = useLocalSearchParams<{ view?: string }>();
+  /** Deep-link into the INDENT stage, e.g. `/(tabs)/trips?stage=indent`. */
+  const { stage: tripsStageParam } = useLocalSearchParams<{
+    stage?: string;
+  }>();
+  const indentDeepLink = tripsStageParam === "indent";
   const { openTripDetail } = useOpenTripDetail();
   const tripsHubLayoutCompact = width > 0 && width < 640;
   const handleOpenTripDetails = useCallback(
@@ -249,10 +265,17 @@ export default function TripsScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const lastFocusRefreshRef = useRef<number>(0);
   const [tripFilter, setTripFilter] = useState<"Active" | "History">("Active");
-  const [searchQuery] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
   const queryClient = useQueryClient();
-  const [activeMetricTab, setActiveMetricTab] =
-    useState<ActiveMetricTabId>("assigned");
+  const [activeMetricTab, setActiveMetricTab] = useState<ActiveMetricTabId>(
+    indentDeepLink ? "indent" : "assigned",
+  );
+  // Deep-link re-entry: expo-router can update params on an already-mounted
+  // screen (e.g. navigating here again from another post-create success
+  // path) without remounting, so the initializer above alone would miss it.
+  useEffect(() => {
+    if (indentDeepLink) setActiveMetricTab("indent");
+  }, [indentDeepLink]);
   const [supplyFilter, setSupplyFilter] = useState<SupplyFilter>("all");
   const [sortBy, setSortBy] = useState<SortBy>("date_desc");
   const [paymentFilter, setPaymentFilter] = useState<PaymentFilter>("all");
@@ -302,7 +325,6 @@ export default function TripsScreen() {
     ? "cards"
     : listLayout;
 
-  const capabilities = useCapabilities();
   const { can: canSurface, orgCapabilities } = useMemberAccess();
   // Org model decides whether trips exist at all; the surface decides whether
   // this member may open them. Gating on member-filtered capabilities too would
@@ -313,6 +335,8 @@ export default function TripsScreen() {
     canAccess &&
     (canSurface("tripops.trips.create_asset") ||
       canSurface("tripops.trips.create_aggregate"));
+  const canAddLoad = canSurface("tripops.indents.create");
+  const canUnifiedAdd = canAddTrip || canAddLoad;
   const attributionRequests = useMemo(
     () =>
       salaryRequestRows.filter(
@@ -329,32 +353,6 @@ export default function TripsScreen() {
   const refreshOrganization = orgCtx?.refreshOrganization;
   const orgBootPending = orgLoading;
   const orgId = canAccess ? (currentOrganization?.id ?? null) : null;
-  /** Trips workspace secondary switch — Indents is a lightweight view, not a separate product. */
-  const [tripsMainView, setTripsMainView] = useState<"trips" | "indents">(
-    tripsViewParam === "indents" ? "indents" : "trips",
-  );
-  // Deep-link re-entry: expo-router can update params on an already-mounted
-  // screen (e.g. navigating here again from another post-create success
-  // path) without remounting, so the initializer above alone would miss it.
-  useEffect(() => {
-    if (tripsViewParam === "indents") setTripsMainView("indents");
-  }, [tripsViewParam]);
-  const renderTripsMainViewSwitch = () => (
-    <View style={styles.tripsMainViewSwitch}>
-      <HubMobileUnderlineTab
-        label="Trips"
-        isActive={tripsMainView === "trips"}
-        compact
-        onPress={() => setTripsMainView("trips")}
-      />
-      <HubMobileUnderlineTab
-        label="Indents"
-        isActive={tripsMainView === "indents"}
-        compact
-        onPress={() => setTripsMainView("indents")}
-      />
-    </View>
-  );
   const cachedTripsForOrg = orgId
     ? (queryClient.getQueryData(queryKeys.trips.finite(orgId)) as TripRow[] | undefined)
     : undefined;
@@ -367,6 +365,68 @@ export default function TripsScreen() {
     refetch: refetchTrips,
   } = useTripsQuery(orgId);
   const trips = tripsData as TripRow[];
+  // INDENT stage: same `useIndentsQuery` Give Load already runs (shared
+  // TanStack Query cache — no duplicate fetch), filtered to indents this org
+  // owns that have not yet been allocated to a trip. Allocation is read from
+  // the trips this screen already fetches (`trips.indent_id`), not a new query.
+  const { data: allIndents = [] } = useIndentsQuery(orgId);
+  const indentIdsWithTrip = useMemo(
+    () => new Set(trips.map((t) => t.indent_id).filter((id): id is string => Boolean(id))),
+    [trips],
+  );
+  const unallocatedIndents = useMemo(
+    () =>
+      allIndents.filter(
+        (i) =>
+          (i.organization_id ?? "") === (orgId ?? "") &&
+          isIndentUnallocated(i, indentIdsWithTrip),
+      ),
+    [allIndents, orgId, indentIdsWithTrip],
+  );
+  const dateFilteredUnallocatedIndents = useMemo(
+    () =>
+      unallocatedIndents.filter((i) =>
+        indentMatchesHubDateFilter(i, dateRangeFilter, {
+          customFrom: customDateFrom,
+          customTo: customDateTo,
+        }),
+      ),
+    [unallocatedIndents, dateRangeFilter, customDateFrom, customDateTo],
+  );
+  const visibleUnallocatedIndents = useMemo(
+    () =>
+      dateFilteredUnallocatedIndents.filter((i) =>
+        indentMatchesHubSearch(i, searchQuery),
+      ),
+    [dateFilteredUnallocatedIndents, searchQuery],
+  );
+  /**
+   * INDENT-stage membership is `isIndentUnallocated` (`trips.indent_id`).
+   * Cards use the same trip ticket shell with indent bidding status +
+   * circulation_target source tags.
+   */
+  const unallocatedIndentIds = useMemo(
+    () => unallocatedIndents.map((i) => i.id),
+    [unallocatedIndents],
+  );
+  const { data: indentOfferCounts = {} } = useIndentOfferCountsQuery(
+    activeMetricTab === "all" || activeMetricTab === "indent" ? orgId : null,
+    unallocatedIndentIds,
+  );
+  const indentHubActionOrgId =
+    activeMetricTab === "all" || activeMetricTab === "indent" ? orgId : null;
+  const handleOpenUnallocatedIndent = useCallback(
+    (indent: IndentRow) => {
+      router.push(`/indent/${indent.id}` as import("expo-router").Href);
+    },
+    [router],
+  );
+  const indentHubActions = useGiveLoadIndentActions({
+    orgId: indentHubActionOrgId,
+    indentIds: unallocatedIndentIds,
+    onOpenIndent: handleOpenUnallocatedIndent,
+    insets,
+  });
   const { data: shipperNameByTripId = {} } = useShipperDisplayNamesQuery(orgId);
   const { data: transactions = [], refetch: refetchTransactions } =
     useTransactionsQuery(orgId);
@@ -628,6 +688,7 @@ export default function TripsScreen() {
       ).length;
       counts.delivered_docs_pending += completedTripsCount;
     }
+    counts.indent = dateFilteredUnallocatedIndents.length;
     return counts;
   }, [
     tripsForHubMetricCounts,
@@ -638,6 +699,7 @@ export default function TripsScreen() {
     attributionFilter,
     tripKindPillMetaByTripId,
     currentOrganization?.id,
+    dateFilteredUnallocatedIndents,
   ]);
 
   const transactionsByTripId = useMemo(() => {
@@ -658,6 +720,8 @@ export default function TripsScreen() {
       if (activeMetricTab === "all") {
         // Keep all active trips visible across Intake + In motion.
         list = tripsByStatus;
+      } else if (activeMetricTab === "indent") {
+        list = [];
       } else if (activeMetricTab === "delivered_docs_pending") {
         const deliveredDocsPendingTrips = tripsByStatus.filter(
           (t) => classifyTripMetric(t, tripIdsWithDocuments) === activeMetricTab,
@@ -1228,6 +1292,18 @@ export default function TripsScreen() {
         title: "No due to pay",
         hint: "Payable cleared",
       },
+      pending_soft_pod: {
+        count: 0,
+        amount: 0,
+        title: "Pending soft POD",
+        hint: "Document not on file",
+      },
+      pending_hard_pod: {
+        count: 0,
+        amount: 0,
+        title: "Pending hard POD",
+        hint: "Hard copy not received",
+      },
     };
 
     if (!showCompletedList) return base;
@@ -1255,6 +1331,16 @@ export default function TripsScreen() {
       } else {
         base.no_due_to_pay.count += 1;
       }
+
+      if (!tripHasHubPodFlag(tripIdsWithDocuments, trip.id)) {
+        base.pending_soft_pod.count += 1;
+      }
+      if (
+        !tripHasHubPodFlag(hardPodTripIds, trip.id) &&
+        !tripPodIsReceived(trip)
+      ) {
+        base.pending_hard_pod.count += 1;
+      }
     }
 
     return base;
@@ -1265,6 +1351,8 @@ export default function TripsScreen() {
     transactionsByTripId,
     tripFinanceAdjForHub,
     hubSubcontractRateByTripId,
+    tripIdsWithDocuments,
+    hardPodTripIds,
   ]);
 
   const tripMainTabCounts = useMemo(() => {
@@ -1354,6 +1442,10 @@ export default function TripsScreen() {
           title: tr("all"),
           hint: tr("active"),
         },
+        indent: {
+          title: tr("tripMetricIndent"),
+          hint: tr("tripMetricHintIndent"),
+        },
         unassigned: {
           title: tr("tripMetricUnassigned"),
           hint: tr("tripMetricHintUnassigned"),
@@ -1392,6 +1484,12 @@ export default function TripsScreen() {
           ],
           accent: Theme.primary,
           micro: tr("active"),
+        },
+        indent: {
+          icon: "file-text-o",
+          gradient: [Theme.financeCardSlateFrom, "#1e293b"] as [string, string],
+          accent: Theme.textSecondary,
+          micro: tr("tripMetricHintIndent"),
         },
         unassigned: {
           icon: "user-times",
@@ -1457,10 +1555,118 @@ export default function TripsScreen() {
     () => ["all" as const, ...TRIP_METRIC_ORDER],
     [],
   );
+  // ALL = every item currently in the lifecycle, at whichever stage it's at
+  // (INDENT through DELIVERED) — one count across the whole rail, not two
+  // buckets added together. A requirement is either still at the INDENT
+  // stage (in unallocatedIndents) or has crossed into the trip stages (in
+  // tripsForHubMetricCounts) — isIndentUnallocated excludes it from the
+  // former the moment it's allocated, so it's counted exactly once.
   const activeAllCount = useMemo(
-    () => tripsForHubMetricCounts.length,
-    [tripsForHubMetricCounts],
+    () => tripsForHubMetricCounts.length + dateFilteredUnallocatedIndents.length,
+    [tripsForHubMetricCounts, dateFilteredUnallocatedIndents],
   );
+  const allToolbarCountLabel = useMemo(
+    () =>
+      tripsHubAllToolbarCountLabel({
+        visibleIndentCount: visibleUnallocatedIndents.length,
+        dateFilteredIndentCount: dateFilteredUnallocatedIndents.length,
+        visibleTripCount: filtered.length,
+        dateFilteredTripCount: tripsForHubMetricCounts.length,
+      }),
+    [
+      visibleUnallocatedIndents.length,
+      dateFilteredUnallocatedIndents.length,
+      filtered.length,
+      tripsForHubMetricCounts.length,
+    ],
+  );
+
+  /**
+   * INDENT is the first stage of the same lifecycle the rail already
+   * renders — not a separate Load Center page. Cards share the Trip ticket
+   * shell; status comes from Give Load bid-count derivation.
+   */
+  const renderUnallocatedIndentCards = (hubGrid: boolean) =>
+    visibleUnallocatedIndents.map((indent) => {
+      const status = (indent.status || "").toLowerCase();
+      const isDraft = status === "draft";
+      const isAwardedPendingTrip = status === "awarded";
+      const isDone = isIndentStageDone(status);
+      const hasDirectSupplier = Boolean(
+        (indent as { assigned_supplier_id?: string | null }).assigned_supplier_id,
+      );
+      const bidCount = indentOfferCounts[indent.id] ?? 0;
+      const openIndent = () => handleOpenUnallocatedIndent(indent);
+      const card = (
+        <TripsHubIndentStageCard
+          indent={indent}
+          bidCount={bidCount}
+          hubGrid={hubGrid}
+          layoutCompact={tripsHubLayoutCompact}
+          onPress={openIndent}
+          tr={tr}
+          actions={
+            <GiveLoadIndentCardActions
+              load={indent}
+              bidCount={bidCount}
+              isDone={isDone}
+              isDraft={isDraft}
+              isAwardedPendingTrip={isAwardedPendingTrip}
+              isAwaitingSupplierDeploy={
+                isAwardedPendingTrip || hasDirectSupplier
+              }
+              showPulseToNetwork={indentHubActions.showPulseToNetwork(indent)}
+              pulseStoryLive={
+                indentHubActions.indentStoryStates[indent.id]?.isLive === true
+              }
+              onPulseStory={indentHubActions.handlePulseStory}
+              onIndentPress={handleOpenUnallocatedIndent}
+              onShareIndent={indentHubActions.handleShareIndent}
+              onToggleMarketplace={indentHubActions.handleToggleMarketplace}
+              marketplaceBusy={
+                indentHubActions.marketplaceToggleBusyId === indent.id
+              }
+              onBroadcastDraft={indentHubActions.handleBroadcastDraft}
+              onOpenAwardModal={indentHubActions.awardModal.open}
+              dense={hubGrid || tripsHubLayoutCompact}
+            />
+          }
+        />
+      );
+      if (!hubGrid) return <View key={indent.id}>{card}</View>;
+      return (
+        <View key={indent.id} style={styles.gridItem}>
+          {card}
+        </View>
+      );
+    });
+
+  const renderIndentStageBody = () => {
+    if (visibleUnallocatedIndents.length === 0) {
+      return (
+        <View style={emptyBannerStageStyle}>
+          <TripsPromoCard
+            variant={tripsEmptyPromoVariant}
+            onCtaPress={
+              canUnifiedAdd && tripsEmptyPromoVariant === "first_trip"
+                ? () => router.push("/add-trip")
+                : undefined
+            }
+          />
+        </View>
+      );
+    }
+    if (isLargeScreen) {
+      return (
+        <View style={styles.gridContainer}>{renderUnallocatedIndentCards(true)}</View>
+      );
+    }
+    return (
+      <TripsHubMobileTripListCanvas>
+        {renderUnallocatedIndentCards(false)}
+      </TripsHubMobileTripListCanvas>
+    );
+  };
 
   const historyReceivableIds: HistoryTripMetricId[] = useMemo(
     () => ["due_to_get", "no_due_to_get"],
@@ -1468,6 +1674,10 @@ export default function TripsScreen() {
   );
   const historyPayableIds: HistoryTripMetricId[] = useMemo(
     () => ["due_to_pay", "no_due_to_pay"],
+    [],
+  );
+  const historyPodIds: HistoryTripMetricId[] = useMemo(
+    () => ["pending_soft_pod", "pending_hard_pod"],
     [],
   );
 
@@ -1555,8 +1765,12 @@ export default function TripsScreen() {
 
   const historyMetricOrder = useMemo(
     () =>
-      [...historyReceivableIds, ...historyPayableIds] as HistoryTripMetricId[],
-    [historyReceivableIds, historyPayableIds],
+      [
+        ...historyReceivableIds,
+        ...historyPayableIds,
+        ...historyPodIds,
+      ] as HistoryTripMetricId[],
+    [historyReceivableIds, historyPayableIds, historyPodIds],
   );
 
   const webTripsPagination =
@@ -1644,21 +1858,16 @@ export default function TripsScreen() {
     return <SceneLoadingSplash variant="preparing" message={tr("loading")} />;
   }
 
-  if (tripsMainView === "indents") {
-    return (
-      <HubScreenShell>
-        <View style={[styles.container, { paddingTop: screenTopPad }]}>
-          {renderTripsMainViewSwitch()}
-          <TripsIndentsPanel
-            orgId={orgId}
-            onIndentPress={(indent) =>
-              router.push(`/indent/${indent.id}` as import("expo-router").Href)
-            }
-          />
-        </View>
-      </HubScreenShell>
-    );
-  }
+  const tripsAddButton = canUnifiedAdd ? (
+    <PulsePillButton
+      label="Add"
+      showPlusIcon
+      size="compact"
+      onPress={() => router.push("/add-trip")}
+      accessibilityLabel="Add"
+      style={styles.tripsAddButtonOnChrome}
+    />
+  ) : null;
 
   return (
     <HubScreenShell
@@ -1689,7 +1898,6 @@ export default function TripsScreen() {
       }
     >
     <View style={[styles.container, { paddingTop: screenTopPad }]}>
-      {renderTripsMainViewSwitch()}
       <TripsFilterBottomSheet
         visible={showSortModal}
         onClose={() => setShowSortModal(false)}
@@ -1745,6 +1953,8 @@ export default function TripsScreen() {
         }}
       />
 
+      {indentHubActions.sheets}
+
       <ScrollView
           style={styles.scroll}
           contentContainerStyle={[
@@ -1797,20 +2007,7 @@ export default function TripsScreen() {
             >
               {isMobileViewport ? (
                 <>
-                  <HubMobileScreenHeader
-                    title={tr("myTrips")}
-                    action={
-                      canAddTrip ? (
-                        <PulsePillButton
-                          label={tr("addTrip")}
-                          showPlusIcon
-                          size="compact"
-                          onPress={() => router.push("/add-trip")}
-                          accessibilityLabel={tr("addTrip")}
-                        />
-                      ) : undefined
-                    }
-                  />
+                  <HubMobileScreenHeader title={tr("myTrips")} />
                   <View style={hubChrome.tabHeaderRow}>
                     <TouchableOpacity
                       style={hubChrome.filterBtn}
@@ -1843,6 +2040,7 @@ export default function TripsScreen() {
                         />
                       ))}
                     </ScrollView>
+                    {tripsAddButton}
                   </View>
                   <View style={hubChrome.tabDivider} />
                 </>
@@ -1996,6 +2194,7 @@ export default function TripsScreen() {
                           </TouchableOpacity>
                         </View>
                       ) : null}
+                      {tripsAddButton}
                     </View>
                   </View>
                 </View>
@@ -2013,6 +2212,7 @@ export default function TripsScreen() {
                   {activeMetricIdsForRail.map((metricId) => {
                     const active = activeMetricTab === metricId;
                     const copy = tripMetricCopy[metricId];
+                    if (!copy) return null;
                     const count =
                       metricId === "all"
                         ? activeAllCount
@@ -2037,9 +2237,9 @@ export default function TripsScreen() {
                   getCount={(id) =>
                     id === "all" ? activeAllCount : metricCounts[id]
                   }
-                  getTitle={(id) => tripMetricCopy[id].title}
-                  getSubtitle={(id) => tripMetricVisual[id].micro}
-                  getIcon={(id) => tripMetricVisual[id].icon}
+                  getTitle={(id) => tripMetricCopy[id]?.title ?? id}
+                  getSubtitle={(id) => tripMetricVisual[id]?.micro ?? ""}
+                  getIcon={(id) => tripMetricVisual[id]?.icon ?? "th-large"}
                   isDesktop={isLargeScreen}
                 style={styles.tripMetricsScroll}
                 />
@@ -2052,7 +2252,7 @@ export default function TripsScreen() {
                 contentContainerStyle={hubChrome.metricTabsContent}
                 style={hubChrome.metricTabsScroll}
               >
-                {[...historyReceivableIds, ...historyPayableIds].map(
+                {[...historyReceivableIds, ...historyPayableIds, ...historyPodIds].map(
                   (metricId) => {
                     const active = activeHistoryMetricTab === metricId;
                     const copy = historyMetricCards[metricId];
@@ -2085,7 +2285,48 @@ export default function TripsScreen() {
             )}
           </View>
 
-          {effectiveListLayout === "table" ? (
+          {/*
+           * ALL is a mixed lifecycle list: unallocated indent tickets
+           * (bidding status + NETWORK/MARKETPLACE tags) alongside actual
+           * Trip tickets (lifecycle status + INDENT/DIRECT origin).
+           * Search/date live on the shared Trips hub toolbar, not inside
+           * a Load Center shell and not only on the trip table.
+           */}
+          {activeMetricTab === "indent" ? (
+            <TripsHubTableView
+              trips={[]}
+              hideBody
+              renderAboveBody={renderIndentStageBody()}
+              renderBody={() => null}
+              toolbarCountLabel={`Showing ${visibleUnallocatedIndents.length} of ${dateFilteredUnallocatedIndents.length}`}
+              searchQuery={searchQuery}
+              onSearchQueryChange={setSearchQuery}
+              pagination={tripsListPagination}
+              onDisplayedTripsLengthChange={setHubToolbarMatchCount}
+              currentOrganizationId={currentOrganization?.id ?? null}
+              getStageLabel={getStageLabelForTrip}
+              transactionsByTripId={transactionsByTripId}
+              financeAdjustmentsByTripId={tripFinanceAdjForHub}
+              subcontractRateByTripId={hubSubcontractRateByTripId}
+              onOpenTripDetails={handleOpenTripDetails}
+              tr={tr}
+              dateRangeFilter={toolbarDateRangeFilter}
+              onDateRangeFilterChange={(next: DateFilter) => {
+                setDateRangeFilter(next);
+                if (next !== "custom") {
+                  setCustomDateFrom(null);
+                  setCustomDateTo(null);
+                }
+              }}
+              onOpenDateRangePicker={() => setShowDateRangePicker(true)}
+              onExportLedger={() => setTripLedgerExportOpen(true)}
+              clientNameByTripId={shipperNameByTripId}
+              linkedOrgByOrganizationId={linkedOrgByOrganizationId}
+              partyMetaByTripId={tripHubPartyMetaByTripId}
+              softPodTripIds={tripIdsWithDocuments}
+              hardPodTripIds={hardPodTripIds}
+            />
+          ) : effectiveListLayout === "table" ? (
             <View>
             <ScrollView
               horizontal
@@ -2116,6 +2357,17 @@ export default function TripsScreen() {
                   subcontractRateByTripId={hubSubcontractRateByTripId}
                   onOpenTripDetails={handleOpenTripDetails}
                   tr={tr}
+                  searchQuery={searchQuery}
+                  onSearchQueryChange={setSearchQuery}
+                  toolbarCountLabel={
+                    activeMetricTab === "all" ? allToolbarCountLabel : undefined
+                  }
+                  renderAboveBody={
+                    activeMetricTab === "all" &&
+                    visibleUnallocatedIndents.length > 0
+                      ? renderIndentStageBody()
+                      : null
+                  }
                   dateRangeFilter={toolbarDateRangeFilter}
                   onDateRangeFilterChange={(next: DateFilter) => {
                     setDateRangeFilter(next);
@@ -2125,8 +2377,6 @@ export default function TripsScreen() {
                     }
                   }}
                   onOpenDateRangePicker={() => setShowDateRangePicker(true)}
-                  onAddTrip={canAddTrip ? () => router.push("/add-trip") : undefined}
-                  addTripLabel={tr("addTrip")}
                     onExportLedger={() => setTripLedgerExportOpen(true)}
                   clientNameByTripId={shipperNameByTripId}
                   linkedOrgByOrganizationId={linkedOrgByOrganizationId}
@@ -2139,7 +2389,7 @@ export default function TripsScreen() {
                     <TripsPromoCard
                       variant={tripsEmptyPromoVariant}
                       onCtaPress={
-                        canAddTrip && tripsEmptyPromoVariant === "first_trip"
+                        canUnifiedAdd && tripsEmptyPromoVariant === "first_trip"
                           ? () => router.push("/add-trip")
                           : undefined
                       }
@@ -2168,6 +2418,17 @@ export default function TripsScreen() {
                 subcontractRateByTripId={hubSubcontractRateByTripId}
                 onOpenTripDetails={handleOpenTripDetails}
                 tr={tr}
+                searchQuery={searchQuery}
+                onSearchQueryChange={setSearchQuery}
+                toolbarCountLabel={
+                  activeMetricTab === "all" ? allToolbarCountLabel : undefined
+                }
+                renderAboveBody={
+                  activeMetricTab === "all" &&
+                  visibleUnallocatedIndents.length > 0
+                    ? renderIndentStageBody()
+                    : null
+                }
                 dateRangeFilter={toolbarDateRangeFilter}
                 onDateRangeFilterChange={(next: DateFilter) => {
                   setDateRangeFilter(next);
@@ -2177,8 +2438,6 @@ export default function TripsScreen() {
                   }
                 }}
                 onOpenDateRangePicker={() => setShowDateRangePicker(true)}
-                onAddTrip={canAddTrip ? () => router.push("/add-trip") : undefined}
-                addTripLabel={tr("addTrip")}
                 onExportLedger={() => setTripLedgerExportOpen(true)}
                 clientNameByTripId={shipperNameByTripId}
                 linkedOrgByOrganizationId={linkedOrgByOrganizationId}
@@ -2191,7 +2450,7 @@ export default function TripsScreen() {
                       <TripsPromoCard
                         variant={tripsEmptyPromoVariant}
                         onCtaPress={
-                          canAddTrip && tripsEmptyPromoVariant === "first_trip"
+                          canUnifiedAdd && tripsEmptyPromoVariant === "first_trip"
                             ? () => router.push("/add-trip")
                             : undefined
                         }
@@ -2420,12 +2679,6 @@ export default function TripsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, minHeight: 0, backgroundColor: TRIPS_PAGE_BG },
-  tripsMainViewSwitch: {
-    flexDirection: "row",
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingTop: 4,
-  },
   centered: {
     flex: 1,
     justifyContent: "center",
@@ -3119,6 +3372,10 @@ const styles = StyleSheet.create({
     paddingTop: 6,
     paddingBottom: 4,
     gap: 4,
+  },
+  tripsAddButtonOnChrome: {
+    marginLeft: 4,
+    flexShrink: 0,
   },
   tripsFilterHeaderCompact: {
     flexDirection: "column",

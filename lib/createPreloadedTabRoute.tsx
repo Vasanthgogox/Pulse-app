@@ -21,19 +21,22 @@ export function createPreloadedTabRoute(
   let promise: Promise<ComponentType<object>> | null = null;
 
   function loadChunk(): Promise<ComponentType<object>> {
-    if (Resolved) return Promise.resolve(Resolved);
-    if (!promise) {
-      promise = loader()
-        .then((mod) => {
-          Resolved = mod.default;
-          return mod.default;
-        })
-        .catch((err) => {
-          promise = null;
-          throw err;
-        });
-    }
-    return promise;
+    // Production: one import, reused. Dev: always read the current export so
+    // Fast Refresh of the screen module is not pinned behind the first load
+    // (that mismatch produced `Can't find variable: tripsMainView` on Trips).
+    if (!__DEV__ && Resolved) return Promise.resolve(Resolved);
+    if (!__DEV__ && promise) return promise;
+    const run = loader()
+      .then((mod) => {
+        Resolved = mod.default;
+        return mod.default;
+      })
+      .catch((err) => {
+        if (!__DEV__) promise = null;
+        throw err;
+      });
+    if (!__DEV__) promise = run;
+    return run;
   }
 
   function preload(): void {
@@ -42,10 +45,9 @@ export function createPreloadedTabRoute(
 
   function TabRoute(): React.ReactElement | null {
     const [Screen, setScreen] = useState<ComponentType<object> | null>(
-      () => Resolved,
+      () => (__DEV__ ? null : Resolved),
     );
     useEffect(() => {
-      if (Screen) return;
       let cancelled = false;
       void loadChunk().then((C) => {
         if (!cancelled) setScreen(() => C);

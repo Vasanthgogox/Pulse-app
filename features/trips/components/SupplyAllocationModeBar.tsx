@@ -33,6 +33,9 @@ export type SupplyAllocationModeBarProps = {
   showModeToggle?: boolean;
   /** Show Assign later row (default true). */
   showAssignLater?: boolean;
+  /** Wizard copy: Create Trip source uses Market instead of Aggregate. */
+  aggregateTitle?: string;
+  aggregateSubtitle?: string;
 };
 
 export function SupplyAllocationModeBar({
@@ -47,6 +50,8 @@ export function SupplyAllocationModeBar({
   allowedModes = ["asset", "aggregate"],
   showModeToggle: showModeToggleProp = true,
   showAssignLater = true,
+  aggregateTitle = "Aggregate",
+  aggregateSubtitle = "Sub-assign to a network supplier",
 }: SupplyAllocationModeBarProps) {
   const isAsset = mode === "asset";
   const isInline = layout === "inline";
@@ -126,9 +131,9 @@ export function SupplyAllocationModeBar({
             <Building2 size={14} color={Theme.textPrimaryDark} strokeWidth={2.2} />
           </View>
           <View style={styles.choiceCopy}>
-            <Text style={styles.choiceTitle}>Aggregate</Text>
+            <Text style={styles.choiceTitle}>{aggregateTitle}</Text>
             <Text style={styles.choiceSub}>
-              Sub-assign to a network supplier
+              {aggregateSubtitle}
             </Text>
           </View>
           <View style={[styles.radio, !isAsset && styles.radioOn]} />
@@ -180,7 +185,7 @@ export function SupplyAllocationModeBar({
               !isAsset && assignmentShellStyles.supplySegBtnTextActive,
             ]}
           >
-            Aggregate
+            {aggregateTitle}
           </Text>
         </TouchableOpacity>
       </View>

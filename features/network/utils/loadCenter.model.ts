@@ -9,6 +9,19 @@ import { formatINR } from "@/lib/format";
 
 export type LoadSubTab = "GIVE_LOAD" | "GET_LOAD" | "AWARDED";
 
+/**
+ * How LoadCenterView paints itself.
+ * `standalone` = full Load Center chrome (`/pulse-loads`).
+ * `trips` = indent cards only, inside the Trips lifecycle body.
+ */
+export type LoadCenterPresentation = "standalone" | "trips";
+
+export function loadCenterShowsStandaloneChrome(
+  presentation: LoadCenterPresentation | undefined,
+): boolean {
+  return presentation !== "trips";
+}
+
 /** Give Load: card pill when at least one supplier bid exists (still open market). */
 export const GIVE_LOAD_RECEIVING_BIDS_STATUS = "receiving bids";
 
@@ -629,42 +642,47 @@ export function giveLoadStatusPillStyles(status: string): {
   };
 }
 
-/**
- * Trips → Indents lightweight stage chips (ALL/OPEN/BIDDING/AWARDED).
- *
- * Deliberately reuses `giveLoadBidReceivedDisplayStatus` — the exact same
- * OPEN-vs-"receiving bids" derivation Give Load already uses — instead of
- * inventing a second one. No new `indents.status` value; this is a pure
- * presentation regroup of the existing OPEN/QUOTED/AWARDED/DONE statuses.
- *
- * NOTE — "READY" gap (reported, not solved here): the target product spec
- * distinguishes AWARDED ("supplier selected") from READY ("selected AND
- * ready for conversion into a Trip"). Today's schema has exactly one state
- * for both — `indents.status='awarded'` + `assigned_supplier_id` set — with
- * no field marking "ready to convert" as distinct from "just awarded." So
- * this returns only `AWARDED`; a `READY` stage is not derivable without
- * inventing a heuristic, which was explicitly out of scope for this slice.
- */
-export type IndentStage = "OPEN" | "BIDDING" | "AWARDED";
-
-export function classifyIndentStage(
-  indentStatus: string,
-  bidCount: number,
-): IndentStage {
-  const derived = giveLoadBidReceivedDisplayStatus(indentStatus, bidCount);
-  if (derived === GIVE_LOAD_RECEIVING_BIDS_STATUS) return "BIDDING";
-  if (derived === "awarded") return "AWARDED";
-  return "OPEN";
-}
-
 /** True once the indent has left the pre-trip lifecycle (converted or terminated). */
 export function isIndentStageDone(indentStatus: string): boolean {
   return statusMatchesFilter(indentStatus, "DONE");
 }
 
-/** Card badge: coarser than the filter chips — UNASSIGNED until a supplier is picked. */
-export function indentUnassignedBadgeLabel(stage: IndentStage): "UNASSIGNED" | "AWARDED" {
-  return stage === "AWARDED" ? "AWARDED" : "UNASSIGNED";
+/**
+ * Boundary between the INDENT stage and the rest of the trip lifecycle
+ * (INDENT → UNASSIGNED → ASSIGNED → ... → DELIVERED — one continuous
+ * lifecycle, not a separate flow). An indent sits at the INDENT stage only
+ * while it (a) hasn't reached a terminal status and (b) has no trip
+ * allocated to it yet. The moment allocation happens it leaves INDENT and
+ * is represented by its trip instead, landing on UNASSIGNED (or further
+ * along, if the same conversion also carried a driver). Allocation is read
+ * from the existing `trips.indent_id` relationship (passed in as
+ * `indentIdsWithTrip`, built from whatever trips list the caller already
+ * has) — the same relationship `create_trip_from_assigned_indent`
+ * establishes; no new status/column/table.
+ *
+ * Deliberately NOT based on driver assignment — an indent with no driver is
+ * not the same thing as a trip with no driver (existing Trip "Unassigned"
+ * semantics are untouched and must not be confused with this).
+ */
+export function isIndentUnallocated(
+  indent: { id: string; status: string },
+  indentIdsWithTrip: ReadonlySet<string>,
+): boolean {
+  return !isIndentStageDone(indent.status) && !indentIdsWithTrip.has(indent.id);
+}
+
+/**
+ * Restricts a list of indents to exactly the given id set. Used so a
+ * rendered list can be made to match an externally-derived membership set
+ * (e.g. Trips → INDENT's `unallocatedIndents`) instead of re-deriving
+ * membership with a second, independently-maintained filter that could
+ * drift out of sync with the one powering the count.
+ */
+export function restrictIndentsToIds<T extends { id: string }>(
+  indents: T[],
+  ids: ReadonlySet<string>,
+): T[] {
+  return indents.filter((i) => ids.has(i.id));
 }
 
 export function formatIndentCardDate(iso: string | null | undefined): string {

@@ -1211,10 +1211,9 @@ export default function CreateIndentScreen() {
           error.message,
         );
         if (vehicleCount > 1 && indents.length > 0) {
-          // Partial multi-vehicle share: land on Trips → Indents (own-org list),
-          // same destination as the full-success path below — Loads no longer
-          // shows "My Load" (Slice 1, Trips IA).
-          router.replace("/(tabs)/trips?view=indents" as import("expo-router").Href);
+          // Partial multi-vehicle share: land on Trips, pre-filtered to the
+          // INDENT stage — same destination as the full-success path below.
+          router.replace("/(tabs)/trips?stage=indent" as import("expo-router").Href);
         }
         return;
       }

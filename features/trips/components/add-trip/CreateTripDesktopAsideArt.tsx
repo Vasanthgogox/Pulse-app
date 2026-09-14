@@ -11,8 +11,12 @@ const ASIDE_ANIMATIONS = {
   route: require("@/assets/Animated folder/navigation.json"),
   commodity: require("@/assets/Animated folder/loading-cargo.json"),
   source: require("@/assets/Animated folder/delivery-truckcargo-truck.json"),
+  market_fulfillment: require("@/assets/Animated folder/delivery-truckcargo-truck.json"),
+  market_partner: require("@/assets/Animated folder/delivery-truckcargo-truck.json"),
+  share_destination: require("@/assets/Animated folder/delivery-truckcargo-truck.json"),
+  share_target: require("@/assets/Animated folder/delivery-truckcargo-truck.json"),
   allocation: require("@/assets/Animated folder/truck-loading.json"),
-} as const;
+};
 
 const ASIDE_COPY: Record<
   AddTripWizardStep,
@@ -36,7 +40,27 @@ const ASIDE_COPY: Record<
   source: {
     eyebrow: "Supply",
     title: "Pick your source",
-    body: "Run on your fleet or hand off to an aggregate partner.",
+    body: "Run on your own assets or fulfil through the market.",
+  },
+  market_fulfillment: {
+    eyebrow: "Market",
+    title: "How to fulfil",
+    body: "Assign a known supplier, or share the requirement for bidding.",
+  },
+  market_partner: {
+    eyebrow: "Supplier",
+    title: "Known partner",
+    body: "Pick the supplier and enter the supplier rate — not the sale value.",
+  },
+  share_destination: {
+    eyebrow: "Share",
+    title: "Who should see this",
+    body: "Network, Marketplace, or both — same circulation as Create Load.",
+  },
+  share_target: {
+    eyebrow: "Target",
+    title: "Supplier target rate",
+    body: "This is the bidding target, independent of customer sale value.",
   },
   allocation: {
     eyebrow: "Dispatch",

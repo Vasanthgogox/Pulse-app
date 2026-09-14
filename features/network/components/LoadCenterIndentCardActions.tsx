@@ -677,48 +677,68 @@ export function GiveLoadIndentCardActions({
     circulationTarget === "marketplace" || circulationTarget === "both";
   // Distribution only matters while the load can still gain new offers.
   const showMarketplaceToggle =
-    Boolean(onToggleMarketplace) && !isDraft && !isDone && !isAwardedPendingTrip && !onViewTrip;
+    Boolean(onToggleMarketplace) && !isDraft && !isDone && !isAwardedPendingTrip;
 
-  const primaryLabel = isDraft
-    ? "Broadcast"
-    : onViewTrip
-      ? "View trip"
-      : "Review Hub";
-
-  const onPrimary = () => {
+  const onReviewOrBroadcast = () => {
     if (isDraft) {
       onBroadcastDraft(load);
-      return;
-    }
-    if (onViewTrip) {
-      onViewTrip(load);
       return;
     }
     onOpenAwardModal(load);
   };
 
-  const hidePrimary = isDone && !onViewTrip;
-  const showPending = !hidePrimary && isAwaitingSupplierDeploy && !onViewTrip;
-  const primaryCta = hidePrimary ? null : showPending ? (
-    commerceRow ? (
-      <Text style={styles.commercePending} numberOfLines={1}>
-        Pending
-      </Text>
-    ) : (
-      <PendingChip dense={dense} />
-    )
-  ) : commerceRow ? (
+  const reviewLabel = isDraft ? "Broadcast" : "Review";
+  const reviewCta = commerceRow ? (
     <CommerceLinkCta
-      label={compactCommerceCtaLabel(primaryLabel)}
-      onPress={onPrimary}
+      label={compactCommerceCtaLabel(reviewLabel === "Broadcast" ? "Broadcast" : "Review Hub")}
+      onPress={onReviewOrBroadcast}
     />
   ) : (
     <PrimaryButton
       dense={dense}
       inline={dense}
-      label={compactGiveLoadCtaLabel(primaryLabel, dense)}
-      onPress={onPrimary}
+      label={compactGiveLoadCtaLabel(
+        reviewLabel === "Broadcast" ? "Broadcast" : "Review Hub",
+        dense,
+      )}
+      onPress={onReviewOrBroadcast}
     />
+  );
+
+  const tripCta =
+    onViewTrip && !isDraft ? (
+      commerceRow ? (
+        <CommerceLinkCta
+          label={compactCommerceCtaLabel("View trip")}
+          onPress={() => onViewTrip(load)}
+        />
+      ) : (
+        <PrimaryButton
+          dense={dense}
+          inline={dense}
+          label={compactGiveLoadCtaLabel("View trip", dense)}
+          onPress={() => onViewTrip(load)}
+        />
+      )
+    ) : null;
+
+  const pendingChip =
+    isAwaitingSupplierDeploy && !onViewTrip ? (
+      commerceRow ? (
+        <Text style={styles.commercePending} numberOfLines={1}>
+          Pending
+        </Text>
+      ) : (
+        <PendingChip dense={dense} />
+      )
+    ) : null;
+
+  const primaryCta = (
+    <>
+      {pendingChip}
+      {reviewCta}
+      {tripCta}
+    </>
   );
 
   if (commerceRow) {
@@ -784,7 +804,13 @@ export function GiveLoadIndentCardActions({
     />
   );
 
-  const primary = commerceRow ? null : primaryCta;
+  const primary = commerceRow ? null : (
+    <>
+      {pendingChip}
+      {reviewCta}
+      {tripCta}
+    </>
+  );
 
   const pulse = showPulse ? (
     <PulseButton
@@ -1223,11 +1249,12 @@ const styles = StyleSheet.create({
   },
   commerceRow: {
     flexDirection: "row",
+    flexWrap: "wrap",
     alignItems: "center",
     justifyContent: "flex-end",
     gap: 6,
-    flexShrink: 0,
-    height: 28,
+    flexShrink: 1,
+    minHeight: 28,
   },
   commerceIconBtn: {
     width: 28,

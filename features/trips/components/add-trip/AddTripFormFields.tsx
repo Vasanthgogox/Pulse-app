@@ -37,6 +37,7 @@ import {
   clientsToWizardAvatarGridItems,
 } from "@/features/clients/utils/clientAvatarGridItems.util";
 import { ClientSaleKeypadFlow } from "@/features/trips/components/add-trip/ClientSaleKeypadFlow";
+import type { AddTripWizardStep } from "@/features/trips/components/add-trip/addTripWizardSteps";
 import { CreateTripDesktopRouteStep } from "@/features/trips/components/add-trip/CreateTripDesktopRouteStep";
 import { CreateTripDesktopCommodityClientStep } from "@/features/trips/components/add-trip/CreateTripDesktopCommodityClientStep";
 import { CreateTripDesktopSaleStep } from "@/features/trips/components/add-trip/CreateTripDesktopSaleStep";
@@ -173,7 +174,7 @@ export interface AddTripFormFieldsProps {
    * Mobile wizard mode: show a single section card at a time.
    * When unset, renders the full 01/02/03 cards.
    */
-  wizardSection?: "client" | "route" | "commodity" | "source" | "allocation";
+  wizardSection?: AddTripWizardStep;
   /** Wide desktop enterprise grid (matches Create Load / indent). */
   enterpriseFormGrid?: boolean;
   /** Stepped mobile wizard — indent-style flat steps + shell scroll. */

@@ -176,6 +176,8 @@ export const queryKeys = {
     /** Commerce execution-plan stop cities for Give Load cards. */
     planRoutes: (orgId: string, planIdsKey: string) =>
       ["q", "indents", orgId, "plan-routes", planIdsKey] as const,
+    planClients: (orgId: string, planIdsKey: string) =>
+      ["q", "indents", orgId, "plan-clients-v2", planIdsKey] as const,
   },
 
   connectionRequests: {

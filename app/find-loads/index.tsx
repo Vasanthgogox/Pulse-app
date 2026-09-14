@@ -175,12 +175,12 @@ export default function FindLoadsScreen() {
             pressed && styles.closeBtnPressed,
           ]}
           accessibilityRole="button"
-          accessibilityLabel="Close Find Loads"
+          accessibilityLabel="Close Marketplace Loads"
           hitSlop={Layout.touchTargetHitSlop}
         >
           <X size={20} color={Theme.textPrimaryDark} strokeWidth={2.2} />
         </Pressable>
-        <Text style={styles.message}>You don't have access to Find Loads.</Text>
+        <Text style={styles.message}>You don't have access to Marketplace Loads.</Text>
       </View>
     );
   }
@@ -219,7 +219,7 @@ export default function FindLoadsScreen() {
         {!layout.isDesktopWeb ? (
           <View style={styles.mobileTitleRow}>
             <View style={styles.headerTextCol}>
-              <Text style={styles.title}>Find Loads</Text>
+              <Text style={styles.title}>Marketplace Loads</Text>
               <Text style={styles.subtitle}>Open Marketplace opportunities</Text>
             </View>
             <Pressable
@@ -229,7 +229,7 @@ export default function FindLoadsScreen() {
                 pressed && styles.closeBtnPressed,
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Close Find Loads"
+              accessibilityLabel="Close Marketplace Loads"
               hitSlop={Layout.touchTargetHitSlop}
             >
               <X size={18} color={Theme.textPrimaryDark} strokeWidth={2.2} />
@@ -293,7 +293,7 @@ export default function FindLoadsScreen() {
         {layout.isDesktopWeb ? (
           <View style={styles.toolbarRight}>
             <View style={styles.toolbarBrand}>
-              <Text style={styles.toolbarBrandTitle}>Find Loads</Text>
+              <Text style={styles.toolbarBrandTitle}>Marketplace Loads</Text>
               <Text style={styles.toolbarBrandSub}>Marketplace</Text>
             </View>
             <Pressable
@@ -303,7 +303,7 @@ export default function FindLoadsScreen() {
                 pressed && styles.closeBtnPressed,
               ]}
               accessibilityRole="button"
-              accessibilityLabel="Close Find Loads"
+              accessibilityLabel="Close Marketplace Loads"
               hitSlop={Layout.touchTargetHitSlop}
             >
               <X size={18} color={Theme.textPrimaryDark} strokeWidth={2.2} />

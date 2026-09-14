@@ -1,6 +1,9 @@
+import { groupSalesOrdersToPlanClients } from "@/features/network/services/fetchExecutionPlanClientNames";
 import {
   giveLoadIndentAvatarProps,
+  indentClientFacesFromParties,
   resolveGiveLoadClient,
+  uniqueClientNameFromCustomers,
 } from "@/features/network/utils/indentCardAvatar.util";
 import type { ClientRow } from "@/features/clients/services/clients.service";
 import type { IndentRow } from "@/features/indents";
@@ -46,6 +49,7 @@ describe("giveLoadIndentAvatarProps", () => {
     });
     expect(avatar.organizationImageUrl).toBe("https://cdn.example/aero.png");
     expect(avatar.initialsColorSeed).toBe("client-entity:c-aero");
+    expect(avatar.partyName).toBe("AERO");
   });
 
   it("falls back to client.avatar_url when linked-org map has no logo yet", () => {
@@ -75,5 +79,128 @@ describe("giveLoadIndentAvatarProps", () => {
       client_name: "AERO",
     } as IndentRow;
     expect(resolveGiveLoadClient(load, map)?.id).toBe("c-other");
+  });
+
+  it("uses own-org branding for synthetic merged-order client names", () => {
+    const load = {
+      id: "ind-merged",
+      client_name: "2 merged orders",
+      organization_id: "org-1",
+    } as IndentRow;
+
+    const avatar = giveLoadIndentAvatarProps(load, byId, {
+      "org-1": { avatarUrl: "https://cdn.example/me.png", avatarSeed: "me" },
+    }, {
+      id: "org-1",
+      name: "Pulse Logistics",
+      logoUrl: "fallback-logo.png",
+    });
+    expect(avatar.organizationImageUrl).toBe("https://cdn.example/me.png");
+    expect(avatar.partyName).toBe("Pulse Logistics");
+    expect(avatar.initialsColorSeed).toBe("org:org-1");
+  });
+
+  it("uses the linked trip client when the indent has no CRM client", () => {
+    const load = {
+      id: "ind-trip",
+      client_name: "Unknown",
+      client_id: null,
+    } as IndentRow;
+    const avatar = giveLoadIndentAvatarProps(
+      load,
+      byId,
+      {
+        "linked-aero": { avatarUrl: "https://cdn.example/aero.png", avatarSeed: "x" },
+      },
+      undefined,
+      { client_id: "c-aero", client_name: "AERO" },
+    );
+    expect(avatar.partyName).toBe("AERO");
+    expect(avatar.organizationImageUrl).toBe("https://cdn.example/aero.png");
+    expect(avatar.initialsColorSeed).toBe("client-entity:c-aero");
+  });
+
+  it("builds trip-style faces for merged-order customers", () => {
+    const ht = client({
+      id: "c-ht",
+      name: "HT Foods",
+      avatar_url: "ht.png",
+      linked_organization_id: "linked-ht",
+    });
+    const map = new Map<string, ClientRow>([
+      [aero.id, aero],
+      [ht.id, ht],
+    ]);
+    const faces = indentClientFacesFromParties(
+      [
+        { id: "c-aero", name: "AERO" },
+        { id: "c-ht", name: "HT Foods" },
+        { id: "c-aero", name: "AERO" },
+      ],
+      map,
+      {
+        "linked-aero": { avatarUrl: "https://cdn.example/aero.png", avatarSeed: "a" },
+        "linked-ht": { avatarUrl: "https://cdn.example/ht.png", avatarSeed: "h" },
+      },
+    );
+    expect(faces).toHaveLength(2);
+    expect(faces[0]).toMatchObject({
+      id: "c-aero",
+      name: "AERO",
+      avatar_url: "https://cdn.example/aero.png",
+    });
+    expect(faces[1]).toMatchObject({
+      id: "c-ht",
+      name: "HT Foods",
+      avatar_url: "https://cdn.example/ht.png",
+    });
+  });
+
+  it("uses the linked trip client for synthetic merged names when no pile is built", () => {
+    const load = {
+      id: "ind-merged-trip",
+      client_name: "2 merged orders",
+      organization_id: "org-1",
+    } as IndentRow;
+    const avatar = giveLoadIndentAvatarProps(
+      load,
+      byId,
+      {
+        "linked-aero": { avatarUrl: "https://cdn.example/aero.png", avatarSeed: "x" },
+      },
+      { id: "org-1", name: "Pulse Logistics" },
+      { client_id: "c-aero", client_name: "AERO" },
+    );
+    expect(avatar.partyName).toBe("AERO");
+    expect(avatar.organizationImageUrl).toBe("https://cdn.example/aero.png");
+  });
+
+  it("picks the first unique customer name", () => {
+    expect(uniqueClientNameFromCustomers(["AERO", "AERO", ""])).toBe("AERO");
+    expect(uniqueClientNameFromCustomers(["  ", null])).toBeNull();
+  });
+});
+
+describe("groupSalesOrdersToPlanClients", () => {
+  it("dedupes customers on a merged execution plan", () => {
+    const grouped = groupSalesOrdersToPlanClients([
+      {
+        execution_plan_id: "plan-1",
+        customer_id: "c-aero",
+        customer: { id: "c-aero", name: "AERO" },
+      },
+      {
+        execution_plan_id: "plan-1",
+        customer_id: "c-ht",
+        customer: { id: "c-ht", legal_name: "HT Foods" },
+      },
+      {
+        execution_plan_id: "plan-1",
+        customer_id: "c-aero",
+        customer: { id: "c-aero", name: "AERO" },
+      },
+    ]);
+    expect(grouped["plan-1"]?.map((p) => p.id)).toEqual(["c-aero", "c-ht"]);
+    expect(grouped["plan-1"]?.[1]?.name).toBe("HT Foods");
   });
 });

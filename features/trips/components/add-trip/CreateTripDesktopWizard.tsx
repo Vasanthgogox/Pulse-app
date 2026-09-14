@@ -59,6 +59,9 @@ import {
 } from "./CreateTripDesktopPickers";
 import { CreateTripDesktopRouteStep } from "./CreateTripDesktopRouteStep";
 import { CreateTripDesktopSourceStep } from "./CreateTripDesktopSourceStep";
+import { CreateTripMarketFulfillmentStep } from "./CreateTripMarketFulfillmentStep";
+import { CreateIndentShareDestinationStep } from "@/features/indents/components/create-indent/CreateIndentShareDestinationStep";
+import { CreateIndentNetworkTargetStep } from "@/features/indents/components/create-indent/CreateIndentNetworkTargetStep";
 import { entityInitials } from "./CreateTripDesktopUi";
 import { createTripDesktopStyles as s } from "./createTripDesktop.styles";
 import {
@@ -91,6 +94,9 @@ export type CreateTripDesktopWizardProps = {
   onContractLaneLockedChange?: (locked: boolean) => void;
   /** Navigate back to the client / lane-gate step (Change lane on route). */
   onRequestChangeLane?: () => void;
+  allowedSupplyModes?: readonly ("asset" | "aggregate")[];
+  canAggregateTrip?: boolean;
+  canShareIndent?: boolean;
 };
 
 export function CreateTripDesktopWizard({
@@ -108,6 +114,9 @@ export function CreateTripDesktopWizard({
   onLaneGateActiveChange,
   onContractLaneLockedChange,
   onRequestChangeLane,
+  allowedSupplyModes = ["asset", "aggregate"],
+  canAggregateTrip = true,
+  canShareIndent = true,
 }: CreateTripDesktopWizardProps) {
   const isMobileLayout = layout === "mobile";
   const router = useRouter();
@@ -644,6 +653,62 @@ export function CreateTripDesktopWizard({
           onTogglePartnerList={() => setPartnerListExpanded((prev) => !prev)}
           onSelectPartner={handleSelectPartner}
           onAddPartner={handleAddPartner}
+          variant="source"
+          allowedSupplyModes={allowedSupplyModes}
+        />
+      );
+      break;
+    case "market_fulfillment":
+      stepContent = (
+        <CreateTripMarketFulfillmentStep
+          compact={isMobileLayout}
+          value={state.marketFulfillment}
+          onChange={setters.setMarketFulfillment}
+          showExistingSupplier={canAggregateTrip}
+          showShareForBidding={canShareIndent}
+        />
+      );
+      break;
+    case "market_partner":
+      stepContent = (
+        <CreateTripDesktopSourceStep
+          compact={isMobileLayout}
+          state={state}
+          setters={setters}
+          invalid={invalid}
+          suppliers={fleet.suppliers}
+          suppliersLoading={fleet.suppliersLoading}
+          partnerListExpanded={partnerListExpanded}
+          onExpandPartnerList={() => setPartnerListExpanded(true)}
+          onTogglePartnerList={() => setPartnerListExpanded((prev) => !prev)}
+          onSelectPartner={handleSelectPartner}
+          onAddPartner={handleAddPartner}
+          variant="partner"
+          allowedSupplyModes={["aggregate"]}
+        />
+      );
+      break;
+    case "share_destination":
+      stepContent = (
+        <CreateIndentShareDestinationStep
+          compact={isMobileLayout}
+          value={state.circulationTarget}
+          onChange={setters.setCirculationTarget}
+        />
+      );
+      break;
+    case "share_target":
+      stepContent = (
+        <CreateIndentNetworkTargetStep
+          compact={isMobileLayout}
+          supplierTarget={state.supplierTarget}
+          onSupplierTargetChange={setters.setSupplierTarget}
+          clientPrice={state.clientPrice}
+          errorMessage={
+            invalid("supplierTarget")
+              ? "Enter a supplier target rate greater than 0"
+              : undefined
+          }
         />
       );
       break;
@@ -938,6 +1003,8 @@ export function CreateTripDesktopWizard({
       (wizardStep === "source" &&
         state.supplySource === "aggregate" &&
         Boolean(state.supplierId)) ||
+      (wizardStep === "market_partner" && Boolean(state.supplierId)) ||
+      (wizardStep === "share_target") ||
       (wizardStep === "allocation" &&
         state.supplySource === "aggregate" &&
         !state.assignLater &&

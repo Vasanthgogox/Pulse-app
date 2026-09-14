@@ -196,6 +196,10 @@ export function createExecutionOrchestrator(eventBus: EventBus = getPlatformEven
       });
 
       const totalAmount = payload.orders.reduce((s, o) => s + o.totalAmount, 0);
+      const clientName =
+        [...new Set(
+          payload.orders.map((o) => o.customerName.trim()).filter(Boolean),
+        )][0] ?? null;
       const indent = await IndentService.createFromExecutionPlan({
         workspaceId,
         executionPlanId: plan.id,
@@ -208,6 +212,7 @@ export function createExecutionOrchestrator(eventBus: EventBus = getPlatformEven
         pickupSummary: summarizeStopsByType(payload.stops, 'pickup'),
         dropSummary: summarizeStopsByType(payload.stops, 'drop'),
         requestedBy,
+        clientName,
       });
 
       await ExecutionPlanService.markPublished(plan.id);

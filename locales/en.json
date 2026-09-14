@@ -196,6 +196,8 @@
   "tripHubLabelJob": "Job",
   "tripAssigned": "Assigned",
   "tripInTransit": "In Transit",
+  "tripMetricIndent": "Indent",
+  "tripMetricHintIndent": "Requirement not yet allocated to a trip",
   "tripMetricUnassigned": "Unassigned",
   "tripMetricHintUnassigned": "No driver on trip",
   "tripMetricHintAssigned": "Driver in route for pickup",

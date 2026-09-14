@@ -1,12 +1,13 @@
 import {
   STATUS_TABS,
-  classifyIndentStage,
-  indentUnassignedBadgeLabel,
   isIndentStageDone,
+  isIndentUnallocated,
+  loadCenterShowsStandaloneChrome,
   resolveGetLoadDoneOutcome,
   resolveGetLoadMobileCardLabels,
   resolveGetLoadTicketCommerce,
   resolveGiveLoadTicketCommerce,
+  restrictIndentsToIds,
   statusMatchesFilter,
 } from "@/features/network/utils/loadCenter.model";
 
@@ -373,41 +374,6 @@ describe("give load ticket commerce — per-MT targets", () => {
   });
 });
 
-/**
- * Trips → Indents stage chips (ALL/OPEN/BIDDING/AWARDED).
- *
- * Deliberately reuses the same OPEN/"receiving bids"/awarded derivation Give
- * Load already uses (`giveLoadBidReceivedDisplayStatus`) — these tests pin
- * that no second, divergent derivation was introduced.
- */
-describe("classifyIndentStage — Trips → Indents", () => {
-  it("classifies a freshly shared, no-bid indent as OPEN", () => {
-    expect(classifyIndentStage("open", 0)).toBe("OPEN");
-    expect(classifyIndentStage("broadcast", 0)).toBe("OPEN");
-    expect(classifyIndentStage("draft", 0)).toBe("OPEN");
-  });
-
-  it("classifies an indent with at least one pending bid as BIDDING", () => {
-    expect(classifyIndentStage("open", 1)).toBe("BIDDING");
-    expect(classifyIndentStage("broadcast", 3)).toBe("BIDDING");
-  });
-
-  it("classifies an awarded indent as AWARDED regardless of bid count", () => {
-    expect(classifyIndentStage("awarded", 0)).toBe("AWARDED");
-    expect(classifyIndentStage("awarded", 4)).toBe("AWARDED");
-  });
-
-  it("legacy 'quoted' status (pre-migration 20270128103100) still reads as BIDDING", () => {
-    expect(classifyIndentStage("quoted", 0)).toBe("BIDDING");
-  });
-
-  it("does not throw for terminal statuses — falls back to OPEN's else-branch, not a stage a Trips list should render", () => {
-    // isIndentStageDone is what actually gates these out of the Trips → Indents
-    // list; classifyIndentStage itself has no DONE bucket by design.
-    expect(() => classifyIndentStage("completed", 0)).not.toThrow();
-  });
-});
-
 describe("isIndentStageDone", () => {
   it("flags completed/cancelled/closed/expired as done", () => {
     for (const s of ["completed", "cancelled", "closed", "expired"]) {
@@ -422,13 +388,97 @@ describe("isIndentStageDone", () => {
   });
 });
 
-describe("indentUnassignedBadgeLabel", () => {
-  it("shows UNASSIGNED for OPEN and BIDDING (no supplier yet)", () => {
-    expect(indentUnassignedBadgeLabel("OPEN")).toBe("UNASSIGNED");
-    expect(indentUnassignedBadgeLabel("BIDDING")).toBe("UNASSIGNED");
+/**
+ * Trips → INDENT stage boundary. Allocation (not driver assignment) is what
+ * moves an indent out of this bucket — reuses the existing trips.indent_id
+ * relationship via a caller-supplied set, no new status/column.
+ */
+describe("isIndentUnallocated — Trips INDENT stage boundary", () => {
+  const indentIdsWithTrip = new Set(["ind-allocated"]);
+
+  it("an unallocated, non-terminal indent counts as INDENT", () => {
+    expect(isIndentUnallocated({ id: "ind-open", status: "open" }, indentIdsWithTrip)).toBe(true);
+    // Legacy pre-migration-20270128103100 status — still active, still unallocated.
+    expect(isIndentUnallocated({ id: "ind-quoted", status: "quoted" }, indentIdsWithTrip)).toBe(true);
+    expect(isIndentUnallocated({ id: "ind-broadcast", status: "broadcast" }, indentIdsWithTrip)).toBe(true);
+    // Bidding status (receiving bids) is a bid-count concern, not a stage boundary.
+    expect(isIndentUnallocated({ id: "ind-pending", status: "pending" }, indentIdsWithTrip)).toBe(true);
+    // Awarded-but-not-yet-converted: allocation boundary is trips.indent_id, not award status.
+    expect(isIndentUnallocated({ id: "ind-awarded", status: "awarded" }, indentIdsWithTrip)).toBe(true);
   });
 
-  it("shows AWARDED once a supplier is selected", () => {
-    expect(indentUnassignedBadgeLabel("AWARDED")).toBe("AWARDED");
+  it("an indent with a trip already allocated is not an INDENT, regardless of status", () => {
+    expect(
+      isIndentUnallocated({ id: "ind-allocated", status: "open" }, indentIdsWithTrip),
+    ).toBe(false);
+    expect(
+      isIndentUnallocated({ id: "ind-allocated", status: "awarded" }, indentIdsWithTrip),
+    ).toBe(false);
+  });
+
+  it("a terminal (done) indent is not an INDENT even if unallocated", () => {
+    for (const status of ["completed", "cancelled", "closed", "expired"]) {
+      expect(isIndentUnallocated({ id: "ind-terminal", status }, indentIdsWithTrip)).toBe(false);
+    }
+  });
+});
+
+/**
+ * `restrictIndentsToIds` is what LoadCenterView uses (via `restrictToIndentIds`)
+ * to render exactly the caller-derived membership set instead of re-deriving
+ * membership with its own independent OPEN/QUOTED/AWARDED/DONE status filter.
+ * Pinning this proves the ALL/INDENT rendered set and the count can never
+ * disagree — both are built from the same `unallocatedIndents` id set.
+ */
+describe("restrictIndentsToIds — one source of truth for INDENT rendering", () => {
+  const allIndents = [
+    { id: "ind-open", status: "open" },
+    { id: "ind-awarded-unallocated", status: "awarded" },
+    { id: "ind-allocated", status: "awarded" },
+    { id: "ind-terminal", status: "completed" },
+  ];
+
+  it("returns exactly the set the count is derived from, including an awarded-but-unallocated indent", () => {
+    const indentIdsWithTrip = new Set(["ind-allocated"]);
+    const unallocatedIds = new Set(
+      allIndents
+        .filter((i) => isIndentUnallocated(i, indentIdsWithTrip))
+        .map((i) => i.id),
+    );
+
+    const rendered = restrictIndentsToIds(allIndents, unallocatedIds);
+
+    expect(rendered.map((i) => i.id).sort()).toEqual([
+      "ind-awarded-unallocated",
+      "ind-open",
+    ]);
+    expect(rendered.length).toBe(unallocatedIds.size);
+    // Once allocated, it disappears from the rendered set — same boundary as the count.
+    expect(rendered.some((i) => i.id === "ind-allocated")).toBe(false);
+  });
+
+  it("returns nothing when the id set is empty", () => {
+    expect(restrictIndentsToIds(allIndents, new Set())).toEqual([]);
+  });
+});
+
+describe("loadCenterShowsStandaloneChrome — Trips vs /pulse-loads", () => {
+  it("keeps standalone Load Center chrome by default", () => {
+    expect(loadCenterShowsStandaloneChrome(undefined)).toBe(true);
+    expect(loadCenterShowsStandaloneChrome("standalone")).toBe(true);
+  });
+
+  it("suppresses Load Center chrome in Trips-embedded presentation", () => {
+    expect(loadCenterShowsStandaloneChrome("trips")).toBe(false);
+  });
+
+  it("restrictToIndentIds membership is independent of presentation", () => {
+    const rows = [
+      { id: "a", status: "open" },
+      { id: "b", status: "awarded" },
+    ];
+    const ids = new Set(["b"]);
+    expect(restrictIndentsToIds(rows, ids).map((r) => r.id)).toEqual(["b"]);
+    expect(loadCenterShowsStandaloneChrome("trips")).toBe(false);
   });
 });

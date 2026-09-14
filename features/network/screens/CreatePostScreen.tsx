@@ -803,7 +803,7 @@ export default function CreatePostScreen() {
                   <Pressable
                     style={({ pressed }) => [styles.emptyCta, pressed && { opacity: 0.9 }]}
                     onPress={() =>
-                      router.push("/(tabs)/trips?view=indents" as import("expo-router").Href)
+                      router.push("/(tabs)/trips?stage=indent" as import("expo-router").Href)
                     }
                   >
                     <Zap size={15} color={Theme.textOnPrimary} fill={Theme.textOnPrimary} />

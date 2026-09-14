@@ -100,6 +100,7 @@ const BENTO_LAYOUT: Record<
   { size: BentoMetricSize; variant: BentoMetricVariant }
 > = {
   all: { size: "large", variant: "indigo" },
+  indent: { size: "small", variant: "slate" },
   unassigned: { size: "small", variant: "slate" },
   assigned: { size: "small", variant: "active" },
   loading: { size: "small", variant: "orange" },
@@ -266,17 +267,20 @@ export function TripsHubBentoMetrics({
   isDesktop,
   style,
 }: TripsHubBentoMetricsProps) {
-  const items: BentoMetricItem[] = metricOrder.map((id) => {
+  const items: BentoMetricItem[] = metricOrder.flatMap((id) => {
     const layout = BENTO_LAYOUT[id];
-    return {
-      id,
-      count: getCount(id),
-      title: getTitle(id),
-      subtitle: getSubtitle(id),
-      size: layout.size,
-      variant: layout.variant,
-      icon: getIcon(id),
-    };
+    if (!layout) return [];
+    return [
+      {
+        id,
+        count: getCount(id),
+        title: getTitle(id),
+        subtitle: getSubtitle(id),
+        size: layout.size,
+        variant: layout.variant,
+        icon: getIcon(id),
+      },
+    ];
   });
 
   const renderCard = (item: BentoMetricItem) => (
@@ -316,7 +320,9 @@ export type HistoryTripMetricId =
   | "due_to_get"
   | "no_due_to_get"
   | "due_to_pay"
-  | "no_due_to_pay";
+  | "no_due_to_pay"
+  | "pending_soft_pod"
+  | "pending_hard_pod";
 
 export type HistoryBentoMetricItem = {
   id: HistoryTripMetricId;
@@ -336,7 +342,25 @@ const HISTORY_VARIANT: Record<
   no_due_to_get: { variant: "slate", showsAmount: false },
   due_to_pay: { variant: "orange", showsAmount: true },
   no_due_to_pay: { variant: "slate", showsAmount: false },
+  pending_soft_pod: { variant: "purple", showsAmount: false },
+  pending_hard_pod: { variant: "cyan", showsAmount: false },
 };
+
+function historyMetricIcon(
+  id: HistoryTripMetricId,
+): React.ComponentProps<typeof FontAwesome>["name"] {
+  switch (id) {
+    case "no_due_to_get":
+    case "no_due_to_pay":
+      return "check";
+    case "pending_soft_pod":
+      return "file-text";
+    case "pending_hard_pod":
+      return "copy";
+    default:
+      return "rupee";
+  }
+}
 
 function HistoryBentoMetricCard({
   item,
@@ -451,11 +475,7 @@ function HistoryBentoMetricCard({
                 ]}
               >
                 <FontAwesome
-                  name={
-                    item.id === "no_due_to_get" || item.id === "no_due_to_pay"
-                      ? "check"
-                      : "rupee"
-                  }
+                  name={historyMetricIcon(item.id)}
                   size={10}
                   color={blobColor}
                 />
@@ -535,6 +555,17 @@ export function TripsHubHistoryBentoMetrics({
     />
   );
 
+  const financeItems = items.filter(
+    (item) =>
+      item.id === "due_to_get" ||
+      item.id === "no_due_to_get" ||
+      item.id === "due_to_pay" ||
+      item.id === "no_due_to_pay",
+  );
+  const podItems = items.filter(
+    (item) => item.id === "pending_soft_pod" || item.id === "pending_hard_pod",
+  );
+
   if (!isDesktop) {
     return (
       <View style={[styles.hub, style]}>
@@ -551,7 +582,16 @@ export function TripsHubHistoryBentoMetrics({
 
   return (
     <View style={[styles.hub, style]}>
-      <View style={styles.bentoRow}>{items.map(renderCard)}</View>
+      <View style={styles.historyClusters}>
+        <View style={[styles.historyCluster, styles.historyClusterFinance]}>
+          {financeItems.map(renderCard)}
+        </View>
+        {podItems.length > 0 ? (
+          <View style={[styles.historyCluster, styles.historyClusterPod]}>
+            {podItems.map(renderCard)}
+          </View>
+        ) : null}
+      </View>
     </View>
   );
 }
@@ -578,6 +618,24 @@ const styles = StyleSheet.create({
     alignItems: "stretch",
     gap: 6,
     width: "100%" as const,
+  },
+  historyClusters: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 10,
+    width: "100%" as const,
+  },
+  historyCluster: {
+    flexDirection: "row",
+    alignItems: "stretch",
+    gap: 6,
+    minWidth: 0,
+  },
+  historyClusterFinance: {
+    flex: 2,
+  },
+  historyClusterPod: {
+    flex: 1,
   },
   mobileScroll: {
     flexDirection: "row",

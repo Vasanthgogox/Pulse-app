@@ -3,7 +3,7 @@
  * Thin container; logic lives in useAddTripForm and useClientsForTrip.
  * Waits for onComplete (e.g. createTrip) to finish before closing so lists refetch with new data.
  */
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { WIZARD_FULL_PAGE_STEPPED } from "@/lib/wizardLayout.util";
 import Layout from "@/constants/Layout";
 import {
@@ -33,15 +33,21 @@ import type {
 } from "./types";
 import { buildAddTripPrefillFromIndent } from "./prefillFromIndent.util";
 import {
-  ADD_TRIP_WIZARD_STEPS,
   addTripWizardStepFields,
   addTripWizardStepLabel,
   addTripWizardStepShortLabel,
   addTripWizardStepSubtitle,
   computeClientStepIssues,
+  inferredMarketFulfillment,
+  isIndentShareStep,
+  marketPartnerStepFields,
+  resolveUnifiedCreateSteps,
   sourceStepFields,
+  wizardStepAfter,
+  wizardStepBefore,
   type AddTripWizardStep,
 } from "./addTripWizardSteps";
+import { buildIndentPayloadFromAddTripState } from "./buildIndentPayloadFromAddTrip";
 import { computeCommodityStepIssues, useAddTripForm } from "./useAddTripForm";
 import { useClientsForTrip } from "./useClientsForTrip";
 import {
@@ -52,6 +58,11 @@ import {
   type AllocationSubStep,
 } from "./allocationWizardSteps";
 import { regenerateTripOtp } from "@/features/trips/services/tripOtp.service";
+import {
+  acquireSubmitLock,
+  releaseSubmitLock,
+  shouldSkipLockedSubmit,
+} from "@/features/indents/utils/indentShareSubmitGuard.util";
 import { AddTripOtpSuccessBody } from "./AddTripOtpSuccessBody";
 
 const DRIVER_BUSY_ALERT_LOTTIE = require("@/assets/Animated folder/person-driving-car.json");
@@ -88,6 +99,7 @@ export function AddTripModal({
   sourceIndent,
   onClose,
   onComplete,
+  onShareIndent,
 }: AddTripModalProps) {
   const { width: winW } = useWindowDimensions();
   const isWeb = Platform.OS === "web";
@@ -105,19 +117,54 @@ export function AddTripModal({
   const canAggregate =
     canUseAggregateSupply(capabilities) &&
     canSurface("tripops.trips.create_aggregate");
+  const canCreateIndent = canSurface("tripops.indents.create");
   const allowedSupplyModes = useMemo(() => {
     const modes: ("asset" | "aggregate")[] = [];
     if (canAsset) modes.push("asset");
-    if (canAggregate) modes.push("aggregate");
+    if (canAggregate || canCreateIndent) modes.push("aggregate");
     return modes.length > 0 ? modes : (["asset", "aggregate"] as const);
-  }, [canAsset, canAggregate]);
+  }, [canAsset, canAggregate, canCreateIndent]);
+  const unifiedPermissions = useMemo(
+    () => ({
+      canAsset,
+      canAggregate,
+      canIndent: canCreateIndent && Boolean(onShareIndent),
+    }),
+    [canAsset, canAggregate, canCreateIndent, onShareIndent],
+  );
   const initialSupplySource =
-    canAsset && !canAggregate
+    canAsset && !(canAggregate || canCreateIndent)
       ? "asset"
-      : canAggregate && !canAsset
+      : !canAsset && (canAggregate || canCreateIndent)
         ? "aggregate"
         : "asset";
   const form = useAddTripForm({ initialSupplySource });
+  const submitLockRef = useRef(false);
+  const indentCreatedRef = useRef(false);
+  const wizardSteps = useMemo(
+    () => resolveUnifiedCreateSteps(form.state, unifiedPermissions),
+    [
+      form.state.supplySource,
+      form.state.marketFulfillment,
+      unifiedPermissions,
+    ],
+  );
+
+  useEffect(() => {
+    const inferred = inferredMarketFulfillment(
+      unifiedPermissions,
+      form.state.supplySource,
+    );
+    if (!inferred) return;
+    if (form.state.marketFulfillment === inferred) return;
+    form.setters.setMarketFulfillment(inferred);
+  }, [
+    unifiedPermissions,
+    form.state.supplySource,
+    form.state.marketFulfillment,
+    form.setters,
+  ]);
+
   const [wizardStep, setWizardStep] = useState<WizardStep>("client");
   const [allocationSubStep, setAllocationSubStep] =
     useState<AllocationSubStep>("supply");
@@ -144,6 +191,11 @@ export function AddTripModal({
     setAllocationSubStep("supply");
     setLaneGateActive(false);
   }, [wizardEnabled, organizationId]);
+
+  useEffect(() => {
+    if (wizardSteps.includes(wizardStep)) return;
+    setWizardStep(wizardSteps.includes("source") ? "source" : "client");
+  }, [wizardSteps, wizardStep]);
 
   useEffect(() => {
     if (form.canSubmit) setSubmitError(null);
@@ -183,6 +235,9 @@ export function AddTripModal({
       if (wizardStep === "source") {
         return sourceStepFields(form.state);
       }
+      if (wizardStep === "market_partner") {
+        return marketPartnerStepFields(form.state);
+      }
       if (wizardStep === "allocation") {
         if (useEnterpriseSteps && mobileAggregateFleetKeypads) {
           return allocationSubStepFields(allocationSubStep, form.state);
@@ -210,6 +265,7 @@ export function AddTripModal({
     wizardStep,
     allocationSubStep,
     form.state.supplySource,
+    form.state.marketFulfillment,
     form.state.assignLater,
   ]);
 
@@ -220,6 +276,15 @@ export function AddTripModal({
     }
     if (wizardEnabled && wizardStep === "commodity") {
       return computeCommodityStepIssues(form.state);
+    }
+    if (wizardEnabled && wizardStep === "market_fulfillment") {
+      if (form.state.marketFulfillment) return [];
+      return [
+        {
+          field: "marketFulfillment" as const,
+          message: "Choose existing supplier or share for bidding",
+        },
+      ];
     }
     return form.validationIssues.filter((i) => stepFieldSet.has(i.field));
   }, [wizardEnabled, stepFieldSet, wizardStep, form.state, form.validationIssues]);
@@ -241,7 +306,9 @@ export function AddTripModal({
     allocationStepIndex === allocationSteps.length - 1;
 
   const wizardSubmitLabel = steppedFormActive
-    ? wizardEnabled && wizardStep !== "allocation"
+    ? wizardEnabled && wizardStep === "share_target"
+      ? "Share"
+      : wizardEnabled && wizardStep !== "allocation" && wizardStep !== "share_target"
       ? "Continue"
       : mobileAggregateFleetKeypads || mobileAssetFleetSteps
         ? isLastAllocationStep
@@ -254,7 +321,7 @@ export function AddTripModal({
 
   const wizardStepMeta = useMemo(() => {
     if (!wizardEnabled) return null;
-    const topSteps = ADD_TRIP_WIZARD_STEPS.map((id) => ({
+    const topSteps = wizardSteps.map((id) => ({
       id,
       label: isDesktopWizard
         ? addTripWizardStepLabel(id)
@@ -267,15 +334,10 @@ export function AddTripModal({
         currentId: wizardStep,
         stepIndex: topIndex >= 0 ? topIndex + 1 : 1,
         stepTotal: topSteps.length,
-        title: "Create Trip",
-        subtitle:
-          wizardStep === "source"
-            ? form.state.supplySource === "aggregate"
-              ? "Select transport partner and partner cost."
-              : addTripWizardStepSubtitle(wizardStep)
-            : addTripWizardStepSubtitle(wizardStep, {
-                contractRouteLocked: contractLaneLocked,
-              }),
+        title: isIndentShareStep(wizardStep) ? "Share load" : "Create Trip",
+        subtitle: addTripWizardStepSubtitle(wizardStep, {
+          contractRouteLocked: contractLaneLocked,
+        }),
       };
     }
     const allocationSubtitle =
@@ -298,6 +360,7 @@ export function AddTripModal({
     };
   }, [
     wizardEnabled,
+    wizardSteps,
     wizardStep,
     allocationSteps,
     allocationSubStep,
@@ -318,9 +381,12 @@ export function AddTripModal({
   const partnerRateFillBody =
     useEnterpriseSteps &&
     !isDesktopWizard &&
-    wizardStep === "source" &&
-    form.state.supplySource === "aggregate" &&
+    wizardStep === "market_partner" &&
     Boolean(form.state.supplierId);
+  const shareTargetFillBody =
+    useEnterpriseSteps &&
+    !isDesktopWizard &&
+    wizardStep === "share_target";
   const allocationKeypadFillBody =
     mobileAggregateFleetKeypads &&
     (allocationSubStep === "driverPhone" ||
@@ -331,6 +397,7 @@ export function AddTripModal({
   const wizardFillBody =
     saleFillBody ||
     partnerRateFillBody ||
+    shareTargetFillBody ||
     allocationKeypadFillBody ||
     desktopAllocationFillBody;
   /** Final allocation step: Create Trip only (edit via summary chips / header back). */
@@ -340,6 +407,8 @@ export function AddTripModal({
 
   const runCreate = async (opts?: { skipDriverAssign?: boolean }) => {
     setDriverBusyAlertVisible(false);
+    if (shouldSkipLockedSubmit(submitting, submitLockRef)) return;
+    if (!acquireSubmitLock(submitLockRef)) return;
     setSubmitting(true);
     try {
       const options: AddTripCompleteOptions = {
@@ -366,6 +435,32 @@ export function AddTripModal({
       setSubmitError(msg);
       showAppAlert("Could not create trip", msg);
     } finally {
+      releaseSubmitLock(submitLockRef);
+      setSubmitting(false);
+    }
+  };
+
+  const runShareIndent = async () => {
+    if (indentCreatedRef.current) return;
+    if (!onShareIndent) {
+      const msg = "You don't have permission to share for bidding.";
+      setSubmitError(msg);
+      showAppAlert("Cannot share", msg);
+      return;
+    }
+    if (shouldSkipLockedSubmit(submitting, submitLockRef)) return;
+    if (!acquireSubmitLock(submitLockRef)) return;
+    setSubmitting(true);
+    try {
+      const payload = buildIndentPayloadFromAddTripState(form.state);
+      await onShareIndent(payload);
+      indentCreatedRef.current = true;
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : "Failed to create indent.";
+      setSubmitError(msg);
+      showAppAlert("Could not create indent", msg);
+    } finally {
+      releaseSubmitLock(submitLockRef);
       setSubmitting(false);
     }
   };
@@ -379,6 +474,18 @@ export function AddTripModal({
         "Your workspace is still loading. Wait a moment and try again.";
       setSubmitError(msg);
       showAppAlert("Organization required", msg);
+      return;
+    }
+    if (form.state.marketFulfillment === "bid") {
+      if (!form.canSubmit) {
+        const validationErr = form.getValidationError();
+        const msg =
+          validationErr ?? "Please fill all required fields before sharing.";
+        setSubmitError(msg);
+        showAppAlert("Missing details", msg);
+        return;
+      }
+      await runShareIndent();
       return;
     }
     if (!form.canSubmit) {
@@ -400,6 +507,26 @@ export function AddTripModal({
     }
 
     await runCreate();
+  };
+
+  const goWizardBack = () => {
+    if (wizardStep === "allocation") {
+      if (
+        !useEnterpriseSteps ||
+        mobileAggregateFleetKeypads ||
+        mobileAssetFleetSteps
+      ) {
+        const allocIdx = allocationSteps.indexOf(allocationSubStep);
+        if (allocIdx > 0) {
+          setAllocationSubStep(allocationSteps[allocIdx - 1]!);
+          return true;
+        }
+      }
+    }
+    const prev = wizardStepBefore(wizardSteps, wizardStep);
+    if (!prev) return false;
+    setWizardStep(prev);
+    return true;
   };
 
   const driverBusyWho = form.state.driverPhoneName?.trim() || "This driver";
@@ -436,62 +563,37 @@ export function AddTripModal({
       void handleSubmit();
       return;
     }
-    if (wizardStep === "client") {
-      if (laneGateActive) {
-        Alert.alert(
-          "Choose a lane",
-          "Select a contract lane, or tap Adhoc / Continue as adhoc to enter sale manually.",
-        );
-        return;
-      }
-      if (stepIssues.length > 0) {
-        Alert.alert("Missing details", stepIssues[0]?.message ?? "Fill required fields.");
-        return;
-      }
-      setWizardStep("route");
+    if (wizardStep === "client" && laneGateActive) {
+      Alert.alert(
+        "Choose a lane",
+        "Select a contract lane, or tap Adhoc / Continue as adhoc to enter sale manually.",
+      );
       return;
     }
-    if (wizardStep === "route") {
-      if (stepIssues.length > 0) {
-        const msg = stepIssues[0]?.message ?? "Fill required fields.";
-        setSubmitError(msg);
+    if (stepIssues.length > 0) {
+      const msg = stepIssues[0]?.message ?? "Fill required fields.";
+      setSubmitError(msg);
+      if (wizardStep === "client" || wizardStep === "commodity") {
+        Alert.alert("Missing details", msg);
+      } else {
         showAppAlert("Missing details", msg);
-        return;
       }
-      setWizardStep("commodity");
-      return;
-    }
-    if (wizardStep === "commodity") {
-      if (stepIssues.length > 0) {
-        Alert.alert("Missing details", stepIssues[0]?.message ?? "Fill required fields.");
-        return;
-      }
-      setWizardStep("source");
-      return;
-    }
-    if (wizardStep === "source") {
-      if (stepIssues.length > 0) {
-        const msg = stepIssues[0]?.message ?? "Fill required fields.";
-        setSubmitError(msg);
-        showAppAlert("Missing details", msg);
-        return;
-      }
-      setAllocationSubStep(getAllocationSubSteps(form.state)[0] ?? "supply");
-      setWizardStep("allocation");
       return;
     }
     if (
       wizardStep === "allocation" &&
       (mobileAggregateFleetKeypads || mobileAssetFleetSteps)
     ) {
-      if (stepIssues.length > 0) {
-        const msg = stepIssues[0]?.message ?? "Fill required fields.";
-        setSubmitError(msg);
-        showAppAlert("Missing details", msg);
-        return;
-      }
       if (advanceAllocationSubStep()) return;
       void handleSubmit();
+      return;
+    }
+    const next = wizardStepAfter(wizardSteps, wizardStep);
+    if (next) {
+      if (next === "allocation") {
+        setAllocationSubStep(getAllocationSubSteps(form.state)[0] ?? "supply");
+      }
+      setWizardStep(next);
       return;
     }
     if (!useEnterpriseSteps && advanceAllocationSubStep()) return;
@@ -507,41 +609,15 @@ export function AddTripModal({
       return;
     }
     if (!wizardEnabled) return;
-    if (wizardStep === "allocation") {
-      if (
-        !useEnterpriseSteps ||
-        mobileAggregateFleetKeypads ||
-        mobileAssetFleetSteps
-      ) {
-        const allocIdx = allocationSteps.indexOf(allocationSubStep);
-        if (allocIdx > 0) {
-          setAllocationSubStep(allocationSteps[allocIdx - 1]!);
-          return;
-        }
-      }
-      setWizardStep("source");
-      return;
-    }
-    if (wizardStep === "source") {
-      setWizardStep("commodity");
-      return;
-    }
-    if (wizardStep === "commodity") {
-      setWizardStep("route");
-      return;
-    }
-    if (wizardStep === "route") {
-      setWizardStep("client");
-      return;
-    }
+    goWizardBack();
   };
 
   /** Jump back to a completed step (desktop + mobile enterprise wizard). */
   const handleWizardStepPress = (_stepId: string, index: number) => {
     if (!wizardEnabled || !useEnterpriseSteps) return;
-    const currentIdx = ADD_TRIP_WIZARD_STEPS.indexOf(wizardStep);
+    const currentIdx = wizardSteps.indexOf(wizardStep);
     if (index < 0 || index > currentIdx) return;
-    const target = ADD_TRIP_WIZARD_STEPS[index];
+    const target = wizardSteps[index];
     if (!target || target === wizardStep) return;
     setWizardStep(target);
     if (target === "allocation") {
@@ -563,37 +639,7 @@ export function AddTripModal({
       onClose();
       return;
     }
-    if (wizardStep === "allocation") {
-      if (
-        !useEnterpriseSteps ||
-        mobileAggregateFleetKeypads ||
-        mobileAssetFleetSteps
-      ) {
-        const allocIdx = allocationSteps.indexOf(allocationSubStep);
-        if (allocIdx > 0) {
-          setAllocationSubStep(allocationSteps[allocIdx - 1]!);
-          return;
-        }
-      }
-      setWizardStep("source");
-      return;
-    }
-    if (wizardStep === "source") {
-      setWizardStep("commodity");
-      return;
-    }
-    if (wizardStep === "commodity") {
-      setWizardStep("route");
-      return;
-    }
-    if (wizardStep === "route") {
-      setWizardStep("client");
-      return;
-    }
-    if (wizardStep === "client") {
-      onClose();
-      return;
-    }
+    if (goWizardBack()) return;
     onClose();
   };
 
@@ -661,7 +707,7 @@ export function AddTripModal({
       progress={
         wizardEnabled && isDesktopWizard ? (
           <CreateTripDesktopStepper
-            steps={ADD_TRIP_WIZARD_STEPS.map((id, idx) => ({
+            steps={wizardSteps.map((id, idx) => ({
               id,
               num: idx + 1,
               title: addTripWizardStepLabel(id),
@@ -701,6 +747,9 @@ export function AddTripModal({
           onLaneGateActiveChange={setLaneGateActive}
           onContractLaneLockedChange={setContractLaneLocked}
           onRequestChangeLane={() => setWizardStep("client")}
+          allowedSupplyModes={allowedSupplyModes}
+          canAggregateTrip={canAggregate}
+          canShareIndent={unifiedPermissions.canIndent}
         />
       ) : (
       <AddTripFormFields
