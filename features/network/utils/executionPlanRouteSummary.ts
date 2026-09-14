@@ -91,10 +91,59 @@ export function planStopToLocationInput(row: PlanStopLocationRow): StopLocationI
 export function isMultiOrderExecutionPlan(
   summary: ExecutionPlanRouteSummary | null | undefined,
 ): boolean {
-  if (!summary?.stops.length) return false;
-  const pickups = summary.stops.filter((s) => s.kind === "pickup").length;
-  const drops = summary.stops.filter((s) => s.kind === "drop").length;
+  const stops = summary?.stops;
+  if (!stops?.length) return false;
+  const pickups = stops.filter((s) => s.kind === "pickup").length;
+  const drops = stops.filter((s) => s.kind === "drop").length;
   return pickups > 1 || drops > 1;
+}
+
+export type CommerceRouteHierarchy = {
+  pickupPlace: string | null;
+  finalDropPlace: string | null;
+  intermediateCount: number;
+  intermediatePlaces: string[];
+};
+
+function trimmedPlace(value: string | null | undefined): string | null {
+  const t = (value ?? "").trim();
+  return t ? t : null;
+}
+
+/**
+ * Card route hierarchy from already-ordered execution stops.
+ * Final destination is the last drop by sequence — not a joined drop list.
+ */
+export function buildCommerceRouteHierarchy(
+  stops: readonly ExecutionPlanRouteStop[] | null | undefined,
+): CommerceRouteHierarchy {
+  const ordered = [...(stops ?? [])].sort((a, b) => {
+    if (a.sequence !== b.sequence) return a.sequence - b.sequence;
+    return a.kindIndex - b.kindIndex;
+  });
+  const pickupStop = ordered.find((s) => s.kind === "pickup") ?? null;
+  const drops = ordered.filter((s) => s.kind === "drop");
+  const finalDrop = drops.length > 0 ? drops[drops.length - 1]! : null;
+  const intermediates = ordered.filter((s) => {
+    if (pickupStop && s === pickupStop) return false;
+    if (finalDrop && s === finalDrop) return false;
+    return true;
+  });
+  const pickupPlace = trimmedPlace(pickupStop?.place);
+  const finalDropPlace = trimmedPlace(finalDrop?.place);
+  const intermediatePlaces = [
+    ...new Set(
+      intermediates
+        .map((s) => trimmedPlace(s.place))
+        .filter((p): p is string => !!p && p !== pickupPlace && p !== finalDropPlace),
+    ),
+  ];
+  return {
+    pickupPlace,
+    finalDropPlace,
+    intermediateCount: intermediates.length,
+    intermediatePlaces,
+  };
 }
 
 export function groupPlanStopsToRouteSummaries(

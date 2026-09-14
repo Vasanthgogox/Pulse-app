@@ -18,6 +18,7 @@ import {
 import { RouteEndpointStack } from "@/features/network/components/RouteEndpointStack";
 import type { LoadCenterTripAllocation } from "@/features/network/utils/loadCenterTripAllocation.util";
 import {
+  buildCommerceRouteHierarchy,
   isMultiOrderExecutionPlan,
   type ExecutionPlanRouteSummary,
 } from "@/features/network/utils/executionPlanRouteSummary";
@@ -306,6 +307,7 @@ export function LoadCenterHubMobileIndentCard({
   const isCommerce = Boolean(indent.execution_plan_id);
   const isMultiOrder = isMultiOrderExecutionPlan(routePlan);
   const planStops = routePlan?.stops ?? [];
+  const routeHierarchy = buildCommerceRouteHierarchy(planStops);
   const displayName = asLabel(titleName);
   const avatarFb =
     (initialsColorSeed ?? avatarSeed ?? "").trim() ||
@@ -477,25 +479,44 @@ export function LoadCenterHubMobileIndentCard({
           </View>
 
           {isMultiOrder && planStops.length > 0 ? (
-            <View style={styles.multiOrderBlock}>
-              {planStops.map((stop) => (
-                <View key={`${stop.kind}-${stop.kindIndex}`} style={styles.multiOrderRow}>
-                  <Text
-                    style={[
-                      styles.multiOrderCaption,
-                      stop.kind === "drop"
-                        ? styles.multiOrderCaptionDrop
-                        : styles.multiOrderCaptionPickup,
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {stop.caption}
-                  </Text>
-                  <Text style={styles.multiOrderPlace} numberOfLines={1}>
-                    {stop.place}
-                  </Text>
+            <View
+              style={styles.multiOrderBlock}
+              testID="commerce-multi-order-route-summary"
+            >
+              {routeHierarchy.pickupPlace ? (
+                <View style={styles.routeHierarchyLeg}>
+                  <Text style={styles.routeLabel}>PICKUP</Text>
+                  <RouteEndpointStack
+                    value={routeHierarchy.pickupPlace}
+                    primaryStyle={styles.routeCity}
+                    secondaryStyle={styles.routeState}
+                  />
                 </View>
-              ))}
+              ) : null}
+              {routeHierarchy.finalDropPlace ? (
+                <View style={styles.routeHierarchyLeg}>
+                  <Text style={styles.routeLabel}>DROP</Text>
+                  <RouteEndpointStack
+                    value={routeHierarchy.finalDropPlace}
+                    primaryStyle={styles.routeCity}
+                    secondaryStyle={styles.routeState}
+                  />
+                  {routeHierarchy.intermediateCount > 0 ? (
+                    <Text
+                      style={styles.routeVia}
+                      numberOfLines={1}
+                      testID="commerce-multi-order-via"
+                    >
+                      {`+ ${routeHierarchy.intermediateCount} ${
+                        routeHierarchy.intermediateCount === 1 ? "stop" : "stops"
+                      }`}
+                      {routeHierarchy.intermediatePlaces.length > 0
+                        ? ` · ${routeHierarchy.intermediatePlaces.join(" · ")}`
+                        : ""}
+                    </Text>
+                  ) : null}
+                </View>
+              ) : null}
               <Pressable
                 onPress={() => setTripPlanOpen(true)}
                 style={styles.tripPlanBtn}
@@ -854,34 +875,18 @@ const styles = StyleSheet.create({
     textTransform: "uppercase",
   },
   multiOrderBlock: {
-    gap: 6,
+    gap: 10,
     width: "100%",
   },
-  multiOrderRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    minWidth: 0,
+  routeHierarchyLeg: {
+    gap: 2,
+    width: "100%",
   },
-  multiOrderCaption: {
-    width: 64,
-    fontSize: 10,
-    fontWeight: "800",
-    letterSpacing: 0.2,
-    flexShrink: 0,
-  },
-  multiOrderCaptionPickup: {
-    color: Theme.driverEmerald,
-  },
-  multiOrderCaptionDrop: {
-    color: Theme.driverGold,
-  },
-  multiOrderPlace: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 13,
-    fontWeight: "700",
-    color: INK,
+  routeVia: {
+    marginTop: 2,
+    fontSize: 12,
+    fontWeight: "600",
+    color: MUTED,
   },
   tripPlanBtn: {
     alignSelf: "flex-start",

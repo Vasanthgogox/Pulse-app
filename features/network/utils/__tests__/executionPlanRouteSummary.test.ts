@@ -1,8 +1,22 @@
 import {
+  buildCommerceRouteHierarchy,
   groupPlanStopsToRouteSummaries,
   indentDisplayOriginDest,
   isMultiOrderExecutionPlan,
+  type ExecutionPlanRouteStop,
+  type ExecutionPlanRouteSummary,
 } from "../executionPlanRouteSummary";
+
+function stop(
+  extras: Pick<ExecutionPlanRouteStop, "sequence" | "kind" | "kindIndex" | "place">,
+): ExecutionPlanRouteStop {
+  return {
+    caption: extras.kind === "pickup" ? `Pickup ${extras.kindIndex}` : `Drop ${extras.kindIndex}`,
+    latitude: null,
+    longitude: null,
+    ...extras,
+  };
+}
 
 describe("groupPlanStopsToRouteSummaries", () => {
   it("uses warehouse city for pickups and stop address for drops", () => {
@@ -96,6 +110,109 @@ describe("indentDisplayOriginDest", () => {
     ).toEqual({
       origin: "Chennai, Tamil Nadu",
       dest: "Ramaraj street · Banglore, Karnataka",
+    });
+  });
+});
+
+describe("isMultiOrderExecutionPlan", () => {
+  it("does not throw when summary or stops is missing", () => {
+    expect(isMultiOrderExecutionPlan(null)).toBe(false);
+    expect(isMultiOrderExecutionPlan(undefined)).toBe(false);
+    expect(
+      isMultiOrderExecutionPlan({
+        pickup: "Chennai",
+        drop: "Bangalore",
+      } as ExecutionPlanRouteSummary),
+    ).toBe(false);
+    expect(
+      isMultiOrderExecutionPlan({
+        pickup: "Chennai",
+        drop: "Bangalore",
+        stops: undefined as unknown as ExecutionPlanRouteStop[],
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("buildCommerceRouteHierarchy", () => {
+  it("single pickup + final drop has no via line", () => {
+    expect(
+      buildCommerceRouteHierarchy([
+        stop({ sequence: 1, kind: "pickup", kindIndex: 1, place: "Chennai Warehouse" }),
+        stop({ sequence: 2, kind: "drop", kindIndex: 1, place: "Bangalore" }),
+      ]),
+    ).toEqual({
+      pickupPlace: "Chennai Warehouse",
+      finalDropPlace: "Bangalore",
+      intermediateCount: 0,
+      intermediatePlaces: [],
+    });
+    expect(
+      isMultiOrderExecutionPlan({
+        pickup: "Chennai Warehouse",
+        drop: "Bangalore",
+        stops: [
+          stop({ sequence: 1, kind: "pickup", kindIndex: 1, place: "Chennai Warehouse" }),
+          stop({ sequence: 2, kind: "drop", kindIndex: 1, place: "Bangalore" }),
+        ],
+      }),
+    ).toBe(false);
+  });
+
+  it("one intermediate drop stays secondary to the last drop", () => {
+    expect(
+      buildCommerceRouteHierarchy([
+        stop({ sequence: 1, kind: "pickup", kindIndex: 1, place: "Chennai Warehouse" }),
+        stop({ sequence: 2, kind: "drop", kindIndex: 1, place: "Hosur" }),
+        stop({ sequence: 3, kind: "drop", kindIndex: 2, place: "Bangalore" }),
+      ]),
+    ).toEqual({
+      pickupPlace: "Chennai Warehouse",
+      finalDropPlace: "Bangalore",
+      intermediateCount: 1,
+      intermediatePlaces: ["Hosur"],
+    });
+  });
+
+  it("multiple intermediates stay secondary and count correctly", () => {
+    expect(
+      buildCommerceRouteHierarchy([
+        stop({ sequence: 1, kind: "pickup", kindIndex: 1, place: "Chennai Warehouse" }),
+        stop({ sequence: 2, kind: "drop", kindIndex: 1, place: "Hosur" }),
+        stop({ sequence: 3, kind: "drop", kindIndex: 2, place: "Krishnagiri" }),
+        stop({ sequence: 4, kind: "drop", kindIndex: 3, place: "Bangalore" }),
+      ]),
+    ).toEqual({
+      pickupPlace: "Chennai Warehouse",
+      finalDropPlace: "Bangalore",
+      intermediateCount: 2,
+      intermediatePlaces: ["Hosur", "Krishnagiri"],
+    });
+  });
+
+  it("uses the last drop by execution sequence as the final destination", () => {
+    const hierarchy = buildCommerceRouteHierarchy([
+      stop({ sequence: 4, kind: "drop", kindIndex: 2, place: "Bangalore" }),
+      stop({ sequence: 2, kind: "drop", kindIndex: 1, place: "Hosur" }),
+      stop({ sequence: 1, kind: "pickup", kindIndex: 1, place: "Chennai Warehouse" }),
+    ]);
+    expect(hierarchy.finalDropPlace).toBe("Bangalore");
+    expect(hierarchy.pickupPlace).toBe("Chennai Warehouse");
+    expect(hierarchy.intermediatePlaces).toEqual(["Hosur"]);
+  });
+
+  it("does not fabricate missing optional location text", () => {
+    expect(
+      buildCommerceRouteHierarchy([
+        stop({ sequence: 1, kind: "pickup", kindIndex: 1, place: "   " }),
+        stop({ sequence: 2, kind: "drop", kindIndex: 1, place: "" }),
+        stop({ sequence: 3, kind: "drop", kindIndex: 2, place: "Bangalore" }),
+      ]),
+    ).toEqual({
+      pickupPlace: null,
+      finalDropPlace: "Bangalore",
+      intermediateCount: 1,
+      intermediatePlaces: [],
     });
   });
 });
