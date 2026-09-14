@@ -14,7 +14,7 @@ export async function fetchExecutionPlanRouteSummaries(
   const { data, error } = await supabase()
     .from("execution_plan_stops")
     .select(
-      "execution_plan_id, stop_type, sequence, label, city, state, address_line, warehouse:client_warehouses(city, state, address, name)",
+      "execution_plan_id, stop_type, sequence, label, city, state, address_line, latitude, longitude, warehouse:client_warehouses(city, state, address, name)",
     )
     .in("execution_plan_id", ids)
     .order("sequence", { ascending: true });

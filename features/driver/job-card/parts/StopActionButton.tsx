@@ -31,11 +31,14 @@ export function StopActionButton({
   onComplete,
 }: Props) {
   if (model.kind === 'idle') {
-    if (!model.stageLabel && !nextPlace) return null;
+    if (!model.stageLabel && !model.hint && !nextPlace) return null;
     return (
       <View style={styles.idle} testID="multi-order-action-idle">
         {model.stageLabel ? (
           <Text style={[styles.stage, { color: colors.emerald }]}>{model.stageLabel}</Text>
+        ) : null}
+        {model.hint ? (
+          <Text style={[styles.hint, { color: colors.textMuted }]}>{model.hint}</Text>
         ) : null}
         {nextPlace ? (
           <Text style={[styles.next, { color: colors.textMuted }]}>Next → {nextPlace}</Text>

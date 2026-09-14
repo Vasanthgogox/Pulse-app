@@ -1,5 +1,6 @@
 import type { IndentRow } from "@/features/indents";
 import {
+  locationLabelFromStop,
   summarizeStopsByType,
   type StopLocationInput,
 } from "@/lib/platform/orchestration/summarizeStopLocations";
@@ -7,10 +8,13 @@ import {
 export type PlanStopLocationRow = {
   execution_plan_id: string;
   stop_type: string | null;
+  sequence?: number | string | null;
   label: string | null;
   city: string | null;
   state: string | null;
   address_line: string | null;
+  latitude?: number | string | null;
+  longitude?: number | string | null;
   warehouse?:
     | {
         name?: string | null;
@@ -27,9 +31,20 @@ export type PlanStopLocationRow = {
     | null;
 };
 
+export type ExecutionPlanRouteStop = {
+  sequence: number;
+  kind: "pickup" | "drop";
+  kindIndex: number;
+  caption: string;
+  place: string;
+  latitude: number | null;
+  longitude: number | null;
+};
+
 export type ExecutionPlanRouteSummary = {
   pickup: string;
   drop: string;
+  stops: ExecutionPlanRouteStop[];
 };
 
 function firstWarehouse(
@@ -41,6 +56,21 @@ function firstWarehouse(
 } | null {
   if (!warehouse) return null;
   return Array.isArray(warehouse) ? (warehouse[0] ?? null) : warehouse;
+}
+
+function asSequence(value: number | string | null | undefined, fallback: number): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string" && value.trim() !== "") {
+    const n = Number(value);
+    if (Number.isFinite(n)) return n;
+  }
+  return fallback;
+}
+
+function asCoord(value: number | string | null | undefined): number | null {
+  if (value == null || value === "") return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
 }
 
 export function planStopToLocationInput(row: PlanStopLocationRow): StopLocationInput | null {
@@ -58,28 +88,89 @@ export function planStopToLocationInput(row: PlanStopLocationRow): StopLocationI
   };
 }
 
+export function isMultiOrderExecutionPlan(
+  summary: ExecutionPlanRouteSummary | null | undefined,
+): boolean {
+  if (!summary?.stops.length) return false;
+  const pickups = summary.stops.filter((s) => s.kind === "pickup").length;
+  const drops = summary.stops.filter((s) => s.kind === "drop").length;
+  return pickups > 1 || drops > 1;
+}
+
 export function groupPlanStopsToRouteSummaries(
   rows: PlanStopLocationRow[],
 ): Record<string, ExecutionPlanRouteSummary> {
-  const byPlan = new Map<string, StopLocationInput[]>();
-  for (const row of rows) {
+  const byPlan = new Map<
+    string,
+    Array<{
+      input: StopLocationInput;
+      sequence: number;
+      latitude: number | null;
+      longitude: number | null;
+    }>
+  >();
+
+  rows.forEach((row, index) => {
     const mapped = planStopToLocationInput(row);
-    if (!mapped) continue;
+    if (!mapped) return;
     const planId = String(row.execution_plan_id ?? "").trim();
-    if (!planId) continue;
+    if (!planId) return;
     const list = byPlan.get(planId) ?? [];
-    list.push(mapped);
+    list.push({
+      input: mapped,
+      sequence: asSequence(row.sequence, index + 1),
+      latitude: asCoord(row.latitude),
+      longitude: asCoord(row.longitude),
+    });
     byPlan.set(planId, list);
-  }
+  });
 
   const out: Record<string, ExecutionPlanRouteSummary> = {};
-  for (const [planId, stops] of byPlan) {
+  for (const [planId, raw] of byPlan) {
+    const ordered = [...raw].sort((a, b) => a.sequence - b.sequence);
+    let pickupN = 0;
+    let dropN = 0;
+    const stops: ExecutionPlanRouteStop[] = ordered.map((item) => {
+      if (item.input.type === "drop") {
+        dropN += 1;
+        return {
+          sequence: item.sequence,
+          kind: "drop",
+          kindIndex: dropN,
+          caption: `Drop ${dropN}`,
+          place: locationLabelFromStop(item.input),
+          latitude: item.latitude,
+          longitude: item.longitude,
+        };
+      }
+      pickupN += 1;
+      return {
+        sequence: item.sequence,
+        kind: "pickup",
+        kindIndex: pickupN,
+        caption: `Pickup ${pickupN}`,
+        place: locationLabelFromStop(item.input),
+        latitude: item.latitude,
+        longitude: item.longitude,
+      };
+    });
+    const inputs = ordered.map((item) => item.input);
     out[planId] = {
-      pickup: summarizeStopsByType(stops, "pickup"),
-      drop: summarizeStopsByType(stops, "drop"),
+      pickup: summarizeStopsByType(inputs, "pickup"),
+      drop: summarizeStopsByType(inputs, "drop"),
+      stops,
     };
   }
   return out;
+}
+
+export function indentRoutePlan(
+  load: { execution_plan_id?: unknown },
+  byPlanId: Record<string, ExecutionPlanRouteSummary> | undefined,
+): ExecutionPlanRouteSummary | undefined {
+  const planId =
+    typeof load.execution_plan_id === "string" ? load.execution_plan_id.trim() : "";
+  return planId ? byPlanId?.[planId] : undefined;
 }
 
 export function indentDisplayOriginDest(
@@ -88,9 +179,7 @@ export function indentDisplayOriginDest(
   },
   byPlanId: Record<string, ExecutionPlanRouteSummary> | undefined,
 ): { origin: string; dest: string } {
-  const planId =
-    typeof load.execution_plan_id === "string" ? load.execution_plan_id.trim() : "";
-  const overlay = planId ? byPlanId?.[planId] : undefined;
+  const overlay = indentRoutePlan(load, byPlanId);
   return {
     origin: overlay?.pickup || load.pickup_area || "—",
     dest: overlay?.drop || load.drop_location || "—",

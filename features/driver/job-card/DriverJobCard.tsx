@@ -1,6 +1,7 @@
 /**
  * Driver Job Card router.
- * SES hydrate chooses legacy vs multi-order. Commerce RPC is never used to decide.
+ * Mode = SES stops or persisted trip.is_commerce / execution_plan_id.
+ * Primitive A is not used to choose the card.
  */
 import { DriverTripFlowCard, type DriverTripFlowCardProps } from '@/features/driver/components/DriverTripFlowCard';
 import { useDriverStopExecution } from '@/features/driver/hooks/useDriverStopExecution';
@@ -10,9 +11,9 @@ import { resolveDriverJobExecutionMode } from '@/features/driver/job-card/resolv
 
 export function DriverJobCard(props: DriverTripFlowCardProps) {
   const stopExecution = useDriverStopExecution(props.trip.id);
-  const mode = stopExecution.hydrated
-    ? resolveDriverJobExecutionMode(stopExecution.stops)
-    : null;
+  const isCommerceTrip = Boolean(
+    props.trip.is_commerce || (props.trip.execution_plan_id ?? '').trim(),
+  );
 
   if (!stopExecution.hydrated) {
     return (
@@ -23,6 +24,8 @@ export function DriverJobCard(props: DriverTripFlowCardProps) {
       />
     );
   }
+
+  const mode = resolveDriverJobExecutionMode(stopExecution.stops, { isCommerceTrip });
 
   if (mode === 'multi_order') {
     return <DriverMultiOrderJobCard {...props} stopExecution={stopExecution} />;

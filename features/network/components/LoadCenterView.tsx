@@ -47,7 +47,7 @@ import { confirmDialog } from "@/lib/confirmDialog";
 import { shareDraftIndent } from "@/features/indents/services/indents.service";
 import { resolveMarketIndentShipperLabel } from "@/features/indents/utils/indentPartyDisplay.util";
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
-import { indentDisplayOriginDest } from "@/features/network/utils/executionPlanRouteSummary";
+import { indentDisplayOriginDest, indentRoutePlan } from "@/features/network/utils/executionPlanRouteSummary";
 import { looksLikePlannerStopSummary } from "@/features/network/utils/storyDisplay";
 import {
   resolveAwardedVendorName,
@@ -1307,6 +1307,7 @@ export function LoadCenterView({
           statusLabel={isDone ? "completed" : "action required"}
           origin={route.origin}
           dest={route.dest}
+          routePlan={indentRoutePlan(load, planRouteById)}
           pickupIso={load.pickup_date}
           leftFooterLabel={(load.vehicle_type || "—").toUpperCase()}
           rightFooterLabel={
@@ -1452,6 +1453,7 @@ export function LoadCenterView({
           statusLabel={displayStatus}
           origin={route.origin}
           dest={route.dest}
+          routePlan={indentRoutePlan(load, planRouteById)}
           pickupIso={load.pickup_date}
           leftFooterLabel={vehicleDetail}
           ticketCommerce={ticketCommerce}
@@ -1690,6 +1692,7 @@ export function LoadCenterView({
           statusLabel={statusLabel}
           origin={route.origin}
           dest={route.dest}
+          routePlan={indentRoutePlan(load, planRouteById)}
           pickupIso={load.pickup_date}
           leftFooterLabel={vehicleDetail}
           rightFooterLabel={rightFooter}
@@ -1803,6 +1806,7 @@ export function LoadCenterView({
           statusLabel={isDone ? "completed" : "action required"}
           origin={route.origin}
           dest={route.dest}
+          routePlan={indentRoutePlan(load, planRouteById)}
           pickupIso={load.pickup_date}
           leftFooterLabel={(load.vehicle_type || "—").toUpperCase()}
           rightFooterLabel={isDone ? "On books" : formatINR(supplierRate)}

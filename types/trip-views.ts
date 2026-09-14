@@ -70,6 +70,9 @@ export type DriverTripRow = {
   trip_number?: string | null;
   indent_id?: string | null;
   source_indent_id?: string | null;
+  /** Present when the driver view (or stamp) exposes indent commerce origin. */
+  execution_plan_id?: string | null;
+  is_commerce?: boolean;
   /** Asset vs market — drives driver expense / odometer capabilities. */
   trip_payout_mode?: string | null;
   operating_mode?: string | null;
@@ -252,6 +255,8 @@ export function driverRowToTripRow(row: DriverTripRow): TripRow {
     updated_at: row.updated_at ?? row.created_at,
     indent_id: row.indent_id ?? null,
     source_indent_id: row.source_indent_id ?? null,
+    execution_plan_id: row.execution_plan_id ?? null,
+    is_commerce: Boolean(row.is_commerce || row.execution_plan_id),
     // Real source, not a hardcoded 'assigned' — mover_asset rows must stay
     // identifiable so the wallet can tell supplier-side trips from dispatches.
     source: row.source ?? 'assigned',

@@ -108,7 +108,7 @@ describe('DriverJobCard', () => {
     mockUseDriverCommerceMission.mockReset();
     mockUseDriverCommerceMission.mockReturnValue({
       status: 'ready',
-      mission: { tripId: 'trip-1', indentId: null, executionPlanId: 'plan-1', stops: [] },
+      mission: { tripId: 'trip-1', indentId: null, executionPlanId: null, stops: [] },
     });
   });
 
@@ -119,12 +119,37 @@ describe('DriverJobCard', () => {
     expect(mockUseDriverCommerceMission).not.toHaveBeenCalled();
   });
 
-  it('renders the untouched legacy card when SES has no stops', () => {
+  it('renders the untouched legacy card when SES is empty and trip is not commerce', () => {
     mockUseDriverStopExecution.mockReturnValue(controller({ hydrated: true, stops: [] }));
     const { getByTestId, queryByTestId } = render(<DriverJobCard trip={trip()} />);
     expect(getByTestId('legacy-job-card')).toBeTruthy();
     expect(queryByTestId('driver-multi-order-job-card')).toBeNull();
     expect(mockUseDriverCommerceMission).not.toHaveBeenCalled();
+  });
+
+  it('does not use Primitive A to choose the card when SES is empty', () => {
+    mockUseDriverStopExecution.mockReturnValue(controller({ hydrated: true, stops: [] }));
+    mockUseDriverCommerceMission.mockReturnValue({
+      status: 'ready',
+      mission: {
+        tripId: 'trip-1',
+        indentId: 'indent-1',
+        executionPlanId: 'plan-1',
+        stops: [],
+      },
+    });
+    const { getByTestId } = render(<DriverJobCard trip={trip()} />);
+    expect(getByTestId('legacy-job-card')).toBeTruthy();
+    expect(mockUseDriverCommerceMission).not.toHaveBeenCalled();
+  });
+
+  it('renders multi-order when trip.is_commerce even without SES', () => {
+    mockUseDriverStopExecution.mockReturnValue(controller({ hydrated: true, stops: [] }));
+    const { getByTestId, queryByTestId } = render(
+      <DriverJobCard trip={{ ...trip(), is_commerce: true }} />,
+    );
+    expect(getByTestId('driver-multi-order-job-card')).toBeTruthy();
+    expect(queryByTestId('legacy-job-card')).toBeNull();
   });
 
   it('renders the multi-order card and then hydrates Primitive A', async () => {

@@ -27,6 +27,10 @@ import {
   isDeliveryStop,
   multiOrderActionModel,
 } from '@/features/driver/job-card/multiOrderStopCopy';
+import {
+  overlayCommerceStopsOnExecution,
+  ROUTE_SETUP_PENDING_MESSAGE,
+} from '@/features/driver/job-card/sesStopsFromCommerceMission';
 import { persistStopDeliveryProof } from '@/features/driver/job-card/persistStopDeliveryProof';
 import type { DeliveryProofDraft } from '@/features/driver/job-card/deliveryProof';
 import { DriverStopVerificationScreen } from '@/features/driver/job-card/DriverStopVerificationScreen';
@@ -63,11 +67,17 @@ export function DriverMultiOrderJobCard({
 }: Props) {
   const colors = useDriverThemeColors();
   const { profile } = useAuth();
-  const { stops, currentStop, nextStop, mutating, arrive, complete } = stopExecution;
+  const { mutating, arrive, complete } = stopExecution;
+  const sesReady = stopExecution.stops.length > 0;
   const missionState = useDriverCommerceMission(trip.id);
   const mission = missionState.status === 'error' ? null : missionState.mission;
+  const execution = useMemo(
+    () => overlayCommerceStopsOnExecution(stopExecution, mission, trip),
+    [stopExecution, mission, trip],
+  );
+  const { stops, currentStop, nextStop } = execution;
   const orderCount = distinctOrderCount(mission);
-  const done = completedStopCount(stops);
+  const done = sesReady ? completedStopCount(stops) : 0;
   const [actionError, setActionError] = useState<string | null>(null);
   const [verificationOpen, setVerificationOpen] = useState(false);
   const [verified, setVerified] = useState(false);
@@ -85,15 +95,21 @@ export function DriverMultiOrderJobCard({
   } | null>(null);
 
   const currentId = currentStop?.stopId ?? null;
-  const routeFinished = allStopsFinished(stops);
+  const routeFinished = sesReady && allStopsFinished(stops);
   const tripCompleted =
     markedComplete || String(trip.status ?? '').toLowerCase() === 'completed';
   const orders = ordersOnStop(mission, currentId);
-  const canArrive = currentStop ? canShowArriveAction(currentStop, currentId) : false;
-  const canComplete = currentStop ? canShowCompleteAction(currentStop, currentId) : false;
+  const canArrive = sesReady && currentStop ? canShowArriveAction(currentStop, currentId) : false;
+  const canComplete = sesReady && currentStop ? canShowCompleteAction(currentStop, currentId) : false;
   const rawModel = multiOrderActionModel(currentStop, orders.length);
-  const actionModel =
-    (rawModel.kind === 'arrive' && !canArrive) || (rawModel.kind === 'complete' && !canComplete)
+  const actionModel = !sesReady
+    ? {
+        kind: 'idle' as const,
+        stageLabel: 'Route setup pending',
+        hint: ROUTE_SETUP_PENDING_MESSAGE,
+        cta: null,
+      }
+    : (rawModel.kind === 'arrive' && !canArrive) || (rawModel.kind === 'complete' && !canComplete)
       ? { ...rawModel, kind: 'idle' as const, cta: null }
       : rawModel;
 
@@ -160,7 +176,7 @@ export function DriverMultiOrderJobCard({
   };
 
   const openVerification = () => {
-    if (!currentStop) return;
+    if (!sesReady || !currentStop) return;
     openStopDetails(currentStop, false);
   };
 
@@ -194,12 +210,20 @@ export function DriverMultiOrderJobCard({
   };
 
   const runArrive = () => {
+    if (!sesReady) {
+      setActionError(ROUTE_SETUP_PENDING_MESSAGE);
+      return;
+    }
     void arrive().then((result) => {
       if (result.ignored) return;
       setActionError(result.ok ? null : result.error?.message ?? 'Could not arrive at this stop');
     });
   };
   const runComplete = (proof: DeliveryProofDraft) => {
+    if (!sesReady) {
+      setActionError(ROUTE_SETUP_PENDING_MESSAGE);
+      return;
+    }
     const stop = verifySession?.stop;
     const uid = profile?.uid;
     void (async () => {
@@ -317,7 +341,7 @@ export function DriverMultiOrderJobCard({
           <StopActionButton
             colors={colors}
             model={actionModel}
-            nextPlace={nextStop ? formatStopPlace(nextStop) : null}
+            nextPlace={sesReady && nextStop ? formatStopPlace(nextStop) : null}
             busy={mutating != null}
             mutating={mutating}
             onArrive={runArrive}
@@ -350,7 +374,8 @@ export function DriverMultiOrderJobCard({
         later={later}
         mission={mission}
         onOpenStop={(stop) => {
-          const confirmHere = stop.stopId === currentId && stop.status === 'arrived';
+          const confirmHere =
+            sesReady && stop.stopId === currentId && stop.status === 'arrived';
           openStopDetails(stop, !confirmHere);
         }}
       />

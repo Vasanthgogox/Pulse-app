@@ -347,4 +347,53 @@ describe('DriverMultiOrderJobCard', () => {
     await waitFor(() => expect(onTripCompleted).toHaveBeenCalledTimes(1));
     expect(getByText('Delivery completed')).toBeTruthy();
   });
+
+  it('does not offer Arrive/Complete when SES is empty even if Primitive A has stops', () => {
+    const arrive = jest.fn().mockResolvedValue({ ok: true });
+    const complete = jest.fn().mockResolvedValue({ ok: true });
+    mockUseDriverCommerceMission.mockReturnValue({
+      status: 'ready',
+      mission: {
+        tripId: 'trip-1',
+        indentId: null,
+        executionPlanId: 'plan-1',
+        stops: [
+          {
+            stopId: 'plan-pu',
+            sequence: 1,
+            stopType: 'pickup',
+            displayName: 'Warehouse',
+            orders: [],
+          },
+          {
+            stopId: 'plan-dr',
+            sequence: 2,
+            stopType: 'drop',
+            displayName: 'Customer',
+            orders: [],
+          },
+        ],
+      },
+    });
+    const { getByText, queryByLabelText, getByTestId } = render(
+      <DriverMultiOrderJobCard
+        trip={trip()}
+        stopExecution={execution({
+          stops: [],
+          currentStop: null,
+          nextStop: null,
+          arrive,
+          complete,
+        })}
+      />,
+    );
+    expect(getByText('Route setup pending')).toBeTruthy();
+    expect(getByTestId('multi-order-action-idle')).toBeTruthy();
+    expect(queryByLabelText('Ready to pick up')).toBeNull();
+    expect(queryByLabelText('Ready to deliver')).toBeNull();
+    expect(queryByLabelText('Verify pickup')).toBeNull();
+    expect(queryByLabelText('Verify delivery')).toBeNull();
+    expect(arrive).not.toHaveBeenCalled();
+    expect(complete).not.toHaveBeenCalled();
+  });
 });

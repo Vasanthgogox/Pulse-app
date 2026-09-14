@@ -26,11 +26,15 @@ function stop(partial: Partial<DriverStopExecutionStop> & { stopId: string }): D
 }
 
 describe('resolveDriverJobExecutionMode', () => {
-  it('legacy when SES has no stops', () => {
+  it('legacy when SES has no stops and no commerce signal', () => {
     expect(resolveDriverJobExecutionMode([])).toBe('legacy');
   });
 
   it('multi_order when SES has any stop — without Commerce RPC', () => {
     expect(resolveDriverJobExecutionMode([stop({ stopId: 's1' })])).toBe('multi_order');
+  });
+
+  it('multi_order when trip.is_commerce even if SES is empty', () => {
+    expect(resolveDriverJobExecutionMode([], { isCommerceTrip: true })).toBe('multi_order');
   });
 });

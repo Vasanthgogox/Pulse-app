@@ -17,9 +17,15 @@ import {
 } from "@/features/network/utils/storyDisplay";
 import { RouteEndpointStack } from "@/features/network/components/RouteEndpointStack";
 import type { LoadCenterTripAllocation } from "@/features/network/utils/loadCenterTripAllocation.util";
+import {
+  isMultiOrderExecutionPlan,
+  type ExecutionPlanRouteSummary,
+} from "@/features/network/utils/executionPlanRouteSummary";
+import { LoadIndentTripPlanPreview } from "@/features/network/components/LoadIndentTripPlanPreview";
 import { formatINR } from "@/lib/format";
 import { ArrowRight } from "lucide-react-native";
 import type { ReactNode } from "react";
+import { useState } from "react";
 import {
   Platform,
   Pressable,
@@ -230,6 +236,8 @@ export type LoadCenterHubMobileIndentCardProps = {
   statusLabel: string;
   origin: string;
   dest: string;
+  /** Commerce execution-plan stops (Pickup 1 / Drop 1…). */
+  routePlan?: ExecutionPlanRouteSummary | null;
   pickupIso?: string | null;
   leftFooterLabel: string;
   rightFooterLabel: string;
@@ -274,6 +282,7 @@ export function LoadCenterHubMobileIndentCard({
   statusLabel,
   origin,
   dest,
+  routePlan = null,
   pickupIso,
   leftFooterLabel,
   rightFooterLabel,
@@ -293,6 +302,10 @@ export function LoadCenterHubMobileIndentCard({
   style,
 }: LoadCenterHubMobileIndentCardProps) {
   const router = useRouter();
+  const [tripPlanOpen, setTripPlanOpen] = useState(false);
+  const isCommerce = Boolean(indent.execution_plan_id);
+  const isMultiOrder = isMultiOrderExecutionPlan(routePlan);
+  const planStops = routePlan?.stops ?? [];
   const displayName = asLabel(titleName);
   const avatarFb =
     (initialsColorSeed ?? avatarSeed ?? "").trim() ||
@@ -420,10 +433,17 @@ export function LoadCenterHubMobileIndentCard({
                 {metaLine}
               </Text>
             </View>
-            {Boolean(indent.execution_plan_id) ? (
-              <View style={styles.commerceBadge} accessibilityLabel="Originated from Pulse Commerce">
+            {isCommerce ? (
+              <View
+                style={styles.commerceBadge}
+                accessibilityLabel={
+                  isMultiOrder
+                    ? "Multi-order commerce delivery"
+                    : "Originated from Pulse Commerce"
+                }
+              >
                 <Text style={styles.commerceBadgeText} numberOfLines={1}>
-                  COMMERCE
+                  {isMultiOrder ? "MULTI-ORDER" : "COMMERCE"}
                 </Text>
               </View>
             ) : null}
@@ -456,31 +476,73 @@ export function LoadCenterHubMobileIndentCard({
             </View>
           </View>
 
-          {/* Route: CSS grid on web (kanban stretch breaks RN flex row). */}
-          <View style={styles.routeGrid}>
-            <View style={styles.routeCol}>
-              <Text style={styles.routeLabel}>PICKUP</Text>
-              <RouteEndpointStack
-                value={origin}
-                primaryStyle={styles.routeCity}
-                secondaryStyle={styles.routeState}
-              />
+          {isMultiOrder && planStops.length > 0 ? (
+            <View style={styles.multiOrderBlock}>
+              {planStops.map((stop) => (
+                <View key={`${stop.kind}-${stop.kindIndex}`} style={styles.multiOrderRow}>
+                  <Text
+                    style={[
+                      styles.multiOrderCaption,
+                      stop.kind === "drop"
+                        ? styles.multiOrderCaptionDrop
+                        : styles.multiOrderCaptionPickup,
+                    ]}
+                    numberOfLines={1}
+                  >
+                    {stop.caption}
+                  </Text>
+                  <Text style={styles.multiOrderPlace} numberOfLines={1}>
+                    {stop.place}
+                  </Text>
+                </View>
+              ))}
+              <Pressable
+                onPress={() => setTripPlanOpen(true)}
+                style={styles.tripPlanBtn}
+                hitSlop={6}
+                accessibilityRole="button"
+                accessibilityLabel="View trip plan"
+              >
+                <Text style={styles.tripPlanBtnText}>Trip plan</Text>
+              </Pressable>
             </View>
-            <View style={styles.routeSep} pointerEvents="none" accessibilityElementsHidden>
-              <View style={styles.routeSepLine} />
-              <ArrowRight size={11} color={MUTED} strokeWidth={2.4} />
-              <View style={styles.routeSepLine} />
+          ) : (
+            <View style={styles.routeGrid}>
+              <View style={styles.routeCol}>
+                <Text style={styles.routeLabel}>PICKUP</Text>
+                <RouteEndpointStack
+                  value={origin}
+                  primaryStyle={styles.routeCity}
+                  secondaryStyle={styles.routeState}
+                />
+              </View>
+              <View style={styles.routeSep} pointerEvents="none" accessibilityElementsHidden>
+                <View style={styles.routeSepLine} />
+                <ArrowRight size={11} color={MUTED} strokeWidth={2.4} />
+                <View style={styles.routeSepLine} />
+              </View>
+              <View style={[styles.routeCol, styles.routeColEnd]}>
+                <Text style={[styles.routeLabel, styles.routeLabelEnd]}>DROP</Text>
+                <RouteEndpointStack
+                  value={dest}
+                  align="end"
+                  primaryStyle={styles.routeCity}
+                  secondaryStyle={styles.routeState}
+                />
+              </View>
             </View>
-            <View style={[styles.routeCol, styles.routeColEnd]}>
-              <Text style={[styles.routeLabel, styles.routeLabelEnd]}>DROP</Text>
-              <RouteEndpointStack
-                value={dest}
-                align="end"
-                primaryStyle={styles.routeCity}
-                secondaryStyle={styles.routeState}
-              />
-            </View>
-          </View>
+          )}
+          {isCommerce && !isMultiOrder ? (
+            <Pressable
+              onPress={() => setTripPlanOpen(true)}
+              style={styles.tripPlanBtn}
+              hitSlop={6}
+              accessibilityRole="button"
+              accessibilityLabel="View trip plan"
+            >
+              <Text style={styles.tripPlanBtnText}>Trip plan</Text>
+            </Pressable>
+          ) : null}
 
           {specChips.length > 0 || loadDateLabel ? (
             <ScrollView
@@ -613,6 +675,12 @@ export function LoadCenterHubMobileIndentCard({
           {priceTrailing}
         </View>
       </View>
+      <LoadIndentTripPlanPreview
+        visible={tripPlanOpen}
+        title={displayName}
+        plan={routePlan}
+        onClose={() => setTripPlanOpen(false)}
+      />
     </View>
   );
 }
@@ -784,6 +852,52 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
     color: MUTED,
     textTransform: "uppercase",
+  },
+  multiOrderBlock: {
+    gap: 6,
+    width: "100%",
+  },
+  multiOrderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minWidth: 0,
+  },
+  multiOrderCaption: {
+    width: 64,
+    fontSize: 10,
+    fontWeight: "800",
+    letterSpacing: 0.2,
+    flexShrink: 0,
+  },
+  multiOrderCaptionPickup: {
+    color: Theme.driverEmerald,
+  },
+  multiOrderCaptionDrop: {
+    color: Theme.driverGold,
+  },
+  multiOrderPlace: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: 13,
+    fontWeight: "700",
+    color: INK,
+  },
+  tripPlanBtn: {
+    alignSelf: "flex-start",
+    minHeight: 32,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 8,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: Theme.driverEmeraldBorder,
+    backgroundColor: Theme.surfaceLight,
+    justifyContent: "center",
+  },
+  tripPlanBtnText: {
+    fontSize: 12,
+    fontWeight: "700",
+    color: Theme.driverEmerald,
   },
   statusChipTextLive: {
     color: Theme.positive,

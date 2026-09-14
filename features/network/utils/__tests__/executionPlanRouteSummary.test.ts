@@ -1,6 +1,7 @@
 import {
   groupPlanStopsToRouteSummaries,
   indentDisplayOriginDest,
+  isMultiOrderExecutionPlan,
 } from "../executionPlanRouteSummary";
 
 describe("groupPlanStopsToRouteSummaries", () => {
@@ -9,6 +10,7 @@ describe("groupPlanStopsToRouteSummaries", () => {
       {
         execution_plan_id: "plan-1",
         stop_type: "pickup",
+        sequence: 1,
         label: "Pickup A",
         city: null,
         state: null,
@@ -18,6 +20,7 @@ describe("groupPlanStopsToRouteSummaries", () => {
       {
         execution_plan_id: "plan-1",
         stop_type: "drop",
+        sequence: 2,
         label: "Drop C",
         city: "",
         state: "",
@@ -27,6 +30,7 @@ describe("groupPlanStopsToRouteSummaries", () => {
       {
         execution_plan_id: "plan-1",
         stop_type: "drop",
+        sequence: 3,
         label: "Drop D",
         city: "Banglore",
         state: "Karnataka",
@@ -38,7 +42,37 @@ describe("groupPlanStopsToRouteSummaries", () => {
     expect(summaries["plan-1"]).toEqual({
       pickup: "Chennai, Tamil Nadu",
       drop: "Ramaraj street · Banglore, Karnataka",
+      stops: [
+        {
+          sequence: expect.any(Number),
+          kind: "pickup",
+          kindIndex: 1,
+          caption: "Pickup 1",
+          place: "Chennai, Tamil Nadu",
+          latitude: null,
+          longitude: null,
+        },
+        {
+          sequence: expect.any(Number),
+          kind: "drop",
+          kindIndex: 1,
+          caption: "Drop 1",
+          place: "Ramaraj street",
+          latitude: null,
+          longitude: null,
+        },
+        {
+          sequence: expect.any(Number),
+          kind: "drop",
+          kindIndex: 2,
+          caption: "Drop 2",
+          place: "Banglore, Karnataka",
+          latitude: null,
+          longitude: null,
+        },
+      ],
     });
+    expect(isMultiOrderExecutionPlan(summaries["plan-1"])).toBe(true);
   });
 });
 
@@ -55,6 +89,7 @@ describe("indentDisplayOriginDest", () => {
           "plan-1": {
             pickup: "Chennai, Tamil Nadu",
             drop: "Ramaraj street · Banglore, Karnataka",
+            stops: [],
           },
         },
       ),
