@@ -2,14 +2,11 @@
  * Give Load indent card mutations + sheets.
  * Same handlers as LoadCenterView — no second marketplace/award/story machine.
  */
-import Theme from "@/constants/Theme";
-import { AwardModal } from "@/features/network/components/AwardModal";
-import { ShareLoadSheet } from "@/features/network/components/ShareLoadSheet";
+import { GiveLoadIndentActionSheets } from "@/features/network/components/GiveLoadIndentActionSheets";
 import { useAwardQuote } from "@/features/network/hooks/useAwardQuote";
 import { useSuccessToast } from "@/features/network/hooks/useSuccessToast";
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
 import { isIndentStageDone } from "@/features/network/utils/loadCenter.model";
-import { BoostSheet } from "@/features/reach/components/BoostSheet";
 import {
   getIndentDisplayNumber,
   shareDraftIndent,
@@ -27,8 +24,8 @@ import {
 } from "@/lib/queries";
 import { useQueryClient } from "@tanstack/react-query";
 import * as Linking from "expo-linking";
-import { Fragment, useCallback, useMemo, useState } from "react";
-import { Alert, Share, StyleSheet, Text, View } from "react-native";
+import { createElement, useCallback, useMemo, useState } from "react";
+import { Alert, Share } from "react-native";
 import type { EdgeInsets } from "react-native-safe-area-context";
 
 export function useGiveLoadIndentActions(opts: {
@@ -202,58 +199,36 @@ export function useGiveLoadIndentActions(opts: {
     [indentStoryStates],
   );
 
-  const sheets = (
-    <Fragment>
-      {showSuccess ? (
-        <View pointerEvents="none" style={toastStyles.successOverlay}>
-          <View style={toastStyles.successCard}>
-            <Text style={toastStyles.successTitle}>
-              {successMsg || "Success"}
-            </Text>
-          </View>
-        </View>
-      ) : null}
-      {orgId ? (
-        <ShareLoadSheet
-          visible={pulseShareIndent != null}
-          indent={pulseShareIndent}
-          orgId={orgId}
-          onClose={() => setPulseShareIndent(null)}
-          onSuccess={handlePulseStoryShareSuccess}
-          onBoostAfterBroadcast={handleBoostAfterBroadcast}
-        />
-      ) : null}
-      {orgId && boostPostId ? (
-        <BoostSheet
-          visible={boostSheetVisible}
-          onClose={() => {
-            setBoostSheetVisible(false);
-            setBoostPostId(null);
-          }}
-          orgId={orgId}
-          postId={boostPostId}
-          onBoosted={() => {
-            invalidatePosts();
-            void refetchIndentStories();
-            if (orgId) {
-              void queryClient.invalidateQueries({
-                queryKey: queryKeys.reach.campaignsForOrg(orgId),
-              });
-              void queryClient.invalidateQueries({
-                queryKey: queryKeys.reach.wallet(orgId),
-              });
-            }
-          }}
-        />
-      ) : null}
-      <AwardModal
-        visible={awardModal.isOpen}
-        award={awardModal}
-        onViewIndent={onOpenIndent}
-        insets={insets}
-      />
-    </Fragment>
-  );
+  const sheets = createElement(GiveLoadIndentActionSheets, {
+    showSuccess,
+    successMsg,
+    orgId,
+    pulseShareIndent,
+    onClosePulseShare: () => setPulseShareIndent(null),
+    onPulseShareSuccess: handlePulseStoryShareSuccess,
+    onBoostAfterBroadcast: handleBoostAfterBroadcast,
+    boostSheetVisible,
+    boostPostId,
+    onCloseBoost: () => {
+      setBoostSheetVisible(false);
+      setBoostPostId(null);
+    },
+    onBoosted: () => {
+      invalidatePosts();
+      void refetchIndentStories();
+      if (orgId) {
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.reach.campaignsForOrg(orgId),
+        });
+        void queryClient.invalidateQueries({
+          queryKey: queryKeys.reach.wallet(orgId),
+        });
+      }
+    },
+    awardModal,
+    onOpenIndent,
+    insets,
+  });
 
   return {
     awardModal,
@@ -269,23 +244,3 @@ export function useGiveLoadIndentActions(opts: {
     sheets,
   };
 }
-
-const toastStyles = StyleSheet.create({
-  successOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    zIndex: 80,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-  successCard: {
-    backgroundColor: Theme.surface,
-    paddingHorizontal: 20,
-    paddingVertical: 14,
-    borderRadius: 12,
-  },
-  successTitle: {
-    color: Theme.textPrimaryDark,
-    fontWeight: "700",
-    fontSize: 14,
-  },
-});

@@ -59,6 +59,31 @@ function asLabel(value: unknown): string {
   return s || "—";
 }
 
+function HubCardRefMeta({
+  tripNo,
+  scheduleLine,
+  secondaryLabel,
+}: {
+  tripNo: string;
+  scheduleLine: string;
+  secondaryLabel?: string | null;
+}) {
+  return (
+    <View
+      style={styles.refBlock}
+      accessibilityLabel={`${tripNo}, ${scheduleLine}`}
+    >
+      <Text style={styles.refId} numberOfLines={1}>
+        {tripNo}
+      </Text>
+      <Text style={styles.refMuted} numberOfLines={1}>
+        {scheduleLine}
+        {secondaryLabel ? ` · ${asLabel(secondaryLabel)}` : ""}
+      </Text>
+    </View>
+  );
+}
+
 /** Asset label under client only; supplier/driver use the chip row. */
 export function mobileTripClientSubline(isAssetTrip: boolean, typeLabel: string): string | null {
   if (!isAssetTrip) return null;
@@ -456,6 +481,14 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
       : [fromIndent ? tr("tripOriginIndent") : tr("tripOriginDirect")]
   ).map((label) => asLabel(label).toUpperCase());
   const originTagJoined = originTagItems.join(" ");
+  const showFooterBar = Boolean(actions);
+  const refMeta = (
+    <HubCardRefMeta
+      tripNo={tripNo}
+      scheduleLine={schedule.scheduleLine}
+      secondaryLabel={secondaryLabel}
+    />
+  );
 
   return (
     <View style={[styles.cardWrap, fillGrid && styles.cardWrapGrid, style]}>
@@ -472,6 +505,7 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
             styles.body,
             dense && styles.bodyDense,
             fillGrid && styles.bodyGrid,
+            showFooterBar && styles.bodyWithFooter,
             pressed && styles.bodyPressed,
           ]}
           accessibilityRole="button"
@@ -592,20 +626,14 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
             </Text>
           ) : null}
 
+          {showFooterBar ? null : (
           <View style={[styles.divider, fillGrid && styles.dividerGrid]} />
+          )}
 
           {fillGrid ? (
             <View style={styles.metaBlockGrid}>
               <View style={styles.metaBlockGridGrow} />
-              <View style={styles.refRow}>
-                <Text style={styles.refLine} numberOfLines={1}>
-                  <Text style={styles.refId}>{tripNo}</Text>
-                  <Text style={styles.refMuted}>{` · ${schedule.scheduleLine}`}</Text>
-                  {secondaryLabel ? (
-                    <Text style={styles.refJob}>{` · ${secondaryLabel}`}</Text>
-                  ) : null}
-                </Text>
-              </View>
+              {showFooterBar ? null : refMeta}
               {hidePartyRow ? null : (
                 <View style={[styles.partyRow, styles.partyRowGrid]}>
                   <PartyChip
@@ -631,15 +659,7 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
             </View>
           ) : (
             <>
-              <View style={styles.refRow}>
-                <Text style={styles.refLine} numberOfLines={1}>
-                  <Text style={styles.refId}>{tripNo}</Text>
-                  <Text style={styles.refMuted}>{` · ${schedule.scheduleLine}`}</Text>
-                  {secondaryLabel ? (
-                    <Text style={styles.refJob}>{` · ${secondaryLabel}`}</Text>
-                  ) : null}
-                </Text>
-              </View>
+              {showFooterBar ? null : refMeta}
               {hidePartyRow ? null : (
                 <View style={styles.partyRow}>
                   <PartyChip
@@ -665,9 +685,23 @@ export const TripsHubMobileTripCard = memo(function TripsHubMobileTripCard({
             </>
           )}
         </Pressable>
-        {actions ? (
-          <View style={[styles.actionsSlot, fillGrid && styles.actionsSlotGrid]}>
-            {actions}
+        {showFooterBar ? (
+          <View
+            style={[
+              styles.cardFooter,
+              dense && styles.cardFooterDense,
+              fillGrid && styles.cardFooterGrid,
+            ]}
+          >
+            <Pressable
+              onPress={onPress}
+              style={styles.refBlockPress}
+              accessibilityRole="button"
+              accessibilityLabel={`${tripNo} ${clientName}, ${schedule.scheduleLine}`}
+            >
+              {refMeta}
+            </Pressable>
+            <View style={styles.actionsSlotFooter}>{actions}</View>
           </View>
         ) : null}
       </View>
@@ -732,19 +766,56 @@ const styles = StyleSheet.create({
     }),
   },
   body: {
-    paddingHorizontal: 18,
+    paddingHorizontal: 16,
     paddingTop: 16,
     paddingBottom: 16,
   },
   bodyDense: {
-    paddingHorizontal: 14,
-    paddingTop: 14,
+    paddingHorizontal: 16,
+    paddingTop: 16,
     paddingBottom: 14,
   },
   bodyGrid: {
     flex: 1,
     flexDirection: "column",
     paddingBottom: 12,
+  },
+  bodyWithFooter: {
+    paddingBottom: 10,
+  },
+  cardFooter: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: REF.hairline,
+  },
+  cardFooterDense: {
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    paddingBottom: 12,
+  },
+  cardFooterGrid: {
+    flexShrink: 0,
+    marginTop: "auto",
+  },
+  refBlockPress: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: "center",
+  },
+  refBlock: {
+    minWidth: 0,
+    gap: 2,
+  },
+  actionsSlotFooter: {
+    flexShrink: 0,
+    alignItems: "flex-end",
+    justifyContent: "center",
   },
   actionsSlot: {
     marginTop: "auto",
@@ -820,7 +891,7 @@ const styles = StyleSheet.create({
     flexShrink: 0,
     maxWidth: "42%",
     alignItems: "flex-end",
-    gap: 4,
+    gap: 5,
     paddingTop: 1,
   },
   headMeta: {
@@ -1015,34 +1086,20 @@ const styles = StyleSheet.create({
     marginBottom: HUB_GRID_DIVIDER_MARGIN_BOTTOM,
     flexShrink: 0,
   },
-  refRow: {
-    minWidth: 0,
-  },
-  refLine: {
-    fontSize: 9,
-    lineHeight: 12,
-    letterSpacing: 0.05,
-  },
   refId: {
-    fontSize: 9,
-    fontWeight: "500",
+    fontSize: 11,
+    fontWeight: "600",
     color: REF.inkMid,
-    lineHeight: 12,
+    lineHeight: 14,
+    letterSpacing: 0.2,
     fontVariant: ["tabular-nums"],
   },
   refMuted: {
-    fontSize: 9,
+    fontSize: 10,
     fontWeight: "400",
     color: REF.muted,
-    lineHeight: 12,
+    lineHeight: 13,
     fontVariant: ["tabular-nums"],
-  },
-  refJob: {
-    fontSize: 9,
-    fontWeight: "600",
-    color: REF.inkMid,
-    lineHeight: 12,
-    letterSpacing: 0.2,
   },
   partyRow: {
     flexDirection: "row",

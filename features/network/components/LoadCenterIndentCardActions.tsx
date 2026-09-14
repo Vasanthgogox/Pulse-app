@@ -1249,7 +1249,7 @@ const styles = StyleSheet.create({
   },
   commerceRow: {
     flexDirection: "row",
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
     alignItems: "center",
     justifyContent: "flex-end",
     gap: 6,

@@ -2,7 +2,7 @@
  * Offline outbox sync — replays queued chat sends when connectivity returns.
  *
  * Flush points:
- *   • offline → online transition (NetworkContext / NetInfo)
+ *   • offline → online transition (NetInfo)
  *   • app background → foreground (AppState)
  *   • mount (app cold start with messages still queued)
  *
@@ -10,12 +10,18 @@
  * `send_chat_message`), so overlapping flushes cannot duplicate messages;
  * a module-level in-flight latch avoids redundant RPC bursts anyway.
  */
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { AppState } from "react-native";
-
-import { useNetwork } from "@/contexts/NetworkContext";
+import NetInfo, { type NetInfoState } from "@react-native-community/netinfo";
 
 import { flushChatOutbox } from "../services/chatPlatform.service";
+
+/** Match `useIsOnline`: unknown connectivity is treated as online so flush can try. */
+function isOnlineFromNetInfo(state: NetInfoState | null): boolean {
+  if (state?.isConnected === false) return false;
+  if (state?.isConnected === true && state.isInternetReachable === false) return false;
+  return true;
+}
 
 let flushInFlight = false;
 
@@ -35,8 +41,22 @@ async function safeFlush(): Promise<void> {
 }
 
 export function useChatOutboxSync(enabled: boolean = true) {
-  const { isConnected, isInternetReachable } = useNetwork();
-  const online = isConnected !== false && isInternetReachable !== false;
+  // Subscribe to NetInfo here instead of NetworkContext. TripChatProvider is
+  // loaded via dynamic import; Metro can then instantiate a second
+  // NetworkContext, so useNetwork() throws even when NetworkProvider is an ancestor.
+  const [online, setOnline] = useState(true);
+
+  useEffect(() => {
+    const unsubscribe = NetInfo.addEventListener((state) => {
+      setOnline(isOnlineFromNetInfo(state));
+    });
+    NetInfo.fetch()
+      .then((state) => setOnline(isOnlineFromNetInfo(state)))
+      .catch(() => {
+        /* non-fatal; listener still drives later updates */
+      });
+    return unsubscribe;
+  }, []);
 
   // Mount (cold start with queued sends) + offline → online transition.
   useEffect(() => {
