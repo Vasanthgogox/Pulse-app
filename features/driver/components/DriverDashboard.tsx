@@ -683,6 +683,7 @@ export default function DriverDashboard() {
         source,
         odometerKm: extras?.odometerKm ?? null,
         recordedAt: extras?.recordedAt ?? null,
+        ownerUserId: driver.user_id,
       });
       return !error;
     },
@@ -1064,7 +1065,7 @@ export default function DriverDashboard() {
 
   /** Write-only telemetry (skipHealthFetchOnTick + reportFireAndForget inside hook). */
   useDriverLocationStream({
-    driver: driver ? { id: driver.id, organization_id: driver.organization_id } : null,
+    driver: driver ? { id: driver.id, organization_id: driver.organization_id, user_id: driver.user_id } : null,
     trip: activeGuidanceTrip,
     enabled: Boolean(driver && activeGuidanceTrip),
     communicationActive,

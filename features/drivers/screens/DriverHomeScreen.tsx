@@ -1067,6 +1067,7 @@ export default function DriverRadarScreen() {
         source,
         odometerKm: extras?.odometerKm ?? null,
         recordedAt: extras?.recordedAt ?? null,
+        ownerUserId: driver.user_id,
       });
       return !error;
     },
@@ -2192,7 +2193,7 @@ export default function DriverRadarScreen() {
   const { communicationActive } = useDriverCommunication();
 
   useDriverLocationStream({
-    driver: driver ? { id: driver.id, organization_id: driver.organization_id } : null,
+    driver: driver ? { id: driver.id, organization_id: driver.organization_id, user_id: driver.user_id } : null,
     trip: activeGuidanceTrip,
     enabled: Boolean(driver && activeGuidanceTrip),
     communicationActive,

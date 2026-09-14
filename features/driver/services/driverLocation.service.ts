@@ -21,10 +21,22 @@ export interface ReportDriverLocationParams {
   recordedAt?: string | null;
   /** Reverse-geocoded city/area for chat copy (no map tiles). */
   addressLabel?: string | null;
+  /** Loaded `drivers.user_id` — must match the live session. No extra DB lookup. */
+  ownerUserId?: string | null;
 }
 
 export interface ReportDriverLocationResult {
   error: Error | null;
+  skipped?: boolean;
+}
+
+export function shouldPersistDriverLocation(opts: {
+  sessionUserId: string | null | undefined;
+  ownerUserId: string | null | undefined;
+}): boolean {
+  const session = (opts.sessionUserId ?? '').trim();
+  const owner = (opts.ownerUserId ?? '').trim();
+  return session.length > 0 && owner.length > 0 && session === owner;
 }
 
 /** Result shape for latest location (read by dispatcher/fleet in Live Tracking). */
@@ -51,7 +63,13 @@ export async function reportDriverLocation(
     source,
     odometerKm,
     recordedAt,
+    ownerUserId,
   } = params;
+  const { data: sessionData } = await supabase().auth.getSession();
+  const sessionUserId = sessionData.session?.user?.id ?? null;
+  if (!shouldPersistDriverLocation({ sessionUserId, ownerUserId })) {
+    return { error: null, skipped: true };
+  }
   // Chat trigger uses address_label; without it the DB falls back to trip
   // pickup/drop (e.g. Maharashtra on a MH→DL route while the phone is in Chennai).
   let addressLabel =

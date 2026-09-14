@@ -202,6 +202,7 @@ export function useAdaptiveTripLocationPingLoop(params: AdaptiveTripLocationPing
           distanceMeters(last.lat, last.lng, latitude, longitude) >= minM;
 
         if (dispOk) {
+          if (cancelled) return;
           const recordedAt = new Date().toISOString();
           if (reportFireAndForget) {
             void reportRef.current(trip.id, latitude, longitude, acc, source, {

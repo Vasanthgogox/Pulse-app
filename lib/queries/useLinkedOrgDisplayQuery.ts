@@ -35,6 +35,7 @@ export function useLinkedOrgDisplayMap(
     queryFn: () => ensureLinkedOrgDisplayProfiles(sortedIds, qc, viewerOrgId),
     enabled: Boolean(viewerOrgId) && sortedIds.length > 0,
     staleTime: STALE.moderate,
+    retry: false,
   });
 
   return data;

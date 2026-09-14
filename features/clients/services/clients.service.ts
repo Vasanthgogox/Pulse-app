@@ -281,15 +281,38 @@ export type OrgDisplayProfile = {
   verificationStatus?: string | null;
 };
 
+function isUnauthenticatedPartnerDisplayError(
+  error: { message?: string; code?: string; status?: number } | null,
+): boolean {
+  if (!error) return false;
+  const code = String(error.code ?? '').toUpperCase();
+  const status = error.status;
+  if (status === 401 || status === 403) return true;
+  if (code === '42501' || code === 'PGRST301') return true;
+  const message = String(error.message ?? '').toLowerCase();
+  return (
+    message.includes('permission denied') ||
+    message.includes('not authenticated') ||
+    message.includes('jwt')
+  );
+}
+
 /** Batch-fetch display profiles for multiple linked orgs in one RPC call. */
 export async function getLinkedOrgProfilesBatch(
   linkedOrganizationIds: string[]
 ): Promise<Record<string, OrgDisplayProfile>> {
   if (linkedOrganizationIds.length === 0) return {};
+  const { data: sessionData } = await supabase().auth.getSession();
+  if (!sessionData.session?.access_token) return {};
   const { data, error } = await supabase().rpc('get_connection_partner_display_batch', {
     p_linked_organization_ids: linkedOrganizationIds,
   });
-  if (error || data == null || typeof data !== 'object') return {};
+  if (error || data == null || typeof data !== 'object') {
+    if (error && isUnauthenticatedPartnerDisplayError(error) && __DEV__) {
+      console.warn('[partner-display] skipped unauthenticated batch', error.message);
+    }
+    return {};
+  }
   const raw = data as Record<string, {
     organizationName?: string;
     contactPerson?: string;
