@@ -8,7 +8,7 @@ import type { TripRow } from "../../../services/trips.service";
 import { getTripDisplayNumber } from "../../../services/trips.service";
 import { getIndentOperationalLineageCode } from "@/features/operations/display";
 import {
-  shouldShowAggregateTripKindPill,
+  getHubTripKind,
   type AggregateTripKindPillContext,
 } from "@/features/drivers/utils/driverUtils.util";
 
@@ -16,7 +16,7 @@ interface TripDetailHeaderProps {
   trip: TripRow;
   onBack: () => void;
   onAddEntry: () => void;
-  /** When omitted, pill falls back to supplier_id-only semantics. */
+  /** Optional hub viewer context; DCO is still only `operating_mode`. */
   aggregateTripKindPillContext?: AggregateTripKindPillContext | null;
 }
 
@@ -26,7 +26,10 @@ export function TripDetailHeader({
   onAddEntry,
   aggregateTripKindPillContext,
 }: TripDetailHeaderProps) {
-  const isAggregate = shouldShowAggregateTripKindPill(trip, aggregateTripKindPillContext);
+  const hubTripKind = getHubTripKind(trip, aggregateTripKindPillContext);
+  const isAsset = hubTripKind === "asset";
+  const kindLabel =
+    hubTripKind === "dco" ? "DCO" : hubTripKind === "aggregate" ? "AGGREGATE" : "ASSET";
   const tripNumber = getTripDisplayNumber(trip);
   const sourceIndentLabel = getIndentOperationalLineageCode(trip);
 
@@ -52,21 +55,27 @@ export function TripDetailHeader({
         </Text>
 
         <View
-          style={[styles.kindPill, isAggregate ? styles.kindPillAggregate : styles.kindPillAsset]}
-          accessibilityLabel={isAggregate ? "Aggregate based trip" : "Asset based trip"}
+          style={[styles.kindPill, isAsset ? styles.kindPillAsset : styles.kindPillAggregate]}
+          accessibilityLabel={
+            hubTripKind === "dco"
+              ? "DCO trip"
+              : hubTripKind === "aggregate"
+                ? "Aggregate based trip"
+                : "Asset based trip"
+          }
         >
           <FontAwesome
-            name={isAggregate ? "link" : "truck"}
+            name={isAsset ? "truck" : hubTripKind === "dco" ? "user" : "link"}
             size={9}
-            color={isAggregate ? Theme.aggregatePillText : Theme.darkGreen}
+            color={isAsset ? Theme.darkGreen : Theme.aggregatePillText}
           />
           <Text
             style={[
               styles.kindPillText,
-              isAggregate ? styles.kindPillTextAggregate : styles.kindPillTextAsset,
+              isAsset ? styles.kindPillTextAsset : styles.kindPillTextAggregate,
             ]}
           >
-            {isAggregate ? "AGGREGATE" : "ASSET"}
+            {kindLabel}
           </Text>
         </View>
       </View>

@@ -6,6 +6,8 @@
 
 import * as driversService from "@/features/drivers/services/drivers.service";
 import { isDcoOperatingTrip } from "@/features/trips/domain/tripDcoOperating";
+import { getTripExecutionModel } from "@/features/trips/domain/tripExecutionModel";
+import type { TripRow } from "@/features/trips/services/trips.service";
 
 export interface TripWithSupplier {
   supplier_id?: string | null;
@@ -16,6 +18,8 @@ export interface TripWithSupplier {
   odometer_distance_km?: number | null;
   gps_distance_km?: number | null;
   operating_mode?: string | null;
+  dco_payee_id?: string | null;
+  trip_payout_mode?: string | null;
 }
 
 export interface DriverTripPayoutTerms {
@@ -73,6 +77,23 @@ export type AggregateTripKindPillContext = {
   driverTrackingOnly?: boolean | null;
 };
 
+export type HubTripKind = "asset" | "aggregate" | "dco";
+
+/**
+ * Hub / detail trip-kind pill.
+ * DCO is only `operating_mode === 'DCO'` ({@link isDcoOperatingTrip}).
+ * Non-DCO Asset vs Aggregate uses {@link getTripExecutionModel}.
+ * `ctx` is reserved for hub viewers; it must not override DCO.
+ */
+export function getHubTripKind(
+  trip: TripWithSupplier &
+    TripRosterShape & { organization_id?: string | null },
+  _ctx?: AggregateTripKindPillContext | null,
+): HubTripKind {
+  if (isDcoOperatingTrip(trip)) return "dco";
+  return getTripExecutionModel(trip as TripRow);
+}
+
 /**
  * Whether the UI should show the **AGGREGATE** (vs ASSET) trip-kind pill for the current viewer.
  *
@@ -81,17 +102,15 @@ export type AggregateTripKindPillContext = {
  * the supplier org, supplier_id null) is the ASSET tile where fuel/toll/driver pay live.
  * Do not re-introduce the old "infer Asset for supplier on shipper trip" workaround: it made
  * both tiles look identical and routed movers into a screen with no expense entry.
+ *
+ * DCO trips are grouped with Aggregate (see {@link getHubTripKind}).
  */
 export function shouldShowAggregateTripKindPill(
   trip: TripWithSupplier &
     TripRosterShape & { organization_id?: string | null },
   ctx?: AggregateTripKindPillContext | null,
 ): boolean {
-  if (!isAggregateTrip(trip)) return false;
-  if (ctx?.driverTrackingOnly === true) return true;
-  // All remaining supplier-linked trips are Aggregate — including cross-org
-  // partner settlement tiles (mover's ASSET job is a separate mover_asset row).
-  return true;
+  return getHubTripKind(trip, ctx) !== "asset";
 }
 
 type TripPayoutShape = TripWithSupplier & {
@@ -111,6 +130,7 @@ export function shouldShowManifestHeroDriverParty(
     .trim()
     .toLowerCase();
 
+  if (isDcoOperatingTrip(trip)) return false;
   if (payoutMode === "market") return false;
   if (payoutMode === "asset") return true;
   if (!isAggregateTrip(trip)) return true;

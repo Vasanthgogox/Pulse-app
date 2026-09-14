@@ -1,7 +1,9 @@
 import {
   canShowDriverTripEstEarnings,
+  getHubTripKind,
   isAggregateTrip,
   resolveDriverTripPayoutTerms,
+  shouldShowAggregateTripKindPill,
   tripEarningsDetailForDriver,
   type TripWithSupplier,
 } from '../driverUtils.util';
@@ -169,5 +171,82 @@ describe('tripEarningsDetailForDriver — unchanged canonical resolver semantics
     expect(detail.isEstimated).toBe(false);
     expect(detail.basis).toBe('dco_settlement');
     expect(detail.amount).toBe(19000);
+  });
+});
+
+describe("getHubTripKind — DCO indent awards are not Asset", () => {
+  const godrejIndentDco = {
+    supplier_id: null,
+    operating_mode: "DCO",
+    dco_payee_id: "9f9c185a-5b77-4c5a-a84d-7f54a4fb2208",
+    trip_payout_mode: "market",
+    source: "direct_bid",
+    driver_id: "808d19a0-59c7-4f09-99d3-2036cdf2ac56",
+    vehicle_id: null,
+  };
+
+  it("labels operating_mode DCO as dco even with no supplier_id", () => {
+    expect(getHubTripKind(godrejIndentDco)).toBe("dco");
+    expect(shouldShowAggregateTripKindPill(godrejIndentDco)).toBe(true);
+  });
+
+  it("does not infer DCO from source, payout, indent, or missing supplier", () => {
+    expect(
+      getHubTripKind({
+        supplier_id: null,
+        operating_mode: "FLEET",
+        trip_payout_mode: "market",
+        source: "direct_bid",
+      }),
+    ).toBe("aggregate");
+  });
+
+  it("keeps non-DCO own-fleet economics as asset", () => {
+    expect(
+      getHubTripKind({
+        supplier_id: null,
+        source: "manual",
+        trip_payout_mode: "asset",
+        operating_mode: "FLEET",
+      }),
+    ).toBe("asset");
+  });
+
+  it("keeps non-DCO supplier trips as aggregate unless execution model is asset", () => {
+    expect(
+      getHubTripKind({
+        supplier_id: "supplier-1",
+        operating_mode: "FLEET",
+        trip_payout_mode: "market",
+        source: "manual",
+      }),
+    ).toBe("aggregate");
+    expect(
+      getHubTripKind({
+        supplier_id: "supplier-1",
+        operating_mode: "FLEET",
+        trip_payout_mode: "asset",
+        source: "manual",
+      }),
+    ).toBe("asset");
+  });
+
+  it("gives DCO precedence over supplier and asset economics", () => {
+    expect(
+      getHubTripKind({
+        supplier_id: "supplier-1",
+        operating_mode: "DCO",
+        trip_payout_mode: "asset",
+        source: "manual",
+      }),
+    ).toBe("dco");
+    expect(
+      shouldShowAggregateTripKindPill({
+        supplier_id: "supplier-1",
+        operating_mode: "DCO",
+        trip_payout_mode: "asset",
+        source: "manual",
+      }),
+    ).toBe(true);
   });
 });

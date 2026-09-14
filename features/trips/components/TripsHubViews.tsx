@@ -27,7 +27,7 @@ import { isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
 import { compareTripsByScheduleDesc } from "@/lib/dateRangePresets";
 import {
     isAggregateTrip,
-    shouldShowAggregateTripKindPill,
+    getHubTripKind,
 } from "@/features/drivers/utils/driverUtils.util";
 import {
     formatINR,
@@ -507,13 +507,18 @@ function TripsHubTripCardInner({
 
   const compactMetricGrid = layoutCompact;
   const hasSupplierLink = isAggregateTrip(trip);
-  const showAggregateKindPill = shouldShowAggregateTripKindPill(trip, {
+  const hubTripKind = getHubTripKind(trip, {
     viewerOrganizationId: currentOrganizationId,
     supplierLinkedOrganizationId: kindPillMeta?.supplierLinkedOrgId ?? null,
     driverTrackingOnly: kindPillMeta?.driverTrackingOnly,
   });
-  const showAssetTripIcon = !showAggregateKindPill;
-  const typeLabel = showAssetTripIcon ? tr("tripAsset") : tr("tripAggregate");
+  const showAssetTripIcon = hubTripKind === "asset";
+  const typeLabel =
+    hubTripKind === "dco"
+      ? tr("tripDco")
+      : hubTripKind === "aggregate"
+        ? tr("tripAggregate")
+        : tr("tripAsset");
   /** `undefined` while adjustment map loads — hub uses raw rates. */
   const adj = financeAdjustments;
   const revenue = tripHubRevenue(trip, currentOrganizationId, adj);
@@ -690,7 +695,13 @@ function TripsHubTripCardInner({
             <View style={styles.fleetTruckWrap}>
               <HubIconPulse>
                 <FontAwesome
-                  name={showAssetTripIcon ? "truck" : "link"}
+                  name={
+                    showAssetTripIcon
+                      ? "truck"
+                      : hubTripKind === "dco"
+                        ? "user"
+                        : "link"
+                  }
                   size={18}
                   color={
                     showAssetTripIcon
@@ -1715,15 +1726,18 @@ export function TripsHubTableView({
             const hasSalesConflict = hasLedgerMismatch;
             const meta = partyMetaByTripId?.get(t.id);
             const hasSupplierLink = isAggregateTrip(t);
-            const showAggregateKindPill = shouldShowAggregateTripKindPill(t, {
+            const hubTripKind = getHubTripKind(t, {
               viewerOrganizationId: currentOrganizationId,
               supplierLinkedOrganizationId: meta?.supplierLinkedOrgId ?? null,
               driverTrackingOnly: meta?.driverTrackingOnly,
             });
-            const showAssetTripIcon = !showAggregateKindPill;
-            const typeLabel = showAssetTripIcon
-              ? tr("tripAsset")
-              : tr("tripAggregate");
+            const showAssetTripIcon = hubTripKind === "asset";
+            const typeLabel =
+              hubTripKind === "dco"
+                ? tr("tripDco")
+                : hubTripKind === "aggregate"
+                  ? tr("tripAggregate")
+                  : tr("tripAsset");
             const tableTripMeta = getTripDisplayMeta(t, currentOrganizationId);
             const tableSecondaryLabel = tableTripMeta.secondaryLabelKey
               ? tableTripMeta.secondaryLabelKey === "tripHubLabelJob" &&
@@ -1878,7 +1892,13 @@ export function TripsHubTableView({
                         >
                           <HubIconPulse>
                             <FontAwesome
-                              name={showAssetTripIcon ? "truck" : "link"}
+                              name={
+                                showAssetTripIcon
+                                  ? "truck"
+                                  : hubTripKind === "dco"
+                                    ? "user"
+                                    : "link"
+                              }
                               size={13}
                               color={
                                 hasSalesConflict
