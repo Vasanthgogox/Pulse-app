@@ -629,6 +629,44 @@ export function giveLoadStatusPillStyles(status: string): {
   };
 }
 
+/**
+ * Trips → Indents lightweight stage chips (ALL/OPEN/BIDDING/AWARDED).
+ *
+ * Deliberately reuses `giveLoadBidReceivedDisplayStatus` — the exact same
+ * OPEN-vs-"receiving bids" derivation Give Load already uses — instead of
+ * inventing a second one. No new `indents.status` value; this is a pure
+ * presentation regroup of the existing OPEN/QUOTED/AWARDED/DONE statuses.
+ *
+ * NOTE — "READY" gap (reported, not solved here): the target product spec
+ * distinguishes AWARDED ("supplier selected") from READY ("selected AND
+ * ready for conversion into a Trip"). Today's schema has exactly one state
+ * for both — `indents.status='awarded'` + `assigned_supplier_id` set — with
+ * no field marking "ready to convert" as distinct from "just awarded." So
+ * this returns only `AWARDED`; a `READY` stage is not derivable without
+ * inventing a heuristic, which was explicitly out of scope for this slice.
+ */
+export type IndentStage = "OPEN" | "BIDDING" | "AWARDED";
+
+export function classifyIndentStage(
+  indentStatus: string,
+  bidCount: number,
+): IndentStage {
+  const derived = giveLoadBidReceivedDisplayStatus(indentStatus, bidCount);
+  if (derived === GIVE_LOAD_RECEIVING_BIDS_STATUS) return "BIDDING";
+  if (derived === "awarded") return "AWARDED";
+  return "OPEN";
+}
+
+/** True once the indent has left the pre-trip lifecycle (converted or terminated). */
+export function isIndentStageDone(indentStatus: string): boolean {
+  return statusMatchesFilter(indentStatus, "DONE");
+}
+
+/** Card badge: coarser than the filter chips — UNASSIGNED until a supplier is picked. */
+export function indentUnassignedBadgeLabel(stage: IndentStage): "UNASSIGNED" | "AWARDED" {
+  return stage === "AWARDED" ? "AWARDED" : "UNASSIGNED";
+}
+
 export function formatIndentCardDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   try {

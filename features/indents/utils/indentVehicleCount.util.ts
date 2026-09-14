@@ -54,11 +54,17 @@ export function resolvedDraftVehicleCount(stored: string | null | undefined): st
   return isValidIndentVehicleCount(v) ? v : "1";
 }
 
+/**
+ * Multiple shared copies have no single indent detail page to land on — send
+ * the user to Trips → Indents (own-org indent list) instead of Loads, which
+ * no longer shows "My Load" (Slice 1, Trips IA). Same deep-link mechanism
+ * TripsScreen already reads for the Indents sub-view (`?view=indents`).
+ */
 export function indentShareSuccessPath(
   requestedCount: number,
   firstIndentId: string,
-): "/pulse-loads" | `/indent/${string}` {
-  if (requestedCount > 1) return "/pulse-loads";
+): "/(tabs)/trips?view=indents" | `/indent/${string}` {
+  if (requestedCount > 1) return "/(tabs)/trips?view=indents";
   return `/indent/${firstIndentId}`;
 }
 

@@ -43,6 +43,7 @@ import {
     type HistoryTripMetricId,
 } from "@/features/trips/components/TripsHubBentoMetrics";
 import { TripsFilterBottomSheet } from "@/features/trips/components/TripsFilterBottomSheet";
+import { TripsIndentsPanel } from "@/features/trips/components/indents/TripsIndentsPanel";
 import { isAttributedFleetTrip } from "@/features/trips/utils/attributedFleetTrip.util";
 import {
   linkedOrgAvatarFields,
@@ -111,7 +112,7 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useFocusEffect } from "@react-navigation/native";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { TripsPromoCard } from "@/features/trips/components/TripsPromoCard";
 import {
@@ -231,6 +232,8 @@ export default function TripsScreen() {
       ? 12
       : layout.scrollBottomPadding(40);
   const router = useRouter();
+  /** Deep-link into the Indents sub-view, e.g. `ROUTES.TABS.TRIPS + '?view=indents'`. */
+  const { view: tripsViewParam } = useLocalSearchParams<{ view?: string }>();
   const { openTripDetail } = useOpenTripDetail();
   const tripsHubLayoutCompact = width > 0 && width < 640;
   const handleOpenTripDetails = useCallback(
@@ -326,6 +329,32 @@ export default function TripsScreen() {
   const refreshOrganization = orgCtx?.refreshOrganization;
   const orgBootPending = orgLoading;
   const orgId = canAccess ? (currentOrganization?.id ?? null) : null;
+  /** Trips workspace secondary switch — Indents is a lightweight view, not a separate product. */
+  const [tripsMainView, setTripsMainView] = useState<"trips" | "indents">(
+    tripsViewParam === "indents" ? "indents" : "trips",
+  );
+  // Deep-link re-entry: expo-router can update params on an already-mounted
+  // screen (e.g. navigating here again from another post-create success
+  // path) without remounting, so the initializer above alone would miss it.
+  useEffect(() => {
+    if (tripsViewParam === "indents") setTripsMainView("indents");
+  }, [tripsViewParam]);
+  const renderTripsMainViewSwitch = () => (
+    <View style={styles.tripsMainViewSwitch}>
+      <HubMobileUnderlineTab
+        label="Trips"
+        isActive={tripsMainView === "trips"}
+        compact
+        onPress={() => setTripsMainView("trips")}
+      />
+      <HubMobileUnderlineTab
+        label="Indents"
+        isActive={tripsMainView === "indents"}
+        compact
+        onPress={() => setTripsMainView("indents")}
+      />
+    </View>
+  );
   const cachedTripsForOrg = orgId
     ? (queryClient.getQueryData(queryKeys.trips.finite(orgId)) as TripRow[] | undefined)
     : undefined;
@@ -1615,6 +1644,22 @@ export default function TripsScreen() {
     return <SceneLoadingSplash variant="preparing" message={tr("loading")} />;
   }
 
+  if (tripsMainView === "indents") {
+    return (
+      <HubScreenShell>
+        <View style={[styles.container, { paddingTop: screenTopPad }]}>
+          {renderTripsMainViewSwitch()}
+          <TripsIndentsPanel
+            orgId={orgId}
+            onIndentPress={(indent) =>
+              router.push(`/indent/${indent.id}` as import("expo-router").Href)
+            }
+          />
+        </View>
+      </HubScreenShell>
+    );
+  }
+
   return (
     <HubScreenShell
       footer={
@@ -1644,6 +1689,7 @@ export default function TripsScreen() {
       }
     >
     <View style={[styles.container, { paddingTop: screenTopPad }]}>
+      {renderTripsMainViewSwitch()}
       <TripsFilterBottomSheet
         visible={showSortModal}
         onClose={() => setShowSortModal(false)}
@@ -2374,6 +2420,12 @@ export default function TripsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, minHeight: 0, backgroundColor: TRIPS_PAGE_BG },
+  tripsMainViewSwitch: {
+    flexDirection: "row",
+    gap: 4,
+    paddingHorizontal: 12,
+    paddingTop: 4,
+  },
   centered: {
     flex: 1,
     justifyContent: "center",

@@ -57,6 +57,8 @@ export default function PulseLoadsScreen() {
           router.push(ROUTES.TABS.NETWORK as import("expo-router").Href)
         }
         contentTopPadding={0}
+        initialSubTab="GET_LOAD"
+        hiddenSubTabs={["GIVE_LOAD"]}
       />
     </View>
   );

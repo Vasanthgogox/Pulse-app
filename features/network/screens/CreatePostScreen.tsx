@@ -802,7 +802,9 @@ export default function CreatePostScreen() {
                   </Text>
                   <Pressable
                     style={({ pressed }) => [styles.emptyCta, pressed && { opacity: 0.9 }]}
-                    onPress={() => router.push(ROUTES.PULSE_LOADS)}
+                    onPress={() =>
+                      router.push("/(tabs)/trips?view=indents" as import("expo-router").Href)
+                    }
                   >
                     <Zap size={15} color={Theme.textOnPrimary} fill={Theme.textOnPrimary} />
                     <Text style={styles.emptyCtaText}>Open load center</Text>

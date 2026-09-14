@@ -169,6 +169,14 @@ interface LoadCenterViewProps {
   highlightedIndentId?: string | null;
   /** @deprecated Pulse reboost is handled inside Load Center. */
   onShareToNetwork?: (indent: IndentRow) => void;
+  /** Which top-level sub-tab to land on. Default preserves existing behavior. */
+  initialSubTab?: LoadSubTab;
+  /**
+   * Sub-tabs to omit from the switcher entirely (e.g. Loads → Get Load hides
+   * GIVE_LOAD now that "My Load" lives under Trips → Indents instead). Default
+   * shows all three, unchanged from before this prop existed.
+   */
+  hiddenSubTabs?: readonly LoadSubTab[];
 }
 
 const TESLA_BLACK = "#171A20";
@@ -179,6 +187,8 @@ export function LoadCenterView({
   onCreateIndentPress,
   onIndentPress,
   highlightedIndentId,
+  initialSubTab = "GIVE_LOAD",
+  hiddenSubTabs = [],
 }: LoadCenterViewProps) {
   const insets = useSafeAreaInsets();
   const layout = useLayoutInsets();
@@ -193,7 +203,7 @@ export function LoadCenterView({
 
   const scrollRef = useRef<FlashListRef<IndentRow>>(null);
 
-  const [loadSubTab, setLoadSubTab] = useState<LoadSubTab>("GIVE_LOAD");
+  const [loadSubTab, setLoadSubTab] = useState<LoadSubTab>(initialSubTab);
   const [statusFilterTab, setStatusFilterTab] =
     useState<StatusFilterTab>("OPEN");
   const [doneSubTab, setDoneSubTab] = useState<DoneSubTab>("REJECTED");
@@ -611,24 +621,26 @@ export function LoadCenterView({
 
   const mainLoadTabs = useMemo(
     () =>
-      [
-        {
-          key: "GIVE_LOAD" as const,
-          label: "My load",
-          count: hirePartnerLoads.length,
-        },
-        {
-          key: "GET_LOAD" as const,
-          label: "Get load",
-          count: findWorkLoads.length,
-        },
-        {
-          key: "AWARDED" as const,
-          label: "Action required",
-          count: claimedTabCount,
-        },
-      ] as const,
-    [hirePartnerLoads.length, findWorkLoads.length, claimedTabCount],
+      (
+        [
+          {
+            key: "GIVE_LOAD" as const,
+            label: "My load",
+            count: hirePartnerLoads.length,
+          },
+          {
+            key: "GET_LOAD" as const,
+            label: "Get load",
+            count: findWorkLoads.length,
+          },
+          {
+            key: "AWARDED" as const,
+            label: "Action required",
+            count: claimedTabCount,
+          },
+        ] as const
+      ).filter((t) => !hiddenSubTabs.includes(t.key)),
+    [hirePartnerLoads.length, findWorkLoads.length, claimedTabCount, hiddenSubTabs],
   );
 
   const driverProfileById = useMemo(() => {
@@ -1896,23 +1908,7 @@ export function LoadCenterView({
                 embedInPageScroll
                 searchQuery={searchQuery}
                 onSearchChange={setSearchQuery}
-                mainTabs={[
-                  {
-                    key: "GIVE_LOAD",
-                    label: "My load",
-                    count: hirePartnerLoads.length,
-                  },
-                  {
-                    key: "GET_LOAD",
-                    label: "Get load",
-                    count: findWorkLoads.length,
-                  },
-                  {
-                    key: "AWARDED",
-                    label: "Action required",
-                    count: claimedTabCount,
-                  },
-                ]}
+                mainTabs={mainLoadTabs}
                 activeMainTab={loadSubTab}
                 onMainTabChange={setLoadSubTab}
                 statusTabs={mobileStatusTabs}

@@ -1,5 +1,8 @@
 import {
   STATUS_TABS,
+  classifyIndentStage,
+  indentUnassignedBadgeLabel,
+  isIndentStageDone,
   resolveGetLoadDoneOutcome,
   resolveGetLoadMobileCardLabels,
   resolveGetLoadTicketCommerce,
@@ -367,5 +370,65 @@ describe("give load ticket commerce — per-MT targets", () => {
       opts,
     );
     expect(c.amountInr).toBe(89_578);
+  });
+});
+
+/**
+ * Trips → Indents stage chips (ALL/OPEN/BIDDING/AWARDED).
+ *
+ * Deliberately reuses the same OPEN/"receiving bids"/awarded derivation Give
+ * Load already uses (`giveLoadBidReceivedDisplayStatus`) — these tests pin
+ * that no second, divergent derivation was introduced.
+ */
+describe("classifyIndentStage — Trips → Indents", () => {
+  it("classifies a freshly shared, no-bid indent as OPEN", () => {
+    expect(classifyIndentStage("open", 0)).toBe("OPEN");
+    expect(classifyIndentStage("broadcast", 0)).toBe("OPEN");
+    expect(classifyIndentStage("draft", 0)).toBe("OPEN");
+  });
+
+  it("classifies an indent with at least one pending bid as BIDDING", () => {
+    expect(classifyIndentStage("open", 1)).toBe("BIDDING");
+    expect(classifyIndentStage("broadcast", 3)).toBe("BIDDING");
+  });
+
+  it("classifies an awarded indent as AWARDED regardless of bid count", () => {
+    expect(classifyIndentStage("awarded", 0)).toBe("AWARDED");
+    expect(classifyIndentStage("awarded", 4)).toBe("AWARDED");
+  });
+
+  it("legacy 'quoted' status (pre-migration 20270128103100) still reads as BIDDING", () => {
+    expect(classifyIndentStage("quoted", 0)).toBe("BIDDING");
+  });
+
+  it("does not throw for terminal statuses — falls back to OPEN's else-branch, not a stage a Trips list should render", () => {
+    // isIndentStageDone is what actually gates these out of the Trips → Indents
+    // list; classifyIndentStage itself has no DONE bucket by design.
+    expect(() => classifyIndentStage("completed", 0)).not.toThrow();
+  });
+});
+
+describe("isIndentStageDone", () => {
+  it("flags completed/cancelled/closed/expired as done", () => {
+    for (const s of ["completed", "cancelled", "closed", "expired"]) {
+      expect(isIndentStageDone(s)).toBe(true);
+    }
+  });
+
+  it("does not flag pre-trip statuses as done", () => {
+    for (const s of ["open", "broadcast", "draft", "quoted", "awarded"]) {
+      expect(isIndentStageDone(s)).toBe(false);
+    }
+  });
+});
+
+describe("indentUnassignedBadgeLabel", () => {
+  it("shows UNASSIGNED for OPEN and BIDDING (no supplier yet)", () => {
+    expect(indentUnassignedBadgeLabel("OPEN")).toBe("UNASSIGNED");
+    expect(indentUnassignedBadgeLabel("BIDDING")).toBe("UNASSIGNED");
+  });
+
+  it("shows AWARDED once a supplier is selected", () => {
+    expect(indentUnassignedBadgeLabel("AWARDED")).toBe("AWARDED");
   });
 });
