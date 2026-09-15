@@ -1,0 +1,25 @@
+import { chromium } from 'playwright';
+const APP = 'http://localhost:8081';
+const OUT = '/private/tmp/claude-501/-Users-ggx-Desktop-Pulse-app/3fa56c9e-c811-4f44-bc3a-b1b68b1011ee/scratchpad/shots';
+const PLAN_ID = '372aebc8-680f-48d7-bbde-6ba50c4c9dc5';
+(async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+  const errs = [];
+  page.on('console', m => { if (m.type()==='error') errs.push(m.text()); });
+  page.on('pageerror', e => errs.push('pageerror: '+e.message));
+  await page.goto(`${APP}/sign-in`, { waitUntil: 'load', timeout: 60000 });
+  await page.waitForTimeout(1500);
+  await page.getByPlaceholder('you@example.com').first().fill('godrej@gmail.com');
+  await page.getByPlaceholder('Your password').first().fill('godrej123');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).first().click();
+  await page.waitForURL((u) => !u.pathname.includes('sign-in'), { timeout: 60000 }).catch(() => {});
+  await page.goto(`${APP}/oms/execution/plan/${PLAN_ID}`, { waitUntil: 'load', timeout: 30000 });
+  await page.waitForTimeout(8000);
+  const bodyText = await page.locator('body').innerText();
+  console.log(bodyText.slice(0, 1500));
+  console.log('\n=== ERRORS ===');
+  console.log([...new Set(errs)].join('\n'));
+  await page.screenshot({ path: `${OUT}/journey13b-longer-wait.png`, fullPage: true });
+  await browser.close();
+})();

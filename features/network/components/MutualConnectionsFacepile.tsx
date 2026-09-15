@@ -22,6 +22,7 @@ export type MutualConnectionsFacepileProps = {
   onPressMutual?: (org: MutualConnectionRow) => void;
   /** Opens full mutual list (e.g. +N chip or row tap). */
   onPressViewAll?: () => void;
+  overflowColor?: string;
 };
 
 export function MutualConnectionsFacepile({
@@ -34,6 +35,7 @@ export function MutualConnectionsFacepile({
   compact = false,
   onPressMutual,
   onPressViewAll,
+  overflowColor = Theme.primary,
 }: MutualConnectionsFacepileProps) {
   const canQuery = Boolean(viewerOrgId && targetOrgId);
   const { data: mutuals = [], isLoading, isError } = useMutualConnectionsQuery(
@@ -74,7 +76,7 @@ export function MutualConnectionsFacepile({
       mutuals={faces.length > 0 ? faces : undefined}
       faceSize={faceSize}
       showLabel={false}
-      overflowColor={Theme.primary}
+      overflowColor={overflowColor}
       compact={compact}
       onPressFace={onPressMutual ? handlePressFace : undefined}
       onPressOverflow={openViewAll}

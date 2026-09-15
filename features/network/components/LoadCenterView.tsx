@@ -184,8 +184,6 @@ interface LoadCenterViewProps {
    * shows all three, unchanged from before this prop existed.
    */
   hiddenSubTabs?: readonly LoadSubTab[];
-  /** Hide header Add Load when the parent already shows that CTA. */
-  hideCreateButton?: boolean;
   /**
    * When set, restricts GIVE_LOAD rendering (both the desktop kanban and the
    * mobile/grid list) to exactly this id set instead of this component's own
@@ -214,7 +212,6 @@ export function LoadCenterView({
   highlightedIndentId,
   initialSubTab = "GIVE_LOAD",
   hiddenSubTabs = [],
-  hideCreateButton = false,
   restrictToIndentIds = null,
   presentation = "standalone",
 }: LoadCenterViewProps) {
@@ -1163,9 +1160,6 @@ export function LoadCenterView({
                 />
               ) : null}
               <View style={styles.loadsSearchCluster}>
-                {loadSubTab === "GIVE_LOAD" && !hideCreateButton
-                  ? renderAddLoadButton()
-                  : null}
                 <View style={[chatChrome.searchWrap, styles.loadsSearchWrapInline]}>
                   <FontAwesome
                     name="search"
@@ -1204,19 +1198,6 @@ export function LoadCenterView({
       </View>
     </View>
   );
-
-  const renderAddLoadButton = () => {
-    if (!canSurface("tripops.indents.create")) return null;
-    return (
-      <PulsePillButton
-        label="Add Load"
-        showPlusIcon
-        size="default"
-        onPress={onCreateIndentPress}
-        accessibilityLabel="Add load"
-      />
-    );
-  };
 
   const handleBroadcastDraft = async (load: IndentRow) => {
     if (!orgId) return;
@@ -1339,7 +1320,6 @@ export function LoadCenterView({
     [drivers],
   );
 
-  // Add Load: mobile hub header + desktop Give Load header; empty state CTA when no rows.
   const paddingBottom = useMemo(() => {
     if (Platform.OS === "web" && !isMobileView && useGridLayout) {
       return 12;
@@ -2110,8 +2090,6 @@ export function LoadCenterView({
                 doneSubTabs={mobileDoneSubTabs}
                 activeDoneSubTab={doneSubTab}
                 onDoneSubTabChange={(id) => setDoneSubTab(id as DoneSubTab)}
-                onCreateIndentPress={onCreateIndentPress}
-                showCreateAction={!hideCreateButton}
                 findLoadsAction={
                   loadSubTab === "GIVE_LOAD" ? undefined : (
                   <PulsePillButton
@@ -4005,9 +3983,6 @@ const styles = StyleSheet.create({
     textAlign: "center",
     paddingHorizontal: 40,
     lineHeight: 20,
-  },
-  emptyAddLoadWrap: {
-    marginTop: 20,
   },
   successOverlay: {
     ...StyleSheet.absoluteFillObject,

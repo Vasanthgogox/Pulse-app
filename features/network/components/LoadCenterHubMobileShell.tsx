@@ -4,13 +4,11 @@
 import Theme from "@/constants/Theme";
 import { LoadCenterUnderlineTabStrip } from "@/features/network/components/LoadCenterUnderlineTabStrip";
 import FontAwesome from "@expo/vector-icons/FontAwesome";
-import { PulsePillButton } from "@/components/PulsePillButton";
 import {
   HubMobileScreenHeader,
   HubMobileSearchRow,
   hubMobileChromeStyles as chrome,
 } from "@/components/hub";
-import { useMemberAccess } from "@/lib/useMemberAccess";
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import {
   ScrollView,
@@ -55,10 +53,8 @@ export function LoadCenterHubMobileShell({
   activeDoneSubTab,
   onDoneSubTabChange,
   showDoneSubTabs = false,
-  onCreateIndentPress,
   findLoadsAction,
   embedInPageScroll = false,
-  showCreateAction = true,
 }: {
   searchQuery: string;
   onSearchChange: (q: string) => void;
@@ -73,11 +69,9 @@ export function LoadCenterHubMobileShell({
   activeDoneSubTab?: string;
   onDoneSubTabChange?: (id: string) => void;
   showDoneSubTabs?: boolean;
-  onCreateIndentPress: () => void;
   findLoadsAction?: ReactNode;
   /** Horizontal padding already applied by page-scroll chrome. */
   embedInPageScroll?: boolean;
-  showCreateAction?: boolean;
 }) {
   const searchInputRef = useRef<TextInput>(null);
   const [searchOpen, setSearchOpen] = useState(() => searchQuery.trim().length > 0);
@@ -107,27 +101,14 @@ export function LoadCenterHubMobileShell({
   };
 
   const hasSearchQuery = searchQuery.trim().length > 0;
-  const { can: canSurface } = useMemberAccess();
-  const canCreateIndent = showCreateAction && canSurface("tripops.indents.create");
 
   return (
     <View style={[chrome.shell, embedInPageScroll && styles.shellInPageScroll]}>
       <HubMobileScreenHeader
         title="My Loads"
         action={
-          canCreateIndent || findLoadsAction ? (
-            <View style={styles.headerActions}>
-              {canCreateIndent ? (
-                <PulsePillButton
-                  label="Add Load"
-                  showPlusIcon
-                  size="compact"
-                  onPress={onCreateIndentPress}
-                  accessibilityLabel="Add load"
-                />
-              ) : null}
-              {findLoadsAction}
-            </View>
+          findLoadsAction ? (
+            <View style={styles.headerActions}>{findLoadsAction}</View>
           ) : undefined
         }
       />

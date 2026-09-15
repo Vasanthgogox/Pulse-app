@@ -1,0 +1,3 @@
+-- Placeholder: this version is already applied on the linked remote
+-- (sibling repo / shared project history). No SQL in this client.
+-- Do not replace with executable schema.

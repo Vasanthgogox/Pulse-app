@@ -19,8 +19,7 @@ import {
   formatConnectionRatingValue,
 } from "@/features/network/utils/businessConnectionOffer.util";
 import { firstFiniteRating } from "@/features/ratings/services/ratings.service";
-import type { LucideIcon } from "lucide-react-native";
-import { BadgeCheck, Eye, Hourglass, Route, Star, X } from "lucide-react-native";
+import { BadgeCheck, CheckCircle2, MapPin, X } from "lucide-react-native";
 import { useState } from "react";
 import { Pressable, Text, View } from "react-native";
 
@@ -60,11 +59,10 @@ function positiveCount(value: number | null | undefined): number | null {
   return Math.floor(value);
 }
 
-type IdentityStat = {
+type MetricBox = {
   key: string;
-  icon: LucideIcon;
+  value: string;
   label: string;
-  tone: "trips" | "aging" | "ratings";
 };
 
 export type NetworkDesktopGrowConnectionCardProps = {
@@ -120,40 +118,31 @@ export function NetworkDesktopGrowConnectionCard({
   const tone = roleTone(pendingRole);
   const rating = firstFiniteRating(ratingValue);
   const trips = positiveCount(org.trip_count);
-  const ratingCount = positiveCount(org.rating_count);
   const mutuals = positiveCount(mutualCount);
   const tenure = org.org_created_at
     ? formatConnectionExperience(org.org_created_at)
     : null;
   const showMutualFacepile = mutuals != null && Boolean(viewerOrgId);
-  const hasMutuals = mutuals != null;
   const locationOk =
     locationLabel.trim().length > 0 && locationLabel !== "Location not set";
 
-  const identityStats: IdentityStat[] = [];
-  if (trips != null) {
-    identityStats.push({
+  const identityStats: MetricBox[] = [
+    {
+      key: "rating",
+      value: rating != null ? formatConnectionRatingValue(rating) : "—",
+      label: "Rating",
+    },
+    {
       key: "trips",
-      icon: Route,
-      label: `${trips} trip${trips === 1 ? "" : "s"}`,
-      tone: "trips",
-    });
-  } else if (ratingCount != null) {
-    identityStats.push({
-      key: "ratings",
-      icon: Star,
-      label: `${ratingCount} rating${ratingCount === 1 ? "" : "s"}`,
-      tone: "ratings",
-    });
-  }
-  if (tenure) {
-    identityStats.push({
+      value: trips != null ? String(trips) : "—",
+      label: "Trips",
+    },
+    {
       key: "aging",
-      icon: Hourglass,
-      label: tenure === "New" ? "New" : `${tenure} aging`,
-      tone: "aging",
-    });
-  }
+      value: tenure ?? "—",
+      label: "Aging",
+    },
+  ];
 
   return (
     <View
@@ -200,32 +189,6 @@ export function NetworkDesktopGrowConnectionCard({
               />
               {isConnected ? <View style={styles.onlineDot} /> : null}
             </View>
-            <View
-              style={growStyles.avatarRatingBadge}
-              accessibilityRole="text"
-              accessibilityLabel={
-                rating != null
-                  ? `${formatConnectionRatingValue(rating)} rating`
-                  : "No rating"
-              }
-            >
-              <Text
-                style={[
-                  growStyles.avatarRatingBadgeText,
-                  rating == null && growStyles.avatarRatingBadgeTextEmpty,
-                ]}
-                numberOfLines={1}
-              >
-                {rating != null ? formatConnectionRatingValue(rating) : "No rating"}
-              </Text>
-              <Star
-                size={rating != null ? 14 : 12}
-                color={rating != null ? Theme.driverGold : Theme.textMuted}
-                fill={rating != null ? Theme.driverGold : "transparent"}
-                strokeWidth={rating != null ? 0 : 1.6}
-                style={growStyles.avatarRatingBadgeStar}
-              />
-            </View>
           </View>
 
           <View style={growStyles.bizIdentityText}>
@@ -234,18 +197,27 @@ export function NetworkDesktopGrowConnectionCard({
                 {org.name}
               </Text>
               {isKycVerified ? (
-                <BadgeCheck size={14} color={Theme.darkGreen} strokeWidth={2.2} />
+                <BadgeCheck
+                  size={15}
+                  color={Theme.analyticsHeroBg}
+                  strokeWidth={2.2}
+                />
               ) : null}
             </View>
-            <Text
-              style={[
-                growStyles.bizLocation,
-                !locationOk && growStyles.bizLocationEmpty,
-              ]}
-              numberOfLines={1}
-            >
-              {locationOk ? locationLabel : "No location"}
-            </Text>
+            <View style={growStyles.bizMetaRow}>
+              <View style={growStyles.bizMetaItem}>
+                <MapPin size={12} color={Theme.textMuted} strokeWidth={2} />
+                <Text
+                  style={[
+                    growStyles.bizLocation,
+                    !locationOk && growStyles.bizLocationEmpty,
+                  ]}
+                  numberOfLines={1}
+                >
+                  {locationOk ? locationLabel : "No location"}
+                </Text>
+              </View>
+            </View>
             <View style={growStyles.bizTrustBadgesSlot}>
               <View
                 style={[
@@ -270,78 +242,43 @@ export function NetworkDesktopGrowConnectionCard({
                 style={growStyles.bizTrustBadges}
               />
             </View>
-            {identityStats.length > 0 ? (
-              <View style={growStyles.bizStatsLine}>
-                {identityStats.map((stat, idx) => {
-                  const Icon = stat.icon;
-                  return (
-                    <View key={stat.key} style={growStyles.bizStatPart}>
-                      {idx > 0 ? (
-                        <Text style={growStyles.bizStatDot}>·</Text>
-                      ) : null}
-                      <Icon
-                        size={10}
-                        color={Theme.textRouteCard}
-                        fill={stat.tone === "ratings" ? Theme.driverGold : "transparent"}
-                        strokeWidth={1.8}
-                      />
-                      <Text style={growStyles.bizStatText} numberOfLines={1}>
-                        {stat.label}
-                      </Text>
-                    </View>
-                  );
-                })}
-              </View>
-            ) : null}
           </View>
         </View>
       </Pressable>
 
       <View style={growStyles.footerBlock}>
-        <View style={growStyles.footerSeparator} />
         <View style={growStyles.footerRow}>
+          <View style={growStyles.bizMetricBoxes}>
+            {(compactActions ? identityStats.slice(0, 2) : identityStats).map((stat) => (
+              <View key={stat.key} style={growStyles.bizMetricBox}>
+                <Text style={growStyles.bizMetricValue} numberOfLines={1}>
+                  {stat.value}
+                </Text>
+                <Text style={growStyles.bizMetricLabel} numberOfLines={1}>
+                  {stat.label}
+                </Text>
+              </View>
+            ))}
+          </View>
           <View
             style={[
               growStyles.mutualFacepileSlot,
               compactActions && growStyles.mutualFacepileSlotCompact,
             ]}
           >
-          {showMutualFacepile ? (
-            <MutualConnectionsFacepile
-              viewerOrgId={viewerOrgId}
-              targetOrgId={org.id}
-              mutualCount={mutualCount}
-              faceSize={24}
-              compact
-              onPressMutual={onPressMutual}
-              onPressViewAll={onPressMutuals}
-            />
-          ) : null}
-          {hasMutuals && onPressMutuals ? (
-            <Pressable
-              onPress={onPressMutuals}
-              hitSlop={8}
-              style={({ pressed }) => [
-                growStyles.mutualsViewBtn,
-                pressed && { opacity: 0.75 },
-              ]}
-              accessibilityRole="button"
-              accessibilityLabel={`View mutual connections with ${org.name}`}
-            >
-              <Text style={growStyles.mutualsWatermark} numberOfLines={1}>
-                mutuals
-              </Text>
-              <Eye size={13} color={Theme.textRouteCard} strokeWidth={2} />
-            </Pressable>
-          ) : (
-            <Text
-              style={growStyles.mutualsWatermark}
-              numberOfLines={1}
-            >
-              {hasMutuals ? "mutuals" : "no mutuals"}
-            </Text>
-          )}
-        </View>
+            {showMutualFacepile ? (
+              <MutualConnectionsFacepile
+                viewerOrgId={viewerOrgId}
+                targetOrgId={org.id}
+                mutualCount={mutualCount}
+                faceSize={22}
+                compact
+                overflowColor="#50CD89"
+                onPressMutual={onPressMutual}
+                onPressViewAll={onPressMutuals}
+              />
+            ) : null}
+          </View>
 
         {isConnected ? (
           <View
@@ -351,6 +288,7 @@ export function NetworkDesktopGrowConnectionCard({
               growStyles.actionBtnConnected,
             ]}
           >
+            <CheckCircle2 size={13} color={Theme.textMuted} strokeWidth={2.2} />
             <Text
               style={[
                 styles.actionBtnConnectedText,

@@ -1,0 +1,20 @@
+import { chromium } from 'playwright';
+const APP = 'http://localhost:8081';
+const OUT = '/private/tmp/claude-501/-Users-ggx-Desktop-Pulse-app/3fa56c9e-c811-4f44-bc3a-b1b68b1011ee/scratchpad/shots';
+const INDENT_ID = 'a1249087-8cb2-4f56-8ff5-067a70d462f7';
+(async () => {
+  const browser = await chromium.launch({ headless: true });
+  const page = await (await browser.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+  await page.goto(`${APP}/sign-in`, { waitUntil: 'load', timeout: 60000 });
+  await page.waitForTimeout(1500);
+  await page.getByPlaceholder('you@example.com').first().fill('godrej@gmail.com');
+  await page.getByPlaceholder('Your password').first().fill('godrej123');
+  await page.getByRole('button', { name: 'Sign in', exact: true }).first().click();
+  await page.waitForURL((u) => !u.pathname.includes('sign-in'), { timeout: 60000 }).catch(() => {});
+  await page.goto(`${APP}/oms/execution/indent/${INDENT_ID}`, { waitUntil: 'load', timeout: 30000 });
+  await page.waitForTimeout(2500);
+  const bodyText = await page.locator('body').innerText();
+  console.log(bodyText.slice(0, 700));
+  await page.screenshot({ path: `${OUT}/refresh-indent-check.png`, fullPage: true });
+  await browser.close();
+})();

@@ -30,7 +30,7 @@ export const NETWORK_HUB_CONNECTION_NATIVE_ROWS = NETWORK_HUB_CONNECTION_MOBILE_
 export const NETWORK_HUB_CONNECTION_NATIVE_PAGE_SIZE =
   NETWORK_HUB_CONNECTION_MOBILE_PAGE_SIZE;
 
-/** Your connections — desktop (≥820): 5 columns × 2 rows per page (chat-style avatar grid). */
+/** Your connections — desktop (≥820): 5 columns × 2 rows per page. */
 export const NETWORK_HUB_CONNECTION_DESKTOP_COLUMNS = 5;
 export const NETWORK_HUB_CONNECTION_DESKTOP_ROWS = 2;
 export const NETWORK_HUB_CONNECTION_DESKTOP_PAGE_SIZE =

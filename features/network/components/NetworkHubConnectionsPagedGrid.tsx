@@ -1,5 +1,5 @@
 /**
- * Your connections — horizontal swipe pages (5×2 desktop, 3×2 mobile) + Previous / Next.
+ * Your connections — horizontal swipe pages (5×2 desktop, 2×2 mobile) + Previous / Next.
  */
 import Theme from "@/constants/Theme";
 import { useLanguage } from "@/contexts/LanguageContext";
@@ -19,13 +19,15 @@ import {
   type ReactNode,
 } from "react";
 import {
-  FlatList,
+  Platform,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
   type NativeScrollEvent,
   type NativeSyntheticEvent,
+  type ViewStyle,
 } from "react-native";
 
 export type NetworkHubConnectionsPagedGridProps<T> = {
@@ -68,8 +70,11 @@ export function NetworkHubConnectionsPagedGrid<T>({
   const { t } = useLanguage();
   const [page, setPage] = useState(0);
   const [viewportWidth, setViewportWidth] = useState(0);
-  const listRef = useRef<FlatList<T[]>>(null);
+  const listRef = useRef<ScrollView>(null);
+  const pageRef = useRef(0);
   const { columns, rows, pageSize } = layout;
+  const isWeb = Platform.OS === "web";
+  const slideWidth = viewportWidth > 0 ? Math.floor(viewportWidth) : 0;
 
   const pageCount = Math.max(1, Math.ceil(items.length / pageSize));
   const pages = useMemo(
@@ -85,38 +90,72 @@ export function NetworkHubConnectionsPagedGrid<T>({
 
   const singleColumn = columns === 1;
 
+  const commitPage = useCallback((next: number) => {
+    const clamped = Math.max(0, Math.min(pageCount - 1, next));
+    if (pageRef.current === clamped) return;
+    pageRef.current = clamped;
+    setPage(clamped);
+  }, [pageCount]);
+
+  const scrollPagerTo = useCallback(
+    (x: number, animated: boolean) => {
+      const scroller = listRef.current;
+      if (!scroller) return;
+      if (isWeb) {
+        const node =
+          typeof (scroller as unknown as { getNativeScrollRef?: () => unknown })
+            .getNativeScrollRef === "function"
+            ? (scroller as unknown as { getNativeScrollRef: () => unknown }).getNativeScrollRef()
+            : typeof (scroller as unknown as { getScrollableNode?: () => unknown })
+                  .getScrollableNode === "function"
+              ? (scroller as unknown as { getScrollableNode: () => unknown }).getScrollableNode()
+              : null;
+        const el = node as { scrollTo?: (opts: ScrollToOptions) => void } | null;
+        if (el && typeof el.scrollTo === "function") {
+          el.scrollTo({ left: x, top: 0, behavior: animated ? "smooth" : "auto" });
+          return;
+        }
+      }
+      scroller.scrollTo({ x, y: 0, animated });
+    },
+    [isWeb],
+  );
+
   const goToPage = useCallback(
     (target: number, animated = true) => {
       const next = Math.max(0, Math.min(pageCount - 1, target));
+      pageRef.current = next;
       setPage(next);
-      if (viewportWidth > 0 && listRef.current) {
-        listRef.current.scrollToOffset({
-          offset: next * viewportWidth,
-          animated,
-        });
+      if (slideWidth > 0) {
+        scrollPagerTo(next * slideWidth, animated);
       }
     },
-    [pageCount, viewportWidth],
+    [pageCount, scrollPagerTo, slideWidth],
   );
 
   useEffect(() => {
+    pageRef.current = 0;
     setPage(0);
-    if (viewportWidth > 0 && listRef.current) {
-      listRef.current.scrollToOffset({ offset: 0, animated: false });
+    if (slideWidth > 0) {
+      scrollPagerTo(0, false);
     }
-  }, [resetKey, viewportWidth]);
+  }, [resetKey, scrollPagerTo, slideWidth]);
 
   useEffect(() => {
-    setPage((current) => Math.min(current, pageCount - 1));
+    setPage((current) => {
+      const next = Math.min(current, pageCount - 1);
+      pageRef.current = next;
+      return next;
+    });
   }, [pageCount]);
 
-  const onPagerScrollSettled = useCallback(
+  const onPagerScroll = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      if (viewportWidth <= 0) return;
-      const idx = Math.round(e.nativeEvent.contentOffset.x / viewportWidth);
-      setPage(Math.max(0, Math.min(pageCount - 1, idx)));
+      if (slideWidth <= 0) return;
+      const idx = Math.round(e.nativeEvent.contentOffset.x / slideWidth);
+      commitPage(idx);
     },
-    [viewportWidth, pageCount],
+    [commitPage, slideWidth],
   );
 
   const renderPageBody = useCallback(
@@ -180,44 +219,50 @@ export function NetworkHubConnectionsPagedGrid<T>({
 
   const canGoPrevious = page > 0;
   const canGoNext = page < pageCount - 1;
-  const slideWidth = viewportWidth > 0 ? viewportWidth : undefined;
 
   return (
     <View
       style={styles.root}
       onLayout={(e) => {
-        const w = e.nativeEvent.layout.width;
+        const w = Math.floor(e.nativeEvent.layout.width);
         if (w > 0 && w !== viewportWidth) {
           setViewportWidth(w);
         }
       }}
     >
-      {pageCount > 1 && slideWidth ? (
-        <FlatList
+      {pageCount > 1 && slideWidth > 0 ? (
+        <ScrollView
           ref={listRef}
-          data={pages}
           horizontal
-          pagingEnabled
           nestedScrollEnabled
-          showsHorizontalScrollIndicator={false}
+          directionalLockEnabled
+          disableIntervalMomentum
+          pagingEnabled={Platform.OS === "ios"}
+          snapToInterval={Platform.OS === "android" ? slideWidth : undefined}
+          snapToAlignment="start"
           decelerationRate="fast"
           bounces={false}
           overScrollMode="never"
-          keyExtractor={(_, index) => `connections-hub-page-${index}`}
-          getItemLayout={(_, index) => ({
-            length: slideWidth,
-            offset: slideWidth * index,
-            index,
-          })}
-          onMomentumScrollEnd={onPagerScrollSettled}
-          onScrollEndDrag={onPagerScrollSettled}
-          renderItem={({ item: pageItems }) => (
-            <View style={[styles.pageSlide, { width: slideWidth }]}>
+          showsHorizontalScrollIndicator={false}
+          scrollEventThrottle={16}
+          onScroll={onPagerScroll}
+          onMomentumScrollEnd={onPagerScroll}
+          style={[styles.pagerList, isWeb ? WEB_PAGER_SCROLL : null]}
+          contentContainerStyle={styles.pagerContent}
+        >
+          {pages.map((pageItems, index) => (
+            <View
+              key={`connections-hub-page-${index}`}
+              style={[
+                styles.pageSlide,
+                { width: slideWidth },
+                isWeb ? WEB_PAGE_SLIDE : null,
+              ]}
+            >
               {renderPageBody(pageItems)}
             </View>
-          )}
-          style={styles.pagerList}
-        />
+          ))}
+        </ScrollView>
       ) : (
         renderPageBody(pages[0] ?? [])
       )}
@@ -279,6 +324,19 @@ export function NetworkHubConnectionsPagedGrid<T>({
   );
 }
 
+const WEB_PAGER_SCROLL: ViewStyle = {
+  overflowX: "auto",
+  overflowY: "hidden",
+  scrollSnapType: "x mandatory",
+  overscrollBehaviorX: "contain",
+  WebkitOverflowScrolling: "touch",
+} as ViewStyle;
+
+const WEB_PAGE_SLIDE: ViewStyle = {
+  scrollSnapAlign: "start",
+  scrollSnapStop: "always",
+} as ViewStyle;
+
 const styles = StyleSheet.create({
   root: {
     width: "100%",
@@ -286,6 +344,10 @@ const styles = StyleSheet.create({
   },
   pagerList: {
     width: "100%",
+  },
+  pagerContent: {
+    flexDirection: "row",
+    alignItems: "stretch",
   },
   pageSlide: {
     flexShrink: 0,

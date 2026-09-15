@@ -4,8 +4,6 @@
 import { PartyAvatar } from "@/components/PartyAvatar";
 import { PartyEntityAvatarGlow } from "@/components/PartyEntityAvatarGlow";
 import Theme from "@/constants/Theme";
-import { ChatPartyAvatar } from "@/features/chat/components/ChatPartyAvatar";
-import { SLACK_CHAT_AVATAR } from "@/features/chat/components/shared/chatSlackAvatar.constants";
 import { useLanguage } from "@/contexts/LanguageContext";
 import { NetworkHubGlassBadge } from "@/features/network/components/NetworkHubGlassBadge";
 import { NetworkHubGlassButton } from "@/features/network/components/NetworkHubGlassButton";
@@ -24,9 +22,8 @@ import {
 import type { MutualConnectionRow } from "@/features/network/services/mutual-connections.service";
 import { SPLIT_STACK_BREAKPOINT } from "@/features/network/constants/networkHubGrid";
 import type { PartyEntityType } from "@/lib/partyAvatarDisplay";
-import type { ResolvedPartyAvatarIdentity } from "@/lib/entityIdentity";
 import { partyAccentFromEntityType } from "@/lib/partyEntityAccent";
-import { Building2, Phone, Send } from "lucide-react-native";
+import { BadgeCheck, Building2, Phone, Send } from "lucide-react-native";
 import { useMemo } from "react";
 import {
   Platform,
@@ -65,8 +62,10 @@ export type NetworkPartyHubListCardProps = {
   loading?: boolean;
   compact?: boolean;
   mobileGrid?: boolean;
-  /** Desktop 2-row hub — chat people-strip avatar + ring styling. */
+  /** Desktop hub — Metronic user-directory tile. */
   chatHubTile?: boolean;
+  /** Show the directory verified check (KYC or in-app). */
+  showVerified?: boolean;
   nativeListRow?: boolean;
 };
 
@@ -96,6 +95,7 @@ export function NetworkPartyHubListCard({
   compact: compactProp,
   mobileGrid: mobileGridProp = false,
   chatHubTile: chatHubTileProp = false,
+  showVerified = false,
   nativeListRow: nativeListRowProp,
 }: NetworkPartyHubListCardProps) {
   const { t } = useLanguage();
@@ -230,15 +230,14 @@ export function NetworkPartyHubListCard({
 
   if (mobileGrid) {
     const cardPressHandler = onOpenProfile ?? onPressCard;
-    const gridAvatarSize = chatHubTile ? SLACK_CHAT_AVATAR.people : 52;
+    const gridAvatarSize = chatHubTile ? 56 : 52;
     const accent = partyAccentFromEntityType(entityType);
-    const partyIdentity: ResolvedPartyAvatarIdentity = {
-      displayName,
-      entityType,
-      avatarUrl: avatarUrl ?? null,
-      avatarSeed: avatarSeed ?? null,
-      isIntegrated: showOnline,
-    };
+    const roleHandle =
+      entityType === "supplier"
+        ? "Supplier"
+        : entityType === "driver"
+          ? "Driver"
+          : "Client";
     return (
       <Pressable
         onPress={cardPressHandler}
@@ -251,25 +250,28 @@ export function NetworkPartyHubListCard({
           style={[
             networkHubListCardChromeStyles.cardMobileGrid,
             styles.cardGridTile,
-            chatHubTile && styles.chatHubTile,
+            chatHubTile ? styles.directoryTile : null,
           ]}
         >
-          <View style={[styles.gridTileAvatarCol, chatHubTile && { width: 64, height: 64 }]}>
+          <View
+            style={[
+              styles.gridTileAvatarCol,
+              chatHubTile && styles.directoryAvatarCol,
+            ]}
+          >
             {chatHubTile ? (
-              <View style={styles.chatHubAvatarWrap}>
-                <View
-                  style={[
-                    styles.chatHubAvatarRing,
-                    {
-                      borderColor: accent.ring,
-                    },
-                  ]}
-                >
-                  <View style={styles.chatHubAvatarCircle}>
-                    <ChatPartyAvatar identity={partyIdentity} size={gridAvatarSize} />
-                  </View>
-                </View>
-                {showOnline ? <View style={styles.chatHubOnlineDot} /> : null}
+              <View style={styles.directoryAvatarWrap}>
+                <PartyAvatar
+                  name={displayName}
+                  initialsColorSeed={partyId}
+                  avatarSeed={avatarSeed}
+                  avatarUrl={avatarUrl}
+                  entityType={entityType}
+                  isIntegrated={showOnline}
+                  size={gridAvatarSize}
+                  shape="circle"
+                />
+                {showOnline ? <View style={styles.directoryOnlineDot} /> : null}
               </View>
             ) : (
               <>
@@ -290,24 +292,43 @@ export function NetworkPartyHubListCard({
               </>
             )}
           </View>
-          <Text
-            style={[
-              styles.partyNameMobileGrid,
-              chatHubTile && styles.chatHubName,
-            ]}
-            numberOfLines={1}
-            ellipsizeMode="tail"
-          >
-            {displayName}
-          </Text>
-          {chatHubTile && rolePill ? (
-            <Text
-              style={[styles.chatHubRoleCue, { color: accent.ring }]}
-              numberOfLines={1}
-            >
-              {rolePill.label}
-            </Text>
-          ) : null}
+          {chatHubTile ? (
+            <>
+              <View style={styles.directoryNameRow}>
+                <Text
+                  style={styles.directoryName}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {displayName}
+                </Text>
+                {showVerified ? (
+                  <BadgeCheck size={13} color={Theme.analyticsHeroBg} strokeWidth={2.4} />
+                ) : null}
+              </View>
+              <Text style={styles.directoryHandle} numberOfLines={1}>
+                {roleHandle}
+              </Text>
+            </>
+          ) : (
+            <>
+              <Text
+                style={styles.partyNameMobileGrid}
+                numberOfLines={1}
+                ellipsizeMode="tail"
+              >
+                {displayName}
+              </Text>
+              {rolePill ? (
+                <Text
+                  style={[styles.chatHubRoleCue, { color: accent.ring }]}
+                  numberOfLines={1}
+                >
+                  {rolePill.label}
+                </Text>
+              ) : null}
+            </>
+          )}
         </View>
       </Pressable>
     );

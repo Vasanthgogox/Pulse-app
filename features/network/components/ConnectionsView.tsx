@@ -286,6 +286,7 @@ function ConnectionProfileCard({
         compact={compact}
         mobileGrid={mobileGrid}
         chatHubTile={chatHubTile}
+        showVerified={item.is_integrated || isOrgKycVerified(item)}
         nativeListRow={nativeListRow}
         rolePills={rolePillsForConnection(item)}
         totalTrips={item.total_trips ?? null}
