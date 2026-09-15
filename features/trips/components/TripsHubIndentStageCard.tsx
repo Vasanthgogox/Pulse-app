@@ -37,6 +37,11 @@ export function TripsHubIndentStageCard({
   hubGrid = false,
   layoutCompact = false,
   actions,
+  clientAvatarUrl,
+  clientAvatarSeed,
+  clientAvatarFallbackSeed,
+  clientOrganizationImageUrl,
+  clientOrganizationAvatarSeed,
 }: {
   indent: IndentRow;
   bidCount: number;
@@ -45,6 +50,12 @@ export function TripsHubIndentStageCard({
   hubGrid?: boolean;
   layoutCompact?: boolean;
   actions?: ReactNode;
+  /** Same client photo/logo stack as the existing Give Load cards — see indentCardAvatar.util.ts. */
+  clientAvatarUrl?: string | null;
+  clientAvatarSeed?: string | null;
+  clientAvatarFallbackSeed?: string;
+  clientOrganizationImageUrl?: string | null;
+  clientOrganizationAvatarSeed?: string | null;
 }) {
   const stageLabel = indentHubLifecycleStatus(indent.status, bidCount);
   const originTags = indentHubSourceTags(indent.circulation_target);
@@ -62,6 +73,11 @@ export function TripsHubIndentStageCard({
       originTags={originTags}
       displayNumber={getIndentDisplayNumber(indent)}
       hidePartyRow
+      clientAvatarUrl={clientAvatarUrl}
+      clientAvatarSeed={clientAvatarSeed}
+      clientAvatarFallbackSeed={clientAvatarFallbackSeed}
+      clientOrganizationImageUrl={clientOrganizationImageUrl}
+      clientOrganizationAvatarSeed={clientOrganizationAvatarSeed}
       specLine={indentHubLoadSpecLine(indent)}
       dense={hubGrid || layoutCompact}
       fillGrid={hubGrid}

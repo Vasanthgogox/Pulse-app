@@ -44,6 +44,7 @@ import {
 } from "@/features/trips/components/TripsHubBentoMetrics";
 import { TripsFilterBottomSheet } from "@/features/trips/components/TripsFilterBottomSheet";
 import { isIndentUnallocated, isIndentStageDone } from "@/features/network/utils/loadCenter.model";
+import { giveLoadIndentAvatarProps } from "@/features/network/utils/indentCardAvatar.util";
 import { TripsHubIndentStageCard } from "@/features/trips/components/TripsHubIndentStageCard";
 import { GiveLoadIndentCardActions } from "@/features/network/components/LoadCenterIndentCardActions";
 import { useGiveLoadIndentActions } from "@/features/network/hooks/useGiveLoadIndentActions";
@@ -434,6 +435,11 @@ export default function TripsScreen() {
   const { data: suppliers = [] } = useSuppliersQuery(orgId);
   const { data: drivers = [] } = useDriversQuery(orgId);
   const linkedOrgByOrganizationId = useLinkedOrgProfileMap(clients, suppliers);
+  const clientById = useMemo(() => {
+    const map = new Map<string, (typeof clients)[number]>();
+    for (const client of clients) map.set(client.id, client);
+    return map;
+  }, [clients]);
   const tripIds = useMemo(() => trips.map((t) => t.id), [trips]);
   const { data: hubTripSubcontracts = [] } = useTripSubcontractsQuery(
     orgId,
@@ -1597,6 +1603,11 @@ export default function TripsScreen() {
       );
       const bidCount = indentOfferCounts[indent.id] ?? 0;
       const openIndent = () => handleOpenUnallocatedIndent(indent);
+      const avatarProps = giveLoadIndentAvatarProps(
+        indent,
+        clientById,
+        linkedOrgByOrganizationId,
+      );
       const card = (
         <TripsHubIndentStageCard
           indent={indent}
@@ -1605,6 +1616,11 @@ export default function TripsScreen() {
           layoutCompact={tripsHubLayoutCompact}
           onPress={openIndent}
           tr={tr}
+          clientAvatarUrl={avatarProps.avatarUrl}
+          clientAvatarSeed={avatarProps.avatarSeed}
+          clientAvatarFallbackSeed={avatarProps.initialsColorSeed}
+          clientOrganizationImageUrl={avatarProps.organizationImageUrl}
+          clientOrganizationAvatarSeed={avatarProps.organizationAvatarSeed}
           actions={
             <GiveLoadIndentCardActions
               load={indent}
