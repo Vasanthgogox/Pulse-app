@@ -170,7 +170,7 @@ export function OrdersPage() {
       <PageToolbar
         title="Sales Orders"
         breadcrumb={['Commerce', 'Orders']}
-        description="All order sources produce the same canonical SalesOrder — manual, Shopify, API, CSV, EDI."
+        description="Select one or more pending orders, then Build Plan to merge them into an execution plan. An indent is created later in Plan Builder."
         actions={
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowCreate(true)} disabled={!canCreate}>
@@ -246,11 +246,11 @@ export function OrdersPage() {
                     );
                   }}
                 >
-                  <Link to="/execution-plans/build">Continue to Plan Builder →</Link>
+                  <Link to="/execution-plans/build">Build Plan</Link>
                 </Button>
               ) : (
                 <Button className="w-full" size="sm" disabled>
-                  Continue to Plan Builder →
+                  Build Plan
                 </Button>
               )
             }

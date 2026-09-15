@@ -16,6 +16,7 @@ import { DEFAULT_TENANT } from '@/types/platform';
 import { useOrganization } from '@/context/OrganizationProvider';
 import { useUserProfile } from '@/hooks/useUserProfile';
 import { buildPublishExecutionPlanPayload, publishPlanToExecution } from '@/lib/execution-api';
+import { shareExecutionPlanToOperations } from '@/lib/execution-service-client';
 import { createEntityMetadata, bumpEntityVersion } from '@/lib/entity-metadata';
 import { findMergeRecommendations } from '@/lib/merge-engine';
 import { subscribePlatformEvents, type PlatformEventEnvelope } from '@/lib/domain-events';
@@ -233,19 +234,19 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
   const publishExecutionPlan = useCallback(async (
     planId: string,
     planSnapshot?: ExecutionPlan,
-    options?: { supplierTargetInr: number },
+    options?: { supplierTargetInr?: number },
   ) => {
     const plan = planSnapshot ?? plans.find(p => p.id === planId);
-    if (!plan) return;
+    if (!plan) throw new Error('Plan not found');
     const supplierTargetInr = options?.supplierTargetInr;
-    if (supplierTargetInr == null || !(supplierTargetInr > 0)) {
-      throw new Error('Enter a supplier target before sharing the indent to market.');
-    }
+    const supplierTarget = supplierTargetInr != null && supplierTargetInr > 0
+      ? supplierTargetInr
+      : 0;
 
     const command = buildPublishExecutionPlanPayload(
       plan, orders, tenant, identity.user.name,
       org.platformOrganization?.id ?? '', user?.id ?? '',
-      supplierTargetInr,
+      supplierTarget,
     );
     const result = await publishPlanToExecution(command);
 
@@ -259,19 +260,53 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
       return list.map(p => {
       if (p.id !== planId) return p;
       const meta = p.meta
-        ? bumpEntityVersion(p.meta, 'published')
-        : createEntityMetadata({ id: p.id, status: 'published', tenant, source: 'commerce', createdBy: identity.user.name });
+        ? bumpEntityVersion(p.meta, 'ready')
+        : createEntityMetadata({ id: p.id, status: 'ready', tenant, source: 'commerce', createdBy: identity.user.name });
       return {
         ...p, meta,
-        status: 'published',
+        status: 'ready',
         correlation_id: result.correlationId,
-        lifecycle_stage: 'execution_received',
-        published_at: new Date().toISOString(),
+        indent_id: result.indentId || p.indent_id,
+        indent_code: result.indentCode || p.indent_code,
+        core_plan_id: result.executionPlanId || p.core_plan_id,
+        lifecycle_stage: 'indent_created',
         updated_at: new Date().toISOString(),
       };
     });
     });
+    return {
+      indentId: result.indentId,
+      indentCode: result.indentCode,
+      executionPlanId: result.executionPlanId,
+    };
   }, [plans, orders, tenant, identity.user.name, org.platformOrganization?.id, user?.id]);
+
+  const sharePlanToOperations = useCallback(async (planId: string) => {
+    // planId may be a locally-cached plan's id, OR (when this plan/indent was
+    // opened in a session that never populated the local order-store cache —
+    // see CommerceIndentHandoff.onShare) the real Core execution_plans.id
+    // directly. shareExecutionPlanToOperations is fully DB-backed
+    // (ExecutionOrchestrator.shareExecutionPlanToOperations resolves by
+    // findById OR findByClientPlanId), so no local plan record is required —
+    // it's only used here to update the optimistic local cache afterward.
+    const plan = plans.find(p => p.id === planId || p.core_plan_id === planId);
+    const workspaceId = org.platformOrganization?.id;
+    if (!workspaceId) throw new Error('Organization not ready');
+    await shareExecutionPlanToOperations({
+      workspaceId,
+      executionPlanId: plan?.core_plan_id || plan?.id || planId,
+    });
+    if (!plan) return;
+    setPlans(prev => prev.map(p => {
+      if (p.id !== planId) return p;
+      return {
+        ...p,
+        status: 'published',
+        published_at: p.published_at ?? new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      };
+    }));
+  }, [plans, org.platformOrganization?.id]);
 
   return (
     <CommerceContext.Provider value={{
@@ -292,6 +327,7 @@ export function CommerceProvider({ children }: { children: ReactNode }) {
       applyMergeRecommendation,
       createExecutionPlan,
       publishExecutionPlan,
+      sharePlanToOperations,
       updateOrderStatus,
       updateOrder,
       deleteOrder,

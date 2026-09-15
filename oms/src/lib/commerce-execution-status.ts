@@ -45,7 +45,7 @@ const RECEIVING_BIDS_INDENT_STATUSES = new Set(['broadcast', 'open', 'pending', 
 const AWARDED_INDENT_STATUSES = new Set(['awarded']);
 
 const INDENT_STATUS_LABELS: Record<string, string> = {
-  draft:     'Preparing',
+  draft:     'DRAFT',
   broadcast: 'Posted',
   open:      'Posted',
   pending:   'Pending',
@@ -261,6 +261,7 @@ export function circulationLabel(target: string | null | undefined): string {
 /** Display lifecycle for the Plans table — Core indent/trip/order SES, not frozen plan.status. */
 export type PlanLifecycleKind =
   | 'draft'
+  | 'indent_created'
   | 'published'
   | 'indent_posted'
   | 'trip_assigned'
@@ -272,6 +273,7 @@ export type PlanLifecycleKind =
 export function planLifecycleKind(
   planStatus: string,
   exec: CommerceExecution | null | undefined,
+  indentId?: string | null,
 ): PlanLifecycleKind {
   if (planStatus === 'cancelled' || (exec?.trip && isTripCancelled(exec.trip.status))) return 'cancelled';
   if (exec) {
@@ -279,10 +281,12 @@ export function planLifecycleKind(
     if (exec.trip && isTripDelivered(exec.trip.status)) return 'trip_completed';
     if (exec.trip && isTripInTransit(exec.trip.status)) return 'in_transit';
     if (exec.trip) return 'trip_assigned';
+    if (exec.indent && String(exec.indent.status).toLowerCase() === 'draft') return 'indent_created';
     if (exec.indent) return 'indent_posted';
     return 'published';
   }
   if (planStatus === 'fulfilled') return 'delivered';
+  if (indentId && planStatus !== 'published') return 'indent_created';
   if (planStatus === 'published') return 'published';
   if (planStatus === 'draft' || planStatus === 'optimizing' || planStatus === 'ready') return 'draft';
   return 'published';
@@ -291,8 +295,9 @@ export function planLifecycleKind(
 export function planLifecycleLabel(kind: PlanLifecycleKind): string {
   switch (kind) {
     case 'draft':           return 'Draft';
-    case 'published':       return 'Published';
-    case 'indent_posted':   return 'Indent posted';
+    case 'indent_created':  return 'DRAFT';
+    case 'published':       return 'Shared to Operations';
+    case 'indent_posted':   return 'INDENT';
     case 'trip_assigned':   return 'Trip assigned';
     case 'in_transit':      return 'In transit';
     case 'trip_completed':  return 'Trip completed';
@@ -303,9 +308,11 @@ export function planLifecycleLabel(kind: PlanLifecycleKind): string {
 
 export function findCommerceExecutionForPlan(
   executions: readonly CommerceExecution[],
-  plan: { id: string; plan_number: string },
+  plan: { id: string; plan_number: string; core_plan_id?: string },
 ): CommerceExecution | undefined {
-  return executions.find(e => e.executionPlanId === plan.id)
+  return executions.find(e => plan.core_plan_id && e.executionPlanId === plan.core_plan_id)
+    ?? executions.find(e => e.executionPlanId === plan.id)
+    ?? executions.find(e => e.correlationId === plan.id)
     ?? executions.find(e => e.planNumber === plan.plan_number);
 }
 

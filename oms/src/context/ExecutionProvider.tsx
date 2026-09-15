@@ -15,6 +15,7 @@ import {
 } from '@/lib/execution-store';
 import { loadOrders, loadPlans } from '@/lib/order-store';
 import { fetchCommerceExecutions, toExecutionJob, type CommerceExecution } from '@/lib/services/execution-visibility.service';
+import { collapseCommerceExecutionsToIndentGroups } from '@/lib/commerce-ops-hub';
 import { useOrganization } from '@/context/OrganizationProvider';
 import { DEFAULT_TENANT } from '@/types/platform';
 import type { ExecutionJob } from '@/types/execution';
@@ -31,6 +32,7 @@ interface ExecutionContextValue {
   commerceExecutionsLoaded: boolean;
   /** Set when the authoritative read itself failed — distinct from "no executions yet". */
   commerceExecutionsError: boolean;
+  refreshCommerceExecutions: () => Promise<void>;
   assignJob:         (jobId: string, driver: FleetDriver, vehicle: FleetVehicle) => ExecutionJob | null;
   completeNextStop:  (jobId: string, podRef?: string) => ExecutionJob | null;
   getJob:            (jobId: string) => ExecutionJob | undefined;
@@ -56,6 +58,38 @@ export function ExecutionProvider({ children }: { children: ReactNode }) {
   const [commerceExecutionsLoaded, setCommerceExecutionsLoaded] = useState(false);
   const [commerceExecutionsError, setCommerceExecutionsError] = useState(false);
 
+  const applyExecutions = useCallback((executions: CommerceExecution[], workspaceId: string) => {
+    setCommerceExecutions(executions);
+    setCommerceExecutionsLoaded(true);
+    setCommerceExecutionsError(false);
+    const persisted = executions.map(exec => toExecutionJob(exec, workspaceId));
+    for (const job of persisted) upsertExecutionJob(job);
+    const confirmedPlanIds = new Set(persisted.map(j => j.executionPlanId));
+    for (const job of getExecutionJobs()) {
+      if (
+        job.status === 'received' &&
+        job.command.workspaceId === workspaceId &&
+        !confirmedPlanIds.has(job.executionPlanId)
+      ) {
+        removeExecutionJob(job.id);
+      }
+    }
+  }, []);
+
+  const refreshCommerceExecutions = useCallback(async () => {
+    const workspaceId = org.platformOrganization?.id;
+    if (!workspaceId) return;
+    try {
+      const executions = collapseCommerceExecutionsToIndentGroups(
+        await fetchCommerceExecutions(workspaceId),
+      );
+      applyExecutions(executions, workspaceId);
+    } catch {
+      setCommerceExecutionsLoaded(true);
+      setCommerceExecutionsError(true);
+    }
+  }, [org.platformOrganization?.id, applyExecutions]);
+
   // Authoritative reconciliation: the local execution-store above is an
   // optimistic mirror populated at dispatch time. On mount (refresh/reopen)
   // and whenever the org becomes available, re-derive state from what is
@@ -73,7 +107,9 @@ export function ExecutionProvider({ children }: { children: ReactNode }) {
     (async () => {
       let executions: CommerceExecution[];
       try {
-        executions = await fetchCommerceExecutions(workspaceId);
+        executions = collapseCommerceExecutionsToIndentGroups(
+          await fetchCommerceExecutions(workspaceId),
+        );
       } catch {
         // Persisted read failed (e.g. offline) — keep the local mirror as-is
         // rather than incorrectly pruning jobs we simply couldn't confirm,
@@ -85,28 +121,11 @@ export function ExecutionProvider({ children }: { children: ReactNode }) {
         return;
       }
       if (cancelled) return;
-
-      setCommerceExecutions(executions);
-      setCommerceExecutionsLoaded(true);
-      setCommerceExecutionsError(false);
-
-      const persisted = executions.map(exec => toExecutionJob(exec, workspaceId));
-      for (const job of persisted) upsertExecutionJob(job);
-
-      const confirmedPlanIds = new Set(persisted.map(j => j.executionPlanId));
-      for (const job of getExecutionJobs()) {
-        if (
-          job.status === 'received' &&
-          job.command.workspaceId === workspaceId &&
-          !confirmedPlanIds.has(job.executionPlanId)
-        ) {
-          removeExecutionJob(job.id);
-        }
-      }
+      applyExecutions(executions, workspaceId);
     })();
 
     return () => { cancelled = true; };
-  }, [org.organizationHydrated, org.platformOrganization?.id]);
+  }, [org.organizationHydrated, org.platformOrganization?.id, applyExecutions]);
 
   const pendingJobs = useMemo(() => jobs.filter(j => j.status === 'received'), [jobs]);
   const activeJobs  = useMemo(() => jobs.filter(j => j.status === 'assigned' || j.status === 'in_progress'), [jobs]);
@@ -128,6 +147,7 @@ export function ExecutionProvider({ children }: { children: ReactNode }) {
     <ExecutionContext.Provider value={{
       jobs, pendingJobs, activeJobs, completedJobs,
       commerceExecutions, commerceExecutionsLoaded, commerceExecutionsError,
+      refreshCommerceExecutions,
       assignJob, completeNextStop,
       getJob: getExecutionJob,
       getNextStop: (jobId) => {

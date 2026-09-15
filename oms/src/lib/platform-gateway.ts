@@ -49,6 +49,8 @@ export async function gatewayRequest<TData = unknown>(
         referenceId: result.referenceId,
         jobId:       result.jobId,
         indentId:    result.indentId,
+        indentCode:  result.indentCode,
+        executionPlanId: result.executionPlanId,
         mode:        result.mode,
         service:     'execution',
         endpoint,

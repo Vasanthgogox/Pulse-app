@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { type ColumnDef } from '@tanstack/react-table';
 import {
   CheckCircle2, Clock, GitMerge, LayoutGrid, List, Loader2, Radio, Truck,
@@ -31,6 +31,7 @@ import type { PlanLifecycleKind } from '@/lib/commerce-execution-status';
 
 const LIFECYCLE_TONE: Record<PlanLifecycleKind, StatusDotTone> = {
   draft:          'muted',
+  indent_created: 'warning',
   published:      'info',
   indent_posted:  'info',
   trip_assigned:  'info',
@@ -41,7 +42,7 @@ const LIFECYCLE_TONE: Record<PlanLifecycleKind, StatusDotTone> = {
 };
 
 function lifecycleOf(plan: ExecutionPlan, exec: CommerceExecution | undefined) {
-  const kind = planLifecycleKind(plan.status, exec);
+  const kind = planLifecycleKind(plan.status, exec, plan.indent_id);
   return { kind, label: planLifecycleLabel(kind), tone: LIFECYCLE_TONE[kind] };
 }
 
@@ -79,9 +80,19 @@ export function ExecutionPlansPage() {
   const { commerceExecutions } = useExecution();
   const [view, setView] = useState<'table' | 'grid'>('table');
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  useEffect(() => {
+    const fromQuery = searchParams.get('plan');
+    if (!fromQuery) return;
+    setSelectedId(fromQuery);
+    const next = new URLSearchParams(searchParams);
+    next.delete('plan');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const execFor = (plan: ExecutionPlan) => findCommerceExecutionForPlan(commerceExecutions, plan);
-  const kindOf = (plan: ExecutionPlan) => planLifecycleKind(plan.status, execFor(plan));
+  const kindOf = (plan: ExecutionPlan) => planLifecycleKind(plan.status, execFor(plan), plan.indent_id);
 
   const indentPosted = plans.filter(p => kindOf(p) === 'indent_posted').length;
   const inFlight = plans.filter(p => kindOf(p) === 'in_transit' || kindOf(p) === 'trip_assigned').length;
@@ -116,6 +127,26 @@ export function ExecutionPlansPage() {
       meta: commerceTableMeta.status,
     },
     {
+      id: 'indent',
+      accessorFn: row => row.indent_code ?? '',
+      header: ({ column }) => <DataGridColumnHeader column={column} title="Indent" />,
+      cell: ({ row }) => {
+        const exec = execFor(row.original);
+        const code = row.original.indent_code ?? exec?.indent?.indentNumber;
+        return <span className="font-mono text-2xs">{code ?? '—'}</span>;
+      },
+      meta: commerceTableMeta.text,
+    },
+    {
+      id: 'trip',
+      accessorFn: row => execFor(row)?.trip?.tripNumber ?? '',
+      header: ({ column }) => <DataGridColumnHeader column={column} title="Trip" />,
+      cell: ({ row }) => (
+        <span className="font-mono text-2xs">{execFor(row.original)?.trip?.tripNumber ?? '—'}</span>
+      ),
+      meta: commerceTableMeta.text,
+    },
+    {
       id: 'amount',
       accessorKey: 'total_amount',
       header: ({ column }) => <NumericColumnHeader column={column} title="Amount" />,
@@ -147,7 +178,7 @@ export function ExecutionPlansPage() {
     {
       id: 'published',
       accessorKey: 'published_at',
-      header: ({ column }) => <DataGridColumnHeader column={column} title="Published" />,
+      header: ({ column }) => <DataGridColumnHeader column={column} title="Shared" />,
       cell: ({ row }) => (
         <span className="text-2xs text-muted-foreground whitespace-nowrap">
           {row.original.published_at ? formatDateTime(row.original.published_at) : '—'}
@@ -185,9 +216,9 @@ export function ExecutionPlansPage() {
   return (
     <div className="container-fluid">
       <PageToolbar
-        title="Execution Plans"
-        breadcrumb={['Commerce', 'Planning', 'Published Plans']}
-        description="Status follows the Core indent and trip — Posted, In transit, or Delivered — not a frozen Published stamp."
+        title="Plan History"
+        breadcrumb={['Commerce', 'Planning', 'Plan History']}
+        description="Each plan keeps orders, stops, allocations, the indent it produced, and the trip once allocated."
         actions={
           <Button size="sm" asChild>
             <Link to="/execution-plans/build"><GitMerge className="size-3.5" /> New Plan</Link>
@@ -197,7 +228,7 @@ export function ExecutionPlansPage() {
 
       <div className="grid gap-3 pulse-stat-grid commerce-section">
         <StatTile label="Total plans" value={String(plans.length)} sub="All execution plans" />
-        <StatTile label="Indent posted" value={String(indentPosted)} sub="Shared to Core · awaiting trip" accent />
+        <StatTile label="Indent posted" value={String(indentPosted)} sub="In Operations · awaiting trip" accent />
         <StatTile label="In transit" value={String(inFlight)} sub="Trip assigned or moving" />
         <StatTile label="Delivered" value={String(delivered)} sub="Orders delivered" />
       </div>
@@ -220,7 +251,7 @@ export function ExecutionPlansPage() {
         <div className="pulse-card border-dashed p-12 text-center">
           <Truck className="size-10 text-muted-foreground/30 mx-auto mb-3" />
           <p className="font-medium text-sm">No execution plans yet</p>
-          <p className="text-2xs text-muted-foreground mt-1 mb-4">Build and publish a plan from pending orders.</p>
+          <p className="text-2xs text-muted-foreground mt-1 mb-4">Build a plan from pending orders, then convert to indent.</p>
           <Button size="sm" asChild>
             <Link to="/execution-plans/build"><GitMerge className="size-3.5" /> Open Plan Builder</Link>
           </Button>
@@ -234,12 +265,13 @@ export function ExecutionPlansPage() {
           getSearchText={p => `${p.plan_number} ${planLifecycleLabel(kindOf(p))} ${p.correlation_id ?? ''} ${p.constraints.vehicle_type}`}
           getRowId={p => p.id}
           statusFilters={[
-            { label: 'Indent posted', value: 'posted', match: p => kindOf(p) === 'indent_posted' },
+            { label: 'DRAFT', value: 'unassigned', match: p => kindOf(p) === 'indent_created' },
+            { label: 'INDENT', value: 'posted', match: p => kindOf(p) === 'indent_posted' },
             { label: 'Trip assigned', value: 'assigned', match: p => kindOf(p) === 'trip_assigned' },
             { label: 'In transit', value: 'transit', match: p => kindOf(p) === 'in_transit' },
             { label: 'Trip completed', value: 'trip_done', match: p => kindOf(p) === 'trip_completed' },
             { label: 'Delivered', value: 'delivered', match: p => kindOf(p) === 'delivered' },
-            { label: 'Published', value: 'published', match: p => kindOf(p) === 'published' },
+            { label: 'Shared to Operations', value: 'published', match: p => kindOf(p) === 'published' },
           ]}
           emptyMessage="No plans match your search"
           onRowClick={p => setSelectedId(p.id)}
@@ -268,9 +300,12 @@ export function ExecutionPlansPage() {
                       )}
                     </div>
                     <p className="text-2xs text-muted-foreground mt-2">
-                      {plan.total_orders} orders · {formatCurrency(plan.total_amount)}
+                      {plan.total_orders} orders · {plan.stops.length} stops · {formatCurrency(plan.total_amount)}
                     </p>
-                    <p className="text-3xs text-muted-foreground mt-0.5">{plan.constraints.vehicle_type}</p>
+                    <p className="text-3xs text-muted-foreground mt-0.5">
+                      Indent {plan.indent_code ?? execFor(plan)?.indent?.indentNumber ?? '—'}
+                      {' · '}Trip {execFor(plan)?.trip?.tripNumber ?? 'not assigned'}
+                    </p>
                   </div>
                 </div>
               </button>

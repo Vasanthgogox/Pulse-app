@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { Radio } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EntityFlexSheet } from '@/components/commerce/EntityFlexSheet';
+import { CommerceIndentHandoffActions } from '@/components/commerce/CommerceIndentHandoff';
 import { CorrelationTrace, RouteTimeline, StatusBadge } from '@/components/pulse-ui';
 import { useCommerce } from '@/context/CommerceProvider';
 import { useExecution } from '@/context/ExecutionProvider';
@@ -26,11 +27,15 @@ export function PlanDetailSheet({ planId, open, onClose }: PlanDetailSheetProps)
   const { commerceExecutions } = useExecution();
   const plan = plans.find(p => p.id === planId) ?? null;
   const exec = plan ? findCommerceExecutionForPlan(commerceExecutions, plan) : undefined;
-  const lifecycle = plan ? planLifecycleLabel(planLifecycleKind(plan.status, exec)) : null;
+  const lifecycle = plan
+    ? planLifecycleLabel(planLifecycleKind(plan.status, exec, plan.indent_id))
+    : null;
 
   if (!plan) return null;
 
   const planOrders = orders.filter(o => plan.order_ids.includes(o.id));
+  const indentCode = plan.indent_code ?? exec?.indent?.indentNumber;
+  const tripNumber = exec?.trip?.tripNumber;
 
   return (
     <EntityFlexSheet
@@ -47,13 +52,14 @@ export function PlanDetailSheet({ planId, open, onClose }: PlanDetailSheetProps)
       onDelete={() => {}}
       footer={
         <div className="flex flex-col gap-2">
-          {plan.status === 'ready' && (
+          {!plan.indent_id && plan.status === 'ready' && (
             <Button className="w-full" size="sm" asChild>
               <Link to="/execution-plans/build">Open in Plan Builder →</Link>
             </Button>
           )}
-          {exec && (
-            <Button className="w-full" size="sm" asChild>
+          <CommerceIndentHandoffActions plan={plan} exec={exec} indentId={plan.indent_id} />
+          {exec && plan.status === 'published' && (
+            <Button className="w-full" size="sm" variant="outline" asChild>
               <Link to={`/execution/plan/${exec.executionPlanId}`}>View fulfillment status →</Link>
             </Button>
           )}
@@ -80,6 +86,10 @@ export function PlanDetailSheet({ planId, open, onClose }: PlanDetailSheetProps)
               <dd className="font-semibold tabular-nums">{plan.total_orders}</dd>
             </div>
             <div>
+              <dt className="text-3xs text-muted-foreground uppercase">Stops</dt>
+              <dd className="font-semibold tabular-nums">{plan.stops.length}</dd>
+            </div>
+            <div>
               <dt className="text-3xs text-muted-foreground uppercase">Amount</dt>
               <dd className="font-semibold tabular-nums">{formatCurrency(plan.total_amount)}</dd>
             </div>
@@ -88,8 +98,12 @@ export function PlanDetailSheet({ planId, open, onClose }: PlanDetailSheetProps)
               <dd className="font-medium tabular-nums">{plan.total_weight_kg.toFixed(1)} kg</dd>
             </div>
             <div>
-              <dt className="text-3xs text-muted-foreground uppercase">Vehicle</dt>
-              <dd className="font-medium">{plan.constraints.vehicle_type}</dd>
+              <dt className="text-3xs text-muted-foreground uppercase">Indent</dt>
+              <dd className="font-mono font-medium">{indentCode ?? 'Not converted'}</dd>
+            </div>
+            <div>
+              <dt className="text-3xs text-muted-foreground uppercase">Trip</dt>
+              <dd className="font-mono font-medium">{tripNumber ?? 'Not assigned'}</dd>
             </div>
             {exec && (
               <>
@@ -111,7 +125,7 @@ export function PlanDetailSheet({ planId, open, onClose }: PlanDetailSheetProps)
             </p>
           )}
           {plan.published_at && (
-            <p className="text-2xs text-muted-foreground mt-1">Published {formatDateTime(plan.published_at)}</p>
+            <p className="text-2xs text-muted-foreground mt-1">Shared to Operations {formatDateTime(plan.published_at)}</p>
           )}
         </div>
 

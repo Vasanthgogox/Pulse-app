@@ -9,9 +9,10 @@ interface RouteTimelineProps {
   sequence?: string[];
   className?: string;
   onMissingAddress?: (stop: PlanStop) => void;
+  emptyHint?: string;
 }
 
-export function RouteTimeline({ stops, sequence, className, onMissingAddress }: RouteTimelineProps) {
+export function RouteTimeline({ stops, sequence, className, onMissingAddress, emptyHint }: RouteTimelineProps) {
   const ordered = sequence
     ? sequence.map(id => stops.find(s => s.stop_id === id)).filter((s): s is PlanStop => Boolean(s))
     : stops;
@@ -20,7 +21,7 @@ export function RouteTimeline({ stops, sequence, className, onMissingAddress }: 
     return (
       <div className={cn('rounded-xl border border-dashed border-border p-6 text-center text-2sm text-muted-foreground', className)}>
         <LottieIcon name="map" size={72} className="mx-auto mb-3 opacity-70" />
-        Select orders to build a route
+        {emptyHint ?? 'Select orders to build a route'}
       </div>
     );
   }

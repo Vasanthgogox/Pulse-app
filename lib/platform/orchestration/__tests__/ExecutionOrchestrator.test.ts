@@ -213,6 +213,67 @@ describe('ExecutionOrchestrator.publishExecutionPlan', () => {
     expect(mockCreateFromExecutionPlan).not.toHaveBeenCalled();
   });
 
+  it('converts to indent without sharing to Operations (no markPublished)', async () => {
+    mockListPlanLinks.mockResolvedValue([
+      { id: orderId, orderNumber: 'SO-001', status: 'Pending Consolidation', executionPlanId: null },
+    ]);
+    mockFindByClientPlanId.mockResolvedValue(null);
+    mockCreateWithGraph.mockResolvedValue({ id: 'plan-new', planNumber: 'EP-0009', status: 'ready' });
+    mockCreateFromExecutionPlan.mockResolvedValue({ id: 'indent-new', indentCode: 'IND040' });
+
+    const orchestrator = createExecutionOrchestrator(new InProcessEventBus());
+    const result = await orchestrator.publishExecutionPlan(planCommand);
+
+    expect(result.indentId).toBe('indent-new');
+    expect(mockCreateWithGraph).toHaveBeenCalled();
+    expect(mockCreateFromExecutionPlan).toHaveBeenCalled();
+    expect(mockMarkPublished).not.toHaveBeenCalled();
+    expect(mockMarkPlannedForExecutionPlan).not.toHaveBeenCalled();
+  });
+
+  it('converts with supplier target 0 (bidding target is not a Convert invariant)', async () => {
+    mockListPlanLinks.mockResolvedValue([
+      { id: orderId, orderNumber: 'SO-001', status: 'Pending Consolidation', executionPlanId: null },
+    ]);
+    mockFindByClientPlanId.mockResolvedValue(null);
+    mockCreateWithGraph.mockResolvedValue({ id: 'plan-new', planNumber: 'EP-0009', status: 'ready' });
+    mockCreateFromExecutionPlan.mockResolvedValue({ id: 'indent-new', indentCode: 'IND040' });
+
+    const orchestrator = createExecutionOrchestrator(new InProcessEventBus());
+    const result = await orchestrator.publishExecutionPlan({
+      ...planCommand,
+      payload: { ...planCommand.payload, supplierTarget: 0 },
+    });
+    expect(result.indentId).toBe('indent-new');
+    expect(mockMarkPlannedForExecutionPlan).not.toHaveBeenCalled();
+    expect(mockCreateFromExecutionPlan).toHaveBeenCalledWith(
+      expect.objectContaining({ supplierTarget: 0 }),
+    );
+    expect(mockMarkPublished).not.toHaveBeenCalled();
+  });
+
+  it('shareExecutionPlanToOperations marks the plan published once', async () => {
+    mockFindPlanById.mockResolvedValue({ id: 'plan-new', planNumber: 'EP-0009', status: 'ready' });
+    mockFindIndentByExecutionPlanId.mockResolvedValue({ id: 'indent-new', indentCode: 'IND040' });
+
+    const orchestrator = createExecutionOrchestrator(new InProcessEventBus());
+    const first = await orchestrator.shareExecutionPlanToOperations({
+      workspaceId,
+      executionPlanId: 'plan-new',
+    });
+    expect(first.alreadyShared).toBe(false);
+    expect(mockMarkPublished).toHaveBeenCalledWith('plan-new');
+
+    mockMarkPublished.mockClear();
+    mockFindPlanById.mockResolvedValue({ id: 'plan-new', planNumber: 'EP-0009', status: 'published' });
+    const second = await orchestrator.shareExecutionPlanToOperations({
+      workspaceId,
+      executionPlanId: 'plan-new',
+    });
+    expect(second.alreadyShared).toBe(true);
+    expect(mockMarkPublished).not.toHaveBeenCalled();
+  });
+
   it('refuses to create a second plan when orders are already on another plan', async () => {
     mockListPlanLinks.mockResolvedValue([
       { id: orderId, orderNumber: 'SO-001', status: 'Planned', executionPlanId: 'plan-a' },
@@ -233,19 +294,5 @@ describe('ExecutionOrchestrator.publishExecutionPlan', () => {
       }),
     ).rejects.toMatchObject({ code: 'INVALID_COMMAND' });
     expect(mockCreateWithGraph).not.toHaveBeenCalled();
-  });
-
-  it('refuses to publish without a supplier target', async () => {
-    mockListPlanLinks.mockResolvedValue([
-      { id: orderId, orderNumber: 'SO-001', status: 'Pending Consolidation', executionPlanId: null },
-    ]);
-    const orchestrator = createExecutionOrchestrator(new InProcessEventBus());
-    await expect(
-      orchestrator.publishExecutionPlan({
-        ...planCommand,
-        payload: { ...planCommand.payload, supplierTarget: 0 },
-      }),
-    ).rejects.toMatchObject({ code: 'INVALID_COMMAND' });
-    expect(mockCreateFromExecutionPlan).not.toHaveBeenCalled();
   });
 });

@@ -14,6 +14,7 @@ export const OrderService = {
   markPlanned(workspaceId: WorkspaceId, orderId: string): Promise<void> {
     return orderRepository.updateStatus(workspaceId, orderId, 'Planned');
   },
+  /** Kept for non-Convert callers. Convert claims orders inside create_execution_plan_with_graph. */
   markPlannedForExecutionPlan(workspaceId: WorkspaceId, orderIds: string[], executionPlanId: string): Promise<void> {
     return orderRepository.markPlannedForExecutionPlan(workspaceId, orderIds, executionPlanId);
   },

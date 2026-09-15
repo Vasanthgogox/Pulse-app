@@ -7,7 +7,7 @@ export function isExecutionWorkspacePath(pathname: string): boolean {
   return pathname === '/execution' || pathname.startsWith('/execution/');
 }
 
-/** Commerce planning routes (Plan Builder, Published Plans). */
+/** Commerce planning routes (Plan Builder, Plan History). */
 export function isCommercePlanningPath(pathname: string): boolean {
   return pathname === '/execution-plans' || pathname.startsWith('/execution-plans/');
 }

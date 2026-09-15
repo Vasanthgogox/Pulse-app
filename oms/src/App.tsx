@@ -19,7 +19,12 @@ import { ProfilePage } from '@/pages/profile';
 import { ObservatoryPage } from '@/pages/observatory';
 import { OnboardingPage } from '@/pages/onboarding';
 import { ExecutionDashboardPage } from '@/pages/execution';
-import { ExecutionPlanStatusPage } from '@/pages/execution/detail';
+import {
+  CommerceAllocatePage,
+  CommerceIndentDetailPage,
+  CommerceTripDetailPage,
+  ExecutionPlanStatusPage,
+} from '@/pages/execution/detail';
 import { DispatchPage } from '@/pages/execution/dispatch';
 import { DriverTripPage } from '@/pages/execution/driver';
 
@@ -61,6 +66,9 @@ export default function App() {
                 <Route path="/observatory" element={<ObservatoryPage />} />
                 <Route path="/execution" element={<ExecutionDashboardPage />} />
                 <Route path="/execution/plan/:planId" element={<ExecutionPlanStatusPage />} />
+                <Route path="/execution/indent/:indentId/allocate" element={<CommerceAllocatePage />} />
+                <Route path="/execution/indent/:indentId" element={<CommerceIndentDetailPage />} />
+                <Route path="/execution/trip/:tripId" element={<CommerceTripDetailPage />} />
                 <Route path="/execution/dispatch/:jobId" element={<DispatchPage />} />
                 <Route path="/execution/driver/:jobId" element={<DriverTripPage />} />
                 <Route path="/indent-builder" element={<Navigate to="/execution-plans/build" replace />} />

@@ -13,6 +13,17 @@ module.exports = {
       },
     },
     {
+      displayName: 'oms',
+      testMatch: ['<rootDir>/oms/src/**/__tests__/**/*.test.ts'],
+      testEnvironment: 'node',
+      transform: {
+        '^.+\\.tsx?$': ['ts-jest/legacy', { isolatedModules: true }],
+      },
+      moduleNameMapper: {
+        '^@/(.*)$': '<rootDir>/oms/src/$1',
+      },
+    },
+    {
       displayName: 'app',
       preset: 'jest-expo',
       testMatch: [

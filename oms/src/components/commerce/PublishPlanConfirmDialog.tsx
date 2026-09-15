@@ -33,9 +33,13 @@ export function PublishPlanConfirmDialog({
   if (!open) return null;
 
   function handleConfirm() {
+    if (!raw.trim()) {
+      onConfirm(0);
+      return;
+    }
     const parsed = parseSupplierTargetInr(raw);
     if (parsed == null) {
-      setError('Enter the supplier target — the freight asking rate for bidding.');
+      setError('Enter a valid supplier target, or leave it blank until Share for Bidding.');
       return;
     }
     onConfirm(parsed);
@@ -55,9 +59,10 @@ export function PublishPlanConfirmDialog({
             <IndianRupee className="size-4 text-[var(--pulse-hero-blue)]" />
           </div>
           <div className="min-w-0">
-            <h2 className="text-sm font-semibold">Confirm supplier target</h2>
+            <h2 className="text-sm font-semibold">Convert to indent</h2>
             <p className="text-2xs text-muted-foreground mt-1">
-              The indent will be shared to market for bidding. Load cards show this target — not the sales invoice.
+              Creates a draft indent from this plan. It is not shared to Operations or to bidding yet.
+              Supplier target is optional until Share for Bidding.
             </p>
           </div>
         </div>
@@ -77,7 +82,7 @@ export function PublishPlanConfirmDialog({
             setRaw(v);
             setError(null);
           }}
-          placeholder="Asking rate for bidding"
+          placeholder="Optional until Share for Bidding"
           type="text"
         />
         {target != null && (
@@ -89,8 +94,8 @@ export function PublishPlanConfirmDialog({
           <Button type="button" variant="outline" size="sm" disabled={publishing} onClick={onClose}>
             Cancel
           </Button>
-          <Button type="button" size="sm" disabled={publishing || target == null} onClick={handleConfirm}>
-            {publishing ? 'Sharing…' : 'Confirm & share indent'}
+          <Button type="button" size="sm" disabled={publishing} onClick={handleConfirm}>
+            {publishing ? 'Converting…' : 'Convert to Indent'}
           </Button>
         </div>
       </div>

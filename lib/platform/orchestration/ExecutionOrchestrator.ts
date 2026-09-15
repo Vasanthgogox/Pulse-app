@@ -176,14 +176,9 @@ export function createExecutionOrchestrator(eventBus: EventBus = getPlatformEven
         );
       }
 
-      const supplierTarget = payload.supplierTarget;
-      if (!Number.isFinite(supplierTarget) || supplierTarget <= 0) {
-        fail(
-          'INVALID_COMMAND',
-          'Enter a supplier target before sharing the indent to market for bidding',
-          correlationId,
-        );
-      }
+      const supplierTarget = Number.isFinite(payload.supplierTarget)
+        ? payload.supplierTarget
+        : 0;
 
       const plan = existingPlan ?? await ExecutionPlanService.createWithGraph({
         workspaceId,
@@ -215,9 +210,6 @@ export function createExecutionOrchestrator(eventBus: EventBus = getPlatformEven
         clientName,
       });
 
-      await ExecutionPlanService.markPublished(plan.id);
-      await OrderService.markPlannedForExecutionPlan(workspaceId, orderIds, plan.id);
-
       await eventBus.publish({
         name: 'OrderReadyForDispatch',
         workspaceId,
@@ -242,6 +234,27 @@ export function createExecutionOrchestrator(eventBus: EventBus = getPlatformEven
         correlationId,
         alreadyPublished: false,
       };
+    },
+
+    async shareExecutionPlanToOperations(input: {
+      workspaceId: string;
+      executionPlanId: string;
+    }): Promise<{ executionPlanId: string; alreadyShared: boolean }> {
+      const plan =
+        (await ExecutionPlanService.findById(input.workspaceId, input.executionPlanId))
+        ?? (await ExecutionPlanService.findByClientPlanId(input.workspaceId, input.executionPlanId));
+      if (!plan) {
+        fail('INVALID_COMMAND', 'Execution plan not found', input.executionPlanId);
+      }
+      const indent = await indentRepository.findByExecutionPlanId(input.workspaceId, plan.id);
+      if (!indent) {
+        fail('INVALID_COMMAND', 'Convert this plan to an indent before sharing to Operations', plan.id);
+      }
+      if (plan.status === 'published') {
+        return { executionPlanId: plan.id, alreadyShared: true };
+      }
+      await ExecutionPlanService.markPublished(plan.id);
+      return { executionPlanId: plan.id, alreadyShared: false };
     },
   };
 }

@@ -9,7 +9,13 @@ import { Button } from '@/components/ui/button';
 import { PageToolbar } from '@/components/commerce/PageToolbar';
 import { AiInsightCard, CommandBar, RouteTimeline } from '@/components/pulse-ui';
 import { useCommerce } from '@/context/CommerceProvider';
+import { useExecution } from '@/context/ExecutionProvider';
 import { buildPublishExecutionPlanPayload } from '@/lib/execution-api';
+import {
+  findCommerceExecutionForPlan,
+  planLifecycleKind,
+  planLifecycleLabel,
+} from '@/lib/commerce-execution-status';
 import { gatewayPath } from '@/lib/platform-gateway';
 import {
   buildDefaultConstraints, buildPlanGraph, computeOptimizationMetrics,
@@ -28,8 +34,9 @@ export function ExecutionPlanBuilderPage() {
     orders, selectedOrderIds, toggleOrderSelection, clearOrderSelection,
     mergeRecommendations, applyMergeRecommendation,
     createExecutionPlan, publishExecutionPlan,
-    tenant, identity, updateOrder,
+    tenant, identity, updateOrder, plans,
   } = useCommerce();
+  const { commerceExecutions } = useExecution();
   const org = useOrganization();
 
   const [search, setSearch] = useState('');
@@ -41,8 +48,32 @@ export function ExecutionPlanBuilderPage() {
   const [showPayload, setShowPayload] = useState(false);
   const [addressStopId, setAddressStopId] = useState<string | null>(null);
   const [skippedStopIds, setSkippedStopIds] = useState<string[]>([]);
+  const [previewPlanId, setPreviewPlanId] = useState<string | null>(null);
 
   const pending = orders.filter(o => o.status === 'Pending Consolidation');
+  const savedPlans = useMemo(
+    () => [...plans].sort((a, b) => (b.updated_at || '').localeCompare(a.updated_at || '')),
+    [plans],
+  );
+  const previewPlan = previewPlanId
+    ? savedPlans.find(p => p.id === previewPlanId) ?? null
+    : null;
+  const previewExec = previewPlan
+    ? findCommerceExecutionForPlan(commerceExecutions, previewPlan)
+    : undefined;
+  const previewLifecycle = previewPlan
+    ? planLifecycleLabel(planLifecycleKind(previewPlan.status, previewExec, previewPlan.indent_id))
+    : null;
+
+  function handleToggleOrder(id: string) {
+    setPreviewPlanId(null);
+    toggleOrderSelection(id);
+  }
+
+  function handlePreviewPlan(id: string) {
+    clearOrderSelection();
+    setPreviewPlanId(current => (current === id ? null : id));
+  }
   const filtered = pending.filter(o => {
     const q = search.toLowerCase();
     return !q || o.order_number.toLowerCase().includes(q) || o.customer_name.toLowerCase().includes(q);
@@ -50,6 +81,14 @@ export function ExecutionPlanBuilderPage() {
   const selected = orders.filter(o => selectedOrderIds.includes(o.id));
   const metrics = useMemo(() => computeOptimizationMetrics(selected), [selected]);
   const constraints = useMemo(() => buildDefaultConstraints(selected), [selected]);
+  const displayStops = previewPlan ? previewPlan.stops : stops;
+  const displayRoute = previewPlan ? previewPlan.route : route;
+  const displayAllocations = previewPlan ? previewPlan.allocations : allocations;
+  const displayConstraints = previewPlan ? previewPlan.constraints : constraints;
+  const displayMetrics = previewPlan?.optimization ?? metrics;
+  const emptyRouteHint = previewPlan
+    ? 'This plan has no stops to preview'
+    : 'Select pending orders to build a route, or preview a saved plan';
 
   const addressFingerprint = selected
     .map(o => `${o.id}:${o.pickup_address.line1}:${o.pickup_address.city}:${o.drop_address.line1}:${o.drop_address.city}:${o.drop_address.pincode}`)
@@ -70,8 +109,8 @@ export function ExecutionPlanBuilderPage() {
     });
   }, [selectedOrderIds, selected.length, addressFingerprint]);
 
-  const orderedStops = route.sequence
-    .map(id => getStopById(stops, id))
+  const orderedStops = displayRoute.sequence
+    .map(id => getStopById(displayStops, id))
     .filter((s): s is NonNullable<typeof s> => Boolean(s));
 
   const addressStop = addressStopId
@@ -79,12 +118,12 @@ export function ExecutionPlanBuilderPage() {
     : null;
 
   useEffect(() => {
-    if (addressStopId) return;
+    if (previewPlan || addressStopId) return;
     const missing = stops.find(
       s => isAddressIncomplete(s.address) && !skippedStopIds.includes(s.stop_id),
     );
     if (missing) setAddressStopId(missing.stop_id);
-  }, [stops, addressStopId, skippedStopIds]);
+  }, [stops, addressStopId, skippedStopIds, previewPlan]);
 
   function orderForStop(stop: PlanStop) {
     const alloc = allocations.find(a =>
@@ -154,7 +193,7 @@ export function ExecutionPlanBuilderPage() {
 
   async function handlePublish() {
     if (!eligibleOrderIds.length) {
-      toast.error('Select pending orders that are not already on a published plan.');
+      toast.error('Select pending orders that are not already on a plan.');
       return;
     }
     if (eligibleOrderIds.length < selectedOrderIds.length) {
@@ -166,8 +205,8 @@ export function ExecutionPlanBuilderPage() {
       setAddressStopId(missing.stop_id);
       toast.error(
         missing.type === 'drop'
-          ? 'Add the client delivery address before publishing'
-          : 'Add the pickup address before publishing',
+          ? 'Add the client delivery address before converting'
+          : 'Add the pickup address before converting',
       );
       return;
     }
@@ -180,8 +219,8 @@ export function ExecutionPlanBuilderPage() {
       const plan = createExecutionPlan(eligibleOrderIds, stops, route, allocations, constraints, metrics);
       await publishExecutionPlan(plan.id, plan, { supplierTargetInr });
       setConfirmOpen(false);
-      toast.success('Indent shared to market for bidding');
-      navigate('/execution');
+      toast.success('Indent created. Review it on the plan, then Share to Operations when ready.');
+      navigate(`/execution-plans?plan=${encodeURIComponent(plan.id)}`);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to publish execution plan');
     } finally {
@@ -196,16 +235,16 @@ export function ExecutionPlanBuilderPage() {
       <PageToolbar
         title="Execution Plan Builder"
         breadcrumb={['Commerce', 'Orders', 'Plan Builder']}
-        description="Set a supplier target, confirm, then share the indent to market for bidding. Invoice value is not freight."
+        description="Merge selected orders into stops, route, and allocations. Convert to Indent when the plan is ready. Do not share to Operations from here."
       />
 
-      {topRec && (
+      {topRec && !previewPlan && (
         <AiInsightCard
           className="mb-3"
           agent="Planning Agent"
           lottie="merge"
           title={topRec.title}
-          description="Optimize utilization and cost before publishing through Pulse Gateway."
+          description="Optimize utilization and cost before converting to indent."
           metrics={[
             { label: 'Savings', value: formatCurrency(topRec.savings_inr) },
             { label: 'Utilization', value: `${topRec.vehicle_utilization_pct}%` },
@@ -234,13 +273,44 @@ export function ExecutionPlanBuilderPage() {
                   key={o.id}
                   className={`flex gap-2.5 px-3 py-2 cursor-pointer hover:bg-muted/40 ${selectedOrderIds.includes(o.id) ? 'bg-[var(--pulse-brand-soft)] border-s-2 border-s-primary' : ''}`}
                 >
-                  <input type="checkbox" checked={selectedOrderIds.includes(o.id)} onChange={() => toggleOrderSelection(o.id)} className="mt-0.5 size-3.5 accent-primary" />
+                  <input type="checkbox" checked={selectedOrderIds.includes(o.id)} onChange={() => handleToggleOrder(o.id)} className="mt-0.5 size-3.5 accent-primary" />
                   <div className="min-w-0">
                     <p className="text-2sm font-medium truncate">{o.order_number}</p>
                     <p className="text-2xs text-muted-foreground truncate">{o.customer_name} · {o.total_weight_kg} kg</p>
                   </div>
                 </label>
               ))}
+              {filtered.length === 0 && (
+                <p className="px-3 py-4 text-2xs text-muted-foreground">No pending orders</p>
+              )}
+            </div>
+          </CardShell>
+
+          <CardShell title="Completed plans">
+            <div className="max-h-[280px] overflow-y-auto divide-y divide-border">
+              {savedPlans.length === 0 ? (
+                <p className="px-3 py-4 text-2xs text-muted-foreground">No saved plans yet</p>
+              ) : (
+                savedPlans.map(plan => {
+                  const exec = findCommerceExecutionForPlan(commerceExecutions, plan);
+                  const label = planLifecycleLabel(planLifecycleKind(plan.status, exec, plan.indent_id));
+                  const active = previewPlanId === plan.id;
+                  return (
+                    <button
+                      key={plan.id}
+                      type="button"
+                      onClick={() => handlePreviewPlan(plan.id)}
+                      className={`w-full text-left px-3 py-2 hover:bg-muted/40 ${active ? 'bg-[var(--pulse-brand-soft)] border-s-2 border-s-primary' : ''}`}
+                    >
+                      <p className="text-2sm font-medium font-mono truncate">{plan.plan_number}</p>
+                      <p className="text-2xs text-muted-foreground truncate">
+                        {label} · {plan.total_orders} order{plan.total_orders !== 1 ? 's' : ''}
+                        {plan.indent_code ? ` · ${plan.indent_code}` : ''}
+                      </p>
+                    </button>
+                  );
+                })
+              )}
             </div>
           </CardShell>
         </div>
@@ -248,16 +318,21 @@ export function ExecutionPlanBuilderPage() {
         <div className="xl:col-span-5 flex flex-col gap-3 min-w-0">
           <CardShell title="Stops (definitions)">
             <div className="p-3">
-              <RouteTimeline stops={stops} onMissingAddress={stop => setAddressStopId(stop.stop_id)} />
+              <RouteTimeline
+                stops={displayStops}
+                emptyHint={emptyRouteHint}
+                onMissingAddress={previewPlan ? undefined : stop => setAddressStopId(stop.stop_id)}
+              />
             </div>
           </CardShell>
 
           <CardShell title="Route (optimized sequence)">
             <div className="p-3">
               <RouteTimeline
-                stops={stops}
-                sequence={route.sequence}
-                onMissingAddress={stop => setAddressStopId(stop.stop_id)}
+                stops={displayStops}
+                sequence={displayRoute.sequence}
+                emptyHint={emptyRouteHint}
+                onMissingAddress={previewPlan ? undefined : stop => setAddressStopId(stop.stop_id)}
               />
             </div>
             {orderedStops.length > 0 && (
@@ -265,10 +340,12 @@ export function ExecutionPlanBuilderPage() {
                 {orderedStops.map((s, idx) => (
                   <div key={s.stop_id} className="flex items-center gap-2 px-3 py-1.5">
                     <div className="flex-1 text-2sm font-medium truncate">{s.label}</div>
-                    <div className="flex flex-col">
-                      <button type="button" onClick={() => setRoute(reorderRoute(route, idx, -1))} className="p-0.5 hover:bg-muted rounded"><ArrowUp className="size-3" /></button>
-                      <button type="button" onClick={() => setRoute(reorderRoute(route, idx, 1))} className="p-0.5 hover:bg-muted rounded"><ArrowDown className="size-3" /></button>
-                    </div>
+                    {!previewPlan ? (
+                      <div className="flex flex-col">
+                        <button type="button" onClick={() => setRoute(reorderRoute(route, idx, -1))} className="p-0.5 hover:bg-muted rounded"><ArrowUp className="size-3" /></button>
+                        <button type="button" onClick={() => setRoute(reorderRoute(route, idx, 1))} className="p-0.5 hover:bg-muted rounded"><ArrowDown className="size-3" /></button>
+                      </div>
+                    ) : null}
                   </div>
                 ))}
               </div>
@@ -277,13 +354,15 @@ export function ExecutionPlanBuilderPage() {
 
           <CardShell title="Shipment allocations">
             <div className="p-3 space-y-1.5">
-              {allocations.map(a => {
+              {displayAllocations.length === 0 ? (
+                <p className="text-2xs text-muted-foreground">No allocations</p>
+              ) : displayAllocations.map(a => {
                 const o = orders.find(x => x.id === a.order_id);
-                const pu = getStopById(stops, a.pickup_stop_id);
-                const dr = getStopById(stops, a.drop_stop_id);
+                const pu = getStopById(displayStops, a.pickup_stop_id);
+                const dr = getStopById(displayStops, a.drop_stop_id);
                 return (
                   <div key={a.allocation_id} className="rounded-md border px-2.5 py-1.5 text-2xs">
-                    <span className="font-medium">{o?.order_number}</span>
+                    <span className="font-medium">{o?.order_number ?? a.order_id}</span>
                     <span className="text-muted-foreground"> · {pu?.label} → {dr?.label}</span>
                   </div>
                 );
@@ -293,38 +372,61 @@ export function ExecutionPlanBuilderPage() {
         </div>
 
         <div className="xl:col-span-3 flex flex-col gap-3 min-w-0 xl:sticky xl:top-[calc(var(--header-total-height)+0.75rem)]">
-          <CardShell title="Selected">
+          <CardShell title={previewPlan ? 'Plan preview' : 'Selected'}>
             <div className="p-3 space-y-2">
-              <p className="text-2xl font-bold tabular-nums">{selectedOrderIds.length}</p>
-              <Row icon={Weight} label="Weight" value={`${selected.reduce((s,o)=>s+o.total_weight_kg,0).toFixed(1)} kg`} />
-              <Row icon={Truck} label="Vehicle" value={constraints.vehicle_type ?? '—'} />
-              <Row label="Merge score" value={String(metrics.merge_score)} />
-              <div className="h-1.5 rounded-full bg-muted overflow-hidden">
-                <div className="h-full bg-primary transition-all" style={{ width: `${metrics.vehicle_utilization_pct}%` }} />
-              </div>
-              {selectedOrderIds.length > 0 && (
-                <button type="button" onClick={clearOrderSelection} className="text-2xs text-muted-foreground hover:text-destructive">Clear</button>
+              {previewPlan ? (
+                <>
+                  <p className="text-sm font-mono font-bold truncate">{previewPlan.plan_number}</p>
+                  <p className="text-2xs text-muted-foreground">{previewLifecycle}</p>
+                  <Row label="Orders" value={String(previewPlan.total_orders)} />
+                  <Row icon={Weight} label="Weight" value={`${previewPlan.total_weight_kg.toFixed(1)} kg`} />
+                  <Row icon={Truck} label="Vehicle" value={displayConstraints.vehicle_type ?? '—'} />
+                  <Row label="Indent" value={previewPlan.indent_code ?? previewExec?.indent?.indentNumber ?? '—'} />
+                  {displayMetrics.merge_score != null && (
+                    <Row label="Merge score" value={String(displayMetrics.merge_score)} />
+                  )}
+                  <button type="button" onClick={() => setPreviewPlanId(null)} className="text-2xs text-muted-foreground hover:text-destructive">Clear preview</button>
+                </>
+              ) : (
+                <>
+                  <p className="text-2xl font-bold tabular-nums">{selectedOrderIds.length}</p>
+                  <Row icon={Weight} label="Weight" value={`${selected.reduce((s,o)=>s+o.total_weight_kg,0).toFixed(1)} kg`} />
+                  <Row icon={Truck} label="Vehicle" value={constraints.vehicle_type ?? '—'} />
+                  <Row label="Merge score" value={String(metrics.merge_score)} />
+                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                    <div className="h-full bg-primary transition-all" style={{ width: `${metrics.vehicle_utilization_pct}%` }} />
+                  </div>
+                  {selectedOrderIds.length > 0 && (
+                    <button type="button" onClick={clearOrderSelection} className="text-2xs text-muted-foreground hover:text-destructive">Clear</button>
+                  )}
+                </>
               )}
             </div>
           </CardShell>
 
           <CardShell title="Execution constraints">
             <div className="p-3 grid grid-cols-2 gap-1.5">
-              <Constraint label="Vehicle" value={constraints.vehicle_type ?? '—'} icon={Truck} />
-              <Constraint label="Temp" value={constraints.temperature} icon={Thermometer} />
-              <Constraint label="Max weight" value={`${constraints.max_weight_kg} kg`} icon={Weight} />
-              <Constraint label="Max volume" value={`${constraints.max_volume_m3} m³`} />
-              <Constraint label="SLA" value={`${constraints.delivery_sla_hours}h`} />
-              <Constraint label="Fragile" value={constraints.fragile ? 'Yes' : 'No'} icon={Shield} />
+              <Constraint label="Vehicle" value={displayConstraints.vehicle_type ?? '—'} icon={Truck} />
+              <Constraint label="Temp" value={displayConstraints.temperature} icon={Thermometer} />
+              <Constraint label="Max weight" value={`${displayConstraints.max_weight_kg} kg`} icon={Weight} />
+              <Constraint label="Max volume" value={`${displayConstraints.max_volume_m3} m³`} />
+              <Constraint label="SLA" value={`${displayConstraints.delivery_sla_hours}h`} />
+              <Constraint label="Fragile" value={displayConstraints.fragile ? 'Yes' : 'No'} icon={Shield} />
             </div>
           </CardShell>
 
-          <Button className="w-full" size="md" disabled={!eligibleOrderIds.length || publishing} onClick={handlePublish}>
-            {publishing ? <Loader2 className="size-3.5 animate-spin" /> : <GitMerge className="size-3.5" />}
-            Publish & share indent
-          </Button>
+          {previewPlan ? (
+            <Button className="w-full" size="md" variant="outline" onClick={() => navigate(`/execution-plans?plan=${encodeURIComponent(previewPlan.id)}`)}>
+              Open plan details
+            </Button>
+          ) : (
+            <Button className="w-full" size="md" disabled={!eligibleOrderIds.length || publishing} onClick={handlePublish}>
+              {publishing ? <Loader2 className="size-3.5 animate-spin" /> : <GitMerge className="size-3.5" />}
+              Convert to Indent
+            </Button>
+          )}
 
-          {previewPayload && (
+          {previewPayload && !previewPlan && (
             <CardShell title="Gateway command">
               <button type="button" onClick={() => setShowPayload(v => !v)} className="w-full text-left px-3 py-1.5 text-3xs text-muted-foreground font-mono">
                 POST {gatewayPath('execution', '/execution-plans')} {showPayload ? '▲' : '▼'}

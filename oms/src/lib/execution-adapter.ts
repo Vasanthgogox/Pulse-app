@@ -23,6 +23,8 @@ export interface ReceivePlanResult {
   jobId:       string;
   referenceId: string;
   indentId:    string;
+  indentCode:  string;
+  executionPlanId: string;
   mode:        'execution-api';
 }
 
@@ -59,6 +61,8 @@ export async function receiveExecutionPlan(
     jobId,
     referenceId: accepted.executionReferenceId,
     indentId:    accepted.indentId,
+    indentCode:  accepted.indentCode,
+    executionPlanId: accepted.executionPlanId,
     mode:        'execution-api',
   };
 }

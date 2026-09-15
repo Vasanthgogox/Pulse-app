@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { EntityFlexSheet } from '@/components/commerce/EntityFlexSheet';
 import { FormField, SpecRow, selectClass } from '@/components/commerce/FormField';
@@ -8,7 +7,6 @@ import { StatusDotBadge, type StatusDotTone } from '@/components/commerce/Status
 import { useCommerce } from '@/context/CommerceProvider';
 import { useExecution } from '@/context/ExecutionProvider';
 import { useOrganization } from '@/context/OrganizationProvider';
-import { coreIndentUrl } from '@/lib/core-navigation';
 import {
   findCommerceExecutionForPlan,
   fulfillmentOrderStatusLabel,
@@ -163,9 +161,9 @@ export function OrderDetailSheet({ orderId, open, onClose }: OrderDetailSheetPro
               {exec?.indent && (
                 <p className="text-2xs">
                   Indent{' '}
-                  <a href={coreIndentUrl(exec.indent.id)} target="_blank" rel="noopener noreferrer" className="font-mono text-primary hover:underline inline-flex items-center gap-1">
-                    {exec.indent.indentNumber} <ExternalLink className="size-3" />
-                  </a>
+                  <Link to={`/execution/indent/${exec.indent.id}`} className="font-mono text-primary hover:underline">
+                    {exec.indent.indentNumber}
+                  </Link>
                 </p>
               )}
               <p className="text-2xs text-muted-foreground">

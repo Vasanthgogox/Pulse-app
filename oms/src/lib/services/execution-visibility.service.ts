@@ -51,6 +51,8 @@ export interface CommerceExecutionStop {
   label:      string;
   city:       string;
   sourceType: string;
+  /** stop_execution_state.status for this plan stop on the linked trip — null until a trip exists. */
+  executionStatus: string | null;
 }
 
 export interface CommerceExecutionIndent {
@@ -60,6 +62,13 @@ export interface CommerceExecutionIndent {
   status:         string;
   pickupArea:     string;
   dropLocation:   string;
+  clientName:     string | null;
+  /** Sale value on the indent (Commerce commercial value), not supplier rate. */
+  clientPrice:    number | null;
+  vehicleType:    string | null;
+  loadType:       string | null;
+  weightKg:       number | null;
+  pickupDate:     string | null;
   /** Target/asking transport rate set at indent creation — NEVER an authoritative cost. Null if unset/zero. */
   supplierTarget: number | null;
   circulationTarget: string | null;
@@ -75,6 +84,8 @@ export interface CommerceExecutionTrip {
   /** Authoritative transport cost once a trip exists. */
   supplierRate: number;
   supplierName: string | null;
+  /** Core trips.driver_id — allocation boundary for UNASSIGNED vs ASSIGNED. */
+  driverId:     string | null;
   driverName:   string | null;
   vehicleNumber: string | null;
   pickupArea:   string;
@@ -88,6 +99,10 @@ export interface CommerceExecutionOrder {
   amount:       number;
   /** Raw stop_execution_state.status for this order's own drop stop — null if no trip/stop-state row exists yet. */
   deliveryStatus: string | null;
+  /** Lagging pickup SES across this order's pickup allocations. */
+  pickupStatus?: string | null;
+  pickupLabel?: string | null;
+  dropLabel?: string | null;
 }
 
 export interface CommerceExecution {
@@ -104,6 +119,8 @@ export interface CommerceExecution {
   stops:           CommerceExecutionStop[];
   indent:          CommerceExecutionIndent | null;
   trip:            CommerceExecutionTrip | null;
+  /** All indent-linked trip rows (children). `trip` is pickBestTrip for group status. */
+  trips?:          CommerceExecutionTrip[];
   /** Supplementary quote observability — not a lifecycle driver. */
   bidCount:        number;
   bestBidAmount:   number | null;
@@ -126,6 +143,7 @@ interface TripRow {
   trip_number: string | null;
   status: string;
   supplier_rate: number | null;
+  driver_id: string | null;
   driver_display_name: string | null;
   vehicle_display_number: string | null;
   pickup_area: string | null;
@@ -139,6 +157,12 @@ interface IndentRow {
   status: string;
   pickup_area: string | null;
   drop_location: string | null;
+  client_name: string | null;
+  client_price: number | null;
+  vehicle_type: string | null;
+  load_type: string | null;
+  weight: number | null;
+  pickup_date: string | null;
   supplier_target: number | null;
   circulation_target: string | null;
   assigned_supplier_id: string | null;
@@ -167,6 +191,7 @@ interface SalesOrderRow {
 }
 
 interface AllocationRow {
+  pickup_stop_id: string | null;
   drop_stop_id: string;
   sales_order_lines: { sales_order_id: string } | { sales_order_id: string }[] | null;
 }
@@ -175,9 +200,10 @@ const PERSISTED_PLAN_SELECT = `
   id, plan_number, status, correlation_id, published_at, created_at,
   stops:execution_plan_stops(id, stop_type, sequence, label, display_name, city, source_type, pod_required),
   indents(
-    id, indent_number, status, pickup_area, drop_location, supplier_target,
+    id, indent_number, status, pickup_area, drop_location, client_name, client_price,
+    vehicle_type, load_type, weight, pickup_date, supplier_target,
     circulation_target, assigned_supplier_id, assigned_supplier_rate,
-    trips!trips_indent_id_fkey(id, trip_number, status, supplier_rate, driver_display_name, vehicle_display_number, pickup_area, drop_location, suppliers(name))
+    trips!trips_indent_id_fkey(id, trip_number, status, supplier_rate, driver_id, driver_display_name, vehicle_display_number, pickup_area, drop_location, suppliers(name))
   )
 `.trim();
 
@@ -213,6 +239,67 @@ function pickBestTrip(trips: TripRow[] | TripRow | null | undefined): TripRow | 
   return pool.slice().sort((a, b) => tripProgressRank(b.status) - tripProgressRank(a.status))[0] ?? null;
 }
 
+function sesRank(status: string | null | undefined): number {
+  const s = (status ?? '').trim().toLowerCase();
+  if (s === 'completed') return 4;
+  if (s === 'arrived') return 3;
+  if (s === 'in_progress' || s === 'loading') return 2;
+  if (s === 'pending') return 1;
+  return 0;
+}
+
+function sesForStop(
+  stopId: string,
+  tripIds: string[],
+  stopStatusByTripAndStop: Map<string, string>,
+): string | null {
+  let best: string | null = null;
+  for (const tripId of tripIds) {
+    const status = stopStatusByTripAndStop.get(`${tripId}:${stopId}`);
+    if (!status) continue;
+    if (!best || sesRank(status) > sesRank(best)) best = status;
+  }
+  return best;
+}
+
+function laggingSes(
+  stopIds: string[],
+  tripIds: string[],
+  stopStatusByTripAndStop: Map<string, string>,
+): string | null {
+  if (!stopIds.length) return null;
+  const statuses = stopIds.map(id => sesForStop(id, tripIds, stopStatusByTripAndStop));
+  if (statuses.every(s => s == null)) return null;
+  return statuses.reduce<string | null>((worst, s) => {
+    if (worst == null) return s;
+    if (s == null) return worst;
+    return sesRank(s) < sesRank(worst) ? s : worst;
+  }, null);
+}
+
+function pushUnique(map: Map<string, string[]>, key: string, value: string | null | undefined) {
+  if (!value) return;
+  const list = map.get(key) ?? [];
+  if (!list.includes(value)) list.push(value);
+  map.set(key, list);
+}
+
+function tripRowToExec(tripRow: TripRow, indentRow: IndentRow | null): CommerceExecutionTrip {
+  const supplier = firstOf(tripRow.suppliers);
+  return {
+    id:           tripRow.id,
+    tripNumber:   tripRow.trip_number ?? tripRow.id,
+    status:       tripRow.status,
+    supplierRate: tripRow.supplier_rate ?? 0,
+    supplierName: supplier?.name ?? null,
+    driverId:     tripRow.driver_id ?? null,
+    driverName:   tripRow.driver_display_name ?? null,
+    vehicleNumber: tripRow.vehicle_display_number ?? null,
+    pickupArea:   tripRow.pickup_area ?? indentRow?.pickup_area ?? '',
+    dropLocation: tripRow.drop_location ?? indentRow?.drop_location ?? '',
+  };
+}
+
 function pickBestIndent(indents: IndentRow[] | IndentRow | null | undefined): IndentRow | null {
   const list = asArray(indents);
   if (!list.length) return null;
@@ -229,7 +316,10 @@ function pickBestIndent(indents: IndentRow[] | IndentRow | null | undefined): In
     ?? list[0];
 }
 
-function stopRowToCommerceStop(row: StopRow): CommerceExecutionStop {
+function stopRowToCommerceStop(
+  row: StopRow,
+  executionStatus: string | null,
+): CommerceExecutionStop {
   return {
     id:         row.id,
     type:       row.stop_type,
@@ -237,6 +327,7 @@ function stopRowToCommerceStop(row: StopRow): CommerceExecutionStop {
     label:      row.display_name ?? row.label ?? (row.stop_type === 'pickup' ? 'Pickup' : 'Drop'),
     city:       row.city ?? '',
     sourceType: row.source_type ?? 'manual',
+    executionStatus,
   };
 }
 
@@ -245,10 +336,13 @@ function planRowToCommerceExecution(
   orderSummary: { count: number; amount: number; weightKg: number },
   orders: CommerceExecutionOrder[],
   quotes: { bidCount: number; bestBidAmount: number | null },
+  stopStatusByTripAndStop: Map<string, string>,
 ): CommerceExecution {
   const indentRow = pickBestIndent(row.indents);
-  const tripRow = indentRow ? pickBestTrip(indentRow.trips) : null;
-  const supplier = tripRow ? firstOf(tripRow.suppliers) : null;
+  const tripRows = indentRow ? asArray(indentRow.trips) : [];
+  const tripRow = pickBestTrip(tripRows);
+  const tripIds = tripRows.map(t => t.id);
+  const trips = tripRows.map(t => tripRowToExec(t, indentRow));
   const stops = (row.stops ?? []).slice().sort((a, b) => a.sequence - b.sequence);
 
   return {
@@ -262,13 +356,22 @@ function planRowToCommerceExecution(
     totalAmount:     orderSummary.amount,
     totalWeightKg:   orderSummary.weightKg,
     stopCount:       stops.length,
-    stops:           stops.map(stopRowToCommerceStop),
+    stops:           stops.map(s => stopRowToCommerceStop(
+      s,
+      sesForStop(s.id, tripIds, stopStatusByTripAndStop),
+    )),
     indent: indentRow ? {
       id:             indentRow.id,
       indentNumber:   indentRow.indent_number ?? indentRow.id,
       status:         indentRow.status,
       pickupArea:     indentRow.pickup_area ?? '',
       dropLocation:   indentRow.drop_location ?? '',
+      clientName:     indentRow.client_name ?? null,
+      clientPrice:    indentRow.client_price && indentRow.client_price > 0 ? indentRow.client_price : null,
+      vehicleType:    indentRow.vehicle_type ?? null,
+      loadType:       indentRow.load_type ?? null,
+      weightKg:       indentRow.weight && indentRow.weight > 0 ? indentRow.weight : null,
+      pickupDate:     indentRow.pickup_date ?? null,
       supplierTarget: indentRow.supplier_target && indentRow.supplier_target > 0 ? indentRow.supplier_target : null,
       circulationTarget: indentRow.circulation_target ?? null,
       assignedSupplierId: indentRow.assigned_supplier_id ?? null,
@@ -276,17 +379,8 @@ function planRowToCommerceExecution(
         ? indentRow.assigned_supplier_rate
         : null,
     } : null,
-    trip: tripRow ? {
-      id:           tripRow.id,
-      tripNumber:   tripRow.trip_number ?? tripRow.id,
-      status:       tripRow.status,
-      supplierRate: tripRow.supplier_rate ?? 0,
-      supplierName: supplier?.name ?? null,
-      driverName:   tripRow.driver_display_name ?? null,
-      vehicleNumber: tripRow.vehicle_display_number ?? null,
-      pickupArea:   tripRow.pickup_area ?? indentRow?.pickup_area ?? '',
-      dropLocation: tripRow.drop_location ?? indentRow?.drop_location ?? '',
-    } : null,
+    trip: tripRow ? tripRowToExec(tripRow, indentRow) : null,
+    trips,
     bidCount: quotes.bidCount,
     bestBidAmount: quotes.bestBidAmount,
     orders,
@@ -358,7 +452,7 @@ async function hydrateTripsFromIndentLinks(planRows: PlanRow[]): Promise<void> {
 
   const { data, error } = await sb
     .from('trips')
-    .select('id, trip_number, status, supplier_rate, driver_display_name, vehicle_display_number, pickup_area, drop_location, indent_id, source_indent_id, suppliers(name)')
+    .select('id, trip_number, status, supplier_rate, driver_id, driver_display_name, vehicle_display_number, pickup_area, drop_location, indent_id, source_indent_id, suppliers(name)')
     .or(`indent_id.in.(${indentIds.join(',')}),source_indent_id.in.(${indentIds.join(',')})`);
   if (error || !data?.length) return;
 
@@ -387,30 +481,59 @@ async function hydrateTripsFromIndentLinks(planRows: PlanRow[]): Promise<void> {
   }
 }
 
-async function queryCommerceExecutions(organizationId: string): Promise<CommerceExecution[]> {
+async function fetchPlanRowsForOrg(
+  organizationId: string,
+  mode: { kind: 'published' } | { kind: 'lookup'; planId?: string; indentId?: string },
+): Promise<PlanRow[]> {
   const sb = getSupabase();
   if (!sb || !organizationId) return [];
 
-  const { data: plans, error: planErr } = await sb
+  if (mode.kind === 'lookup' && mode.indentId) {
+    const { data: indent, error: indentErr } = await sb
+      .from('indents')
+      .select('execution_plan_id')
+      .eq('id', mode.indentId)
+      .eq('organization_id', organizationId)
+      .is('deleted_at', null)
+      .maybeSingle();
+    if (indentErr) throw indentErr;
+    const planId = indent?.execution_plan_id ? String(indent.execution_plan_id) : '';
+    if (!planId) return [];
+    return fetchPlanRowsForOrg(organizationId, { kind: 'lookup', planId });
+  }
+
+  let query = sb
     .from('execution_plans')
     .select(PERSISTED_PLAN_SELECT)
     .eq('organization_id', organizationId)
-    .eq('status', 'published')
-    .is('deleted_at', null)
-    .order('published_at', { ascending: false });
-  if (planErr) throw planErr;
+    .is('deleted_at', null);
 
-  const planRows = (plans ?? []) as unknown as PlanRow[];
+  if (mode.kind === 'published') {
+    query = query.eq('status', 'published').order('published_at', { ascending: false });
+  } else if (mode.planId) {
+    query = query.or(`id.eq.${mode.planId},correlation_id.eq.${mode.planId}`);
+  } else {
+    return [];
+  }
+
+  const { data: plans, error: planErr } = await query;
+  if (planErr) throw planErr;
+  return (plans ?? []) as unknown as PlanRow[];
+}
+
+async function queryCommerceExecutionsFromRows(planRows: PlanRow[]): Promise<CommerceExecution[]> {
   if (!planRows.length) return [];
+  const sb = getSupabase();
+  if (!sb) return [];
 
   const planIds = planRows.map(p => p.id);
   await hydrateTripsFromIndentLinks(planRows);
 
-  const tripIdByPlanId = new Map<string, string>();
+  const tripIdsByPlanId = new Map<string, string[]>();
   for (const row of planRows) {
     const indentRow = pickBestIndent(row.indents);
-    const tripRow = indentRow ? pickBestTrip(indentRow.trips) : null;
-    if (tripRow) tripIdByPlanId.set(row.id, tripRow.id);
+    const ids = indentRow ? asArray(indentRow.trips).map(t => t.id) : [];
+    if (ids.length) tripIdsByPlanId.set(row.id, ids);
   }
 
   const { data: orders, error: orderErr } = await sb
@@ -422,20 +545,21 @@ async function queryCommerceExecutions(organizationId: string): Promise<Commerce
 
   const { data: allocations, error: allocErr } = await sb
     .from('shipment_allocations')
-    .select('drop_stop_id, sales_order_lines(sales_order_id)')
+    .select('pickup_stop_id, drop_stop_id, sales_order_lines(sales_order_id)')
     .in('execution_plan_id', planIds);
   if (allocErr) throw allocErr;
   const allocationRows = (allocations ?? []) as unknown as AllocationRow[];
 
-  const dropStopIdByOrderId = new Map<string, string>();
+  const pickupStopIdsByOrderId = new Map<string, string[]>();
+  const dropStopIdsByOrderId = new Map<string, string[]>();
   for (const alloc of allocationRows) {
     const line = firstOf(alloc.sales_order_lines);
-    if (line && !dropStopIdByOrderId.has(line.sales_order_id)) {
-      dropStopIdByOrderId.set(line.sales_order_id, alloc.drop_stop_id);
-    }
+    if (!line) continue;
+    pushUnique(pickupStopIdsByOrderId, line.sales_order_id, alloc.pickup_stop_id);
+    pushUnique(dropStopIdsByOrderId, line.sales_order_id, alloc.drop_stop_id);
   }
 
-  const tripIds = [...new Set(tripIdByPlanId.values())];
+  const tripIds = [...new Set([...tripIdsByPlanId.values()].flat())];
   const stopStatusByTripAndStop = new Map<string, string>();
   if (tripIds.length) {
     const { data: stopStates, error: stopErr } = await sb
@@ -458,11 +582,11 @@ async function queryCommerceExecutions(organizationId: string): Promise<Commerce
     cur.weightKg += o.total_weight_kg ?? 0;
     summaryByPlan.set(o.execution_plan_id, cur);
 
-    const tripId = tripIdByPlanId.get(o.execution_plan_id);
-    const dropStopId = dropStopIdByOrderId.get(o.id);
-    const deliveryStatus = tripId && dropStopId
-      ? stopStatusByTripAndStop.get(`${tripId}:${dropStopId}`) ?? null
-      : null;
+    const tripIdsForPlan = tripIdsByPlanId.get(o.execution_plan_id) ?? [];
+    const dropStopIds = dropStopIdsByOrderId.get(o.id) ?? [];
+    const pickupStopIds = pickupStopIdsByOrderId.get(o.id) ?? [];
+    const deliveryStatus = laggingSes(dropStopIds, tripIdsForPlan, stopStatusByTripAndStop);
+    const pickupStatus = laggingSes(pickupStopIds, tripIdsForPlan, stopStatusByTripAndStop);
 
     const list = ordersByPlan.get(o.execution_plan_id) ?? [];
     list.push({
@@ -471,6 +595,7 @@ async function queryCommerceExecutions(organizationId: string): Promise<Commerce
       customerName:   client?.name ?? '—',
       amount:         o.total_amount ?? 0,
       deliveryStatus,
+      pickupStatus,
     });
     ordersByPlan.set(o.execution_plan_id, list);
   }
@@ -484,21 +609,57 @@ async function queryCommerceExecutions(organizationId: string): Promise<Commerce
   const quoteSummaries = await indentRepository.listQuoteSummaries(quoteIndentIds);
   const quoteByIndent = new Map(quoteSummaries.map(q => [q.indentId, q]));
 
-  return planRows.map(row => {
+  const mapped = planRows.map(row => {
     const indentId = indentIdByPlanId.get(row.id);
     const quotes = indentId
       ? quoteByIndent.get(indentId) ?? { bidCount: 0, bestBidAmount: null }
       : { bidCount: 0, bestBidAmount: null };
-    return planRowToCommerceExecution(
+    const exec = planRowToCommerceExecution(
       row,
       summaryByPlan.get(row.id) ?? { count: 0, amount: 0, weightKg: 0 },
       ordersByPlan.get(row.id) ?? [],
       quotes,
+      stopStatusByTripAndStop,
     );
+    const stopById = new Map(exec.stops.map(s => [s.id, s]));
+    exec.orders = exec.orders.map(order => {
+      const pickups = pickupStopIdsByOrderId.get(order.id) ?? [];
+      const drops = dropStopIdsByOrderId.get(order.id) ?? [];
+      return {
+        ...order,
+        pickupLabel: pickups.map(id => stopById.get(id)?.label).filter(Boolean).join(' · ') || null,
+        dropLabel: drops.map(id => stopById.get(id)?.label).filter(Boolean).join(' · ') || null,
+      };
+    });
+    return exec;
   });
+  return mapped;
 }
 
 /** Rich, lifecycle-oriented shape for the Commerce Execution UI (plan → orders → stops → indent → trip). */
 export async function fetchCommerceExecutions(organizationId: string): Promise<CommerceExecution[]> {
-  return queryCommerceExecutions(organizationId);
+  const planRows = await fetchPlanRowsForOrg(organizationId, { kind: 'published' });
+  return queryCommerceExecutionsFromRows(planRows);
+}
+
+/**
+ * One batched plan graph (same joins as Operations), including unpublished
+ * plans so Plan History can View/Edit the indent before Share to Operations.
+ */
+export async function fetchCommerceExecutionByLookup(
+  organizationId: string,
+  lookup: { planId?: string; indentId?: string },
+): Promise<CommerceExecution | null> {
+  if (!lookup.planId && !lookup.indentId) return null;
+  const planRows = await fetchPlanRowsForOrg(organizationId, { kind: 'lookup', ...lookup });
+  const rows = await queryCommerceExecutionsFromRows(planRows);
+  if (lookup.indentId) {
+    return rows.find(e => e.indent?.id === lookup.indentId) ?? rows[0] ?? null;
+  }
+  if (lookup.planId) {
+    return rows.find(e => e.executionPlanId === lookup.planId || e.correlationId === lookup.planId)
+      ?? rows[0]
+      ?? null;
+  }
+  return rows[0] ?? null;
 }

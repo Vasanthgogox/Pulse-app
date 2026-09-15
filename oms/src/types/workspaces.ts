@@ -34,7 +34,7 @@ export const PULSE_WORKSPACES: PulseWorkspace[] = [
       { label: 'Consignees', path: '/customers' },
       { label: 'Warehouses', path: '/warehouses' },
       { label: 'Plan Builder', path: '/execution-plans/build' },
-      { label: 'Published Plans', path: '/execution-plans' },
+      { label: 'Plan History', path: '/execution-plans' },
       { label: 'Observatory', path: '/observatory' },
       { label: 'Settings', path: '/settings' },
     ],

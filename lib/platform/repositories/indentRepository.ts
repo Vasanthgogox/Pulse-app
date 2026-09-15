@@ -13,6 +13,47 @@ export type CreatedPlanIndentRef = {
   indentCode: string;
 };
 
+/** Convert-to-indent insert: Give Load draft, not broadcast/share. */
+export function buildIndentInsertFromExecutionPlan(input: {
+  workspaceId: WorkspaceId;
+  executionPlanId: string;
+  vehicleType?: string;
+  orderCount: number;
+  totalWeightKg: number;
+  totalAmount: number;
+  supplierTarget: number;
+  pickupSummary: string;
+  dropSummary: string;
+  requestedBy: string;
+  clientName?: string | null;
+  nowIso?: string;
+}): Record<string, unknown> {
+  const nowIso = input.nowIso ?? new Date().toISOString();
+  const target = Number.isFinite(input.supplierTarget) ? input.supplierTarget : 0;
+  return {
+    organization_id: input.workspaceId,
+    execution_plan_id: input.executionPlanId,
+    sales_order_id: null,
+    pickup_area: input.pickupSummary,
+    drop_location: input.dropSummary,
+    client_name:
+      (input.clientName ?? '').trim() ||
+      `${input.orderCount} merged orders`,
+    client_price: input.totalAmount,
+    supplier_target: target,
+    sale_rate_basis: 'per_trip',
+    vehicle_type: input.vehicleType ?? 'Truck',
+    load_type: 'General',
+    weight: Math.max(input.totalWeightKg, 1),
+    status: 'draft',
+    shared_at: null,
+    last_saved_at: nowIso,
+    owner_user_id: input.requestedBy,
+    created_by_user_id: input.requestedBy,
+    indent_number: null,
+  };
+}
+
 export const indentRepository = {
   async findByExecutionPlanId(
     workspaceId: WorkspaceId,
@@ -47,27 +88,7 @@ export const indentRepository = {
     await ensurePublicUserRecord(input.requestedBy);
     const { data, error } = await requirePlatformDb()
       .from('indents')
-      .insert({
-        organization_id: input.workspaceId,
-        execution_plan_id: input.executionPlanId,
-        sales_order_id: null,
-        pickup_area: input.pickupSummary,
-        drop_location: input.dropSummary,
-        client_name:
-          (input.clientName ?? "").trim() ||
-          `${input.orderCount} merged orders`,
-        client_price: input.totalAmount,
-        supplier_target: input.supplierTarget,
-        sale_rate_basis: 'per_trip',
-        vehicle_type: input.vehicleType ?? 'Truck',
-        load_type: 'General',
-        weight: Math.max(input.totalWeightKg, 1),
-        status: 'broadcast',
-        shared_at: new Date().toISOString(),
-        owner_user_id: input.requestedBy,
-        created_by_user_id: input.requestedBy,
-        indent_number: null,
-      })
+      .insert(buildIndentInsertFromExecutionPlan(input))
       .select('id,indent_number')
       .single();
     if (error) {

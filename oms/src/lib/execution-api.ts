@@ -152,8 +152,20 @@ export function buildPublishExecutionPlanPayload(
 export async function publishPlanToExecution(
   command: PublishExecutionPlanCommand,
   correlationId?: string,
-): Promise<{ accepted: boolean; referenceId: string; correlationId: string }> {
-  const response = await gatewayRequest<{ referenceId: string }>({
+): Promise<{
+  accepted: boolean;
+  referenceId: string;
+  correlationId: string;
+  indentId: string;
+  indentCode: string;
+  executionPlanId: string;
+}> {
+  const response = await gatewayRequest<{
+    referenceId: string;
+    indentId: string;
+    indentCode: string;
+    executionPlanId: string;
+  }>({
     service: 'execution',
     path:    '/execution-plans',
     method:  'POST',
@@ -167,6 +179,9 @@ export async function publishPlanToExecution(
     accepted:      response.ok,
     referenceId:   response.data?.referenceId ?? `EXEC-${command.planNumber}`,
     correlationId: response.correlationId,
+    indentId:      response.data?.indentId ?? '',
+    indentCode:    response.data?.indentCode ?? response.data?.referenceId ?? '',
+    executionPlanId: response.data?.executionPlanId ?? '',
   };
 }
 

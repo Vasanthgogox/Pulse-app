@@ -41,15 +41,11 @@ export const executionPlanRepository = {
   },
 
   /**
-   * Creates the execution_plans row plus its stops and order-line allocations
-   * atomically via create_execution_plan_with_graph() (migration
-   * 20270913091416). Previously this was three independent Supabase calls
-   * (plan insert, stops insert, allocations insert) — a failure between any
-   * of them could leave a committed, stopless "orphan" plan that the
-   * idempotency lookup would then silently reuse forever. A single RPC call
-   * is one Postgres transaction: any exception (including a CHECK-constraint
-   * violation) rolls back everything, so only a complete graph or no graph
-   * at all can ever be committed.
+   * Creates the execution_plans row plus its stops, order-line allocations,
+   * and sales_order claims atomically via create_execution_plan_with_graph()
+   * (migrations 20270913091416, 20270915101200). One Postgres transaction:
+   * any exception rolls back the graph and any order claims together.
+   * Convert must not call markPlannedForExecutionPlan afterwards.
    */
   async createWithGraph(input: {
     workspaceId: WorkspaceId;

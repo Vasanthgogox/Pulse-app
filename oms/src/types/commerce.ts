@@ -195,6 +195,11 @@ export interface ExecutionPlan {
   created_by:    string;
   created_at:    string;
   updated_at:    string;
+  /** Core indent created from this plan (Convert to Indent). */
+  indent_id?:    string;
+  indent_code?:  string;
+  /** Core execution_plans.id when different from the client plan id. */
+  core_plan_id?: string;
 }
 
 export interface MergeRecommendation {
@@ -248,8 +253,9 @@ export interface CommerceContextValue {
   publishExecutionPlan: (
     planId: string,
     planSnapshot?: ExecutionPlan,
-    options?: { supplierTargetInr: number },
-  ) => Promise<void>;
+    options?: { supplierTargetInr?: number },
+  ) => Promise<{ indentId: string; indentCode: string; executionPlanId: string }>;
+  sharePlanToOperations: (planId: string) => Promise<void>;
   updateOrderStatus: (orderId: string, status: OrderStatus) => void;
   updateOrder: (orderId: string, patch: Partial<Order>) => void;
   deleteOrder: (orderId: string) => void;

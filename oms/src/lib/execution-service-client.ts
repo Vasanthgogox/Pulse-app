@@ -15,16 +15,16 @@ import { getExecutionOrchestrator } from '@pulse-platform/index';
 
 export interface ExecutionPlanAccepted {
   executionReferenceId: string;
+  executionPlanId:  string;
   indentId:             string;
   indentCode:           string;
   acceptedAt:           string;
 }
 
 /**
- * Publishes the plan via ExecutionOrchestrator.publishExecutionPlan(): real
- * execution_plans + execution_plan_stops + shipment_allocations rows, plus a
- * linked Core indent (execution_plan_id set, sales_order_id NULL — see
- * migration 20270913090000). Idempotent per (workspaceId, executionPlanId).
+ * Creates a draft Core indent (execution_plan_id set, sales_order_id NULL).
+ * Does not publish to Operations or broadcast. Idempotent per
+ * (workspaceId, executionPlanId).
  */
 export async function postExecutionPlan(
   command: PublishExecutionPlanCommand,
@@ -74,6 +74,7 @@ export async function postExecutionPlan(
 
   const accepted: ExecutionPlanAccepted = {
     executionReferenceId: result.indentCode,
+    executionPlanId:  result.executionPlanId,
     indentId:             result.indentId,
     indentCode:           result.indentCode,
     acceptedAt:           new Date().toISOString(),
@@ -105,4 +106,11 @@ export async function postExecutionPlan(
   }
 
   return accepted;
+}
+
+export async function shareExecutionPlanToOperations(input: {
+  workspaceId: string;
+  executionPlanId: string;
+}): Promise<{ executionPlanId: string; alreadyShared: boolean }> {
+  return getExecutionOrchestrator().shareExecutionPlanToOperations(input);
 }
