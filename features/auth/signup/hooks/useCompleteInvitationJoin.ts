@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 
 import { useAuth } from '@/contexts/AuthContext';
 import { useOptionalActiveWorkspace } from '@/contexts/ActiveWorkspaceContext';
-import { useOrganization } from '@/contexts/OrganizationContext';
+import { useOptionalOrganization } from '@/contexts/OrganizationContext';
 import { useOptionalPendingOnboarding } from '@/contexts/PendingOnboardingContext';
 import { platformIdentityService } from '@/lib/platform-identity';
 import type { IdentityInvitation } from '@/lib/onboarding/identityTypes';
@@ -16,7 +16,8 @@ export type CompleteInvitationJoinOptions = {
 
 export function useCompleteInvitationJoin() {
   const { refreshSession } = useAuth();
-  const { refreshOrganization } = useOrganization();
+  const orgCtx = useOptionalOrganization();
+  const refreshOrganization = orgCtx?.refreshOrganization ?? (async () => {});
   const workspace = useOptionalActiveWorkspace();
   const refreshWorkspaces = workspace?.refresh ?? (async () => {});
   const switchWorkspace = workspace?.switchWorkspace ?? (async () => {});
