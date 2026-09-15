@@ -358,15 +358,8 @@ export const VEHICLE_CATEGORIES = [
 ] as const;
 export type VehicleCategory = (typeof VEHICLE_CATEGORIES)[number];
 
-export const PAYMENT_MODES = [
-  { id: 'CASH', name: 'Cash' },
-  { id: 'UPI', name: 'UPI' },
-  { id: 'BANK', name: 'Bank Transfer' },
-  { id: 'CHEQUE', name: 'Cheque' },
-  { id: 'FUEL_CARD', name: 'Fuel Card' },
-  { id: 'FASTAG', name: 'FASTag' },
-  { id: 'CREDIT', name: 'Credit' },
-] as const;
+import { PAYMENT_MODES } from '@/lib/paymentModes';
+export { PAYMENT_MODES };
 
 /** True when mode is cash (case-insensitive so stored/legacy values still match). */
 function isLedgerCashPaymentMode(id: string | null | undefined): boolean {

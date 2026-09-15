@@ -74,6 +74,13 @@ export type DriverPodCompletionPageProps = {
   onDelete: (doc: tripDocumentsService.TripDocumentRow) => void;
   /** Runs after user confirms Complete in the dialog. */
   onConfirmAction: () => void;
+  /**
+   * Optional informational slot above the action button — used by the
+   * Compliance module (variant='lr' only) to show a non-blocking "Compliance
+   * pending" notice. Purely additive: passing null/undefined renders nothing,
+   * and this component has no compliance logic of its own.
+   */
+  complianceNotice?: React.ReactNode;
 };
 
 const VARIANT_COPY = {
@@ -152,6 +159,7 @@ export function DriverPodCompletionPage({
   onResolvePreview,
   onDelete,
   onConfirmAction,
+  complianceNotice,
 }: DriverPodCompletionPageProps) {
   const insets = useSafeAreaInsets();
   const copy = VARIANT_COPY[variant];
@@ -511,6 +519,7 @@ export function DriverPodCompletionPage({
             },
           ]}
         >
+          {complianceNotice}
           <View style={styles.footerEarnRow}>
             <View style={styles.earnIcon}>
               <FontAwesome name="money" size={12} color={FLOW_EMERALD} />

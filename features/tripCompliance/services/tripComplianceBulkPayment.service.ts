@@ -1,0 +1,167 @@
+import { supabase } from "@/lib/supabase";
+import { PAYMENT_MODES } from "@/lib/paymentModes";
+import { interpretLedgerRowStructured } from "@/features/finance/ledger/ledgerEntryModel";
+import type { TripRow } from "@/features/trips/services/trips.service";
+import {
+  postCompliancePayment,
+  type ComplianceLedgerCategory,
+} from "@/features/tripCompliance/services/tripComplianceWrite.service";
+
+/**
+ * Minimum bulk-import fields per the spec: Trip ID, Amount, Mode, Date, UTR,
+ * Remarks. No dedicated CSV import schema exists elsewhere in Finance to
+ * prefer instead (confirmed absent in the Phase 0 audit) — this is net-new,
+ * but every accepted row still posts through `postCompliancePayment` →
+ * `createLedgerEntry`, never a direct table insert.
+ */
+export type ComplianceBulkPaymentRow = {
+  rowIndex: number;
+  tripId: string;
+  amount: number;
+  paymentModeId: string;
+  date?: string;
+  utr?: string;
+  remarks?: string;
+};
+
+export type ComplianceBulkRowValidation = {
+  row: ComplianceBulkPaymentRow;
+  errors: string[];
+};
+
+export type ComplianceBulkValidationResult = {
+  valid: ComplianceBulkRowValidation[];
+  invalid: ComplianceBulkRowValidation[];
+};
+
+const VALID_MODE_IDS = new Set(PAYMENT_MODES.map((m) => m.id));
+
+/** Parse a minimal CSV (Trip ID,Amount,Mode,Date,UTR,Remarks) with a header row. */
+export function parseComplianceBulkPaymentCsv(csvText: string): ComplianceBulkPaymentRow[] {
+  const lines = csvText.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length <= 1) return [];
+  return lines.slice(1).map((line, i) => {
+    const cols = line.split(",").map((c) => c.trim());
+    return {
+      rowIndex: i + 2, // 1-indexed + header row
+      tripId: cols[0] ?? "",
+      amount: Number(cols[1] ?? ""),
+      paymentModeId: (cols[2] ?? "").toUpperCase(),
+      date: cols[3] || undefined,
+      utr: cols[4] || undefined,
+      remarks: cols[5] || undefined,
+    };
+  });
+}
+
+/**
+ * Validate rows against real Trip IDs scoped to the org (one batched query,
+ * not one lookup per row) plus duplicate-UTR detection against both the
+ * batch itself and already-posted compliance transactions for those trips.
+ * Never partially processes silently — returns a full valid/invalid split
+ * for the caller to show counts + [View Errors] / [Process N Payments].
+ */
+export async function validateComplianceBulkPayments(params: {
+  organizationId: string;
+  category: ComplianceLedgerCategory;
+  rows: ComplianceBulkPaymentRow[];
+}): Promise<ComplianceBulkValidationResult & { tripsById: Map<string, TripRow> }> {
+  const { organizationId, rows } = params;
+  const tripIds = [...new Set(rows.map((r) => r.tripId).filter(Boolean))];
+
+  const { data: tripRows, error: tripsErr } = await supabase()
+    .from("trips")
+    .select("*")
+    .eq("organization_id", organizationId)
+    .in("id", tripIds);
+  if (tripsErr) throw new Error(tripsErr.message);
+  const tripsById = new Map<string, TripRow>((tripRows ?? []).map((t) => [t.id as string, t as TripRow]));
+
+  const { data: existingTxns, error: txnErr } = await supabase()
+    .from("transactions")
+    .select("trip_id, description, ledger_category")
+    .in("trip_id", tripIds)
+    .eq("ledger_category", params.category);
+  if (txnErr) throw new Error(txnErr.message);
+  const existingUtrsByTrip = new Map<string, Set<string>>();
+  for (const t of existingTxns ?? []) {
+    const utr = interpretLedgerRowStructured(t as { description?: string | null }).reference_number;
+    if (!utr) continue;
+    const set = existingUtrsByTrip.get(t.trip_id as string) ?? new Set<string>();
+    set.add(utr.toUpperCase());
+    existingUtrsByTrip.set(t.trip_id as string, set);
+  }
+
+  const seenInBatch = new Map<string, Set<string>>(); // tripId -> utrs already claimed by an earlier valid row in this batch
+
+  const valid: ComplianceBulkRowValidation[] = [];
+  const invalid: ComplianceBulkRowValidation[] = [];
+
+  for (const row of rows) {
+    const errors: string[] = [];
+    if (!row.tripId) errors.push("Missing Trip ID");
+    const trip = tripsById.get(row.tripId);
+    if (row.tripId && !trip) errors.push("Trip ID not found in this organization");
+    if (!Number.isFinite(row.amount) || row.amount <= 0) errors.push("Invalid amount");
+    if (!VALID_MODE_IDS.has(row.paymentModeId as (typeof PAYMENT_MODES)[number]["id"])) {
+      errors.push(`Invalid payment mode "${row.paymentModeId}"`);
+    }
+    if (row.paymentModeId !== "CASH" && row.utr) {
+      const utrUpper = row.utr.toUpperCase();
+      const existing = existingUtrsByTrip.get(row.tripId);
+      const batchSeen = seenInBatch.get(row.tripId);
+      if (existing?.has(utrUpper) || batchSeen?.has(utrUpper)) {
+        errors.push(`Duplicate UTR "${row.utr}" for this trip`);
+      }
+    }
+
+    if (errors.length > 0) {
+      invalid.push({ row, errors });
+      continue;
+    }
+    if (row.paymentModeId !== "CASH" && row.utr) {
+      const set = seenInBatch.get(row.tripId) ?? new Set<string>();
+      set.add(row.utr.toUpperCase());
+      seenInBatch.set(row.tripId, set);
+    }
+    valid.push({ row, errors: [] });
+  }
+
+  return { valid, invalid, tripsById };
+}
+
+/**
+ * Process only the pre-validated rows the caller confirmed. Each row is an
+ * independent canonical ledger write — one row's failure doesn't roll back
+ * the others (matches how the existing single-payment flow already behaves),
+ * but every outcome is reported back so nothing is silently dropped.
+ */
+export async function processComplianceBulkPayments(params: {
+  organizationId: string;
+  category: ComplianceLedgerCategory;
+  rows: ComplianceBulkRowValidation[];
+  tripsById: Map<string, TripRow>;
+}): Promise<{ rowIndex: number; error: Error | null }[]> {
+  const results: { rowIndex: number; error: Error | null }[] = [];
+  for (const { row } of params.rows) {
+    const trip = params.tripsById.get(row.tripId);
+    if (!trip) {
+      results.push({ rowIndex: row.rowIndex, error: new Error("Trip not found") });
+      continue;
+    }
+    const mode = PAYMENT_MODES.find((m) => m.id === row.paymentModeId);
+    const { error } = await postCompliancePayment({
+      organizationId: params.organizationId,
+      trip,
+      category: params.category,
+      amount: row.amount,
+      paymentModeId: row.paymentModeId,
+      paymentModeLabel: mode?.name ?? row.paymentModeId,
+      utr: row.utr,
+      transactionDate: row.date,
+      notes: row.remarks,
+    });
+    results.push({ rowIndex: row.rowIndex, error });
+  }
+  return results;
+}

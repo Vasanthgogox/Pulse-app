@@ -595,4 +595,9 @@ export const queryKeys = {
     verificationBanner: (orgId: string) =>
       ["q", "workspace", "verificationBanner", orgId] as const,
   },
+
+  tripCompliance: {
+    list: (orgId: string, page: number) =>
+      ["q", "tripCompliance", "list", orgId, page] as const,
+  },
 } as const;

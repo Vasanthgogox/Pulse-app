@@ -45,6 +45,7 @@ import { shouldShowDriverMultiStop } from '@/features/driver/execution/normalize
 import { DriverShipperFeedbackModal } from '@/features/chat/components/driver/DriverShipperFeedbackModal';
 import { findLatestMissionDebriefMessage } from '@/features/chat/utils/missionDebrief.util';
 import { DriverPodCompletionPage } from '@/features/driver/components/DriverPodCompletionPage';
+import { LoadingComplianceNotice } from '@/features/tripCompliance/components/LoadingComplianceNotice';
 import { missionStagePeekCopy } from '@/features/driver/utils/missionStagePeekLabel.util';
 import {
   clearLrPhase,
@@ -1457,6 +1458,7 @@ export function DriverTripFlowCard({
             onResolvePreview={resolveLrPreviewUrl}
             onDelete={confirmDeleteLr}
             onConfirmAction={() => { void engageTransit(); }}
+            complianceNotice={<LoadingComplianceNotice complianceVerifiedAt={localTrip?.compliance_verified_at ?? null} />}
           />
         ) : null}
         {step === 'reached' ? (
@@ -1872,6 +1874,7 @@ export function DriverTripFlowCard({
         onResolvePreview={resolveLrPreviewUrl}
         onDelete={confirmDeleteLr}
         onConfirmAction={() => { void engageTransit(); }}
+        complianceNotice={<LoadingComplianceNotice complianceVerifiedAt={localTrip?.compliance_verified_at ?? null} />}
       />
       ) : null}
 

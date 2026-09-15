@@ -357,6 +357,10 @@ export const ROUTES = {
   LOAD_BOARD:     '/load-board'     as const,
   /** Load Center + share indent to Pulse (story); use when Network is story-only. */
   PULSE_LOADS:   '/pulse-loads'   as const,
+  /** Trip Compliance + Finance settlement parallel workflow. */
+  COMPLIANCE:    '/compliance'    as const,
+  COMPLIANCE_BULK_PAYMENT: '/compliance/bulk-payment' as const,
+  COMPLIANCE_REPORT:       '/compliance/report'       as const,
   /** A4 — Business Find Loads: open Marketplace discovery, separate from
    * Load Center's relationship-based Get Load tab. */
   FIND_LOADS:    '/find-loads'    as const,

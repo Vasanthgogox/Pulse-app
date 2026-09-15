@@ -78,7 +78,9 @@ export type TripDocumentType =
   | 'fuel_bill_photo'
   | 'toll_receipt_photo'
   | 'trip_expense_receipt_photo'
-  | 'maintenance_invoice_photo';
+  | 'maintenance_invoice_photo'
+  | 'insurance'
+  | 'rc';
 
 export interface TripDocumentRow {
   id: string;

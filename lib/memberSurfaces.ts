@@ -88,6 +88,15 @@ export type MemberSurfaceId =
   | "tripops.indents.award"
   | "tripops.indents.allocate"
   | "tripops.pulse_loads"
+  // Trip Compliance (parallel workflow over canonical trips — NOT the fleet/KYC
+  // "compliance" section above, which is unrelated vehicle/driver/document compliance)
+  | "trip_compliance.tab"
+  | "trip_compliance.documents.view"
+  | "trip_compliance.documents.verify"
+  | "trip_compliance.trip.mark_verified"
+  | "trip_compliance.finance.view"
+  | "trip_compliance.finance.manage"
+  | "trip_compliance.pod.manage"
   // Fleet (asset path)
   | "fleet.vehicles.view"
   | "fleet.vehicles.create"
@@ -116,7 +125,7 @@ export type MemberSurfaceDef = {
   label: string;
   hint: string;
   /** UI grouping under the permission page. */
-  domain: FunctionalRole | "fleet" | "team";
+  domain: FunctionalRole | "fleet" | "team" | "trip_compliance";
   /**
    * Optional sub-section label inside a domain accordion. Purely presentational
    * — surfaces with the same `group` render under one collapsible header so the
@@ -784,6 +793,63 @@ export const MEMBER_SURFACE_CATALOG: readonly MemberSurfaceDef[] = [
     requires: "sales.tab",
   },
 
+  // ── Trip Compliance (parallel Compliance + Settlement workflow) ────────────
+  {
+    id: "trip_compliance.tab",
+    label: "Compliance tab",
+    hint: "Open the Trip Compliance workspace",
+    domain: "trip_compliance",
+    anyOfCaps: DISP,
+  },
+  {
+    id: "trip_compliance.documents.view",
+    label: "View compliance documents",
+    hint: "Preview trip documents (LR, invoice, e-way bill, insurance, RC)",
+    domain: "trip_compliance",
+    anyOfCaps: DISP,
+    requires: "trip_compliance.tab",
+  },
+  {
+    id: "trip_compliance.documents.verify",
+    label: "Verify / reject documents",
+    hint: "Mark a trip document Verified or Rejected with a reason",
+    domain: "trip_compliance",
+    anyOfCaps: DISP,
+    requires: "trip_compliance.documents.view",
+  },
+  {
+    id: "trip_compliance.trip.mark_verified",
+    label: "Mark Compliance Verified",
+    hint: "Mark a trip's compliance fully verified once required documents pass",
+    domain: "trip_compliance",
+    anyOfCaps: DISP,
+    requires: "trip_compliance.documents.verify",
+  },
+  {
+    id: "trip_compliance.finance.view",
+    label: "View compliance settlement",
+    hint: "See advance/balance payment and POD settlement state on Compliance",
+    domain: "trip_compliance",
+    anyOfCaps: FIN,
+    requires: "trip_compliance.tab",
+  },
+  {
+    id: "trip_compliance.finance.manage",
+    label: "Manage compliance payments",
+    hint: "Initiate/update advance and balance payments from Compliance",
+    domain: "trip_compliance",
+    anyOfCaps: ["finance_manage"],
+    requires: "trip_compliance.finance.view",
+  },
+  {
+    id: "trip_compliance.pod.manage",
+    label: "Record hard-copy POD",
+    hint: "Mark hard-copy POD received with courier / AWB details",
+    domain: "trip_compliance",
+    anyOfCaps: DISP,
+    requires: "trip_compliance.tab",
+  },
+
   // ── Fleet ────────────────────────────────────────────────────────────────
   {
     id: "fleet.vehicles.view",
@@ -1220,6 +1286,12 @@ const FINANCE_CROSS_DOMAIN_SURFACES: readonly MemberSurfaceId[] = [
   // Rosters behind Finance → Garage / Drivers.
   "fleet.vehicles.view",
   "fleet.drivers.view",
+  // Compliance settlement: Finance initiates/updates advance & balance
+  // payments from the Compliance page, but must not gain document
+  // verify/reject or "mark verified" authority — those stay Compliance-only.
+  "trip_compliance.tab",
+  "trip_compliance.finance.view",
+  "trip_compliance.finance.manage",
 ];
 
 /**

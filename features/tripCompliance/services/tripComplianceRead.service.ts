@@ -1,0 +1,287 @@
+import { supabase } from "@/lib/supabase";
+import type { TripRow } from "@/features/trips/services/trips.service";
+import { interpretLedgerRowStructured } from "@/features/finance/ledger/ledgerEntryModel";
+import {
+  REQUIRED_COMPLIANCE_DOCUMENT_TYPES,
+  type ComplianceDocumentRow,
+  type ComplianceStage,
+  type CompliancePaymentSummary,
+  type ComplianceTripSummary,
+} from "@/features/tripCompliance/tripCompliance.types";
+
+/**
+ * `trip_documents.status`/`verified_by`/`verified_at`/`rejection_reason` and
+ * `trips.compliance_verified_*`/`pod_hard_copy_*` ship in migration
+ * 20260915162440 — not yet applied while the production schema freeze holds.
+ * Every read below degrades gracefully (missing-column / missing-relation
+ * errors) so the rest of the app, and this feature's read-only surfaces,
+ * keep working before that migration lands.
+ */
+function isMissingColumnOrRelation(error: { code?: string; message?: string }): boolean {
+  const message = String(error.message ?? "").toLowerCase();
+  return (
+    error.code === "42703" || // undefined_column
+    error.code === "42P01" || // undefined_table
+    error.code === "PGRST204" ||
+    error.code === "PGRST205" ||
+    message.includes("does not exist")
+  );
+}
+
+type RawTripDocRow = {
+  id: string;
+  trip_id: string;
+  document_type: string | null;
+  file_name: string;
+  storage_path: string;
+  uploaded_at: string;
+  status?: ComplianceDocumentRow["status"];
+  verified_by?: string | null;
+  verified_at?: string | null;
+  rejection_reason?: string | null;
+};
+
+async function fetchTripDocumentsForTrips(
+  tripIds: string[],
+): Promise<Map<string, ComplianceDocumentRow[]>> {
+  const byTrip = new Map<string, ComplianceDocumentRow[]>();
+  if (tripIds.length === 0) return byTrip;
+
+  let rows: RawTripDocRow[] = [];
+  const withStatus = await supabase()
+    .from("trip_documents")
+    .select(
+      "id, trip_id, document_type, file_name, storage_path, uploaded_at, status, verified_by, verified_at, rejection_reason",
+    )
+    .in("trip_id", tripIds);
+
+  if (withStatus.error && isMissingColumnOrRelation(withStatus.error)) {
+    // Pre-migration fallback: no verification columns yet, treat every
+    // uploaded document as 'pending' so the UI still renders sensibly.
+    const fallback = await supabase()
+      .from("trip_documents")
+      .select("id, trip_id, document_type, file_name, storage_path, uploaded_at")
+      .in("trip_id", tripIds);
+    if (fallback.error) throw new Error(fallback.error.message);
+    rows = (fallback.data ?? []).map((r) => ({ ...r, status: "pending" as const }));
+  } else if (withStatus.error) {
+    throw new Error(withStatus.error.message);
+  } else {
+    rows = (withStatus.data ?? []) as RawTripDocRow[];
+  }
+
+  for (const r of rows) {
+    const doc: ComplianceDocumentRow = {
+      id: r.id,
+      trip_id: r.trip_id,
+      document_type: r.document_type,
+      file_name: r.file_name,
+      storage_path: r.storage_path,
+      uploaded_at: r.uploaded_at,
+      status: r.status ?? "pending",
+      verified_by: r.verified_by ?? null,
+      verified_at: r.verified_at ?? null,
+      rejection_reason: r.rejection_reason ?? null,
+    };
+    const list = byTrip.get(doc.trip_id) ?? [];
+    list.push(doc);
+    byTrip.set(doc.trip_id, list);
+  }
+  return byTrip;
+}
+
+type ComplianceTripFlags = {
+  compliance_verified_at: string | null;
+  compliance_verified_by: string | null;
+  pod_hard_copy_courier: string | null;
+  pod_hard_copy_awb_number: string | null;
+  pod_hard_copy_received_by: string | null;
+};
+
+async function fetchComplianceTripFlags(
+  tripIds: string[],
+): Promise<Map<string, ComplianceTripFlags>> {
+  const byTrip = new Map<string, ComplianceTripFlags>();
+  if (tripIds.length === 0) return byTrip;
+
+  const { data, error } = await supabase()
+    .from("trips")
+    .select(
+      "id, compliance_verified_at, compliance_verified_by, pod_hard_copy_courier, pod_hard_copy_awb_number, pod_hard_copy_received_by",
+    )
+    .in("id", tripIds);
+
+  if (error) {
+    if (isMissingColumnOrRelation(error)) return byTrip; // pre-migration: all flags absent
+    throw new Error(error.message);
+  }
+  for (const row of data ?? []) {
+    byTrip.set(row.id as string, {
+      compliance_verified_at: (row as Record<string, unknown>).compliance_verified_at as string | null,
+      compliance_verified_by: (row as Record<string, unknown>).compliance_verified_by as string | null,
+      pod_hard_copy_courier: (row as Record<string, unknown>).pod_hard_copy_courier as string | null,
+      pod_hard_copy_awb_number: (row as Record<string, unknown>).pod_hard_copy_awb_number as string | null,
+      pod_hard_copy_received_by: (row as Record<string, unknown>).pod_hard_copy_received_by as string | null,
+    });
+  }
+  return byTrip;
+}
+
+type RawTxnRow = {
+  id: string;
+  trip_id: string | null;
+  amount_in: number;
+  amount_out: number;
+  description: string | null;
+  transaction_date: string;
+  created_by: string | null;
+  ledger_category: string | null;
+};
+
+export async function fetchComplianceTransactions(
+  tripIds: string[],
+): Promise<Map<string, { advance: RawTxnRow[]; balance: RawTxnRow[] }>> {
+  const byTrip = new Map<string, { advance: RawTxnRow[]; balance: RawTxnRow[] }>();
+  if (tripIds.length === 0) return byTrip;
+
+  const { data, error } = await supabase()
+    .from("transactions")
+    .select("id, trip_id, amount_in, amount_out, description, transaction_date, created_by, ledger_category")
+    .in("trip_id", tripIds)
+    .in("ledger_category", ["compliance_advance", "compliance_balance"]);
+
+  if (error) {
+    if (isMissingColumnOrRelation(error)) return byTrip; // ledger_category not queryable — no payments yet
+    throw new Error(error.message);
+  }
+  for (const row of (data ?? []) as RawTxnRow[]) {
+    if (!row.trip_id) continue;
+    const bucket = byTrip.get(row.trip_id) ?? { advance: [], balance: [] };
+    if (row.ledger_category === "compliance_advance") bucket.advance.push(row);
+    else if (row.ledger_category === "compliance_balance") bucket.balance.push(row);
+    byTrip.set(row.trip_id, bucket);
+  }
+  return byTrip;
+}
+
+export function toPaymentSummary(rows: RawTxnRow[]): CompliancePaymentSummary | null {
+  if (rows.length === 0) return null;
+  // Most recent posting represents the payment's current display state —
+  // matches "derive, don't duplicate" (Phase 7/9): we don't track a separate
+  // paid/pending flag, presence of the row is the state.
+  const latest = [...rows].sort((a, b) => b.transaction_date.localeCompare(a.transaction_date))[0];
+  const structured = interpretLedgerRowStructured(latest);
+  return {
+    amount: Number(latest.amount_in || latest.amount_out || 0),
+    paymentMode: structured.payment_mode,
+    utr: structured.reference_number,
+    paidAt: latest.transaction_date,
+    actorId: latest.created_by,
+    transactionId: latest.id,
+  };
+}
+
+/**
+ * Derives the single displayed compliance stage for a trip from independent
+ * signals — never a persisted status column (Phase 4's explicit instruction).
+ *
+ * Documented interpretation of a genuine spec ambiguity: "HARD_COPY_POD_RECEIVED"
+ * and "BALANCE_PENDING" describe what is, functionally, the same instant (Phase 11:
+ * "once hard copy POD received, show BALANCE PENDING"). Since a trip can only sit
+ * in one filter bucket at a time, HARD_COPY_POD_RECEIVED is used here for "trip
+ * delivered, physical POD not yet marked received" (the actionable, awaiting-Ops
+ * bucket) and BALANCE_PENDING begins the moment Ops marks it received — i.e. the
+ * "Mark Hard Copy Received" action is the transition point, not two separate
+ * milestones with two separate durations.
+ */
+export function deriveComplianceStage(input: {
+  documentCount: number;
+  complianceVerifiedAt: string | null;
+  advance: CompliancePaymentSummary | null;
+  tripStatus: string;
+  hardCopyReceived: boolean;
+  balance: CompliancePaymentSummary | null;
+}): ComplianceStage {
+  if (input.documentCount === 0) return "pending_for_docs";
+  if (!input.complianceVerifiedAt) return "compliance_pending";
+  if (!input.advance) return "compliance_verified";
+  if (input.tripStatus !== "delivered") return "advance_payment_processed";
+  if (!input.hardCopyReceived) return "hard_copy_pod_received";
+  if (!input.balance) return "balance_pending";
+  return "payment_settled";
+}
+
+/**
+ * Batched compliance read for a page of trips — exactly 3 queries regardless
+ * of page size (trips, trip_documents, transactions), no per-trip RPC/query.
+ * Reuses `getTripsByOrganization`'s existing single-query trip fetch — pass
+ * its result in rather than re-fetching, so a Compliance list page never
+ * duplicates the same trips query the Trips tab already runs.
+ */
+export async function buildComplianceTripSummaries(
+  trips: TripRow[],
+): Promise<ComplianceTripSummary[]> {
+  const tripIds = trips.map((t) => t.id);
+  const [docsByTrip, flagsByTrip, txnsByTrip] = await Promise.all([
+    fetchTripDocumentsForTrips(tripIds),
+    fetchComplianceTripFlags(tripIds),
+    fetchComplianceTransactions(tripIds),
+  ]);
+
+  return trips.map((trip) => {
+    const documents = docsByTrip.get(trip.id) ?? [];
+    const flags = flagsByTrip.get(trip.id);
+    const txns = txnsByTrip.get(trip.id) ?? { advance: [], balance: [] };
+    const advance = toPaymentSummary(txns.advance);
+    const balance = toPaymentSummary(txns.balance);
+    const hardCopyReceived = Boolean(flags?.pod_hard_copy_courier || flags?.pod_hard_copy_awb_number || flags?.pod_hard_copy_received_by);
+
+    const documentCounts = {
+      total: documents.length,
+      verified: documents.filter((d) => d.status === "verified").length,
+      rejected: documents.filter((d) => d.status === "rejected").length,
+      pending: documents.filter((d) => d.status === "pending").length,
+    };
+
+    const stage = deriveComplianceStage({
+      documentCount: documentCounts.total,
+      complianceVerifiedAt: flags?.compliance_verified_at ?? null,
+      advance,
+      tripStatus: trip.status,
+      hardCopyReceived,
+      balance,
+    });
+
+    return {
+      trip,
+      stage,
+      documents,
+      documentCounts,
+      complianceVerifiedAt: flags?.compliance_verified_at ?? null,
+      complianceVerifiedBy: flags?.compliance_verified_by ?? null,
+      advance,
+      balance,
+      hardCopyPod: {
+        received: hardCopyReceived,
+        receivedAt: trip.pod_received_at ?? null,
+        courier: flags?.pod_hard_copy_courier ?? null,
+        awbNumber: flags?.pod_hard_copy_awb_number ?? null,
+        receivedBy: flags?.pod_hard_copy_received_by ?? null,
+      },
+    };
+  });
+}
+
+/** Whether every Compliance-required document type on a trip is verified. */
+export function canMarkComplianceVerified(documents: ComplianceDocumentRow[]): {
+  ok: boolean;
+  missing: string[];
+} {
+  const byType = new Map(documents.map((d) => [d.document_type, d]));
+  const missing: string[] = [];
+  for (const type of REQUIRED_COMPLIANCE_DOCUMENT_TYPES) {
+    const doc = byType.get(type);
+    if (!doc || doc.status !== "verified") missing.push(type);
+  }
+  return { ok: missing.length === 0, missing };
+}

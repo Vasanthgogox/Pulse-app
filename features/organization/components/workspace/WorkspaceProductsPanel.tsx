@@ -35,10 +35,12 @@ import {
 } from "@/features/organization/components/workspace/workspaceElegantPalette";
 import {
   useJoinWaitlistMutation,
+  useSetWorkspaceProductStatusMutation,
   useWorkspaceProductsQuery,
   useWorkspaceWaitlistQuery,
 } from "@/lib/queries/useWorkspaceProductsQuery";
 import { AlertCircle, ChevronRight, Lock, X } from "lucide-react-native";
+import { confirmAction } from "@/features/tripCompliance/utils/crossPlatformAlert.util";
 import { useCallback, useMemo, useState } from "react";
 import {
   ActivityIndicator,
@@ -224,29 +226,41 @@ function ProductCatalogCard({
   isActive,
   isOnWaitlist,
   activeProductIds,
+  onManage,
 }: ProductCardProps) {
   const isBundledProduct = isBundledActiveProduct(product.id);
   const canBeActivated = canActivate(product.id, activeProductIds);
   const missingDeps = product.dependencies.filter((d) => !activeProductIds.has(d));
   const status = moduleStatusMeta(product, isActive, isBundledProduct, isOnWaitlist);
 
+  // Compliance is a real enable/disable toggle, not a billing/trial flow — its
+  // CTA must say what tapping it does, not reuse the generic catalogue copy.
+  const isComplianceToggle = product.id === "pulse_compliance";
+
   const ctaLabel = useMemo(() => {
+    if (isComplianceToggle) return isActive ? "Manage (Disable)" : "Enable";
     if (isBundledProduct) return "Included in workspace";
     if (isActive) return "Manage module";
     if (isOnWaitlist) return "On waitlist";
     if (product.status === "active") return "Start trial";
     return "Learn more";
-  }, [isBundledProduct, isActive, isOnWaitlist, product.status]);
+  }, [isComplianceToggle, isActive, isBundledProduct, isOnWaitlist, product.status]);
 
   const ctaDisabled = isBundledProduct || isOnWaitlist;
-  const isLockedModule = !isBundledProduct;
+  const isLockedModule = !isBundledProduct && !isComplianceToggle;
   const isLive = isActive || isBundledProduct;
   const pricingHint = isLive ? formatPricingHint(product) : null;
 
+  // Compliance is a plain operational toggle (see handleManage) — its card is
+  // the only one wired to a real activation action today. Other products'
+  // cards stay display-only pending their own billing/trial flow.
+  const CardContainer = isComplianceToggle ? Pressable : View;
+
   return (
-    <View
-      style={[s.card, (isActive || isBundledProduct) && s.cardActive]}
+    <CardContainer
+      style={[s.card, (isActive || isBundledProduct) && s.cardActive, isComplianceToggle && s.cardInteractive]}
       accessibilityLabel={`${product.name}, ${status.label}`}
+      {...(isComplianceToggle ? { onPress: () => onManage(product) } : null)}
     >
       <View style={s.cardHeader}>
         <ProductLogo
@@ -305,12 +319,12 @@ function ProductCatalogCard({
             style={[
               s.footerCtaText,
               (ctaDisabled || isLockedModule) && s.footerCtaTextMuted,
-              isBundledProduct && s.footerCtaTextActive,
+              (isBundledProduct || isComplianceToggle) && s.footerCtaTextActive,
             ]}
           >
             {ctaLabel}
           </Text>
-          {isBundledProduct ? (
+          {isBundledProduct || isComplianceToggle ? (
             <ChevronRight size={12} color={NAVY} strokeWidth={2.2} />
           ) : null}
         </View>
@@ -320,16 +334,20 @@ function ProductCatalogCard({
           </View>
         ) : (
           <Switch
-            value
+            value={isComplianceToggle ? isActive : true}
             disabled
             trackColor={{ false: "#E4E6EF", true: "rgba(79,70,229,0.32)" }}
             thumbColor={NAVY}
             ios_backgroundColor="#E4E6EF"
-            accessibilityLabel={`${product.name} included`}
+            accessibilityLabel={
+              isComplianceToggle
+                ? `${product.name} ${isActive ? "enabled" : "disabled"}`
+                : `${product.name} included`
+            }
           />
         )}
       </View>
-    </View>
+    </CardContainer>
   );
 }
 
@@ -610,6 +628,7 @@ export function WorkspaceProductsPanel({ onBack }: Props) {
     useWorkspaceWaitlistQuery();
   const { mutateAsync: joinWaitlist, isPending: joiningWaitlist } =
     useJoinWaitlistMutation();
+  const { mutateAsync: setProductStatus } = useSetWorkspaceProductStatusMutation();
 
   const [waitlistTarget, setWaitlistTarget] = useState<ProductDefinition | null>(null);
   const [catalogFilter, setCatalogFilter] = useState<CatalogFilter>("all");
@@ -642,13 +661,36 @@ export function WorkspaceProductsPanel({ onBack }: Props) {
     setWaitlistTarget(product);
   }, []);
 
-  const handleManage = useCallback((product: ProductDefinition) => {
-    Alert.alert(
-      product.name,
-      "Billing management portal coming soon. Contact your account manager to modify your subscription.",
-      [{ text: "OK" }],
-    );
-  }, []);
+  const handleManage = useCallback(
+    (product: ProductDefinition) => {
+      // Compliance is an operational workflow toggle, not a billed module —
+      // enable/disable it directly instead of routing through the billing
+      // portal placeholder every other product still shows.
+      if (product.id === "pulse_compliance") {
+        const isActive = activeProductIds.has(product.id);
+        void confirmAction(
+          product.name,
+          isActive
+            ? "Turn off the Compliance workflow for this workspace? The Compliance tab and all compliance data stay intact — this only hides it from the nav."
+            : "Enable the Compliance workflow for this workspace? This adds a Compliance tab for document verification and advance/balance settlement, alongside your existing Trip workflow.",
+          isActive ? "Turn off" : "Enable",
+        ).then((confirmed) => {
+          if (!confirmed) return;
+          void setProductStatus({
+            productId: product.id,
+            status: isActive ? "inactive" : "active",
+          });
+        });
+        return;
+      }
+      Alert.alert(
+        product.name,
+        "Billing management portal coming soon. Contact your account manager to modify your subscription.",
+        [{ text: "OK" }],
+      );
+    },
+    [activeProductIds, setProductStatus],
+  );
 
   const handleWaitlistSubmit = useCallback(
     async ({
@@ -860,6 +902,12 @@ const s = StyleSheet.create({
   cardActive: {
     borderColor: WORKSPACE_ACCENT_BORDER,
     backgroundColor: "#FCFCFF",
+  },
+  // Distinguishes the one card that's actually tappable (enable/disable) from
+  // every other display-only "Learn more" card in the catalogue.
+  cardInteractive: {
+    borderColor: NAVY,
+    borderWidth: 1.5,
   },
   cardHeader: {
     flexDirection: "row",

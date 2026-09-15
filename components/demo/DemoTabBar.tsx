@@ -55,7 +55,7 @@ import { setMobileNetworkDockExpanded } from "@/lib/mobileDockState";
 import { ROUTES } from "@/lib/routes";
 import { useEffectiveBottomInset } from "@/lib/safeAreaWeb";
 import { usePathname, useRouter } from "expo-router";
-import { DollarSign, Inbox, LineChart, MessageSquare, Signpost, Truck } from "lucide-react-native";
+import { DollarSign, Inbox, LineChart, MessageSquare, ShieldCheck, Signpost, Truck } from "lucide-react-native";
 import { Fragment, lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
     Image,
@@ -135,7 +135,7 @@ function AnimatedPress({
   );
 }
 
-export type DemoTabId = "finance" | "trips" | "network" | "loadCenter" | "resources";
+export type DemoTabId = "finance" | "trips" | "network" | "loadCenter" | "compliance" | "resources";
 
 /** Per-domain tab visibility (functional member roles). Omitted → all visible. */
 export type DemoTabVisibility = {
@@ -143,6 +143,7 @@ export type DemoTabVisibility = {
   trips: boolean;
   network: boolean;
   loadCenter: boolean;
+  compliance: boolean;
 };
 
 const ALL_TABS_VISIBLE: DemoTabVisibility = {
@@ -150,6 +151,7 @@ const ALL_TABS_VISIBLE: DemoTabVisibility = {
   trips: true,
   network: true,
   loadCenter: true,
+  compliance: true,
 };
 
 interface DemoTabBarProps {
@@ -193,6 +195,9 @@ export function DemoTabBar({
     (tab: DemoTabId) => {
       if (tab === "loadCenter") {
         preloadPulseLoadsRoute();
+        return;
+      }
+      if (tab === "compliance") {
         return;
       }
       if (tab === "finance" || tab === "trips" || tab === "network") {
@@ -489,6 +494,7 @@ export function DemoTabBar({
   const isTrips = activeTab === "trips";
   const isNetwork = activeTab === "network";
   const isLoadCenter = activeTab === "loadCenter";
+  const isCompliance = activeTab === "compliance";
   const isChatRoute = pathname.includes("/chat");
   const networkDockOpen = !isDesktopWeb && isNetworkExpanded;
   const displayName = (
@@ -645,6 +651,13 @@ export function DemoTabBar({
         Icon: Truck,
         active: isLoadCenter,
       },
+      {
+        id: "compliance",
+        title: "COMPLIANCE",
+        subtitle: "SETTLEMENT",
+        Icon: ShieldCheck,
+        active: isCompliance,
+      },
     ];
     // Hide primary-domain tabs the member's functional role can't reach.
     const navItems = allNavItems.filter((item) => {
@@ -652,6 +665,7 @@ export function DemoTabBar({
       if (item.id === "trips") return visibility.trips;
       if (item.id === "network") return visibility.network;
       if (item.id === "loadCenter") return visibility.loadCenter;
+      if (item.id === "compliance") return visibility.compliance;
       return true;
     });
 

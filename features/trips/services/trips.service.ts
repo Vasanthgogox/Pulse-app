@@ -164,6 +164,12 @@ export interface TripRow {
    * Independent of digital `trip_documents` with document_type = pod.
    */
   pod_received_at?: string | null;
+  /** Trip Compliance parallel workflow — see migration 20260915162440. */
+  compliance_verified_at?: string | null;
+  compliance_verified_by?: string | null;
+  pod_hard_copy_courier?: string | null;
+  pod_hard_copy_awb_number?: string | null;
+  pod_hard_copy_received_by?: string | null;
 }
 
 type TripIndentJoin = {

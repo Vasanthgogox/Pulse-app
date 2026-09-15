@@ -81,6 +81,45 @@ export function useWorkspaceWaitlistQuery() {
   });
 }
 
+/**
+ * Directly activate/deactivate a workspace product. Reuses the existing
+ * `workspace_products` table and its `org_admins_manage_products` RLS policy
+ * (owner/admin write access) — no RPC needed, this is a plain upsert.
+ */
+export function useSetWorkspaceProductStatusMutation() {
+  const { currentOrganization } = useOrganization();
+  const qc = useQueryClient();
+  const orgId = currentOrganization?.id ?? "";
+
+  return useMutation({
+    mutationFn: async ({
+      productId,
+      status,
+    }: {
+      productId: ProductId;
+      status: "active" | "inactive";
+    }) => {
+      if (!orgId) throw new Error("No active organization");
+      const { error } = await supabase()
+        .from("workspace_products")
+        .upsert(
+          {
+            org_id: orgId,
+            product_id: productId,
+            status,
+            activated_at: status === "active" ? new Date().toISOString() : null,
+          },
+          { onConflict: "org_id,product_id" },
+        );
+      if (error) throw new Error(error.message);
+    },
+    onSuccess: () => {
+      if (!orgId) return;
+      void qc.invalidateQueries({ queryKey: queryKeys.workspace.products(orgId) });
+    },
+  });
+}
+
 export function useJoinWaitlistMutation() {
   const { currentOrganization } = useOrganization();
   const qc = useQueryClient();

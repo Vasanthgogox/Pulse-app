@@ -95,6 +95,38 @@ export const ORG_POLICIES: readonly PolicyRecord[] = [
     onDeny: { type: 'sign_in' },
     softDeny: true,
   },
+  // Trip Compliance + Finance settlement — coarse org-capability gate only
+  // (must be a dispatch org for Compliance to be meaningful at all); the real
+  // enable/disable (workspace_products.pulse_compliance) and fine-grained
+  // RBAC (trip_compliance.* MemberSurfaceId) checks happen in-screen, per
+  // "Navigation ≠ Authorization" above.
+  {
+    id: 'org.compliance',
+    pattern: '/compliance',
+    experience: 'org',
+    priority: 100,
+    grants: { anyOf: ['dispatch', 'dispatch_for_own_fleet'] },
+    onDeny: { type: 'path', path: '/trips' },
+    softDeny: true,
+  },
+  {
+    id: 'org.compliance-bulk-payment',
+    pattern: '/compliance/bulk-payment',
+    experience: 'org',
+    priority: 100,
+    grants: { anyOf: ['finance_manage'] },
+    onDeny: { type: 'path', path: '/compliance' },
+    softDeny: true,
+  },
+  {
+    id: 'org.compliance-report',
+    pattern: '/compliance/report',
+    experience: 'org',
+    priority: 100,
+    grants: { anyOf: ['finance_view', 'finance_manage'] },
+    onDeny: { type: 'path', path: '/compliance' },
+    softDeny: true,
+  },
   {
     // A4.3: same gate as Load Center for this first version (see
     // docs/MARKETPLACE_DOMAIN.md "Distribution vs monetization" — discovery

@@ -31,6 +31,8 @@ import { TripMarginHero } from "@/features/trips/components/trip-detail/TripMarg
 import { TripLedgerTransactionPreviewModal } from "@/features/trips/components/trip-detail/TripLedgerTransactionPreviewModal";
 import { TripAuditLogPanel } from "@/features/trips/components/trip-detail/TripAuditLogPanel";
 import { TripPodStatusSection } from "@/features/trips/components/trip-detail/TripPodStatusSection";
+import { ComplianceSection } from "@/features/tripCompliance/components/ComplianceSection";
+import { useWorkspaceProductsQuery } from "@/lib/queries/useWorkspaceProductsQuery";
 import type { LedgerRow } from "@/features/finance/services/finance.service";
 import type { LedgerEntryReceiptPartyAvatar } from "@/components/ledger/LedgerEntryReceiptCard";
 import { latestTripSettlementLedgerEntry } from "@/features/trips/utils/tripSettlementLedgerEntries.util";
@@ -591,6 +593,11 @@ export default function TripDetailScreen({
   );
 
   const { can: canSurface } = useMemberAccess();
+  const { data: workspaceProducts } = useWorkspaceProductsQuery();
+  const complianceEnabled = (workspaceProducts ?? []).some(
+    (p) => p.product_id === "pulse_compliance" && (p.status === "active" || p.status === "trial"),
+  );
+  const canViewCompliance = complianceEnabled && canSurface("trip_compliance.tab");
   const { memberPlatformRole } = useOptionalActiveWorkspace() ?? {};
   const isGroundOpsOnly = memberPlatformRole === "ground_ops";
   const groundOpsDocUploadQuery = useQuery({
@@ -5759,6 +5766,30 @@ export default function TripDetailScreen({
                 }}
               />
             </View>
+
+            {canViewCompliance ? (
+              <View style={{ marginBottom: 16 }}>
+                <ComplianceSection
+                  trip={trip}
+                  organizationId={trip.organization_id}
+                  actorId={detail.currentUserId ?? null}
+                  tripDocuments={detail.tripDocuments}
+                  tripDelivered={tripIsDeliveredStatus(trip.status)}
+                  complianceVerifiedAt={trip.compliance_verified_at ?? null}
+                  hardCopyPodReceived={Boolean(
+                    trip.pod_hard_copy_courier || trip.pod_hard_copy_awb_number || trip.pod_hard_copy_received_by,
+                  )}
+                  canVerifyDocuments={canSurface("trip_compliance.documents.verify")}
+                  canMarkVerified={canSurface("trip_compliance.trip.mark_verified")}
+                  canManagePod={canSurface("trip_compliance.pod.manage")}
+                  canManageFinance={canSurface("trip_compliance.finance.manage")}
+                  onUpdated={() => {
+                    void detail.load();
+                    void detail.loadTripDocuments();
+                  }}
+                />
+              </View>
+            ) : null}
 
             <View style={dStyles.row}>
               <View style={dStyles.bottomLeft}>

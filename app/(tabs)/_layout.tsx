@@ -37,6 +37,7 @@ import {
   useMemberCapabilities,
 } from '@/lib/useMemberCapabilities';
 import { useMemberAccess } from '@/lib/useMemberAccess';
+import { useWorkspaceProductsQuery } from '@/lib/queries/useWorkspaceProductsQuery';
 import { useQueryClient } from '@tanstack/react-query';
 
 function DemoCustomTabBar(
@@ -58,11 +59,23 @@ function DemoCustomTabBar(
   const memberAccess = useMemberCapabilities();
   const { can: canSurface, isLoading: surfaceLoading } = useMemberAccess();
   const canOpenLoadCenter = surfaceLoading || canSurface('tripops.pulse_loads');
+  // Compliance is workspace-toggled (workspace_products.pulse_compliance) AND
+  // permission-gated (trip_compliance.tab) — both must hold, and while either
+  // is still loading we fail open like every other tab here (per-tab gate on
+  // the destination screen holds the real access line).
+  const { data: workspaceProducts, isLoading: productsLoading } = useWorkspaceProductsQuery();
+  const complianceProductActive =
+    productsLoading ||
+    (workspaceProducts ?? []).some(
+      (p) => p.product_id === 'pulse_compliance' && (p.status === 'active' || p.status === 'trial'),
+    );
+  const canOpenCompliance = (surfaceLoading || canSurface('trip_compliance.tab')) && complianceProductActive;
   const tabVisibility = {
     finance: memberAccess.isLoading || memberAccess.finance,
     trips: memberAccess.isLoading || memberAccess.tripops,
     network: memberAccess.isLoading || memberAccess.sales,
     loadCenter: canOpenLoadCenter,
+    compliance: canOpenCompliance,
   };
   // The member's own home tab — used to highlight the dock when the current
   // route isn't a primary tab (e.g. profile), so a hidden tab is never shown active.
@@ -88,6 +101,10 @@ function DemoCustomTabBar(
         if (canOpenLoadCenter) router.push(ROUTES.PULSE_LOADS);
         return;
       }
+      if (tab === 'compliance') {
+        if (canOpenCompliance) router.push(ROUTES.COMPLIANCE as Parameters<typeof router.push>[0]);
+        return;
+      }
       if (tab === 'network') {
         // Re-tapping NETWORK while already on hub must not downgrade to the feed.
         if (pathname.includes('/hub')) return;
@@ -96,7 +113,7 @@ function DemoCustomTabBar(
       }
       navigation.navigate(tab);
     },
-    [canOpenLoadCenter, navigation, pathname, router],
+    [canOpenLoadCenter, canOpenCompliance, navigation, pathname, router],
   );
 
   const onProfilePress = () => {
