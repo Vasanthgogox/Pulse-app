@@ -177,6 +177,23 @@ function isNetworkFailure(error: unknown): boolean {
 }
 
 /**
+ * A query that already timed out (Postgres `statement timeout`, PostgREST's
+ * 57014, or our own fetch-layer timeout) means the DB was too slow to answer
+ * in time — retrying immediately adds another attempt at the exact same load
+ * instead of backing off. Under a real DB slowdown this is a fleet-wide
+ * multiplier: every in-flight query gets a guaranteed 2nd attempt at once,
+ * which was identified as a contributing factor in the 2026-09-16 DB incident.
+ * Don't retry these; still retry other transient failures (dropped
+ * connection, brief 5xx) since those usually aren't caused by sustained load.
+ */
+function isTimeoutError(error: unknown): boolean {
+  const message = extractErrorMessage(error);
+  return /\b57014\b|statement timeout|canceling statement due to|timed? ?out/i.test(
+    message,
+  );
+}
+
+/**
  * Supabase/PostgREST rejects with a plain object ({message, code, details,
  * hint}), not an Error. `String(obj)` on those yields "[object Object]", which
  * collapses every distinct failure into one unreadable Sentry group with no
@@ -200,6 +217,19 @@ function toReportableError(error: unknown): Error {
     }
   }
   return new Error(String(error));
+}
+
+/**
+ * Was a plain `retry: 1` (unconditional) — retried aborted/unmounted
+ * requests for nothing, and during a DB slowdown guaranteed a 2nd attempt at
+ * every already-timed-out query, fleet-wide, at once. See isTimeoutError's
+ * comment. Exported for direct unit testing.
+ */
+export function shouldRetryQuery(failureCount: number, error: unknown): boolean {
+  if (failureCount >= 1) return false;
+  if (isAbortError(error)) return false;
+  if (isTimeoutError(error)) return false;
+  return true;
 }
 
 export function makeQueryClient() {
@@ -228,7 +258,7 @@ export function makeQueryClient() {
       queries: {
         staleTime: STALE.moderate,
         gcTime: GC_TIME_MS,
-        retry: 1,
+        retry: shouldRetryQuery,
         retryDelay: 1000,
         refetchOnWindowFocus: false,
         refetchOnReconnect: true,

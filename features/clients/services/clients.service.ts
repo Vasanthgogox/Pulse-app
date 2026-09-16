@@ -298,10 +298,41 @@ function isUnauthenticatedPartnerDisplayError(
 }
 
 /** Batch-fetch display profiles for multiple linked orgs in one RPC call. */
+/**
+ * Single-flight guard for `get_connection_partner_display_batch`. Several
+ * independent call sites (ClientDetailScreen, chat branding, mutual
+ * connections, bids, inbound-protocol) can request the same id set within
+ * the same page load with no coordination between them — without this, each
+ * one fires its own RPC. Keyed by the exact sorted id set: this catches the
+ * common "same one org id looked up from two components" case without the
+ * complexity of a partial-overlap cache (see `linkedOrgDisplayCache.ts` for
+ * that, used by the one call site that already needed it).
+ */
+const linkedOrgProfilesBatchInFlight = new Map<
+  string,
+  Promise<Record<string, OrgDisplayProfile>>
+>();
+
 export async function getLinkedOrgProfilesBatch(
   linkedOrganizationIds: string[]
 ): Promise<Record<string, OrgDisplayProfile>> {
   if (linkedOrganizationIds.length === 0) return {};
+  const dedupeKey = Array.from(new Set(linkedOrganizationIds.map((id) => id.trim()).filter(Boolean)))
+    .sort()
+    .join(',');
+  if (!dedupeKey) return {};
+  const inFlight = linkedOrgProfilesBatchInFlight.get(dedupeKey);
+  if (inFlight) return inFlight;
+  const run = fetchLinkedOrgProfilesBatchUncached(linkedOrganizationIds).finally(() => {
+    linkedOrgProfilesBatchInFlight.delete(dedupeKey);
+  });
+  linkedOrgProfilesBatchInFlight.set(dedupeKey, run);
+  return run;
+}
+
+async function fetchLinkedOrgProfilesBatchUncached(
+  linkedOrganizationIds: string[]
+): Promise<Record<string, OrgDisplayProfile>> {
   const { data: sessionData } = await supabase().auth.getSession();
   if (!sessionData.session?.access_token) return {};
   const { data, error } = await supabase().rpc('get_connection_partner_display_batch', {

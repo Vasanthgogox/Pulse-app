@@ -61,4 +61,53 @@ describe('getLinkedOrgProfilesBatch session guard', () => {
     expect(result).toEqual({});
     expect(mockRpc).toHaveBeenCalledTimes(1);
   });
+
+  it('single-flights concurrent calls for the same id set into one RPC call', async () => {
+    mockGetSession.mockResolvedValue({
+      data: { session: { access_token: 'jwt', user: { id: 'user-1' } } },
+    });
+    let resolveRpc!: (v: unknown) => void;
+    mockRpc.mockReturnValue(
+      new Promise((resolve) => {
+        resolveRpc = resolve;
+      }),
+    );
+    // Two independent call sites request the same org concurrently (e.g. a
+    // client detail screen and a chat branding lookup racing on page load).
+    const call1 = getLinkedOrgProfilesBatch(['org-1']);
+    const call2 = getLinkedOrgProfilesBatch(['org-1']);
+    resolveRpc({
+      data: { 'org-1': { organizationName: 'Acme', contactPerson: 'Ada', phone: '1' } },
+      error: null,
+    });
+    const [result1, result2] = await Promise.all([call1, call2]);
+    expect(mockRpc).toHaveBeenCalledTimes(1);
+    expect(result1).toEqual(result2);
+    expect(result1['org-1']?.organizationName).toBe('Acme');
+  });
+
+  it('does not single-flight calls for a different id set', async () => {
+    mockGetSession.mockResolvedValue({
+      data: { session: { access_token: 'jwt', user: { id: 'user-1' } } },
+    });
+    mockRpc.mockResolvedValue({ data: {}, error: null });
+    await Promise.all([
+      getLinkedOrgProfilesBatch(['org-1']),
+      getLinkedOrgProfilesBatch(['org-2']),
+    ]);
+    expect(mockRpc).toHaveBeenCalledTimes(2);
+  });
+
+  it('a later call for the same id set after the first resolves fetches fresh (no stale sharing)', async () => {
+    mockGetSession.mockResolvedValue({
+      data: { session: { access_token: 'jwt', user: { id: 'user-1' } } },
+    });
+    mockRpc.mockResolvedValue({
+      data: { 'org-1': { organizationName: 'Acme', contactPerson: 'Ada', phone: '1' } },
+      error: null,
+    });
+    await getLinkedOrgProfilesBatch(['org-1']);
+    await getLinkedOrgProfilesBatch(['org-1']);
+    expect(mockRpc).toHaveBeenCalledTimes(2);
+  });
 });

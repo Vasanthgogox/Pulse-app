@@ -1434,13 +1434,22 @@ export const useChatStore = create<ChatState>()(
       if (get().bootstrappedOrg === orgId) return;
       if (chatBootstrapInFlightFor === orgId) return;
 
+      // Set the in-flight guard synchronously, before the first `await`, so a
+      // second caller (e.g. the tab-touch preloader in preloadChatWarmup.ts racing
+      // TripChatContext's own mount-triggered bootstrap) can't slip past the guard
+      // above while this call is still suspended on getSession() — that race fired
+      // a duplicate get_multi_lane_bootstrap for the same org during the 2026-09-16
+      // DB incident, when getSession() latency widened the window.
+      chatBootstrapInFlightFor = orgId;
+
       // Abort if there is no valid session — the RPC requires auth and will 42501
       // on anon. This happens during the brief window between SIGNED_OUT and
       // SIGNED_IN when React context still holds the previous orgId/selfUid.
       const { data: { session } } = await supabase().auth.getSession();
-      if (!session) return;
-
-      chatBootstrapInFlightFor = orgId;
+      if (!session) {
+        chatBootstrapInFlightFor = null;
+        return;
+      }
 
       let seededFromDisk = false;
 
