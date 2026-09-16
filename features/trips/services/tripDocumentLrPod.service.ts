@@ -188,6 +188,35 @@ function chunkIds(ids: string[]): string[][] {
   return chunks;
 }
 
+/** Max simultaneous `trip_documents`/`trips` chunk queries per call — large orgs can
+ *  otherwise produce dozens of chunks (e.g. 3000 ids / 40 = 75), firing that many
+ *  connections at once via `Promise.all`. */
+const CHUNK_CONCURRENCY = 3;
+
+/**
+ * Runs `worker` over `items` with at most `limit` in flight at once. Every item is
+ * processed and one result is returned per item, in input order — `worker` is expected
+ * to catch its own errors (as all call sites below already do), so a single item's
+ * failure never rejects the overall call.
+ */
+export async function runWithConcurrencyLimit<T, R>(
+  items: readonly T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function runNext(): Promise<void> {
+    while (next < items.length) {
+      const index = next++;
+      results[index] = await worker(items[index]!, index);
+    }
+  }
+  const workerCount = Math.min(Math.max(limit, 1), items.length);
+  await Promise.all(Array.from({ length: workerCount }, () => runNext()));
+  return results;
+}
+
 /** One bulk read of LR + POD metadata for many trips. */
 export async function loadLrPodIndexByTripIds(
   tripIds: string[],
@@ -196,20 +225,18 @@ export async function loadLrPodIndexByTripIds(
   if (chunks.length === 0) return new Map();
 
   const rows: TripDocumentLrPodRow[] = [];
-  const results = await Promise.all(
-    chunks.map(async (chunk) => {
-      const { data, error } = await supabase()
-        .from("trip_documents")
-        .select("trip_id, document_type, document_number")
-        .in("trip_id", chunk)
-        .in("document_type", ["lr", "pod", "soft_pod", "pod_soft"]);
-      if (error) {
-        console.warn("[tripDocumentLrPod] trip_documents fetch:", error.message);
-        return [] as TripDocumentLrPodRow[];
-      }
-      return (data ?? []) as TripDocumentLrPodRow[];
-    }),
-  );
+  const results = await runWithConcurrencyLimit(chunks, CHUNK_CONCURRENCY, async (chunk) => {
+    const { data, error } = await supabase()
+      .from("trip_documents")
+      .select("trip_id, document_type, document_number")
+      .in("trip_id", chunk)
+      .in("document_type", ["lr", "pod", "soft_pod", "pod_soft"]);
+    if (error) {
+      console.warn("[tripDocumentLrPod] trip_documents fetch:", error.message);
+      return [] as TripDocumentLrPodRow[];
+    }
+    return (data ?? []) as TripDocumentLrPodRow[];
+  });
   for (const part of results) rows.push(...part);
   return indexLrPodDocuments(rows);
 }
@@ -235,20 +262,18 @@ export async function loadHubPodReceiptFlags(
   const soft = new Set<string>();
   const hard = new Set<string>();
 
-  const docParts = await Promise.all(
-    chunks.map(async (chunk) => {
-      const { data, error } = await supabase()
-        .from("trip_documents")
-        .select("trip_id, document_type")
-        .in("trip_id", chunk)
-        .in("document_type", ["pod", "soft_pod", "pod_soft"]);
-      if (error) {
-        console.warn("[tripDocumentLrPod] hub soft POD fetch:", error.message);
-        return [] as TripDocumentLrPodRow[];
-      }
-      return (data ?? []) as TripDocumentLrPodRow[];
-    }),
-  );
+  const docParts = await runWithConcurrencyLimit(chunks, CHUNK_CONCURRENCY, async (chunk) => {
+    const { data, error } = await supabase()
+      .from("trip_documents")
+      .select("trip_id, document_type")
+      .in("trip_id", chunk)
+      .in("document_type", ["pod", "soft_pod", "pod_soft"]);
+    if (error) {
+      console.warn("[tripDocumentLrPod] hub soft POD fetch:", error.message);
+      return [] as TripDocumentLrPodRow[];
+    }
+    return (data ?? []) as TripDocumentLrPodRow[];
+  });
   for (const part of docParts) {
     for (const row of part) {
       if (!isSoftPodDocumentType(row.document_type)) continue;
@@ -257,19 +282,17 @@ export async function loadHubPodReceiptFlags(
     }
   }
 
-  const stampParts = await Promise.all(
-    chunks.map(async (chunk) => {
-      const { data, error } = await supabase()
-        .from("trips")
-        .select("id, pod_received_at")
-        .in("id", chunk);
-      if (error) {
-        console.warn("[tripDocumentLrPod] hub hard POD fetch:", error.message);
-        return [] as { id?: string; pod_received_at?: string | null }[];
-      }
-      return (data ?? []) as { id?: string; pod_received_at?: string | null }[];
-    }),
-  );
+  const stampParts = await runWithConcurrencyLimit(chunks, CHUNK_CONCURRENCY, async (chunk) => {
+    const { data, error } = await supabase()
+      .from("trips")
+      .select("id, pod_received_at")
+      .in("id", chunk);
+    if (error) {
+      console.warn("[tripDocumentLrPod] hub hard POD fetch:", error.message);
+      return [] as { id?: string; pod_received_at?: string | null }[];
+    }
+    return (data ?? []) as { id?: string; pod_received_at?: string | null }[];
+  });
   for (const part of stampParts) {
     for (const row of part) {
       if (tripPodIsReceived({ pod_received_at: row.pod_received_at })) {

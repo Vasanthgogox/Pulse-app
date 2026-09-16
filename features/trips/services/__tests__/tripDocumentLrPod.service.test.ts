@@ -7,7 +7,97 @@ import {
   tripPodStatusFlags,
   tripIsDeliveredStatus,
   tripMatchesCompletionFilter,
+  runWithConcurrencyLimit,
 } from "../tripDocumentLrPod.service";
+
+/** Wraps a worker to record how many calls were in flight at once. */
+function trackConcurrency<T, R>(worker: (item: T, index: number) => Promise<R>) {
+  let active = 0;
+  let maxActive = 0;
+  const tracked = async (item: T, index: number): Promise<R> => {
+    active++;
+    maxActive = Math.max(maxActive, active);
+    try {
+      return await worker(item, index);
+    } finally {
+      active--;
+    }
+  };
+  return { tracked, getMaxActive: () => maxActive };
+}
+
+describe("runWithConcurrencyLimit", () => {
+  it("Case A: 0 items resolves to an empty array without invoking the worker", async () => {
+    const worker = jest.fn(async (x: number) => x);
+    const result = await runWithConcurrencyLimit<number, number>([], 3, worker);
+    expect(result).toEqual([]);
+    expect(worker).not.toHaveBeenCalled();
+  });
+
+  it("Case B: 1-3 items may all run concurrently when limit >= item count", async () => {
+    const { tracked, getMaxActive } = trackConcurrency(async (x: number) => {
+      await Promise.resolve();
+      return x;
+    });
+    const result = await runWithConcurrencyLimit([1, 2, 3], 3, tracked);
+    expect(result).toEqual([1, 2, 3]);
+    expect(getMaxActive()).toBe(3);
+  });
+
+  it("Case C: 4-6 items never exceed the concurrency limit of 3", async () => {
+    const { tracked, getMaxActive } = trackConcurrency(async (x: number) => {
+      await Promise.resolve();
+      await Promise.resolve();
+      return x;
+    });
+    const result = await runWithConcurrencyLimit([1, 2, 3, 4, 5, 6], 3, tracked);
+    expect(result).toEqual([1, 2, 3, 4, 5, 6]);
+    expect(getMaxActive()).toBe(3);
+  });
+
+  it("Case D: a large input (3000 items) never exceeds the concurrency limit of 3", async () => {
+    const items = Array.from({ length: 3000 }, (_, i) => i);
+    const { tracked, getMaxActive } = trackConcurrency(async (x: number) => {
+      await Promise.resolve();
+      return x;
+    });
+    const result = await runWithConcurrencyLimit(items, 3, tracked);
+    expect(result).toEqual(items);
+    expect(getMaxActive()).toBeLessThanOrEqual(3);
+    expect(getMaxActive()).toBeGreaterThan(0);
+  });
+
+  it("Case E: a chunk whose worker catches its own error and returns a fallback does not stop the others — matches the existing per-chunk try/catch at every call site", async () => {
+    const worker = async (item: number) => {
+      if (item === 2) {
+        // Mirrors loadLrPodIndexByTripIds / loadHubPodReceiptFlags: the real
+        // Supabase error is caught inside the worker, which resolves with a
+        // fallback instead of throwing.
+        return -1;
+      }
+      return item;
+    };
+    const result = await runWithConcurrencyLimit([1, 2, 3], 3, worker);
+    expect(result).toEqual([1, -1, 3]);
+  });
+
+  it("Case F: results preserve input order regardless of completion order", async () => {
+    const delays = [30, 10, 20, 5];
+    const worker = async (item: number, index: number) => {
+      await new Promise((resolve) => setTimeout(resolve, delays[index]));
+      return item;
+    };
+    const result = await runWithConcurrencyLimit([10, 20, 30, 40], 3, worker);
+    expect(result).toEqual([10, 20, 30, 40]);
+  });
+
+  it("does not mutate the input array", async () => {
+    const items = [1, 2, 3, 4, 5];
+    const snapshot = [...items];
+    await runWithConcurrencyLimit(items, 2, async (x: number) => x);
+    expect(items).toEqual(snapshot);
+  });
+});
 
 describe("indexLrPodDocuments", () => {
   it("maps lr document_number and pod presence by trip_id", () => {
