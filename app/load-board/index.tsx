@@ -3,6 +3,7 @@
  */
 import { LoadBoardModal } from "@/components/LoadBoardModal";
 import { SurfaceAccessGate } from "@/components/SurfaceAccessGate";
+import { setInitialIndentForDetail } from "@/features/indents/initialIndentForDetail";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useMemberAccess } from "@/lib/useMemberAccess";
 import { useSafeBack } from "@/lib/useSafeBack";
@@ -31,9 +32,10 @@ export default function LoadBoardFullScreen() {
           if (!canSurface("tripops.indents.create")) return;
           router.push("/create-indent" as import("expo-router").Href);
         }}
-        onIndentPress={(indent) =>
-          router.push(`/indent/${indent.id}` as import("expo-router").Href)
-        }
+        onIndentPress={(indent) => {
+          setInitialIndentForDetail(indent);
+          router.push(`/indent/${indent.id}` as import("expo-router").Href);
+        }}
       />
     </SurfaceAccessGate>
   );

@@ -75,6 +75,10 @@ import { useRealtimeTransactionsInvalidation } from "@/lib/queries/useRealtimeIn
 import { useInvalidateTransactions } from "@/lib/queries/useTransactionsQuery";
 import { queryKeys } from "@/lib/queryKeys";
 import { ROUTES } from "@/lib/routes";
+import { setInitialClientForDetail } from "@/features/clients/initialClientForDetail";
+import { setInitialSupplierForDetail } from "@/features/suppliers/initialSupplierForDetail";
+import { setInitialDriverForDetail } from "@/features/drivers/initialDriverForDetail";
+import { setInitialVehicleForDetail } from "@/features/vehicles/initialVehicleForDetail";
 import { clearAllDomainCacheMetaForOrg } from "@/lib/cache/cacheMetadataStore";
 import { useLinkedOrgProfileMap } from "@/lib/useLinkedOrgProfileMap";
 import { useQueryClient } from "@tanstack/react-query";
@@ -1092,6 +1096,10 @@ export function FinanceScreen() {
       // Fall through to the in-memory overlay below instead, which matches by name/ledger data only.
       const isLedgerOnlyCustomer = data.id.startsWith("ledger-party-");
       if (entityType === "CLIENT" && subTab === "customers" && !isLedgerOnlyCustomer) {
+        // Stash the already-loaded ClientRow for Client Detail's first paint —
+        // seed only, ClientDetailScreen still fetches the authoritative bundle.
+        const seed = clientRows.find((c) => c.id === data.id);
+        if (seed) setInitialClientForDetail(seed);
         router.push(
           ROUTES.clientDetail(data.id, "cash") as Parameters<
             typeof router.push
@@ -1101,6 +1109,8 @@ export function FinanceScreen() {
       }
       const isDcoCounterparty = data.counterpartyKind === "dco";
       if (entityType === "SUPPLIER" && subTab === "suppliers" && !isDcoCounterparty) {
+        const seed = supplierRows.find((s) => s.id === data.id);
+        if (seed) setInitialSupplierForDetail(seed);
         router.push(
           ROUTES.supplierDetail(data.id, "cash") as Parameters<
             typeof router.push
@@ -1110,11 +1120,15 @@ export function FinanceScreen() {
       }
       // Vehicle selection from Finance > Garage: open full VehicleDetailScreen (detail page)
       if (entityType === "VEHICLE" && subTab === "garage") {
+        const seed = vehicleRows.find((v) => v.id === data.id);
+        if (seed) setInitialVehicleForDetail(seed);
         router.push(ROUTES.vehicleDetail(data.id) as Parameters<typeof router.push>[0]);
         return;
       }
       // Driver selection from Finance > Drivers: open full DriverDetailScreen (detail page)
       if (entityType === "DRIVER" && subTab === "drivers") {
+        const seed = driverRows.find((d) => d.id === data.id);
+        if (seed) setInitialDriverForDetail(seed);
         router.push(
           ROUTES.driverDetail(data.id, "ledger") as Parameters<
             typeof router.push
@@ -1124,7 +1138,7 @@ export function FinanceScreen() {
       }
       setSelectedEntity({ data, entityType, subTab });
     },
-    [router],
+    [router, clientRows, supplierRows, driverRows, vehicleRows],
   );
 
   const supplierPartyOptions = useMemo(

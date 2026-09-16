@@ -62,6 +62,10 @@ import {
     isLoadBasedTrip,
 } from "@/features/trips/visibility/tripVisibility";
 import { computeClientPaidSeed } from "@/features/clients/utils/clientPaidSeed.util";
+import {
+  clearInitialClientForDetail,
+  getInitialClientForDetail,
+} from "@/features/clients/initialClientForDetail";
 import { ClientInvoicePodPolicySection } from "@/features/clients/components/ClientInvoicePodPolicySection";
 import { getSignedAvatarUrl } from "@/lib/avatarUpload";
 import { canAccessFinance } from "@/lib/capabilities";
@@ -206,6 +210,16 @@ function supplierPartyAvatarProps(
   return { name: displayName };
 }
 
+/**
+ * First paint: the list ClientRow seed stashed by FinanceScreen before
+ * navigating here, if any. `get_client_detail_bundle` remains the
+ * authoritative hydration source — never written into any query cache.
+ */
+function peekClientFirstPaint(clientId: string | null | undefined): ClientRow | null {
+  if (!clientId) return null;
+  return getInitialClientForDetail(clientId);
+}
+
 export interface ClientDetailScreenProps {
   clientId: string;
   onBack: () => void;
@@ -227,7 +241,9 @@ export default function ClientDetailScreen({
   const { can: canSurface } = useMemberAccess();
   const canAddTransaction =
     canAccessFinance(capabilities) && canSurface("finance.add_transaction");
-  const [client, setClient] = useState<ClientRow | null>(null);
+  const [client, setClient] = useState<ClientRow | null>(() =>
+    peekClientFirstPaint(clientId),
+  );
   const clientName = client?.name || client?.contact_person || t("client");
   const [trips, setTrips] = useState<TripRow[]>([]);
   const tripIdsForFinanceAdj = useMemo(
@@ -268,7 +284,7 @@ export default function ClientDetailScreen({
   const [clientReportKind, setClientReportKind] = useState<"receivable" | "pnl" | "ledger">(
     "receivable",
   );
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => peekClientFirstPaint(clientId) == null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const isRefreshingRef = useRef(false);
@@ -315,15 +331,34 @@ export default function ClientDetailScreen({
     [],
   );
   const initialLoadDoneRef = useRef(false);
+  /** Whether we currently have seed data to show while `load()` is in flight — first mount only, reset per `clientId`. */
+  const hasSeedDataRef = useRef(peekClientFirstPaint(clientId) != null);
+  /** Guards a resolving `load()` from writing state after the user has already switched to a different client. */
+  const activeClientIdRef = useRef(clientId);
+  /** clientId of an in-flight `load()` call, or null — makes concurrent triggers (mount effect + focus effect) idempotent. */
+  const loadInFlightRef = useRef<string | null>(null);
   const heroDecorProgress = useRef(new Animated.Value(0)).current;
 
+  const mountRef = useRef(true);
   useEffect(() => {
+    activeClientIdRef.current = clientId;
     setIsLinked(false);
     setClientRatingAvg(null);
     initialLoadDoneRef.current = false;
-    setLoading(true);
     setError(null);
-    setClient(null);
+    if (mountRef.current) {
+      // Initial mount already seeded `client`/`loading` via useState initializers above —
+      // re-seeding here too would be redundant but harmless; skip to avoid a wasted render.
+      mountRef.current = false;
+      return;
+    }
+    // Switching to a different client on an already-mounted screen instance
+    // (e.g. web SPA route reuse): reset first so stale Client A data never
+    // shows under Client B's id, then seed from the registry if available.
+    const seed = peekClientFirstPaint(clientId);
+    hasSeedDataRef.current = seed != null;
+    setClient(seed);
+    setLoading(seed == null);
   }, [clientId]);
 
 
@@ -394,10 +429,17 @@ export default function ClientDetailScreen({
       setLoading(false);
       return;
     }
-    if (!isRefreshingRef.current && !initialLoadDoneRef.current)
+    // Idempotency guard: `useFocusEffect` and the org-readiness retry effect
+    // below can both attempt to invoke `load()` for the same clientId in the
+    // same tick (e.g. on mount, once org context is already available) —
+    // without this, that's a literal duplicate Promise.all of every request.
+    if (loadInFlightRef.current === clientId) return;
+    loadInFlightRef.current = clientId;
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current && !hasSeedDataRef.current)
       setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
+    const requestClientId = clientId;
 
     // FinanceScreen already warms these under the same query keys for the whole
     // Finance tab (useFinanceEntities / useFinanceLedger) — reuse them instead of
@@ -487,6 +529,9 @@ export default function ClientDetailScreen({
           suppliersRes,
           driversRes,
         ]) => {
+          // The user navigated to a different client while this was in flight —
+          // a newer `load()` for the new clientId owns state now, discard this one.
+          if (activeClientIdRef.current !== requestClientId) return;
           const allTrips = tripsRes.error ? [] : (tripsRes.trips ?? []);
           const allClients = clientsRes.error ? [] : (clientsRes.clients ?? []);
           const allTx = txRes.error ? [] : (txRes.transactions ?? []);
@@ -560,13 +605,18 @@ export default function ClientDetailScreen({
         },
       )
       .catch((err: unknown) => {
+        if (activeClientIdRef.current !== requestClientId) return;
         setError(err instanceof Error ? err.message : "Failed to load client data");
       })
       .finally(() => {
+        if (loadInFlightRef.current === requestClientId) loadInFlightRef.current = null;
+        if (activeClientIdRef.current !== requestClientId) return;
         setLoading(false);
         initialLoadDoneRef.current = true;
+        hasSeedDataRef.current = false;
         isRefreshingRef.current = false;
         setRefreshing(false);
+        clearInitialClientForDetail(requestClientId);
       });
   }, [clientId, currentOrganization?.id, orgLoading, queryClient]);
 
@@ -862,7 +912,13 @@ export default function ClientDetailScreen({
     ],
   );
 
-  useEffect(() => load(), [load]);
+  // Both effects below can independently invoke load() for the same mount
+  // (e.g. org context already ready at mount fires both; SupplierDetailScreen/
+  // DriverDetailScreen/VehicleDetailScreen share this exact shape, the latter
+  // two with a matching "org context may not be ready on cold Netlify load"
+  // comment — that race is real, so neither trigger is removed here. Instead
+  // `load()` itself is idempotent per clientId via `loadInFlightRef`, so a
+  // simultaneous double-trigger costs nothing extra on the network.
   useFocusEffect(
     useCallback(() => {
       if (initialLoadDoneRef.current && Date.now() - lastFocusRefreshRef.current < 5 * 60_000) return;
@@ -870,6 +926,10 @@ export default function ClientDetailScreen({
       load();
     }, [load]),
   );
+  useEffect(() => {
+    if (!currentOrganization?.id || initialLoadDoneRef.current) return;
+    load();
+  }, [currentOrganization?.id, load]);
 
   const profileWarehousesForCard = useMemo<ProfileWarehouse[]>(
     () =>

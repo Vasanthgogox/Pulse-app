@@ -36,6 +36,10 @@ import {
     type IndentRow,
 } from "@/features/indents/services/indents.service";
 import {
+  clearInitialIndentForDetail,
+  getInitialIndentForDetail,
+} from "@/features/indents/initialIndentForDetail";
+import {
     indentReviewHubLayout,
     indentReviewHubSpecValue,
     indentReviewHubText,
@@ -96,6 +100,16 @@ import {
     View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+/**
+ * First paint: the list IndentRow seed stashed by the Load Center / Load
+ * Board before navigating here, if any. `getVisibleIndentById` remains the
+ * authoritative hydration source — never written into any query cache.
+ */
+function peekIndentFirstPaint(indentId: string | null | undefined): IndentRow | null {
+  if (!indentId) return null;
+  return getInitialIndentForDetail(indentId);
+}
 
 export interface IndentDetailScreenProps {
   indentId: string;
@@ -217,7 +231,9 @@ export function IndentDetailScreen({
       selectIntegratedSuppliersForLoadCenter(suppliers, linkedOrgByOrganizationId),
     [suppliers, linkedOrgByOrganizationId],
   );
-  const [indent, setIndent] = useState<IndentRow | null>(null);
+  const [indent, setIndent] = useState<IndentRow | null>(() =>
+    peekIndentFirstPaint(indentId),
+  );
   const indentStoryIds = useMemo(
     () => (indent?.id ? [indent.id] : []),
     [indent?.id],
@@ -228,7 +244,7 @@ export function IndentDetailScreen({
     : undefined;
   const pulseStoryLive = pulseStoryState?.isLive === true;
   const pulseStoryPostId = pulseStoryState?.postId ?? null;
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => peekIndentFirstPaint(indentId) == null);
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [cancelling, setCancelling] = useState(false);
@@ -257,6 +273,29 @@ export function IndentDetailScreen({
   const [submittingQuote, setSubmittingQuote] = useState(false);
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
+  /** Whether we currently have seed data to show while `load()` is in flight — first mount only, reset per `indentId`. */
+  const hasSeedDataRef = useRef(peekIndentFirstPaint(indentId) != null);
+  /** Guards a resolving `load()` from writing state after the user has already switched to a different indent. */
+  const activeIndentIdRef = useRef(indentId);
+
+  const indentMountRef = useRef(true);
+  useEffect(() => {
+    activeIndentIdRef.current = indentId;
+    initialLoadDoneRef.current = false;
+    setError(null);
+    if (indentMountRef.current) {
+      // Initial mount already seeded `indent`/`loading` via useState initializers above.
+      indentMountRef.current = false;
+      return;
+    }
+    // Switching to a different indent on an already-mounted screen instance:
+    // reset first so stale Indent A data never shows under Indent B's id,
+    // then seed from the registry if available.
+    const seed = peekIndentFirstPaint(indentId);
+    hasSeedDataRef.current = seed != null;
+    setIndent(seed);
+    setLoading(seed == null);
+  }, [indentId]);
 
   const { data: quotes = [], refetch: refetchQuotes } =
     useIndentDirectQuotesQuery(indentId);
@@ -268,17 +307,23 @@ export function IndentDetailScreen({
       setLoading(false);
       return;
     }
-    if (!isRefreshingRef.current && !initialLoadDoneRef.current)
+    const requestIndentId = indentId;
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current && !hasSeedDataRef.current)
       setLoading(true);
     setError(null);
     const { error: err, indent: row } = await getVisibleIndentById(
       orgId,
       indentId,
     );
+    // The user navigated to a different indent while this was in flight — a
+    // newer load() for the new indentId owns state now, discard this one.
+    if (activeIndentIdRef.current !== requestIndentId) return;
     setLoading(false);
     initialLoadDoneRef.current = true;
+    hasSeedDataRef.current = false;
     isRefreshingRef.current = false;
     setRefreshing(false);
+    clearInitialIndentForDetail(requestIndentId);
     if (err) {
       setError(err.message);
       setIndent(null);

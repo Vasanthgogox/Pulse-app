@@ -6,6 +6,7 @@ import { ChromeBelowTopNavLoadingScreen } from "@/components/chromeLoadingScreen
 import Layout from "@/constants/Layout";
 import { LoadCenterView } from "@/features/network/components/LoadCenterView";
 import { LOADS_HUB_PAGE_BG } from "@/features/network/components/LoadCenterHubMobileShell";
+import { setInitialIndentForDetail } from "@/features/indents/initialIndentForDetail";
 import { ROUTES } from "@/lib/routes";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useLayoutInsets } from "@/lib/layoutInsets";
@@ -52,7 +53,10 @@ export default function PulseLoadsScreen() {
           if (!canSurface("tripops.indents.create")) return;
           router.push(ROUTES.CREATE_INDENT as import("expo-router").Href);
         }}
-        onIndentPress={(indent) => router.push(`/indent/${indent.id}` as import("expo-router").Href)}
+        onIndentPress={(indent) => {
+          setInitialIndentForDetail(indent);
+          router.push(`/indent/${indent.id}` as import("expo-router").Href);
+        }}
         onMyNetworkPress={() =>
           router.push(ROUTES.TABS.NETWORK as import("expo-router").Href)
         }

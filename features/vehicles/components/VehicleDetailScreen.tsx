@@ -56,6 +56,10 @@ import {
   type VehicleRow,
 } from "../services/vehicles.service";
 import {
+  clearInitialVehicleForDetail,
+  getInitialVehicleForDetail,
+} from "../initialVehicleForDetail";
+import {
   AddVehicleEntryModal,
   type TripOption,
   type DriverOption,
@@ -66,6 +70,17 @@ import { ROUTES } from "@/lib/routes";
 import { VehicleOperationsHub } from "./VehicleOperationsHub";
 import { VehicleAvatar } from "./VehicleAvatar";
 import { VehicleProfileHub } from "./desktop/VehicleProfileHub";
+
+/**
+ * First paint: the list VehicleRow seed stashed by FinanceScreen before
+ * navigating here, if any. `getVehicleById` remains the authoritative
+ * hydration source — never written into any query cache. Only valid for the
+ * "own vehicle" case; the cross-org trip-viewer fallback below always fetches.
+ */
+function peekVehicleFirstPaint(vehicleId: string | null | undefined): VehicleRow | null {
+  if (!vehicleId) return null;
+  return getInitialVehicleForDetail(vehicleId);
+}
 
 export interface VehicleDetailScreenProps {
   vehicleId: string;
@@ -93,14 +108,16 @@ export default function VehicleDetailScreen({
     canAccessFinance(capabilities) && canSurface("finance.add_transaction");
   const canViewVehicleAnalytics = canSurface("fleet.vehicles.analytics");
   const canViewVehicleDocuments = canSurface("fleet.vehicles.documents");
-  const [vehicle, setVehicle] = useState<VehicleRow | null>(null);
+  const [vehicle, setVehicle] = useState<VehicleRow | null>(() =>
+    peekVehicleFirstPaint(vehicleId),
+  );
   /** True when `vehicle` was resolved via the cross-org trip-viewer fallback (vendor's own vehicle). */
   const [isCrossOrgVehicle, setIsCrossOrgVehicle] = useState(false);
   const [trips, setTrips] = useState<TripRow[]>([]);
   const [transactions, setTransactions] = useState<LedgerRow[]>([]);
   const [drivers, setDrivers] = useState<DriverOption[]>([]);
   const [driverRowsForLedger, setDriverRowsForLedger] = useState<DriverRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => peekVehicleFirstPaint(vehicleId) == null);
   const [error, setError] = useState<string | null>(null);
   const [showAddTransactionModal, setShowAddTransactionModal] = useState(false);
   const [showProfileModal, setShowProfileModal] = useState(false);
@@ -111,10 +128,36 @@ export default function VehicleDetailScreen({
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
   const lastFocusRefreshRef = useRef(0);
+  /** Whether we currently have seed data to show while `load()` is in flight — first mount only, reset per `vehicleId`. */
+  const hasSeedDataRef = useRef(peekVehicleFirstPaint(vehicleId) != null);
+  /** Guards a resolving `load()` from writing state after the user has already switched to a different vehicle. */
+  const activeVehicleIdRef = useRef(vehicleId);
+  /** vehicleId of an in-flight `load()` call, or null — makes concurrent triggers (mount effect + focus effect) idempotent. */
+  const loadInFlightRef = useRef<string | null>(null);
   const heroDecorProgress = useRef(new Animated.Value(0)).current;
   const queryClient = useQueryClient();
   const openAddEntryHandledRef = useRef(false);
   const cashLedgerBackfillAttemptRef = useRef(0);
+
+  const vehicleMountRef = useRef(true);
+  useEffect(() => {
+    activeVehicleIdRef.current = vehicleId;
+    initialLoadDoneRef.current = false;
+    setError(null);
+    if (vehicleMountRef.current) {
+      // Initial mount already seeded `vehicle`/`loading` via useState initializers above.
+      vehicleMountRef.current = false;
+      return;
+    }
+    // Switching to a different vehicle on an already-mounted screen instance:
+    // reset first so stale Vehicle A data never shows under Vehicle B's id,
+    // then seed from the registry if available.
+    const seed = peekVehicleFirstPaint(vehicleId);
+    hasSeedDataRef.current = seed != null;
+    setIsCrossOrgVehicle(false);
+    setVehicle(seed);
+    setLoading(seed == null);
+  }, [vehicleId]);
 
   useEffect(() => {
     if (!openAddEntryOnLoad || openAddEntryHandledRef.current) return;
@@ -153,7 +196,12 @@ export default function VehicleDetailScreen({
       setLoading(false);
       return;
     }
-    if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
+    // Idempotency guard: useFocusEffect and the org-readiness retry effect can
+    // both invoke load() for the same vehicleId in the same tick.
+    if (loadInFlightRef.current === vehicleId) return;
+    loadInFlightRef.current = vehicleId;
+    const requestVehicleId = vehicleId;
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current && !hasSeedDataRef.current) setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
     // FinanceScreen already warms these under the same query keys for the
@@ -205,6 +253,9 @@ export default function VehicleDetailScreen({
       driversPromise,
       txPromise,
     ]).then(([res, ownerRes, supplierRes, driversRes, txRes]) => {
+      // The user navigated to a different vehicle while this was in flight —
+      // a newer load() for the new vehicleId owns state now.
+      if (activeVehicleIdRef.current !== requestVehicleId) return;
       if (res.vehicle) {
         setVehicle(res.vehicle);
         setIsCrossOrgVehicle(false);
@@ -215,6 +266,7 @@ export default function VehicleDetailScreen({
         // reporting "not found": basic info + documents only, no trip
         // history/ledger/driver list (those stay properly org-scoped to the vendor).
         getVehicleForTripViewer(vehicleId, initialLedgerTripId, orgId).then((res2) => {
+          if (activeVehicleIdRef.current !== requestVehicleId) return;
           if (res2.vehicle) {
             setVehicle(res2.vehicle);
             setIsCrossOrgVehicle(true);
@@ -241,10 +293,14 @@ export default function VehicleDetailScreen({
         (txRes.error ? [] : ((txRes.transactions ?? []) as LedgerRow[])) ?? [];
       setTransactions(allTx);
     }).finally(() => {
+      if (loadInFlightRef.current === requestVehicleId) loadInFlightRef.current = null;
+      if (activeVehicleIdRef.current !== requestVehicleId) return;
       setLoading(false);
       initialLoadDoneRef.current = true;
+      hasSeedDataRef.current = false;
       isRefreshingRef.current = false;
       setRefreshing(false);
+      clearInitialVehicleForDetail(requestVehicleId);
     });
   }, [vehicleId, currentOrganization?.id, queryClient]);
 

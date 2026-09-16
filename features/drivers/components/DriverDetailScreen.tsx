@@ -104,6 +104,10 @@ import {
     type UpdateDriverData,
 } from "../services/drivers.service";
 import {
+  clearInitialDriverForDetail,
+  getInitialDriverForDetail,
+} from "../initialDriverForDetail";
+import {
   DriverFleetInviteSalaryModal,
   type DriverFleetInviteSalaryModalMode,
 } from "./DriverFleetInviteSalaryModal";
@@ -289,6 +293,16 @@ function getDriverFallbackSeed(driverId: string): string {
   return `driver-${hash + 1}`;
 }
 
+/**
+ * First paint: the list DriverRow seed stashed by FinanceScreen before
+ * navigating here, if any. `getDriverDetailBundle` remains the authoritative
+ * hydration source — never written into any query cache.
+ */
+function peekDriverFirstPaint(driverId: string | null | undefined): DriverRow | null {
+  if (!driverId) return null;
+  return getInitialDriverForDetail(driverId);
+}
+
 export interface DriverDetailScreenProps {
   driverId: string;
   onBack: () => void;
@@ -312,9 +326,11 @@ export default function DriverDetailScreen({
   const canInviteDriver = canSurface("fleet.drivers.invite");
   const canEditDriver = canSurface("fleet.drivers.edit");
   const canViewDriverAnalytics = canSurface("fleet.drivers.analytics");
-  const [driver, setDriver] = useState<DriverRow | null>(null);
+  const [driver, setDriver] = useState<DriverRow | null>(() =>
+    peekDriverFirstPaint(driverId),
+  );
   const [trips, setTrips] = useState<TripRow[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => peekDriverFirstPaint(driverId) == null);
   const [error, setError] = useState<string | null>(null);
   const [linking, setLinking] = useState(false);
   const [inviting, setInviting] = useState(false);
@@ -365,6 +381,12 @@ export default function DriverDetailScreen({
   const isRefreshingRef = useRef(false);
   const initialLoadDoneRef = useRef(false);
   const lastFocusRefreshRef = useRef<number>(0);
+  /** Whether we currently have seed data to show while `load()` is in flight — first mount only, reset per `driverId`. */
+  const hasSeedDataRef = useRef(peekDriverFirstPaint(driverId) != null);
+  /** Guards a resolving `load()` from writing state after the user has already switched to a different driver. */
+  const activeDriverIdRef = useRef(driverId);
+  /** driverId of an in-flight `load()` call, or null — makes concurrent triggers (mount effect + focus effect) idempotent. */
+  const loadInFlightRef = useRef<string | null>(null);
   const queryClient = useQueryClient();
   const insets = useSafeAreaInsets();
   const { width: windowWidth } = useWindowDimensions();
@@ -401,12 +423,36 @@ export default function DriverDetailScreen({
     if (autoOpenProfile) setShowProfileModal(true);
   }, [autoOpenProfile]);
 
+  const driverMountRef = useRef(true);
+  useEffect(() => {
+    activeDriverIdRef.current = driverId;
+    initialLoadDoneRef.current = false;
+    setError(null);
+    if (driverMountRef.current) {
+      // Initial mount already seeded `driver`/`loading` via useState initializers above.
+      driverMountRef.current = false;
+      return;
+    }
+    // Switching to a different driver on an already-mounted screen instance:
+    // reset first so stale Driver A data never shows under Driver B's id,
+    // then seed from the registry if available.
+    const seed = peekDriverFirstPaint(driverId);
+    hasSeedDataRef.current = seed != null;
+    setDriver(seed);
+    setLoading(seed == null);
+  }, [driverId]);
+
   const load = useCallback(() => {
     if (!driverId || !currentOrganization?.id) {
       setLoading(false);
       return;
     }
-    if (!isRefreshingRef.current && !initialLoadDoneRef.current)
+    // Idempotency guard: useFocusEffect and the org-readiness retry effect can
+    // both invoke load() for the same driverId in the same tick.
+    if (loadInFlightRef.current === driverId) return;
+    loadInFlightRef.current = driverId;
+    const requestDriverId = driverId;
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current && !hasSeedDataRef.current)
       setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
@@ -458,6 +504,9 @@ export default function DriverDetailScreen({
           signupMatchRes,
           tenuresRes,
         ]) => {
+          // The user navigated to a different driver while this was in
+          // flight — a newer load() for the new driverId owns state now.
+          if (activeDriverIdRef.current !== requestDriverId) return;
           const driverRow = bundleRes.error ? null : (bundleRes.driver ?? null);
           if (bundleRes.error) {
             setError(bundleRes.error.message);
@@ -537,13 +586,18 @@ export default function DriverDetailScreen({
         },
       )
       .catch((err: unknown) => {
+        if (activeDriverIdRef.current !== requestDriverId) return;
         setError(err instanceof Error ? err.message : "Failed to load driver data");
       })
       .finally(() => {
+        if (loadInFlightRef.current === requestDriverId) loadInFlightRef.current = null;
+        if (activeDriverIdRef.current !== requestDriverId) return;
         setLoading(false);
         initialLoadDoneRef.current = true;
+        hasSeedDataRef.current = false;
         isRefreshingRef.current = false;
         setRefreshing(false);
+        clearInitialDriverForDetail(requestDriverId);
       });
   }, [driverId, currentOrganization?.id, queryClient]);
 

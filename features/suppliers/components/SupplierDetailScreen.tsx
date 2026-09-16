@@ -110,6 +110,10 @@ import {
     type SupplierRow,
     type UpdateSupplierData,
 } from "../services/suppliers.service";
+import {
+  clearInitialSupplierForDetail,
+  getInitialSupplierForDetail,
+} from "../initialSupplierForDetail";
 
 /** Treat DB placeholders or internal ids as empty for display. */
 function normalizeContactDisplay(value: string | null | undefined): string {
@@ -142,6 +146,16 @@ function isUuidLikeString(value: string | null | undefined): boolean {
   );
 }
 
+/**
+ * First paint: the list SupplierRow seed stashed by FinanceScreen before
+ * navigating here, if any. `getSupplierDetails` remains the authoritative
+ * hydration source — never written into any query cache.
+ */
+function peekSupplierFirstPaint(supplierId: string | null | undefined): SupplierRow | null {
+  if (!supplierId) return null;
+  return getInitialSupplierForDetail(supplierId);
+}
+
 export interface SupplierDetailScreenProps {
   supplierId: string;
   onBack: () => void;
@@ -163,7 +177,9 @@ export default function SupplierDetailScreen({
   const { can: canSurface } = useMemberAccess();
   const canAddTransaction =
     canAccessFinance(capabilities) && canSurface("finance.add_transaction");
-  const [supplier, setSupplier] = useState<SupplierRow | null>(null);
+  const [supplier, setSupplier] = useState<SupplierRow | null>(() =>
+    peekSupplierFirstPaint(supplierId),
+  );
   const supplierName =
     supplier?.name ||
     supplier?.company_name ||
@@ -186,7 +202,7 @@ export default function SupplierDetailScreen({
   const [cashFlowDriverProfileUrls, setCashFlowDriverProfileUrls] = useState<
     Record<string, string>
   >({});
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(() => peekSupplierFirstPaint(supplierId) == null);
   const [error, setError] = useState<string | null>(null);
   const [showReportModal, setShowReportModal] = useState(false);
   const [supplierReportKind, setSupplierReportKind] = useState<
@@ -234,7 +250,32 @@ export default function SupplierDetailScreen({
       : Layout.screenPaddingHorizontal;
   const initialLoadDoneRef = useRef(false);
   const lastFocusRefreshRef = useRef(0);
+  /** Whether we currently have seed data to show while `load()` is in flight — first mount only, reset per `supplierId`. */
+  const hasSeedDataRef = useRef(peekSupplierFirstPaint(supplierId) != null);
+  /** Guards a resolving `load()` from writing state after the user has already switched to a different supplier. */
+  const activeSupplierIdRef = useRef(supplierId);
+  /** supplierId of an in-flight `load()` call, or null — makes concurrent triggers (mount effect + focus effect) idempotent. */
+  const loadInFlightRef = useRef<string | null>(null);
   const heroDecorProgress = useRef(new Animated.Value(0)).current;
+
+  const supplierMountRef = useRef(true);
+  useEffect(() => {
+    activeSupplierIdRef.current = supplierId;
+    initialLoadDoneRef.current = false;
+    setError(null);
+    if (supplierMountRef.current) {
+      // Initial mount already seeded `supplier`/`loading` via useState initializers above.
+      supplierMountRef.current = false;
+      return;
+    }
+    // Switching to a different supplier on an already-mounted screen instance:
+    // reset first so stale Supplier A data never shows under Supplier B's id,
+    // then seed from the registry if available.
+    const seed = peekSupplierFirstPaint(supplierId);
+    hasSeedDataRef.current = seed != null;
+    setSupplier(seed);
+    setLoading(seed == null);
+  }, [supplierId]);
 
   const clientById = useMemo(() => {
     const m = new Map<string, ClientRow>();
@@ -397,7 +438,12 @@ export default function SupplierDetailScreen({
       setLoading(false);
       return;
     }
-    if (!isRefreshingRef.current && !initialLoadDoneRef.current)
+    // Idempotency guard: useFocusEffect and the org-readiness retry effect can
+    // both invoke load() for the same supplierId in the same tick.
+    if (loadInFlightRef.current === supplierId) return;
+    loadInFlightRef.current = supplierId;
+    const requestSupplierId = supplierId;
+    if (!isRefreshingRef.current && !initialLoadDoneRef.current && !hasSeedDataRef.current)
       setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
@@ -514,6 +560,9 @@ export default function SupplierDetailScreen({
           clientsRes,
           shipperNamesRes,
         ]) => {
+          // The user navigated to a different supplier while this was in
+          // flight — a newer load() for the new supplierId owns state now.
+          if (activeSupplierIdRef.current !== requestSupplierId) return;
           if (res.error) {
             setError(res.error.message);
             setSupplier(null);
@@ -616,10 +665,14 @@ export default function SupplierDetailScreen({
         },
       )
       .finally(() => {
+        if (loadInFlightRef.current === requestSupplierId) loadInFlightRef.current = null;
+        if (activeSupplierIdRef.current !== requestSupplierId) return;
         setLoading(false);
         initialLoadDoneRef.current = true;
+        hasSeedDataRef.current = false;
         isRefreshingRef.current = false;
         setRefreshing(false);
+        clearInitialSupplierForDetail(requestSupplierId);
       });
   }, [supplierId, currentOrganization?.id, queryClient]);
 
