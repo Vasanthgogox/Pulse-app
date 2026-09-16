@@ -11,6 +11,7 @@ import { getPlatformEventBus } from "@/lib/platform/events/InProcessEventBus";
 import { recordTripWorkflowEvent } from "@/features/trips/services/tripWorkflow.service";
 import { createStorageSignedUrlCache } from "@/lib/storageSignedUrlCache";
 import { listOcrJobsForTripDocuments } from "@/features/ocr/services/ocrJob.service";
+import { runWithConcurrencyLimit } from "@/features/trips/services/tripDocumentLrPod.service";
 import { parseLrFieldsFromOcrJob, parseLrFieldValues, preferredLrDocumentNumber, serializeLrFieldValues, LR_FIELDS_FILE_NAME, lrFieldsStoragePath, isLrFieldsMetaPath } from "@/features/trips/services/lrDocumentOcr.util";
 import { expandLR } from "@/lib/utils/lr";
 import {
@@ -24,6 +25,8 @@ import {
 const BUCKET = "trip-documents";
 const MAX_TRIP_DOC_BYTES = 10 * 1024 * 1024;
 const MAX_TRIP_CHAT_IMAGE_BYTES = 5 * 1024 * 1024;
+/** Max simultaneous Storage `list()` calls across a trip's document-type subfolders. */
+const SUBFOLDER_LIST_CONCURRENCY = 3;
 
 /**
  * Postgres/PostgREST: table missing from DB or not in API schema cache (`supabase db push`).
@@ -308,9 +311,15 @@ export async function getDocumentsByTripId(
     (f) => f.name && !f.name.includes('.') && KNOWN_SUBFOLDER_TYPES.includes(f.name as TripDocumentType),
   );
 
-  // Fetch files inside each recognised subfolder (parallel, bounded to known types).
-  const subFolderFilePairs = await Promise.all(
-    subFolderEntries.map(async (entry) => {
+  // Fetch files inside each recognised subfolder — bounded to at most
+  // SUBFOLDER_LIST_CONCURRENCY in flight at once (was an unbounded Promise.all
+  // across up to KNOWN_SUBFOLDER_TYPES.length subfolders per call, doubled by
+  // useTripDetail's two independent viewer-open effects; see the 2026-09-16
+  // Trip Document storage-fallback forensic report).
+  const subFolderFilePairs = await runWithConcurrencyLimit(
+    subFolderEntries,
+    SUBFOLDER_LIST_CONCURRENCY,
+    async (entry) => {
       const { data: sub } = await supabase()
         .storage
         .from(BUCKET)
@@ -319,7 +328,7 @@ export async function getDocumentsByTripId(
         type: entry.name as TripDocumentType,
         files: (sub ?? []).filter((f) => isUsableStorageListObject(f.name)),
       };
-    }),
+    },
   );
 
   function makeStorageFallbackRow(
