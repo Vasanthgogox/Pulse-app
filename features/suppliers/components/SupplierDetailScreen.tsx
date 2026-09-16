@@ -402,12 +402,48 @@ export default function SupplierDetailScreen({
     setError(null);
     const orgId = currentOrganization.id;
     const supplierPromise = getSupplierDetails(supplierId);
-    const cachedTrips = queryClient.getQueryData<TripRow[]>(queryKeys.trips.finite(orgId));
-    const tripsPromise = cachedTrips !== undefined
-      ? Promise.resolve({ error: null, trips: cachedTrips })
-      : getTripsByOrganization(orgId);
-    const txPromise = getTransactionsByOrganization(orgId);
-    const suppliersPromise = getSuppliersByOrganization(orgId);
+    // FinanceScreen already warms these under the same query keys for the
+    // whole Finance tab (useFinanceEntities / useFinanceLedger) — reuse them
+    // instead of re-fetching org-wide data this screen doesn't own.
+    //
+    // `ensureQueryData` (not a plain getQueryData-then-fallback-fetch) so a
+    // cold cache is a single, request-deduplicated fetch shared with any
+    // other concurrent consumer of the same queryKey — a plain fallback
+    // fetch here would race a concurrently-mounting list/warmup hook and
+    // double the RPC (identified as a contributor to the 2026-09-16 DB incident).
+    const tripsPromise = queryClient
+      .ensureQueryData({
+        queryKey: queryKeys.trips.finite(orgId),
+        queryFn: async () => {
+          const res = await getTripsByOrganization(orgId);
+          if (res.error) throw res.error;
+          return res.trips ?? [];
+        },
+      })
+      .then((trips) => ({ error: null, trips }))
+      .catch((error: unknown) => ({ error: error instanceof Error ? error : new Error(String(error)), trips: [] as TripRow[] }));
+    const txPromise = queryClient
+      .ensureQueryData({
+        queryKey: queryKeys.transactions.finite(orgId),
+        queryFn: async () => {
+          const res = await getTransactionsByOrganization(orgId);
+          if (res.error) throw res.error;
+          return res.transactions ?? [];
+        },
+      })
+      .then((transactions) => ({ error: null, transactions }))
+      .catch((error: unknown) => ({ error: error instanceof Error ? error : new Error(String(error)), transactions: [] as LedgerRow[] }));
+    const suppliersPromise = queryClient
+      .ensureQueryData({
+        queryKey: queryKeys.suppliers.finite(orgId),
+        queryFn: async () => {
+          const res = await getSuppliersByOrganization(orgId);
+          if (res.error) throw res.error;
+          return res.suppliers ?? [];
+        },
+      })
+      .then((suppliers) => ({ error: null, suppliers }))
+      .catch((error: unknown) => ({ error: error instanceof Error ? error : new Error(String(error)), suppliers: [] as SupplierRow[] }));
     const shipperNamesPromise = getShipperDisplayNamesForSupplierTrips(orgId);
     const asClientPromise = supplierPromise.then((res) => {
       const sup = res.supplier;
@@ -433,8 +469,28 @@ export default function SupplierDetailScreen({
         );
       },
     );
-    const driversPromise = getDriversByOrganization(orgId);
-    const clientsPromise = getClientsByOrganization(orgId);
+    const driversPromise = queryClient
+      .ensureQueryData({
+        queryKey: queryKeys.drivers.finite(orgId),
+        queryFn: async () => {
+          const res = await getDriversByOrganization(orgId);
+          if (res.error) throw res.error;
+          return res.drivers ?? [];
+        },
+      })
+      .then((drivers) => ({ error: null, drivers }))
+      .catch((error: unknown) => ({ error: error instanceof Error ? error : new Error(String(error)), drivers: [] as DriverRow[] }));
+    const clientsPromise = queryClient
+      .ensureQueryData({
+        queryKey: queryKeys.clients.finite(orgId),
+        queryFn: async () => {
+          const res = await getClientsByOrganization(orgId);
+          if (res.error) throw res.error;
+          return res.clients ?? [];
+        },
+      })
+      .then((clients) => ({ error: null, clients }))
+      .catch((error: unknown) => ({ error: error instanceof Error ? error : new Error(String(error)), clients: [] as ClientRow[] }));
     Promise.all([
       supplierPromise,
       tripsPromise,

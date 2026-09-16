@@ -411,16 +411,41 @@ export default function DriverDetailScreen({
     setError(null);
     const orgId = currentOrganization.id;
     // Use TanStack Query cache from Trips tab (get_trips_for_org includes cross-org supplier trips).
-    const cachedTrips = queryClient.getQueryData<TripRow[]>(queryKeys.trips.finite(orgId));
+    // `ensureQueryData` (not a plain getQueryData-then-fallback-fetch) so a
+    // cold cache is a single, request-deduplicated fetch shared with any
+    // other concurrent consumer of the same queryKey — a plain fallback
+    // fetch here would race a concurrently-mounting list/warmup hook and
+    // double the RPC (identified as a contributor to the 2026-09-16 DB incident).
+    const tripsPromise = queryClient
+      .ensureQueryData({
+        queryKey: queryKeys.trips.finite(orgId),
+        queryFn: async () => {
+          const res = await getTripsForOrg(orgId);
+          if (res.error) throw res.error;
+          return res.trips ?? [];
+        },
+      })
+      .then((trips) => ({ error: null, trips }))
+      .catch((error: unknown) => ({ error: error instanceof Error ? error : new Error(String(error)), trips: [] as TripRow[] }));
+    // FinanceScreen already warms driver offers under the same query key for
+    // the whole Finance tab (useFinanceEntities) — reuse it.
+    const offersPromise = queryClient
+      .ensureQueryData({
+        queryKey: queryKeys.driverOffers(orgId),
+        queryFn: async () => {
+          const res = await getDriverOffersByOrganization(orgId);
+          if (res.error) throw res.error;
+          return res.offersByDriverId ?? {};
+        },
+      })
+      .then((offersByDriverId) => ({ error: null, offersByDriverId }))
+      .catch((error: unknown) => ({ error: error instanceof Error ? error : new Error(String(error)), offersByDriverId: {} as Record<string, { payableAmount: number | null; commissionPercent: number | null; commissionPerKm: number | null }> }));
 
     Promise.all([
       // Bundle: driver row + ratings + salary requests + ledger + transactions in 1 RPC
       getDriverDetailBundle(orgId, driverId),
-      // Trips: read from cache or fall back to RPC (owner + supplier trips).
-      cachedTrips !== undefined
-        ? Promise.resolve({ error: null, trips: cachedTrips })
-        : getTripsForOrg(orgId),
-      getDriverOffersByOrganization(orgId),
+      tripsPromise,
+      offersPromise,
       getDriverSignupMatchStatus(driverId),
       // Tenure history: connect/disconnect periods
       getDriverTenures(orgId, driverId),

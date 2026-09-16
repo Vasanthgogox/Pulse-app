@@ -156,16 +156,54 @@ export default function VehicleDetailScreen({
     if (!isRefreshingRef.current && !initialLoadDoneRef.current) setLoading(true);
     setError(null);
     const orgId = currentOrganization.id;
-    const cachedTrips = queryClient.getQueryData<TripRow[]>(queryKeys.trips.finite(orgId));
-    const ownerTripsPromise = cachedTrips !== undefined
-      ? Promise.resolve({ error: null, trips: cachedTrips })
-      : getTripsByOrganization(orgId);
+    // FinanceScreen already warms these under the same query keys for the
+    // whole Finance tab (useFinanceEntities) — reuse them instead of
+    // re-fetching org-wide data this screen doesn't own.
+    //
+    // `ensureQueryData` (not a plain getQueryData-then-fallback-fetch) so a
+    // cold cache is a single, request-deduplicated fetch shared with any
+    // other concurrent consumer of the same queryKey — a plain fallback
+    // fetch here would race a concurrently-mounting list/warmup hook and
+    // double the RPC (identified as a contributor to the 2026-09-16 DB incident).
+    const ownerTripsPromise = queryClient
+      .ensureQueryData({
+        queryKey: queryKeys.trips.finite(orgId),
+        queryFn: async () => {
+          const res = await getTripsByOrganization(orgId);
+          if (res.error) throw res.error;
+          return res.trips ?? [];
+        },
+      })
+      .then((trips) => ({ error: null, trips }))
+      .catch((error: unknown) => ({ error: error instanceof Error ? error : new Error(String(error)), trips: [] as TripRow[] }));
+    const driversPromise = queryClient
+      .ensureQueryData({
+        queryKey: queryKeys.drivers.finite(orgId),
+        queryFn: async () => {
+          const res = await getDriversByOrganization(orgId);
+          if (res.error) throw res.error;
+          return res.drivers ?? [];
+        },
+      })
+      .then((drivers) => ({ error: null, drivers }))
+      .catch((error: unknown) => ({ error: error instanceof Error ? error : new Error(String(error)), drivers: [] as DriverRow[] }));
+    const txPromise = queryClient
+      .ensureQueryData({
+        queryKey: queryKeys.transactions.finite(orgId),
+        queryFn: async () => {
+          const res = await getTransactionsByOrganization(orgId);
+          if (res.error) throw res.error;
+          return res.transactions ?? [];
+        },
+      })
+      .then((transactions) => ({ error: null, transactions }))
+      .catch((error: unknown) => ({ error: error instanceof Error ? error : new Error(String(error)), transactions: [] as LedgerRow[] }));
     Promise.all([
       getVehicleById(orgId, vehicleId),
       ownerTripsPromise,
       getTripsWhereOrgIsSupplier(orgId),
-      getDriversByOrganization(orgId),
-      getTransactionsByOrganization(orgId),
+      driversPromise,
+      txPromise,
     ]).then(([res, ownerRes, supplierRes, driversRes, txRes]) => {
       if (res.vehicle) {
         setVehicle(res.vehicle);
