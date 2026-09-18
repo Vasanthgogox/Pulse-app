@@ -143,6 +143,21 @@ export function statusMatchesFilter(
 export type GetLoadSourceTag = "network" | "market_ad";
 
 /**
+ * Get Load / Find Work visibility. Unset target matches createIndent default.
+ * `marketplace` and `both` are open-market circulation, not partner-only.
+ */
+export function isGetLoadMarketCirculation(
+  circulationTarget: string | null | undefined,
+): boolean {
+  const target = (circulationTarget || "integrated_supplier").toLowerCase();
+  return (
+    target === "integrated_supplier" ||
+    target === "both" ||
+    target === "marketplace"
+  );
+}
+
+/**
  * Network = shipper is an integrated client (partner link).
  * Market (through ad) = otherwise — typically Reach/story bid without a client link
  * (see mergeQuotedIndentsForSupplier).

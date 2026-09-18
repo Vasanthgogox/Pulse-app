@@ -1,5 +1,6 @@
 import {
   STATUS_TABS,
+  isGetLoadMarketCirculation,
   isIndentStageDone,
   isIndentUnallocated,
   loadCenterShowsStandaloneChrome,
@@ -44,6 +45,14 @@ describe("loadCenter status tabs", () => {
 
   it("is case-insensitive", () => {
     expect(statusMatchesFilter("QUOTED", "OPEN")).toBe(true);
+  });
+
+  it("treats marketplace circulation as Get Load / Open Market visible", () => {
+    expect(isGetLoadMarketCirculation(null)).toBe(true);
+    expect(isGetLoadMarketCirculation("integrated_supplier")).toBe(true);
+    expect(isGetLoadMarketCirculation("both")).toBe(true);
+    expect(isGetLoadMarketCirculation("marketplace")).toBe(true);
+    expect(isGetLoadMarketCirculation("offline")).toBe(false);
   });
 
   it("Open and Awarded remain disjoint", () => {

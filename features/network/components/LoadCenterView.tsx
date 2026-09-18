@@ -267,9 +267,13 @@ export function LoadCenterView({
     isError: marketError,
     isRefetching: marketRefetching,
     refetch: refetchMarketIndents,
+    isFetched: marketFetched,
   } = useMarketIndentsQuery(orgId, {
+    urgent: !isTripsPresentation,
     enabled: !isTripsPresentation,
   });
+  const marketPending =
+    !isTripsPresentation && (marketLoading || (!marketFetched && !marketError));
   const marketplaceLoadsQ = useQuery({
     queryKey: queryKeys.findLoadsForOrg.list(orgId ?? ""),
     queryFn: async () => {
@@ -301,7 +305,7 @@ export function LoadCenterView({
     commercePlanIds,
   );
   const { data: myQuotes = [], refetch: refetchMyQuotes } =
-    useMyDirectQuotesQuery(orgId);
+    useMyDirectQuotesQuery(orgId, { urgent: !isTripsPresentation });
   const { data: trips = [] } = useTripsQuery(orgId);
   const { data: drivers = [] } = useDriversQuery(orgId);
   useVehiclesQuery(orgId);
@@ -813,31 +817,55 @@ export function LoadCenterView({
         .length,
     [getLoadOpportunityPosts, getLoadOppViewerBids],
   );
+  const marketplaceOpenCount = marketplaceLoads.length;
   const getLoadKanbanColumnsWithOpps = useMemo(() => {
-    if (openMarketOpportunityCount === 0) return getLoadKanbanColumns;
+    if (openMarketOpportunityCount === 0 && marketplaceOpenCount === 0) {
+      return getLoadKanbanColumns;
+    }
     return getLoadKanbanColumns.map((col) => {
       if (col.id !== "OPEN") return col;
       return {
         ...col,
-        countExtra: openMarketOpportunityCount,
+        countExtra: openMarketOpportunityCount + marketplaceOpenCount,
         topExtra: (
-          <LoadCenterOpportunityExchange
-            orgId={orgId}
-            mode="get"
-            columnStack
-            supplierOrgIds={connectedSupplierOrgIds}
-            clientOrgIds={connectedClientOrgIds}
-            embedded
-          />
+          <>
+            {marketplaceOpenCount > 0 ? (
+              <View style={{ marginBottom: 10 }}>
+                <PulsePillButton
+                  label={`${marketplaceOpenCount} Marketplace load${marketplaceOpenCount === 1 ? "" : "s"}`}
+                  size="compact"
+                  variant="outline"
+                  showPlusIcon
+                  IconComponent={Compass}
+                  onPress={() =>
+                    router.push(ROUTES.FIND_LOADS as import("expo-router").Href)
+                  }
+                  accessibilityLabel="Open Marketplace Loads"
+                />
+              </View>
+            ) : null}
+            {openMarketOpportunityCount > 0 ? (
+              <LoadCenterOpportunityExchange
+                orgId={orgId}
+                mode="get"
+                columnStack
+                supplierOrgIds={connectedSupplierOrgIds}
+                clientOrgIds={connectedClientOrgIds}
+                embedded
+              />
+            ) : null}
+          </>
         ),
       };
     });
   }, [
     getLoadKanbanColumns,
     openMarketOpportunityCount,
+    marketplaceOpenCount,
     orgId,
     connectedSupplierOrgIds,
     connectedClientOrgIds,
+    router,
   ]);
 
   const expandedKanbanColumn = useMemo(() => {
@@ -2329,7 +2357,7 @@ export function LoadCenterView({
 
           {loadSubTab === "GET_LOAD" &&
             showLoadCenterChrome &&
-            (marketLoading ? (
+            (marketPending ? (
               <View style={styles.loadingWrap}>
                 <ActivityIndicator size="small" color={Theme.primary} />
                 <Text style={styles.loadingText}>Loading…</Text>
@@ -2345,7 +2373,8 @@ export function LoadCenterView({
               findWorkLoads.length === 0 &&
               awardedLoads.length === 0 &&
               findWorkDoneUnionLoads.length === 0 &&
-              getLoadOpportunityPosts.length === 0 ? (
+              getLoadOpportunityPosts.length === 0 &&
+              marketplaceLoads.length === 0 ? (
                 renderLoadCenterEmptyPromo()
               ) : (
                 <LoadCenterKanbanBoard
@@ -2357,8 +2386,23 @@ export function LoadCenterView({
                   onColumnPress={(col) => openKanbanColumn("get", col)}
                 />
               )
-            ) : filteredFindWorkList.length === 0 ? (
+            ) : filteredFindWorkList.length === 0 &&
+              getLoadOpportunityPosts.length === 0 &&
+              marketplaceLoads.length === 0 ? (
               renderLoadCenterEmptyPromo()
+            ) : filteredFindWorkList.length === 0 ? (
+              <LoadCenterHubMobileListCanvas>
+                <PulsePillButton
+                  label={`${marketplaceLoads.length || getLoadOpportunityPosts.length} Marketplace load${(marketplaceLoads.length || getLoadOpportunityPosts.length) === 1 ? "" : "s"}`}
+                  size="compact"
+                  variant="outline"
+                  showPlusIcon
+                  IconComponent={Compass}
+                  onPress={() =>
+                    router.push(ROUTES.FIND_LOADS as import("expo-router").Href)
+                  }
+                />
+              </LoadCenterHubMobileListCanvas>
             ) : useGridLayout ? (
               <View style={styles.gridList}>
                 <View style={styles.loadSectionRow}>
