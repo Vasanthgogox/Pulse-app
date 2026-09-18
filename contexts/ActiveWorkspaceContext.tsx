@@ -175,16 +175,25 @@ const ACTIVE_MEMBERSHIP_SELECT = `
   )
 `;
 
+/**
+ * AuthenticatedDataPlane only mounts after sessionAttached, so the JWT is
+ * almost always present on the first getSession. A long poll here delayed
+ * organization_members (and MemberDomainGate) by several seconds after login.
+ */
+const ACCESS_TOKEN_WAIT_ATTEMPTS = 3;
+const EMPTY_MEMBERSHIP_RETRY_COLD = 3;
+const EMPTY_MEMBERSHIP_RETRY_HYDRATED = 1;
+
 async function waitForSupabaseAccessToken(
   signal: { cancelled: boolean },
-  maxAttempts = 10,
+  maxAttempts = ACCESS_TOKEN_WAIT_ATTEMPTS,
 ): Promise<string | null> {
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     if (signal.cancelled) return null;
     const { data } = await supabase().auth.getSession();
     const token = data.session?.access_token ?? null;
     if (token) return token;
-    await new Promise((resolve) => setTimeout(resolve, 120 * (attempt + 1)));
+    await new Promise((resolve) => setTimeout(resolve, 50 * (attempt + 1)));
   }
   return null;
 }
@@ -273,6 +282,8 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
   const retryAttemptRef = useRef(0);
   const retryTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const requestLoadWorkspacesRef = useRef<() => Promise<void>>(async () => {});
+  /** User id whose membership last resolved — skip loading flash on same-user refresh. */
+  const hydratedForUidRef = useRef<string | null>(null);
 
   const clearRetryTimer = useCallback(() => {
     if (retryTimerRef.current != null) {
@@ -323,14 +334,20 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
           clearPlatformWorkspaceStore();
           setMembershipResolved(true);
           setIsLoading(false);
+          hydratedForUidRef.current = null;
         }
         return;
       }
 
+      const alreadyHydrated = hydratedForUidRef.current === currentUser.uid;
+
       if (!stale()) {
-        setIsLoading(true);
-        setMembershipResolved(false);
         setError(null);
+        // Realtime / coalesced refresh must not blank Network behind workspace.
+        if (!alreadyHydrated) {
+          setIsLoading(true);
+          setMembershipResolved(false);
+        }
       }
 
       let shouldFinishLoading = true;
@@ -369,11 +386,13 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
         }
 
         // Cold web boot: JWT can exist while PostgREST still returns 0 RLS rows.
-        // Retry longer before accepting a durable empty membership.
         if (rows.length === 0) {
-          for (let attempt = 0; attempt < 8; attempt++) {
+          const extraAttempts = alreadyHydrated
+            ? EMPTY_MEMBERSHIP_RETRY_HYDRATED
+            : EMPTY_MEMBERSHIP_RETRY_COLD;
+          for (let attempt = 0; attempt < extraAttempts; attempt++) {
             await new Promise((resolve) =>
-              setTimeout(resolve, 250 * Math.min(attempt + 1, 4)),
+              setTimeout(resolve, 200 * (attempt + 1)),
             );
             if (stale()) return;
             ({ rows, error: fetchError } = await fetchActiveMembershipRows(currentUser.uid));
@@ -462,6 +481,7 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
           clearPlatformWorkspaceStore();
         }
         setMembershipResolved(true);
+        hydratedForUidRef.current = currentUser.uid;
       } catch (e) {
         if (!stale()) {
           setError(e instanceof Error ? e : new Error(String(e)));
