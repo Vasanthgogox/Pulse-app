@@ -91,6 +91,7 @@ export const ROUTE_INVENTORY: readonly RouteInventoryEntry[] = [
   { file: 'app/index.tsx', samplePath: '/' },
   { file: 'app/invoicing/pdf-preview.tsx', samplePath: '/invoicing/pdf-preview' },
   { file: 'app/invoicing-execute/index.tsx', samplePath: '/invoicing-execute' },
+  { file: 'app/invoicing-execute/create.tsx', samplePath: '/invoicing-execute/create' },
   { file: 'app/load-board/index.tsx', samplePath: '/load-board' },
   { file: 'app/log-incoming-pods/index.tsx', samplePath: '/log-incoming-pods' },
   { file: 'app/milestone/index.tsx', samplePath: '/milestone' },

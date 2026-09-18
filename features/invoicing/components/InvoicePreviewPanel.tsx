@@ -19,6 +19,7 @@ import type {
 import type { InvoiceIssuerIdentity } from "@/features/invoicing/services/invoiceIssuerIdentity.service";
 import {
   buildInvoiceDraftModel,
+  displayInvoicePreviewDate,
   formatInvoicePreviewDate,
   invoiceDraftTaxDisplay,
   uniqueTripClientIds,
@@ -38,14 +39,15 @@ import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useCallback, useMemo, useState } from "react";
 import {
     Alert,
-    Modal,
-    Platform,
-    Pressable,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    View,
+  Modal,
+  Platform,
+  Pressable,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  View,
+  type ViewStyle,
 } from "react-native";
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -339,6 +341,23 @@ export function InvoicePreviewPanel({
     });
   };
 
+  const globalCharges = additionalCharges.filter((c) => !c.tripId);
+  const primaryTrip = selectedTrips[0] ?? null;
+  const routeParts = primaryTrip?.route
+    ? primaryTrip.route.split(/\s*->\s*|\s*→\s*/).map((p) => p.trim())
+    : [];
+  const pickupLabel = routeParts[0] || "—";
+  const deliveryLabel = routeParts[1] || routeParts[0] || "—";
+  const customerLabel =
+    draft?.client.legal_name ||
+    draft?.client.display_name ||
+    activeClient ||
+    "Select a customer…";
+  const dueDateLabel = draft?.indicative_due_date
+    ? displayInvoicePreviewDate(draft.indicative_due_date)
+    : "—";
+  const invoiceDateLabel = displayInvoicePreviewDate(previewDate);
+
   return (
     <View
       style={[
@@ -348,12 +367,30 @@ export function InvoicePreviewPanel({
     >
       <View style={styles.header}>
         <View style={styles.headerCopy}>
-          <Text style={styles.headerTitle}>
-            Invoice draft{" "}
-            <Text style={styles.headerDraftTag}>#Draft</Text>
-          </Text>
+          <View style={styles.headerTitleRow}>
+            {onClose ? (
+              <Pressable
+                style={styles.backBtn}
+                onPress={onClose}
+                disabled={isFinalizing}
+                accessibilityRole="button"
+                accessibilityLabel="Close invoice draft"
+                hitSlop={Layout.touchTargetHitSlop}
+              >
+                <FontAwesome
+                  name="arrow-left"
+                  size={14}
+                  color={Theme.textPrimaryDark}
+                />
+              </Pressable>
+            ) : null}
+            <Text style={styles.headerTitle}>New Invoice</Text>
+            <View style={styles.draftBadge}>
+              <Text style={styles.draftBadgeText}>Draft</Text>
+            </View>
+          </View>
           <Text style={styles.headerSub}>
-            Preview date {previewDate} · Invoice number assigned on issue
+            Preview date {invoiceDateLabel} · Invoice number assigned on issue
           </Text>
         </View>
         <View style={styles.headerActions}>
@@ -378,6 +415,8 @@ export function InvoicePreviewPanel({
               style={styles.headerIconBtn}
               onPress={onClose}
               disabled={isFinalizing}
+              accessibilityRole="button"
+              accessibilityLabel="Close"
             >
               <FontAwesome
                 name="times"
@@ -403,30 +442,14 @@ export function InvoicePreviewPanel({
             previewExpanded && styles.documentExpanded,
           ]}
         >
-        {/* Header Info — issuer from active workspace; client name only (no fabricated address). */}
-        <View style={styles.rowLayout}>
-          <View style={styles.colLayout}>
-            <Text style={styles.sectionLabel}>Issuer</Text>
-            <View style={styles.infoCard}>
-              {issuer ? (
-                <>
-                  <Text style={styles.clientName}>{issuer.businessName}</Text>
-                  {issuer.addressLines.map((line) => (
-                    <Text key={line} style={styles.clientAddress}>
-                      {line}
-                    </Text>
-                  ))}
-                </>
-              ) : (
-                <Text style={styles.clientAddress}>
-                  Workspace identity unavailable
-                </Text>
-              )}
-            </View>
-          </View>
-          <View style={styles.colLayout}>
-            <View style={styles.sectionHeaderRow}>
-              <Text style={styles.sectionLabel}>Bill to</Text>
+        {/* Customer Details — form field grid */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Customer Details</Text>
+          <View style={styles.customerNameBlock}>
+            <View style={styles.fieldLabelRow}>
+              <Text style={[styles.fieldLabel, styles.fieldLabelFlush]}>
+                Customer Name
+              </Text>
               {draft?.client.client_id && onEditClient ? (
                 <Pressable
                   style={styles.editClientBtn}
@@ -435,361 +458,55 @@ export function InvoicePreviewPanel({
                   accessibilityLabel="Edit client details"
                   hitSlop={Layout.touchTargetHitSlop}
                 >
-                  <FontAwesome name="pencil" size={12} color={Theme.primary} />
+                  <FontAwesome name="pencil" size={11} color={Theme.primary} />
                   <Text style={styles.editClientBtnText}>Edit</Text>
                 </Pressable>
               ) : null}
             </View>
-            <View style={styles.infoCard}>
-              {draft?.client.display_name ? (
-                <>
-                  <Text style={styles.clientName}>
-                    {draft.client.legal_name || draft.client.display_name}
-                  </Text>
-                  {draft.client.billing_address ? (
-                    <Text style={styles.clientAddress}>
-                      {draft.client.billing_address}
-                    </Text>
-                  ) : null}
-                  {draft.client.state ? (
-                    <Text style={styles.clientAddress}>{draft.client.state}</Text>
-                  ) : null}
-                  {draft.client.gstin ? (
-                    <Text style={styles.clientAddress}>
-                      GSTIN {draft.client.gstin}
-                    </Text>
-                  ) : null}
-                  {draft.client.pan ? (
-                    <Text style={styles.clientAddress}>
-                      PAN {draft.client.pan}
-                    </Text>
-                  ) : null}
-                  {draft.client.email ? (
-                    <Text style={styles.clientAddress}>{draft.client.email}</Text>
-                  ) : null}
-                </>
-              ) : (
-                <Text style={styles.clientAddress}>Select a client...</Text>
-              )}
+            <View style={styles.fieldValueBox}>
+              <Text style={styles.fieldValueText} numberOfLines={1}>
+                {customerLabel}
+              </Text>
             </View>
+            {draft?.client.billing_address || draft?.client.gstin ? (
+              <Text style={styles.fieldHint} numberOfLines={2}>
+                {[
+                  draft.client.billing_address,
+                  draft.client.gstin ? `GSTIN ${draft.client.gstin}` : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")}
+              </Text>
+            ) : null}
           </View>
-        </View>
-        <View style={styles.rowLayout}>
-          <View style={styles.colLayout}>
-            <Text style={styles.sectionLabel}>Issuer tax details</Text>
-            <View style={styles.infoCard}>
-              {issuer?.pan ? (
-                <Text style={styles.taxText}>
-                  <Text style={styles.taxLabel}>PAN</Text> {issuer.pan}
-                </Text>
-              ) : null}
-              {issuer?.gstNotApplicable ? (
-                <Text style={styles.taxText}>
-                  <Text style={styles.taxLabel}>GST</Text> Not applicable
-                </Text>
-              ) : issuer?.gstin ? (
-                <Text style={styles.taxText}>
-                  <Text style={styles.taxLabel}>GSTIN</Text> {issuer.gstin}
-                </Text>
-              ) : null}
-              {issuer?.state ? (
-                <Text style={styles.taxText}>
-                  <Text style={styles.taxLabel}>State</Text> {issuer.state}
-                </Text>
-              ) : null}
-              {!issuer?.pan && !issuer?.gstin && !issuer?.gstNotApplicable && !issuer?.state ? (
-                <Text style={styles.clientAddress}>No tax identifiers on file</Text>
-              ) : null}
-            </View>
-          </View>
-        </View>
-
-        {/* Line Items */}
-        <View style={styles.sectionHeaderRow}>
-          <Text style={styles.sectionLabel}>Invoice Details</Text>
-          <Pressable
-            style={styles.addChargeBtn}
-            onPress={() => handleAddCharge()}
-          >
-            <FontAwesome name="plus" size={12} color={Theme.textPrimaryDark} />
-            <Text style={styles.addChargeText}>Add Custom Charge</Text>
-          </Pressable>
-        </View>
-
-        {/* Global Charges */}
-        {additionalCharges
-          .filter((c) => !c.tripId)
-          .map((charge) => (
-            <View key={charge.id} style={styles.chargeRow}>
-              <View style={styles.chargeContentCol}>
-                <TextInput
-                  style={styles.chargeInput}
-                  value={charge.description}
-                  onChangeText={(t) =>
-                    handleUpdateCharge(charge.id, "description", t)
-                  }
-                  placeholder="Charge description..."
-                  placeholderTextColor={Theme.textMuted}
-                />
-                <Text style={styles.chargeHint} numberOfLines={1}>
-                  Global Adjustment
+          <View style={styles.fieldGridMeta}>
+            <View style={styles.fieldCell}>
+              <Text style={styles.fieldLabel}>Invoice Number</Text>
+              <View style={[styles.fieldValueBox, styles.fieldValueMuted]}>
+                <Text style={styles.fieldValueMutedText} numberOfLines={1}>
+                  Assigned on issue
                 </Text>
               </View>
-              <View style={styles.chargeActionsRow}>
-                <View style={styles.chargeTypeToggle}>
-                  <Pressable
-                    style={[
-                      styles.chargeTypeBtn,
-                      !Object.is(charge.amount, -0) && charge.amount >= 0
-                        ? styles.chargeTypeBtnAdd
-                        : null,
-                    ]}
-                    onPress={() =>
-                      handleUpdateCharge(
-                        charge.id,
-                        "amount",
-                        Math.abs(charge.amount),
-                      )
-                    }
-                  >
-                    <Text
-                      style={[
-                        styles.chargeTypeText,
-                        !Object.is(charge.amount, -0) && charge.amount >= 0
-                          ? styles.chargeTypeTextAdd
-                          : null,
-                      ]}
-                    >
-                      Add
-                    </Text>
-                  </Pressable>
-                  <Pressable
-                    style={[
-                      styles.chargeTypeBtn,
-                      Object.is(charge.amount, -0) || charge.amount < 0
-                        ? styles.chargeTypeBtnMinus
-                        : null,
-                    ]}
-                    onPress={() =>
-                      handleUpdateCharge(
-                        charge.id,
-                        "amount",
-                        Object.is(charge.amount, 0)
-                          ? -0
-                          : -Math.abs(charge.amount),
-                      )
-                    }
-                  >
-                    <Text
-                      style={[
-                        styles.chargeTypeText,
-                        Object.is(charge.amount, -0) || charge.amount < 0
-                          ? styles.chargeTypeTextMinus
-                          : null,
-                      ]}
-                    >
-                      Minus
-                    </Text>
-                  </Pressable>
-                </View>
-                <View style={styles.chargeAmountWrapper}>
-                  <Text style={styles.chargeCurrencySymbol}>₹</Text>
-                  <TextInput
-                    style={styles.chargeAmountInput}
-                    value={Math.abs(charge.amount).toString()}
-                    onChangeText={(t) => {
-                      const val = parseFloat(t) || 0;
-                      const isNeg =
-                        Object.is(charge.amount, -0) || charge.amount < 0;
-                      handleUpdateCharge(
-                        charge.id,
-                        "amount",
-                        isNeg ? (val === 0 ? -0 : -val) : val,
-                      );
-                    }}
-                    keyboardType="numeric"
-                  />
-                </View>
+            </View>
+            <View style={styles.fieldCell}>
+              <Text style={styles.fieldLabel}>Terms</Text>
+              <View style={styles.settingsSelectWrap}>
                 <Pressable
-                  style={styles.removeChargeBtn}
-                  onPress={() => handleRemoveCharge(charge.id)}
+                  style={styles.settingsSelect}
+                  onPress={() => setShowTermsModal((prev) => !prev)}
+                  accessibilityRole="button"
+                  accessibilityLabel="Payment terms"
                 >
+                  <Text style={styles.settingsSelectText}>{paymentTerms}</Text>
                   <FontAwesome
-                    name="times"
+                    name={showTermsModal ? "chevron-up" : "chevron-down"}
                     size={12}
-                    color={Theme.negative || "#dc2626"}
+                    color={Theme.textMuted}
                   />
                 </Pressable>
-              </View>
-            </View>
-          ))}
-
-        <View style={styles.tripsList}>
-          {selectedTrips.length === 0 && (
-            <View style={styles.emptyTrips}>
-              <FontAwesome
-                name="file-text-o"
-                size={24}
-                color={Theme.borderMedium}
-                style={{ marginBottom: 8 }}
-              />
-              <Text style={styles.emptyTripsText}>No context selected</Text>
-            </View>
-          )}
-          {selectedTrips.length > 0 ? (
-            <View style={styles.splitToggleRow}>
-              <Pressable
-                style={[styles.splitToggleBtn, showSplit && styles.splitToggleBtnOn]}
-                onPress={() => setShowSplit(true)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: showSplit }}
-                accessibilityLabel="Show split"
-              >
-                <Text
-                  style={[
-                    styles.splitToggleText,
-                    showSplit && styles.splitToggleTextOn,
-                  ]}
-                >
-                  Show split
-                </Text>
-              </Pressable>
-              <Pressable
-                style={[styles.splitToggleBtn, !showSplit && styles.splitToggleBtnOn]}
-                onPress={() => setShowSplit(false)}
-                accessibilityRole="button"
-                accessibilityState={{ selected: !showSplit }}
-                accessibilityLabel="No split"
-              >
-                <Text
-                  style={[
-                    styles.splitToggleText,
-                    !showSplit && styles.splitToggleTextOn,
-                  ]}
-                >
-                  No split
-                </Text>
-              </Pressable>
-            </View>
-          ) : null}
-          {selectedTrips.map((trip) => {
-            const tripNotes = adjustmentsForTripId(
-              tripAdjustmentsRecord,
-              trip.internal_id,
-            );
-            const revised = invoiceTripAdjustedAmount(trip.amount, tripNotes);
-            const hasSplit = Math.abs(revised - trip.amount) >= 0.005;
-            return (
-              <View key={trip.id} style={styles.tripItemWrapper}>
-                <View style={styles.tripItem}>
-                  <View style={styles.tripItemMeta}>
-                    <Text style={styles.tripItemTitle}>
-                      <Text style={styles.tripItemId}>{trip.id}</Text>
-                      <Text style={styles.tripItemDot}> · </Text>
-                      <Text style={styles.tripItemDate}>{trip.date}</Text>
-                    </Text>
-                    <Text style={styles.tripItemRoute}>{trip.route}</Text>
-                    <View style={styles.tripItemPodRow}>
-                      <TripCompletionOrPodTags
-                        compact
-                        tripCompleted={tripIsDeliveredStatus(trip.tripStatus)}
-                        softCopyReceived={Boolean(trip.digitalPodPresent)}
-                        hardCopyReceived={Boolean(trip.physicalPodReceived)}
-                      />
-                    </View>
-                  </View>
-                  <View style={styles.tripItemAmounts}>
-                    <Text style={styles.tripItemAmount}>
-                      {formatCurrency(revised)}
-                    </Text>
-                    {showSplit && hasSplit ? (
-                      <Text style={styles.tripItemBaseAmount}>
-                        Freight {formatCurrency(trip.amount)}
-                      </Text>
-                    ) : null}
-                  </View>
-                </View>
-                <InvoiceTripCnDnGroup
-                  trip={trip}
-                  adjustments={tripNotes}
-                  showBreakdown={showSplit}
-                  onAdd={() => {
-                    setCnDnEdit(null);
-                    setCnDnTrip(trip);
-                  }}
-                  onEdit={(adj) => {
-                    setCnDnEdit(adj);
-                    setCnDnTrip(trip);
-                  }}
-                />
-              </View>
-            );
-          })}
-        </View>
-
-        {/* Invoice Settings */}
-        <View style={styles.settingsBlock}>
-          <View style={styles.settingsRow}>
-            <Text style={styles.settingsLabel}>Payment Terms</Text>
-            <View style={styles.settingsSelectWrap}>
-              <Pressable
-                style={styles.settingsSelect}
-                onPress={() => setShowTermsModal((prev) => !prev)}
-              >
-                <Text style={styles.settingsSelectText}>{paymentTerms}</Text>
-                <FontAwesome
-                  name={showTermsModal ? "chevron-up" : "chevron-down"}
-                  size={12}
-                  color={Theme.textMuted}
-                />
-              </Pressable>
-
-              {Platform.OS === "web" ? (
-                showTermsModal ? (
-                  <View style={styles.webTermsDropdown}>
-                    {PAYMENT_TERMS_OPTIONS.map((term) => (
-                      <Pressable
-                        key={term}
-                        style={styles.termOption}
-                        onPress={() => {
-                          setPaymentTerms(term);
-                          setShowTermsModal(false);
-                        }}
-                      >
-                        <Text
-                          style={[
-                            styles.termOptionText,
-                            paymentTerms === term && styles.termOptionActive,
-                          ]}
-                        >
-                          {term}
-                        </Text>
-                        {paymentTerms === term && (
-                          <FontAwesome
-                            name="check"
-                            size={14}
-                            color={Theme.primary}
-                          />
-                        )}
-                      </Pressable>
-                    ))}
-                  </View>
-                ) : null
-              ) : (
-                <Modal
-                  visible={showTermsModal}
-                  transparent
-                  animationType="fade"
-                  onRequestClose={() => setShowTermsModal(false)}
-                >
-                  <Pressable
-                    style={styles.modalOverlay}
-                    onPress={() => setShowTermsModal(false)}
-                  >
-                    <Pressable
-                      style={styles.termsModalContent}
-                      onPress={() => {}}
-                    >
+                {Platform.OS === "web" ? (
+                  showTermsModal ? (
+                    <View style={styles.webTermsDropdown}>
                       {PAYMENT_TERMS_OPTIONS.map((term) => (
                         <Pressable
                           key={term}
@@ -807,34 +524,449 @@ export function InvoicePreviewPanel({
                           >
                             {term}
                           </Text>
-                          {paymentTerms === term && (
+                          {paymentTerms === term ? (
                             <FontAwesome
                               name="check"
                               size={14}
                               color={Theme.primary}
                             />
-                          )}
+                          ) : null}
                         </Pressable>
                       ))}
+                    </View>
+                  ) : null
+                ) : (
+                  <Modal
+                    visible={showTermsModal}
+                    transparent
+                    animationType="fade"
+                    onRequestClose={() => setShowTermsModal(false)}
+                  >
+                    <Pressable
+                      style={styles.modalOverlay}
+                      onPress={() => setShowTermsModal(false)}
+                    >
+                      <Pressable
+                        style={styles.termsModalContent}
+                        onPress={() => {}}
+                      >
+                        {PAYMENT_TERMS_OPTIONS.map((term) => (
+                          <Pressable
+                            key={term}
+                            style={styles.termOption}
+                            onPress={() => {
+                              setPaymentTerms(term);
+                              setShowTermsModal(false);
+                            }}
+                          >
+                            <Text
+                              style={[
+                                styles.termOptionText,
+                                paymentTerms === term &&
+                                  styles.termOptionActive,
+                              ]}
+                            >
+                              {term}
+                            </Text>
+                            {paymentTerms === term ? (
+                              <FontAwesome
+                                name="check"
+                                size={14}
+                                color={Theme.primary}
+                              />
+                            ) : null}
+                          </Pressable>
+                        ))}
+                      </Pressable>
                     </Pressable>
-                  </Pressable>
-                </Modal>
-              )}
+                  </Modal>
+                )}
+              </View>
+            </View>
+            <View style={styles.fieldCell}>
+              <Text style={styles.fieldLabel}>Due Date</Text>
+              <View style={styles.fieldValueBox}>
+                <Text style={styles.fieldValueText} numberOfLines={1}>
+                  {dueDateLabel}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.fieldCell}>
+              <Text style={styles.fieldLabel}>Invoice Date</Text>
+              <View style={styles.fieldValueBox}>
+                <Text style={styles.fieldValueText} numberOfLines={1}>
+                  {invoiceDateLabel}
+                </Text>
+              </View>
             </View>
           </View>
+        </View>
 
-          <View style={styles.settingsCol}>
-            <Text style={styles.settingsLabel}>Remarks / Notes</Text>
-            <TextInput
-              style={styles.notesInput}
-              value={notes}
-              onChangeText={setNotes}
-              placeholder="Add special instructions, PO references..."
-              placeholderTextColor={Theme.textMuted}
-              multiline
-              numberOfLines={2}
-            />
+        {/* Transport Details */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Transport Details</Text>
+          <View style={styles.fieldGrid}>
+            <View style={styles.fieldCell}>
+              <Text style={styles.fieldLabel}>Consignor</Text>
+              <View style={styles.fieldValueBox}>
+                <Text style={styles.fieldValueText} numberOfLines={1}>
+                  {issuer?.businessName || "—"}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.fieldCell}>
+              <Text style={styles.fieldLabel}>Consignee</Text>
+              <View style={styles.fieldValueBox}>
+                <Text style={styles.fieldValueText} numberOfLines={1}>
+                  {customerLabel}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.fieldCell}>
+              <Text style={styles.fieldLabel}>Trip ID</Text>
+              <View style={styles.fieldValueBox}>
+                <Text style={styles.fieldValueText} numberOfLines={1}>
+                  {primaryTrip?.id || "—"}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.fieldCell}>
+              <Text style={styles.fieldLabel}>Trip Date</Text>
+              <View style={styles.fieldValueBox}>
+                <Text style={styles.fieldValueText} numberOfLines={1}>
+                  {primaryTrip?.date || "—"}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.fieldCell}>
+              <Text style={styles.fieldLabel}>Pickup Location</Text>
+              <View style={styles.fieldValueBox}>
+                <Text style={styles.fieldValueText} numberOfLines={1}>
+                  {primaryTrip ? pickupLabel : "—"}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.fieldCell}>
+              <Text style={styles.fieldLabel}>Delivery Location</Text>
+              <View style={styles.fieldValueBox}>
+                <Text style={styles.fieldValueText} numberOfLines={1}>
+                  {primaryTrip ? deliveryLabel : "—"}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.fieldCell}>
+              <Text style={styles.fieldLabel}>Issuer State</Text>
+              <View style={styles.fieldValueBox}>
+                <Text style={styles.fieldValueText} numberOfLines={1}>
+                  {issuer?.state || "—"}
+                </Text>
+              </View>
+            </View>
+            <View style={styles.fieldCell}>
+              <Text style={styles.fieldLabel}>GSTIN</Text>
+              <View style={styles.fieldValueBox}>
+                <Text style={styles.fieldValueText} numberOfLines={1}>
+                  {issuer?.gstNotApplicable
+                    ? "Not applicable"
+                    : issuer?.gstin || "—"}
+                </Text>
+              </View>
+            </View>
           </View>
+          {selectedTrips.length > 1 ? (
+            <Text style={styles.fieldHint}>
+              Showing transport for the first of {selectedTrips.length} selected
+              trips. All trips appear in Items below.
+            </Text>
+          ) : null}
+        </View>
+
+        {/* Items table */}
+        <View style={styles.section}>
+          <View style={styles.sectionTitleRow}>
+            <Text style={[styles.sectionTitle, styles.sectionTitleInline]}>
+              Items
+            </Text>
+            {selectedTrips.length > 0 ? (
+              <View style={styles.splitToggleRow}>
+                <Pressable
+                  style={[
+                    styles.splitToggleBtn,
+                    showSplit && styles.splitToggleBtnOn,
+                  ]}
+                  onPress={() => setShowSplit(true)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: showSplit }}
+                  accessibilityLabel="Show split"
+                >
+                  <Text
+                    style={[
+                      styles.splitToggleText,
+                      showSplit && styles.splitToggleTextOn,
+                    ]}
+                  >
+                    Show split
+                  </Text>
+                </Pressable>
+                <Pressable
+                  style={[
+                    styles.splitToggleBtn,
+                    !showSplit && styles.splitToggleBtnOn,
+                  ]}
+                  onPress={() => setShowSplit(false)}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: !showSplit }}
+                  accessibilityLabel="No split"
+                >
+                  <Text
+                    style={[
+                      styles.splitToggleText,
+                      !showSplit && styles.splitToggleTextOn,
+                    ]}
+                  >
+                    No split
+                  </Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
+
+          <View style={styles.itemsTable}>
+            <View style={styles.itemsHead}>
+              <Text style={[styles.itemsHeadCell, styles.colIndex]}>#</Text>
+              <Text style={[styles.itemsHeadCell, styles.colDesc]}>
+                Description / Trip
+              </Text>
+              <Text style={[styles.itemsHeadCell, styles.colRoute]}>Route</Text>
+              <Text style={[styles.itemsHeadCell, styles.colStatus]}>
+                Status
+              </Text>
+              <Text
+                style={[
+                  styles.itemsHeadCell,
+                  styles.colAmount,
+                  styles.itemsHeadRight,
+                ]}
+              >
+                Amount
+              </Text>
+            </View>
+
+            {globalCharges.map((charge, index) => (
+              <View key={charge.id} style={styles.chargeRow}>
+                <Text style={[styles.itemsBodyCell, styles.colIndex]}>
+                  {index + 1}
+                </Text>
+                <View style={[styles.chargeContentCol, styles.colDesc]}>
+                  <TextInput
+                    style={styles.chargeInput}
+                    value={charge.description}
+                    onChangeText={(t) =>
+                      handleUpdateCharge(charge.id, "description", t)
+                    }
+                    placeholder="Enter description"
+                    placeholderTextColor={Theme.textMuted}
+                  />
+                  <Text style={styles.chargeHint} numberOfLines={1}>
+                    Global adjustment
+                  </Text>
+                </View>
+                <View style={[styles.chargeActionsRow, styles.colAmountWide]}>
+                  <View style={styles.chargeTypeToggle}>
+                    <Pressable
+                      style={[
+                        styles.chargeTypeBtn,
+                        !Object.is(charge.amount, -0) && charge.amount >= 0
+                          ? styles.chargeTypeBtnAdd
+                          : null,
+                      ]}
+                      onPress={() =>
+                        handleUpdateCharge(
+                          charge.id,
+                          "amount",
+                          Math.abs(charge.amount),
+                        )
+                      }
+                    >
+                      <Text
+                        style={[
+                          styles.chargeTypeText,
+                          !Object.is(charge.amount, -0) && charge.amount >= 0
+                            ? styles.chargeTypeTextAdd
+                            : null,
+                        ]}
+                      >
+                        Add
+                      </Text>
+                    </Pressable>
+                    <Pressable
+                      style={[
+                        styles.chargeTypeBtn,
+                        Object.is(charge.amount, -0) || charge.amount < 0
+                          ? styles.chargeTypeBtnMinus
+                          : null,
+                      ]}
+                      onPress={() =>
+                        handleUpdateCharge(
+                          charge.id,
+                          "amount",
+                          Object.is(charge.amount, 0)
+                            ? -0
+                            : -Math.abs(charge.amount),
+                        )
+                      }
+                    >
+                      <Text
+                        style={[
+                          styles.chargeTypeText,
+                          Object.is(charge.amount, -0) || charge.amount < 0
+                            ? styles.chargeTypeTextMinus
+                            : null,
+                        ]}
+                      >
+                        Minus
+                      </Text>
+                    </Pressable>
+                  </View>
+                  <View style={styles.chargeAmountWrapper}>
+                    <Text style={styles.chargeCurrencySymbol}>₹</Text>
+                    <TextInput
+                      style={styles.chargeAmountInput}
+                      value={Math.abs(charge.amount).toString()}
+                      onChangeText={(t) => {
+                        const val = parseFloat(t) || 0;
+                        const isNeg =
+                          Object.is(charge.amount, -0) || charge.amount < 0;
+                        handleUpdateCharge(
+                          charge.id,
+                          "amount",
+                          isNeg ? (val === 0 ? -0 : -val) : val,
+                        );
+                      }}
+                      keyboardType="numeric"
+                    />
+                  </View>
+                  <Pressable
+                    style={styles.removeChargeBtn}
+                    onPress={() => handleRemoveCharge(charge.id)}
+                    accessibilityRole="button"
+                    accessibilityLabel="Remove charge"
+                  >
+                    <FontAwesome
+                      name="trash-o"
+                      size={14}
+                      color={Theme.negative}
+                    />
+                  </Pressable>
+                </View>
+              </View>
+            ))}
+
+            {selectedTrips.length === 0 ? (
+              <View style={styles.emptyTrips}>
+                <FontAwesome
+                  name="file-text-o"
+                  size={22}
+                  color={Theme.borderMedium}
+                  style={{ marginBottom: 8 }}
+                />
+                <Text style={styles.emptyTripsText}>
+                  Select trips to build this invoice
+                </Text>
+              </View>
+            ) : (
+              selectedTrips.map((trip, index) => {
+                const tripNotes = adjustmentsForTripId(
+                  tripAdjustmentsRecord,
+                  trip.internal_id,
+                );
+                const revised = invoiceTripAdjustedAmount(
+                  trip.amount,
+                  tripNotes,
+                );
+                const hasSplit = Math.abs(revised - trip.amount) >= 0.005;
+                const rowNum = globalCharges.length + index + 1;
+                return (
+                  <View key={trip.id} style={styles.tripItemWrapper}>
+                    <View style={styles.tripItem}>
+                      <Text style={[styles.itemsBodyCell, styles.colIndex]}>
+                        {rowNum}
+                      </Text>
+                      <View style={[styles.tripItemMeta, styles.colDesc]}>
+                        <Text style={styles.tripItemId} numberOfLines={1}>
+                          {trip.id}
+                        </Text>
+                        <Text style={styles.tripItemDate} numberOfLines={1}>
+                          {trip.date}
+                        </Text>
+                      </View>
+                      <Text
+                        style={[styles.tripItemRoute, styles.colRoute]}
+                        numberOfLines={2}
+                      >
+                        {trip.route}
+                      </Text>
+                      <View style={[styles.tripItemPodRow, styles.colStatus]}>
+                        <TripCompletionOrPodTags
+                          compact
+                          tripCompleted={tripIsDeliveredStatus(trip.tripStatus)}
+                          softCopyReceived={Boolean(trip.digitalPodPresent)}
+                          hardCopyReceived={Boolean(trip.physicalPodReceived)}
+                        />
+                      </View>
+                      <View style={[styles.tripItemAmounts, styles.colAmount]}>
+                        <Text style={styles.tripItemAmount}>
+                          {formatCurrency(revised)}
+                        </Text>
+                        {showSplit && hasSplit ? (
+                          <Text style={styles.tripItemBaseAmount}>
+                            Freight {formatCurrency(trip.amount)}
+                          </Text>
+                        ) : null}
+                      </View>
+                    </View>
+                    <InvoiceTripCnDnGroup
+                      trip={trip}
+                      adjustments={tripNotes}
+                      showBreakdown={showSplit}
+                      onAdd={() => {
+                        setCnDnEdit(null);
+                        setCnDnTrip(trip);
+                      }}
+                      onEdit={(adj) => {
+                        setCnDnEdit(adj);
+                        setCnDnTrip(trip);
+                      }}
+                    />
+                  </View>
+                );
+              })
+            )}
+          </View>
+
+          <Pressable
+            style={styles.addChargeBtn}
+            onPress={() => handleAddCharge()}
+            accessibilityRole="button"
+            accessibilityLabel="Add item"
+          >
+            <FontAwesome name="plus" size={12} color={Theme.analyticsHeroBg} />
+            <Text style={styles.addChargeText}>Add Item</Text>
+          </Pressable>
+        </View>
+
+        {/* Terms & Conditions */}
+        <View style={[styles.section, styles.settingsBlock]}>
+          <Text style={styles.sectionTitle}>Terms & Conditions</Text>
+          <TextInput
+            style={styles.notesInput}
+            value={notes}
+            onChangeText={setNotes}
+            placeholder="Add special instructions, PO references, or payment notes…"
+            placeholderTextColor={Theme.textMuted}
+            multiline
+            numberOfLines={3}
+          />
 
           <View style={styles.settingsToggles}>
             <Pressable
@@ -845,7 +977,11 @@ export function InvoicePreviewPanel({
                 style={[styles.checkbox, includeGst && styles.checkboxActive]}
               >
                 {includeGst && (
-                  <FontAwesome name="check" size={10} color="#fff" />
+                  <FontAwesome
+                    name="check"
+                    size={10}
+                    color={Theme.screenBackground}
+                  />
                 )}
               </View>
               <Text style={styles.checkboxLabel}>Apply GST</Text>
@@ -870,7 +1006,11 @@ export function InvoicePreviewPanel({
                 style={[styles.checkbox, includeFuel && styles.checkboxActive]}
               >
                 {includeFuel && (
-                  <FontAwesome name="check" size={10} color="#fff" />
+                  <FontAwesome
+                    name="check"
+                    size={10}
+                    color={Theme.screenBackground}
+                  />
                 )}
               </View>
               <Text style={styles.checkboxLabel}>Fuel Surcharge</Text>
@@ -889,7 +1029,7 @@ export function InvoicePreviewPanel({
           </View>
         </View>
 
-        {/* Calculations */}
+        {/* Totals */}
         <View style={styles.calcBlock}>
           {taxDisplay?.warning ? (
             <Text style={styles.taxWarning}>{taxDisplay.warning}</Text>
@@ -899,7 +1039,7 @@ export function InvoicePreviewPanel({
               key={row.key}
               style={[
                 styles.calcRow,
-                row.key === "taxable" ? { marginBottom: 16 } : null,
+                row.key === "taxable" ? styles.calcRowTaxable : null,
               ]}
             >
               <Text
@@ -969,13 +1109,13 @@ export function InvoicePreviewPanel({
           accessibilityLabel={invoiceBuildBlockedReason ?? "Preview draft"}
         >
           {isFinalizing ? (
-            <LoadingIndicator color={Theme.textPrimaryDark} size="small" />
+            <LoadingIndicator color={Theme.analyticsHeroBg} size="small" />
           ) : (
             <>
               <FontAwesome
-                name="file-text"
-                size={14}
-                color={Theme.textPrimaryDark}
+                name="file-text-o"
+                size={13}
+                color={Theme.analyticsHeroBg}
                 style={{ marginRight: 8 }}
               />
               <Text style={styles.footerBtnSecondaryText}>Preview draft</Text>
@@ -992,7 +1132,7 @@ export function InvoicePreviewPanel({
           accessibilityLabel="Issue Invoice"
         >
           {isIssuing ? (
-            <LoadingIndicator color={Theme.buttonPrimaryText} size="small" />
+            <LoadingIndicator color={Theme.screenBackground} size="small" />
           ) : (
             <Text style={styles.footerBtnPrimaryText}>Issue Invoice</Text>
           )}
@@ -1043,39 +1183,63 @@ export function InvoicePreviewPanel({
 
 const styles = StyleSheet.create({
   sheet: {
-    backgroundColor: Theme.surface,
+    backgroundColor: Theme.analyticsCanvas,
     flex: 1,
   },
   header: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "flex-start",
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingBottom: 12,
-    paddingTop: 12,
+    paddingHorizontal: 20,
+    paddingBottom: 16,
+    paddingTop: 16,
     minHeight: 68,
     gap: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
-    backgroundColor: Theme.screenBackground,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderMedium,
+    backgroundColor: Theme.cardWhite,
   },
   headerCopy: { flex: 1, minWidth: 0 },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
-    letterSpacing: 0.2,
+  headerTitleRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flexWrap: "wrap",
   },
-  headerDraftTag: {
-    color: Theme.textMuted,
-    fontWeight: "500",
+  backBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 2,
+  },
+  headerTitle: {
+    fontSize: 20,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    letterSpacing: -0.3,
+  },
+  draftBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: Theme.brandBlueSoft,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+  },
+  draftBadgeText: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: Theme.analyticsHeroBg,
+    letterSpacing: 0.3,
   },
   headerSub: {
-    fontSize: 13,
-    fontWeight: "400",
+    fontSize: 12,
+    fontWeight: "500",
     color: Theme.textMuted,
-    marginTop: 4,
-    lineHeight: 18,
+    marginTop: 6,
+    lineHeight: 17,
   },
   headerActions: { flexDirection: "row", alignItems: "center", gap: 4 },
   headerIconBtn: {
@@ -1083,11 +1247,12 @@ const styles = StyleSheet.create({
     height: Layout.minTouchTargetSize,
     alignItems: "center",
     justifyContent: "center",
+    borderRadius: 8,
   },
 
-  body: { flex: 1, backgroundColor: Theme.screenBackground },
+  body: { flex: 1, backgroundColor: Theme.analyticsCanvas },
   bodyContent: {
-    paddingHorizontal: Layout.screenPaddingHorizontal,
+    paddingHorizontal: 16,
     paddingBottom: 40,
     paddingTop: 16,
     flexGrow: 1,
@@ -1100,6 +1265,13 @@ const styles = StyleSheet.create({
     width: "100%",
     flexGrow: 1,
     alignSelf: "stretch",
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    paddingHorizontal: 20,
+    paddingVertical: 22,
+    gap: 0,
   },
   documentExpanded: {
     width: "100%",
@@ -1107,43 +1279,143 @@ const styles = StyleSheet.create({
     alignSelf: "stretch",
   },
 
-  rowLayout: {
-    flexDirection: "row",
-    alignItems: "stretch",
-    gap: 24,
-    marginBottom: 20,
+  section: {
+    marginBottom: 28,
   },
-  colLayout: { flex: 1, minWidth: 0 },
-  sectionLabel: {
-    fontSize: 11,
+  sectionTitle: {
+    fontSize: 15,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+    marginBottom: 14,
+    letterSpacing: -0.2,
+  },
+  sectionTitleInline: {
+    marginBottom: 0,
+  },
+  sectionTitleRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 10,
+    marginBottom: 14,
+  },
+
+  fieldLabel: {
+    fontSize: 12,
     fontWeight: "600",
+    color: Theme.textSecondary,
+    marginBottom: 6,
+  },
+  fieldLabelFlush: {
+    marginBottom: 0,
+  },
+  fieldLabelRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    marginBottom: 6,
+  },
+  fieldHint: {
+    marginTop: 6,
+    fontSize: 11,
+    fontWeight: "400",
     color: Theme.textMuted,
-    letterSpacing: 0.4,
-    marginBottom: 8,
+    lineHeight: 15,
+  },
+  fieldGrid: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 14,
+    ...(Platform.OS === "web"
+      ? ({
+          display: "grid",
+          gridTemplateColumns: "repeat(3, minmax(0, 1fr))",
+          alignItems: "start",
+        } as unknown as ViewStyle)
+      : null),
+  },
+  fieldGridMeta: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 14,
+    marginTop: 14,
+    ...(Platform.OS === "web"
+      ? ({
+          display: "grid",
+          gridTemplateColumns: "repeat(4, minmax(0, 1fr))",
+          alignItems: "start",
+        } as unknown as ViewStyle)
+      : null),
+  },
+  customerNameBlock: {
+    width: "100%",
+    minWidth: 0,
+  },
+  fieldCell: {
+    flexGrow: 1,
+    flexBasis: 160,
+    minWidth: 140,
+    maxWidth: "100%",
+    ...(Platform.OS === "web"
+      ? ({
+          width: "100%",
+          flexBasis: "auto",
+          minWidth: 0,
+        } as unknown as ViewStyle)
+      : null),
+  },
+  fieldCellWide: {
+    flexBasis: 220,
+    minWidth: 180,
+    ...(Platform.OS === "web"
+      ? ({
+          gridColumn: "1 / -1",
+          flexBasis: "auto",
+          minWidth: 0,
+        } as unknown as ViewStyle)
+      : null),
+  },
+  fieldValueBox: {
+    minHeight: 42,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    borderRadius: 6,
+    backgroundColor: Theme.cardWhite,
+    paddingHorizontal: 12,
+    justifyContent: "center",
+  },
+  fieldValueMuted: {
+    backgroundColor: Theme.surface,
+  },
+  fieldValueText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: Theme.textPrimaryDark,
+  },
+  fieldValueMutedText: {
+    fontSize: 13,
+    fontWeight: "500",
+    color: Theme.textMuted,
   },
   editClientBtn: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 6,
-    minHeight: Layout.minTouchTargetSize,
-    paddingHorizontal: 4,
-    marginBottom: 8,
+    gap: 4,
+    minHeight: 28,
+    paddingHorizontal: 2,
+    marginBottom: 0,
   },
   editClientBtnText: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: Theme.primary,
+    fontSize: 12,
+    fontWeight: "600",
+    color: Theme.analyticsHeroBg,
   },
 
-  infoCard: {
-    backgroundColor: Theme.cardWhite,
-    paddingVertical: 4,
-    paddingRight: 8,
-    minHeight: 72,
-  },
   clientName: {
     fontSize: 14,
-    fontWeight: "600",
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
     marginBottom: 4,
   },
@@ -1155,83 +1427,108 @@ const styles = StyleSheet.create({
     lineHeight: 17,
   },
 
-  taxText: {
-    fontSize: 13,
-    fontWeight: "400",
-    color: Theme.textPrimaryDark,
-    marginBottom: 4,
-    lineHeight: 18,
-  },
-  taxLabel: { color: Theme.textMuted, fontWeight: "500" },
-
-  configBlock: { marginBottom: 24 },
-  toggleRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+  itemsTable: {
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    borderRadius: 8,
+    overflow: "hidden",
     backgroundColor: Theme.cardWhite,
-    padding: 12,
-    marginBottom: 8,
   },
-  toggleText: { flex: 1, paddingRight: 16 },
-  toggleTitle: {
-    fontSize: 13,
+  itemsHead: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: Theme.brandBlueSoft,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderMedium,
+    paddingHorizontal: 12,
+    paddingVertical: 11,
+    gap: 8,
+  },
+  itemsHeadCell: {
+    fontSize: 11,
     fontWeight: "700",
     color: Theme.textPrimaryDark,
+    letterSpacing: 0.2,
   },
-  toggleSub: { fontSize: 11, color: Theme.textMuted, marginTop: 2 },
+  itemsHeadRight: {
+    textAlign: "right",
+  },
+  itemsBodyCell: {
+    fontSize: 12,
+    fontWeight: "500",
+    color: Theme.textSecondary,
+  },
+  colIndex: {
+    width: 28,
+    flexShrink: 0,
+  },
+  colDesc: {
+    flex: 1.4,
+    minWidth: 100,
+  },
+  colRoute: {
+    flex: 1.3,
+    minWidth: 90,
+  },
+  colStatus: {
+    flex: 0.9,
+    minWidth: 72,
+  },
+  colAmount: {
+    width: 96,
+    flexShrink: 0,
+    alignItems: "flex-end",
+  },
+  colAmountWide: {
+    flexShrink: 0,
+    marginLeft: "auto",
+  },
 
-  sectionHeaderRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 8,
-  },
   addChargeBtn: {
     flexDirection: "row",
     alignItems: "center",
+    alignSelf: "flex-start",
     gap: 6,
     minHeight: Layout.minTouchTargetSize,
     paddingVertical: 8,
-    paddingHorizontal: 10,
-    backgroundColor: Theme.brandBlueWashSubtle,
-    borderRadius: 8,
+    paddingHorizontal: 4,
+    marginTop: 10,
   },
   addChargeText: {
     fontSize: 13,
-    fontWeight: "500",
-    color: Theme.primary,
+    fontWeight: "700",
+    color: Theme.analyticsHeroBg,
   },
 
   chargeRow: {
     flexDirection: "row",
-    backgroundColor: Theme.cardWhite,
-    padding: 8,
-    marginBottom: 8,
     alignItems: "center",
-    justifyContent: "space-between",
-    gap: 4,
+    gap: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.surfaceBorder,
+    backgroundColor: Theme.cardWhite,
   },
   chargeContentCol: {
     flexGrow: 1,
     flexShrink: 1,
-    minWidth: 120,
-    paddingRight: 6,
+    minWidth: 100,
   },
   chargeActionsRow: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 4,
+    gap: 6,
     flexShrink: 0,
-    maxWidth: 220,
   },
   chargeInput: {
     width: "100%",
     fontSize: 13,
-    fontWeight: "400",
+    fontWeight: "500",
     color: Theme.textPrimaryDark,
     padding: 0,
     margin: 0,
+    minHeight: 20,
   },
   chargeHint: {
     fontSize: 11,
@@ -1244,6 +1541,7 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     backgroundColor: Theme.surfaceGray,
     padding: 2,
+    borderRadius: 6,
   },
   chargeTypeBtn: {
     paddingHorizontal: 8,
@@ -1253,36 +1551,29 @@ const styles = StyleSheet.create({
     justifyContent: "center",
   },
   chargeTypeBtnAdd: {
-    backgroundColor: "#fff",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-    elevation: 1,
+    backgroundColor: Theme.cardWhite,
   },
   chargeTypeBtnMinus: {
-    backgroundColor: "#fff",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
-    elevation: 1,
+    backgroundColor: Theme.cardWhite,
   },
   chargeTypeText: {
     fontSize: 11,
     fontWeight: "500",
     color: Theme.textMuted,
   },
-  chargeTypeTextAdd: { color: "#059669" },
-  chargeTypeTextMinus: { color: "#dc2626" },
+  chargeTypeTextAdd: { color: Theme.positive },
+  chargeTypeTextMinus: { color: Theme.negative },
 
   chargeAmountWrapper: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Theme.surfaceGray,
-    paddingHorizontal: 4,
-    paddingVertical: 2,
-    width: 72,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    borderRadius: 6,
+    paddingHorizontal: 6,
+    paddingVertical: 4,
+    width: 78,
   },
   chargeCurrencySymbol: {
     fontSize: 12,
@@ -1291,9 +1582,9 @@ const styles = StyleSheet.create({
     marginRight: 2,
   },
   chargeAmountInput: {
-    width: 44,
+    width: 48,
     fontSize: 13,
-    fontWeight: "500",
+    fontWeight: "600",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     color: Theme.textPrimaryDark,
     textAlign: "right",
@@ -1305,36 +1596,30 @@ const styles = StyleSheet.create({
     height: Layout.minTouchTargetSize,
     alignItems: "center",
     justifyContent: "center",
-    backgroundColor: "rgba(220,38,38,0.08)",
     borderRadius: 8,
   },
 
-  tripsList: { marginBottom: 24 },
   splitToggleRow: {
     flexDirection: "row",
-    alignSelf: "flex-start",
-    backgroundColor: Theme.liquidPillBg,
+    alignSelf: "flex-end",
+    backgroundColor: Theme.surface,
     borderWidth: 1,
-    borderColor: Theme.liquidPillBorder,
-    borderRadius: 999,
-    padding: 3,
-    marginBottom: 12,
+    borderColor: Theme.borderMedium,
+    borderRadius: 8,
+    padding: 2,
     gap: 2,
   },
   splitToggleBtn: {
-    minHeight: 36,
-    paddingHorizontal: 14,
+    minHeight: 32,
+    paddingHorizontal: 12,
     justifyContent: "center",
-    borderRadius: 999,
+    borderRadius: 6,
     backgroundColor: "transparent",
   },
   splitToggleBtnOn: {
-    backgroundColor: Theme.screenBackground,
-    shadowColor: Theme.textPrimaryDark,
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.08,
-    shadowRadius: 2,
-    elevation: 1,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
   },
   splitToggleText: {
     fontSize: 12,
@@ -1345,113 +1630,107 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
   },
   emptyTrips: {
-    padding: 24,
+    padding: 28,
     alignItems: "center",
     justifyContent: "center",
     backgroundColor: Theme.cardWhite,
   },
   emptyTripsText: {
     fontSize: 13,
-    fontWeight: "400",
+    fontWeight: "500",
     color: Theme.textMuted,
   },
-  tripItemWrapper: { marginBottom: 12 },
+  tripItemWrapper: {
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.surfaceBorder,
+  },
   tripItem: {
     backgroundColor: Theme.cardWhite,
     paddingVertical: 12,
-    paddingHorizontal: 0,
+    paddingHorizontal: 12,
     flexDirection: "row",
-    justifyContent: "space-between",
     alignItems: "flex-start",
-    gap: 16,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: Theme.borderLight,
+    gap: 8,
   },
-  tripItemMeta: { flex: 1, minWidth: 0 },
-  tripItemAmounts: { alignItems: "flex-end", flexShrink: 0 },
-  tripItemTitle: {
+  tripItemMeta: { minWidth: 0 },
+  tripItemAmounts: {
+    alignItems: "flex-end",
+    justifyContent: "flex-start",
+  },
+  tripItemId: {
     fontSize: 13,
-    fontWeight: "500",
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
-    marginBottom: 6,
-    lineHeight: 20,
+    marginBottom: 2,
   },
-  tripItemId: { color: Theme.primary, fontWeight: "600" },
-  tripItemDot: { color: Theme.textMuted, fontWeight: "400" },
-  tripItemDate: { color: Theme.textRouteCard, fontWeight: "400" },
+  tripItemDate: {
+    fontSize: 11,
+    fontWeight: "500",
+    color: Theme.textMuted,
+  },
   tripItemRoute: {
-    fontSize: 13,
-    fontWeight: "400",
+    fontSize: 12,
+    fontWeight: "500",
     color: Theme.textRouteCard,
-    lineHeight: 19,
+    lineHeight: 17,
+    minWidth: 0,
   },
   tripItemPodRow: {
-    marginTop: 6,
+    minWidth: 0,
+    paddingTop: 2,
   },
   tripItemAmount: {
-    fontSize: 15,
-    fontWeight: "600",
+    fontSize: 14,
+    fontWeight: "700",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     color: Theme.textPrimaryDark,
+    textAlign: "right",
   },
   tripItemBaseAmount: {
     marginTop: 4,
     fontSize: 11,
     fontWeight: "400",
     color: Theme.textMuted,
-  },
-  adjustBtn: {
-    marginTop: 4,
-    minHeight: 32,
-    justifyContent: "center",
-  },
-  addTripChargeText: {
-    fontSize: 13,
-    fontWeight: "500",
-    color: Theme.primary,
-  },
-
-  tripChargeRow: {
-    flexDirection: "row",
-    backgroundColor: Theme.surfaceGray,
-    padding: 8,
-    marginTop: 4,
-    marginLeft: 24,
-    alignItems: "center",
-    gap: 6,
+    textAlign: "right",
   },
 
   calcBlock: {
-    backgroundColor: Theme.cardWhite,
-    paddingVertical: 8,
-    marginBottom: 24,
+    backgroundColor: Theme.surface,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    marginBottom: 8,
   },
   calcRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     marginBottom: 8,
   },
-  calcLabel: { fontSize: 13, color: Theme.textRouteCard, fontWeight: "400" },
+  calcRowTaxable: {
+    marginBottom: 12,
+  },
+  calcLabel: { fontSize: 13, color: Theme.textRouteCard, fontWeight: "500" },
   calcVal: {
     fontSize: 13,
-    fontWeight: "500",
+    fontWeight: "600",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     color: Theme.textPrimaryDark,
   },
   calcSubtotal: {
     borderTopWidth: 1,
-    borderBottomWidth: 1,
-    paddingVertical: 8,
+    borderTopColor: Theme.borderMedium,
     marginVertical: 8,
   },
   calcLabelSubtotal: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "700",
     color: Theme.textPrimaryDark,
   },
   calcValSubtotal: {
     fontSize: 13,
-    fontWeight: "600",
+    fontWeight: "700",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
     color: Theme.textPrimaryDark,
   },
@@ -1465,12 +1744,12 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
-    marginTop: 8,
-    paddingTop: 8,
+    marginTop: 4,
+    paddingTop: 4,
   },
   calcTotalLabel: {
     fontSize: 13,
-    fontWeight: "500",
+    fontWeight: "600",
     color: Theme.textMuted,
   },
   calcTotalSub: {
@@ -1481,98 +1760,30 @@ const styles = StyleSheet.create({
   },
   calcTotalVal: {
     fontSize: 22,
-    fontWeight: "600",
+    fontWeight: "700",
     fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-    color: Theme.primary,
-  },
-
-  annexureBlock: {
-    backgroundColor: "#0f172a",
-    padding: 16,
-    marginBottom: 24,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.2,
-    shadowRadius: 8,
-    elevation: 5,
-  },
-  annexureHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-  annexureTitle: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "rgba(255,255,255,0.7)",
-    textTransform: "uppercase",
-    letterSpacing: 1,
-  },
-  annexureRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    marginBottom: 8,
-    alignItems: "center",
-  },
-  annexureLabel: {
-    fontSize: 10,
-    fontWeight: "800",
-    color: "rgba(255,255,255,0.4)",
-    textTransform: "uppercase",
-    letterSpacing: 0.5,
-  },
-  annexureValue: {
-    fontSize: 10,
-    fontFamily: Platform.OS === "ios" ? "Menlo" : "monospace",
-    color: "#fff",
-    flex: 1,
-    textAlign: "right",
-    marginLeft: 16,
+    color: Theme.textPrimaryDark,
   },
 
   settingsBlock: {
-    backgroundColor: Theme.cardWhite,
-    paddingVertical: 8,
-    marginBottom: 24,
     position: "relative",
     overflow: "visible",
     zIndex: 10,
-  },
-  settingsRow: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 16,
-    position: "relative",
-    zIndex: 30,
-  },
-  settingsCol: {
-    marginBottom: 16,
-    position: "relative",
-    zIndex: 1,
-  },
-  settingsLabel: {
-    fontSize: 12,
-    fontWeight: "500",
-    color: Theme.textMuted,
-    marginBottom: 6,
   },
   settingsSelect: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.cardWhite,
     paddingHorizontal: 12,
     paddingVertical: 10,
-    minHeight: Layout.minTouchTargetSize,
-    minWidth: 140,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    minHeight: 42,
+    borderRadius: 6,
+    borderWidth: 1,
     borderColor: Theme.borderMedium,
   },
   settingsSelectWrap: {
     position: "relative",
-    alignItems: "flex-end",
     zIndex: 1000,
   },
   settingsSelectText: {
@@ -1581,27 +1792,28 @@ const styles = StyleSheet.create({
     color: Theme.textPrimaryDark,
   },
   notesInput: {
-    backgroundColor: Theme.screenBackground,
+    backgroundColor: Theme.cardWhite,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 13,
     fontWeight: "400",
     color: Theme.textPrimaryDark,
-    minHeight: 72,
+    minHeight: 88,
     textAlignVertical: "top",
     position: "relative",
     zIndex: 1,
-    borderRadius: 8,
-    borderWidth: StyleSheet.hairlineWidth,
+    borderRadius: 6,
+    borderWidth: 1,
     borderColor: Theme.borderMedium,
   },
   settingsToggles: {
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 16,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
-    paddingTop: 16,
+    borderTopWidth: 1,
+    borderTopColor: Theme.surfaceBorder,
+    paddingTop: 14,
+    marginTop: 14,
     position: "relative",
     zIndex: 1,
   },
@@ -1619,9 +1831,11 @@ const styles = StyleSheet.create({
     borderColor: Theme.borderMedium,
     alignItems: "center",
     justifyContent: "center",
+    backgroundColor: Theme.cardWhite,
   },
   checkboxActive: {
-    backgroundColor: Theme.buttonPrimary,
+    backgroundColor: Theme.analyticsHeroBg,
+    borderColor: Theme.analyticsHeroBg,
   },
   checkboxLabel: {
     fontSize: 13,
@@ -1631,9 +1845,12 @@ const styles = StyleSheet.create({
   rateInputWrap: {
     flexDirection: "row",
     alignItems: "center",
-    backgroundColor: Theme.screenBackground,
-    paddingHorizontal: 6,
-    paddingVertical: 2,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    borderRadius: 6,
+    paddingHorizontal: 8,
+    paddingVertical: 4,
   },
   rateInput: {
     width: 36,
@@ -1654,13 +1871,14 @@ const styles = StyleSheet.create({
   footer: {
     flexDirection: "row",
     alignItems: "center",
+    justifyContent: "flex-end",
     gap: 12,
-    paddingHorizontal: Layout.screenPaddingHorizontal,
-    paddingTop: 16,
+    paddingHorizontal: 20,
+    paddingTop: 14,
     paddingBottom: 16,
-    backgroundColor: Theme.screenBackground,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
+    backgroundColor: Theme.cardWhite,
+    borderTopWidth: 1,
+    borderTopColor: Theme.borderMedium,
   },
   footerBlocked: {
     flexDirection: "column",
@@ -1672,49 +1890,41 @@ const styles = StyleSheet.create({
     color: Theme.textSecondary,
     textAlign: "center",
   },
-  footerBtnOutline: {
-    flex: 1,
-    paddingVertical: 14,
-    alignItems: "center",
-  },
-  footerBtnOutlineText: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: Theme.textPrimaryDark,
-  },
   footerBtnSecondary: {
-    flex: 1,
+    minWidth: 140,
     minHeight: Layout.minTouchTargetSize,
-    paddingVertical: 14,
-    backgroundColor: Theme.surface,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.border,
-    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1.5,
+    borderColor: Theme.analyticsHeroBg,
+    borderRadius: 8,
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "center",
   },
   footerBtnSecondaryText: {
     fontSize: 14,
-    fontWeight: "600",
-    color: Theme.textPrimaryDark,
+    fontWeight: "700",
+    color: Theme.analyticsHeroBg,
   },
   footerBtnPrimary: {
-    flex: 2,
+    minWidth: 148,
     minHeight: Layout.minTouchTargetSize,
-    paddingVertical: 14,
-    backgroundColor: Theme.buttonPrimary,
-    borderWidth: Theme.buttonPrimaryBorderWidth,
-    borderColor: Theme.buttonPrimaryBorder,
-    borderRadius: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 18,
+    backgroundColor: Theme.analyticsHeroBg,
+    borderWidth: 0,
+    borderColor: Theme.analyticsHeroBg,
+    borderRadius: 8,
     alignItems: "center",
     flexDirection: "row",
     justifyContent: "center",
   },
   footerBtnPrimaryText: {
-    fontSize: 15,
-    fontWeight: "600",
-    color: Theme.buttonPrimaryText,
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.screenBackground,
   },
   btnDisabled: { opacity: 0.5 },
 
@@ -1727,11 +1937,9 @@ const styles = StyleSheet.create({
   termsModalContent: {
     backgroundColor: Theme.cardWhite,
     padding: 8,
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
-    shadowRadius: 12,
-    elevation: 8,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
   },
   termOption: {
     flexDirection: "row",
@@ -1739,26 +1947,27 @@ const styles = StyleSheet.create({
     alignItems: "center",
     paddingVertical: 12,
     paddingHorizontal: 16,
+    minHeight: Layout.minTouchTargetSize,
   },
   termOptionText: {
     fontSize: 14,
     fontWeight: "600",
     color: Theme.textPrimaryDark,
   },
-  termOptionActive: { color: Theme.primary, fontWeight: "600" },
+  termOptionActive: { color: Theme.analyticsHeroBg, fontWeight: "700" },
   webTermsDropdown: {
     position: "absolute" as const,
-    top: 44,
+    top: 48,
+    left: 0,
     right: 0,
-    width: 120,
     backgroundColor: Theme.cardWhite,
-    borderRadius: 12,
-    padding: 8,
+    borderRadius: 10,
+    padding: 6,
     borderWidth: 1,
-    borderColor: Theme.borderLight,
-    shadowColor: "#000",
+    borderColor: Theme.borderMedium,
+    shadowColor: Theme.textPrimaryDark,
     shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.15,
+    shadowOpacity: 0.12,
     shadowRadius: 12,
     elevation: 24,
     zIndex: 9999,

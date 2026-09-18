@@ -79,6 +79,7 @@ export {
 export type {
   TrendBarChartProps,
   TrendLineChartProps,
+  TrendLineTooltipRow,
   TrendPoint,
 } from "./AnalyticsCharts";
 

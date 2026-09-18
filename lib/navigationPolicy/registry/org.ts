@@ -474,6 +474,15 @@ export const ORG_POLICIES: readonly PolicyRecord[] = [
     softDeny: true,
   },
   {
+    id: 'org.invoicing-execute-create',
+    pattern: '/invoicing-execute/create',
+    experience: 'org',
+    priority: 100,
+    grants: { anyOf: ['finance_view', 'finance_manage'] },
+    onDeny: { type: 'path', path: '/trips' },
+    softDeny: true,
+  },
+  {
     id: 'org.ledger-sync',
     pattern: '/ledger-sync',
     experience: 'org',

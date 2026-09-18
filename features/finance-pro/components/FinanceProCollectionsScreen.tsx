@@ -1,9 +1,11 @@
 import { ROUTES } from "@/lib/routes";
 import {
-  FinanceProAgeBoard,
+  FinanceProAgeHighlights,
+  FinanceProCollectRank,
   FinanceProDataTable,
-  FinanceProPageHero,
+  FinanceProPanel,
   FinanceProStack,
+  FinanceProWidgetRow,
   type FinanceProTableColumn,
 } from "./FinanceProCanvas";
 import { FinanceProInvestigation } from "./FinanceProInvestigation";
@@ -31,7 +33,7 @@ import { buildInvestigationBrief } from "../model/investigation.util";
 import { useRouter } from "expo-router";
 import { useState } from "react";
 import { Platform, Pressable, Text } from "react-native";
-import Theme from "@/constants/Theme";
+import { METRONIC } from "@/features/network/components/desktop/networkDesktopHub.styles";
 
 function ageMixLabel(row: ClientCollectionRow): string {
   const parts = OBLIGATION_AGE_BUCKETS.filter((k) => row.ageMix[k] > 0).map(
@@ -61,35 +63,35 @@ export function FinanceProCollectionsScreen() {
           (a, b) => (b.daysOld ?? 0) - (a.daysOld ?? 0),
         );
         const columns: FinanceProTableColumn<ClientCollectionRow>[] = [
-          { key: "c", label: "Customer", flex: 1.5, minWidth: 150, render: (r) => r.name },
+          { key: "c", label: "Customer", flex: 1.4, minWidth: 148, render: (r) => r.name },
           {
             key: "o",
             label: "Outstanding",
-            flex: 1.1,
-            minWidth: 120,
+            flex: 1,
+            minWidth: 118,
             align: "right",
             render: (r) => formatFinanceInr(r.outstanding),
           },
           {
             key: "a",
             label: "Age",
-            flex: 1.1,
-            minWidth: 110,
+            flex: 1,
+            minWidth: 108,
             render: (r) => ageMixLabel(r),
           },
           {
             key: "t",
             label: "Open trips",
-            flex: 0.8,
-            minWidth: 88,
+            flex: 0.85,
+            minWidth: 92,
             align: "right",
             render: (r) => formatCount(r.openTrips),
           },
           {
             key: "old",
             label: "Oldest trip",
-            flex: 0.8,
-            minWidth: 88,
+            flex: 0.85,
+            minWidth: 92,
             align: "right",
             render: (r) =>
               r.oldestObligationDays == null ? "—" : `${r.oldestObligationDays}d`,
@@ -105,8 +107,8 @@ export function FinanceProCollectionsScreen() {
           {
             key: "cash",
             label: "Cash attributed",
-            flex: 1.1,
-            minWidth: 120,
+            flex: 1.05,
+            minWidth: 124,
             align: "right",
             render: (r) => formatFinanceInr(r.attributedReceipts),
           },
@@ -114,15 +116,15 @@ export function FinanceProCollectionsScreen() {
             key: "s",
             label: "Share",
             flex: 0.7,
-            minWidth: 72,
+            minWidth: 64,
             align: "right",
             render: (r) => formatPct(r.shareOfOutstanding),
           },
           {
             key: "act",
             label: "Action",
-            flex: 1,
-            minWidth: 110,
+            flex: 0.85,
+            minWidth: 96,
             variant: "muted",
             render: (r) =>
               r.isLedgerOnly ? (
@@ -145,7 +147,7 @@ export function FinanceProCollectionsScreen() {
                       }
                     : null)}
                 >
-                  <Text style={{ fontWeight: "800", color: Theme.primary, fontSize: 13 }}>
+                  <Text style={{ fontWeight: "800", color: METRONIC.link, fontSize: 13 }}>
                     Open 360
                   </Text>
                 </Pressable>
@@ -153,27 +155,27 @@ export function FinanceProCollectionsScreen() {
           },
         ];
         const tripColumns: FinanceProTableColumn<TripFinancialFact>[] = [
-          { key: "t", label: "Trip", flex: 1.1, minWidth: 130, render: (r) => r.tripLabel },
+          { key: "t", label: "Trip", flex: 1.15, minWidth: 120, render: (r) => r.tripLabel },
           {
             key: "c",
             label: "Customer",
             flex: 1.2,
-            minWidth: 130,
+            minWidth: 132,
             render: (r) => r.clientName,
           },
           {
             key: "v",
             label: "Value",
-            flex: 0.9,
-            minWidth: 100,
+            flex: 1,
+            minWidth: 108,
             align: "right",
             render: (r) => formatFinanceInr(r.sales),
           },
           {
             key: "open",
             label: "Open",
-            flex: 0.9,
-            minWidth: 100,
+            flex: 1,
+            minWidth: 108,
             align: "right",
             render: (r) => formatFinanceInr(r.remainingDue),
           },
@@ -188,38 +190,59 @@ export function FinanceProCollectionsScreen() {
           {
             key: "p",
             label: "POD",
-            flex: 0.7,
-            minWidth: 88,
+            flex: 0.9,
+            minWidth: 100,
             render: (r) => (r.podReceived ? "Received" : "Pending"),
           },
           {
             key: "i",
             label: "Invoice",
-            flex: 0.8,
-            minWidth: 96,
+            flex: 0.95,
+            minWidth: 108,
             render: (r) => (r.invoiced ? "Issued" : "Not billed"),
           },
         ];
 
         return (
           <FinanceProStack>
-            <FinanceProPageHero
-              eyebrow="Collections"
-              value={formatFinanceInr(model.outstanding)}
-              caption={
-                brief.active && brief.label
-                  ? `${brief.label} · ${formatCount(brief.clientCount)} customers · ${formatCount(brief.openTripCount)} open trips`
-                  : "Open trip-linked exposure · who should I collect from?"
-              }
-            />
-
-            <FinanceProAgeBoard
-              totals={model.ageTotals}
-              selected={selection.ageBucket}
-              onSelect={(bucket) =>
-                setSelection((s) => toggleAgeBucketSelection(s, bucket))
-              }
-            />
+            <FinanceProWidgetRow columns="1-2">
+              <FinanceProAgeHighlights
+                title="Outstanding"
+                kicker="Who should I collect from?"
+                heroLabel="Open trip-linked exposure"
+                badge={`${formatPct(model.collectionPct)} collected`}
+                totals={model.ageTotals}
+                selected={selection.ageBucket}
+                onSelect={(bucket) =>
+                  setSelection((s) => toggleAgeBucketSelection(s, bucket))
+                }
+              />
+              <FinanceProPanel
+                title="Who to collect"
+                kicker="Ranked by open exposure"
+              >
+                <FinanceProCollectRank
+                  selectedId={selection.clientId}
+                  onSelect={(id, name) =>
+                    setSelection((s) => toggleClientSelection(s, id, name))
+                  }
+                  rows={customerRows.slice(0, 5).map((row) => ({
+                    id: row.id,
+                    name: row.name,
+                    amount: row.outstanding,
+                    share: row.shareOfOutstanding,
+                    hint: [
+                      `${formatCount(row.openTrips)} trips`,
+                      row.oldestObligationDays != null
+                        ? `${row.oldestObligationDays}d oldest`
+                        : null,
+                    ]
+                      .filter(Boolean)
+                      .join(" · "),
+                  }))}
+                />
+              </FinanceProPanel>
+            </FinanceProWidgetRow>
 
             <FinanceProDataTable
               title="Decision table"
