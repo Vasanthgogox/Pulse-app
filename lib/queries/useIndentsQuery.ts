@@ -70,7 +70,7 @@ export function useMarketIndentsQuery(
     enabled,
     // Cross-org feed: partner shippers mutate indents outside this org's invalidation path.
     staleTime: STALE.frequent,
-    refetchOnMount: refetchOnMountIfEntityListEmpty<IndentRow[]>(),
+    refetchOnMount: true,
   });
 }
 

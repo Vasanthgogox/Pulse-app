@@ -89,6 +89,7 @@ import { BidModal } from "@/features/network/components/bidding/BidModal";
 import { ShareLoadSheet } from "@/features/network/components/ShareLoadSheet";
 import { BoostSheet } from "@/features/reach/components/BoostSheet";
 import { queryKeys } from "@/lib/queryKeys";
+import { STALE } from "@/lib/queryClient";
 import { LoadCenterKanbanBoard, type LoadCenterKanbanColumn } from "@/features/network/components/LoadCenterKanbanBoard";
 import { LoadCenterKanbanColumnModal } from "@/features/network/components/LoadCenterKanbanColumnModal";
 import { GIVE_LOAD_KANBAN_COLUMNS, bucketGiveLoadIndentsForKanban, giveLoadKanbanColumnLabel, giveLoadTripKanbanStage } from "@/features/network/utils/giveLoadKanban.util";
@@ -121,6 +122,8 @@ import { useMemberAccess } from "@/lib/useMemberAccess";
 import { formatINR } from "@/lib/format";
 import { ROUTES } from "@/lib/routes";
 import { resolveLoadCenterPromoVariant } from "@/lib/loadCenterPromoAssets";
+import { useAppQueryGate } from "@/lib/hooks/useAppQueryGate";
+import { listOpenMarketplaceLoadsForOrg } from "@/features/network/services/findLoadsForOrg.service";
 import { useRouter } from "expo-router";
 import {
     useIndentOfferCountsQuery,
@@ -142,7 +145,7 @@ import {
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { Compass, Search } from "lucide-react-native";
 import { type FlashListRef } from "@shopify/flash-list";
-import { useQueryClient } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Linking from "expo-linking";
 
 
@@ -267,6 +270,17 @@ export function LoadCenterView({
   } = useMarketIndentsQuery(orgId, {
     enabled: !isTripsPresentation,
   });
+  const marketplaceLoadsQ = useQuery({
+    queryKey: queryKeys.findLoadsForOrg.list(orgId ?? ""),
+    queryFn: async () => {
+      const { error, loads } = await listOpenMarketplaceLoadsForOrg(orgId!);
+      if (error) throw error;
+      return loads;
+    },
+    enabled: useAppQueryGate(orgId, { urgent: !isTripsPresentation }) && !isTripsPresentation,
+    staleTime: STALE.frequent,
+  });
+  const marketplaceLoads = marketplaceLoadsQ.data ?? [];
   const commercePlanIds = useMemo(() => {
     const ids: string[] = [];
     for (const row of [...indents, ...marketIndents]) {
