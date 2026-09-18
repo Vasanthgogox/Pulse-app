@@ -3,6 +3,7 @@ import { supabase } from "@/lib/supabase";
 import type { ProductId } from "@/lib/productRegistry";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { queryKeys } from "@/lib/queryKeys";
+import { shouldRetryQuery } from '@/lib/queryClient';
 
 export interface OrgProductActivation {
   product_id: ProductId;
@@ -53,7 +54,7 @@ export function useWorkspaceProductsQuery() {
     },
     enabled: !!orgId,
     staleTime: 60_000,
-    retry: 1,
+    retry: shouldRetryQuery,
   });
 }
 
@@ -77,7 +78,7 @@ export function useWorkspaceWaitlistQuery() {
     },
     enabled: !!orgId,
     staleTime: 120_000,
-    retry: 1,
+    retry: shouldRetryQuery,
   });
 }
 

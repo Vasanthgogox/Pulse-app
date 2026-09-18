@@ -17,9 +17,9 @@ import { DemoTabBar } from '@/components/demo/DemoTabBar';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
 import {
-    DemoTabBarAutoHideShell,
-    DemoTabBarScrollProvider,
-    useDemoTabBarScrollOptional,
+  DemoTabBarAutoHideShell,
+  DemoTabBarScrollProvider,
+  useDemoTabBarScrollOptional,
 } from '@/contexts/DemoTabBarScrollContext';
 import * as authService from '@/features/auth/services/auth.service';
 import { isSessionExpiredError } from '@/features/auth/services/auth.service';
@@ -42,6 +42,7 @@ import {
     preloadTabScreen,
     scheduleDispatcherTabPreloads,
 } from '@/lib/preloadRoutes';
+import { useWorkspaceProductsQuery } from '@/lib/queries/useWorkspaceProductsQuery';
 import { purgeEmptyEntityQueriesFromCache } from '@/lib/queries/entityListQueryOptions';
 import {
     isLinkedOrgDisplayQueryKey,
@@ -54,7 +55,7 @@ import {
     startRealtimeDiagnosticsLogger,
     stopRealtimeDiagnosticsLogger,
 } from '@/lib/realtimeRegistry';
-import { pathnameHasRootTopNav } from '@/lib/rootChromeRoutes';
+import { overlayActiveTab, overlayPathForTab, pathnameHasRootTopNav } from '@/lib/rootChromeRoutes';
 import { routeStackScreenOptions } from '@/lib/routeStackOptions';
 import { ROUTES } from '@/lib/routes';
 import { safeHideSplashAsync, safePreventAutoHideAsync } from '@/lib/safeSplashScreen.util';
@@ -648,6 +649,14 @@ function RootOverlayTabBar() {
    */
   const memberDomainAccess = useMemberCapabilities();
   const domainsLoading = memberDomainAccess.isLoading;
+  const { data: workspaceProducts, isLoading: productsLoading } = useWorkspaceProductsQuery();
+  const complianceProductActive =
+    productsLoading ||
+    (workspaceProducts ?? []).some(
+      (p) => p.product_id === 'pulse_compliance' && (p.status === 'active' || p.status === 'trial'),
+    );
+  const canOpenCompliance =
+    (surfaceLoading || canSurface('trip_compliance.tab')) && complianceProductActive;
 
   const showOnRootScreens = pathnameHasRootTopNav(pathname);
 
@@ -662,11 +671,7 @@ function RootOverlayTabBar() {
 
   if (!showOnRootScreens) return null;
 
-  // These screens are reached from header actions, so keep the matching nav item active.
-  const activeTab: DemoTabId =
-    pathname === ROUTES.PULSE_LOADS || pathname === ROUTES.FIND_LOADS || pathname.startsWith(`${ROUTES.FIND_LOADS}/`)
-      ? 'loadCenter'
-      : 'finance';
+  const activeTab: DemoTabId = overlayActiveTab(pathname);
   const isDesktopWeb = Platform.OS === 'web' && layoutWidth >= Layout.webDesktopMinWidth;
 
   const shellStyle = [
@@ -696,9 +701,11 @@ function RootOverlayTabBar() {
         trips: domainsLoading || memberDomainAccess.tripops,
         network: domainsLoading || memberDomainAccess.sales,
         loadCenter: canViewLoadsHub,
+        compliance: canOpenCompliance,
       }}
       onTabChange={(tab) => {
         if (tab === 'loadCenter' && !canViewLoadsHub) return;
+        if (tab === 'compliance' && !canOpenCompliance) return;
         if (tab === 'loadCenter') preloadPulseLoadsRoute();
         else if (tab === 'finance' || tab === 'trips' || tab === 'network') {
           preloadTabScreen(tab as PreloadableTab);
@@ -706,17 +713,7 @@ function RootOverlayTabBar() {
             preloadFinanceWarmup(queryClient, orgId);
           }
         }
-        router.push(
-          (tab === 'finance'
-            ? ROUTES.TABS.FINANCE
-            : tab === 'trips'
-              ? ROUTES.TABS.TRIPS
-              : tab === 'network'
-                ? ROUTES.TABS.NETWORK
-                : tab === 'loadCenter'
-                  ? ROUTES.PULSE_LOADS
-                  : ROUTES.TABS.RESOURCES) as '/'
-        );
+        router.push(overlayPathForTab(tab) as '/');
       }}
       onProfilePress={() => router.push(ROUTES.WORKSPACE)}
       onNotificationsPress={() => router.push('/notifications')}

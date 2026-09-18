@@ -1,6 +1,7 @@
 import { useQuery } from "@tanstack/react-query";
 import { getSupplierManagementBundle } from "@/features/suppliers/services/supplierManagement.service";
 import { queryKeys } from "@/lib/queryKeys";
+import { shouldRetryQuery } from '@/lib/queryClient';
 
 export function useSupplierManagementBundleQuery(
   orgId: string | null,
@@ -17,6 +18,6 @@ export function useSupplierManagementBundleQuery(
     enabled: Boolean(orgId && supplierId),
     staleTime: 60_000,
     gcTime: 5 * 60_000,
-    retry: 1,
+    retry: shouldRetryQuery,
   });
 }

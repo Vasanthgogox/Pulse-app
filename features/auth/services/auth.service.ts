@@ -10,6 +10,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import type { OnboardingType } from '@/lib/onboarding/onboardingTypes';
 import { createsOrganization, onboardingTypeToMetadata } from '@/lib/onboarding/onboardingTypes';
 import { registrationTypeFromBusinessType } from '@/features/organization/utils/kycVerification.util';
+import { syncLinkedDriverRowsForCurrentUser } from "@/features/drivers/services/drivers.service";
 import {
   extractIndianMobileTenDigits,
   normalizeIndianPhoneForMetadata,
@@ -493,10 +494,12 @@ function mapSignInErrorMessage(raw: string): string {
   return "Sign in failed. Please try again.";
 }
 
-/** DB RPC: link roster drivers.user_id by profile email/phone (migration 20260510123000). */
+/** DB RPC: link roster drivers.user_id by profile email/phone (migration 20260510123000).
+ * Goes through syncLinkedDriverRowsForCurrentUser so sign-in + driver-home share dedupe.
+ */
 async function trySyncMyDriverRowsUserId(): Promise<void> {
   try {
-    const { error } = await supabase().rpc("sync_my_driver_rows_user_id");
+    const { error } = await syncLinkedDriverRowsForCurrentUser();
     if (error && __DEV__) {
       console.warn("[auth] sync_my_driver_rows_user_id:", error.message);
     }
@@ -1085,7 +1088,9 @@ export async function applyPendingOAuthMetadata(): Promise<PendingOAuthMetadataR
     raw = null;
   }
   if (!raw) {
-    void trySyncMyDriverRowsUserId();
+    // No pending OAuth work — do not sync driver rows here.
+    // Auth restore calls this on every cold boot; boot-time sync belongs in
+    // sign-in / driver-home once-per-session paths (incident 2026-09-18).
     return { status: 'skipped' };
   }
 
@@ -1098,7 +1103,6 @@ export async function applyPendingOAuthMetadata(): Promise<PendingOAuthMetadataR
   if (!pending) {
     // Corrupt payload — drop it so we do not retry forever.
     await AsyncStorage.removeItem(PENDING_OAUTH_METADATA_KEY).catch(() => {});
-    void trySyncMyDriverRowsUserId();
     return { status: 'skipped' };
   }
 
@@ -1151,7 +1155,6 @@ export async function applyPendingOAuthMetadata(): Promise<PendingOAuthMetadataR
   const { data: userData } = await supabase().auth.getUser();
   const userId = userData.user?.id;
   if (!userId) {
-    void trySyncMyDriverRowsUserId();
     failedSteps.push('profile', 'organization');
     return { status: 'partial_failure', failedSteps };
   }

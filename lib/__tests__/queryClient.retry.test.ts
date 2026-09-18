@@ -36,4 +36,31 @@ describe("shouldRetryQuery", () => {
   it("still retries a non-timeout 5xx-shaped error once", () => {
     expect(shouldRetryQuery(0, { message: "Internal Server Error", status: 500 })).toBe(true);
   });
+
+  it("does not retry origin-down 503 / 521 / 57P03", () => {
+    expect(shouldRetryQuery(0, { message: "Service Unavailable", status: 503 })).toBe(false);
+    expect(shouldRetryQuery(0, new Error("error code 521: web server is down"))).toBe(false);
+    expect(
+      shouldRetryQuery(0, { message: "the database system is not accepting connections", code: "57P03" }),
+    ).toBe(false);
+  });
+
+  it("does not treat JWT/auth failures as origin-down retries to suppress", () => {
+    // Auth errors are not origin-down; with failureCount 0 they still get one retry
+    // under the default policy (same as other non-timeout, non-abort errors).
+    expect(shouldRetryQuery(0, { message: "JWT expired", code: "PGRST301" })).toBe(true);
+    expect(shouldRetryQuery(0, new Error("Invalid login credentials"))).toBe(true);
+  });
+
+  it("allows one default retry for normalized Cloudflare 522 timed-out messages", () => {
+    expect(shouldRetryQuery(0, new Error("Connection timed out (522)"))).toBe(true);
+    expect(shouldRetryQuery(1, new Error("Connection timed out (522)"))).toBe(false);
+  });
+
+  it("still does not retry origin-down when status is 503 even if message says timed out", () => {
+    expect(
+      shouldRetryQuery(0, { message: "Connection timed out", status: 503 }),
+    ).toBe(false);
+  });
+
 });
