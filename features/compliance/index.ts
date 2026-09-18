@@ -85,6 +85,7 @@ export {
   getComplianceSummary,
   getDocumentAuditLog,
   getDocumentsByEntity,
+  getDocumentsForEntities,
   getExpiringDocuments,
   getOrgComplianceDocuments,
   recordDocumentAuditEvent,

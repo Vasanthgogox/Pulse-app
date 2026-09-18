@@ -1,77 +1,95 @@
 /**
- * Trip Compliance + Finance settlement — a workspace VIEW over canonical Trip
- * data, not a second Trip system. Card view extends the trip-card visual
- * language into a dedicated verification card (ComplianceTripCard); Table
- * view is an expandable trip work queue. Both open the same
- * ComplianceDocumentReviewSheet for the actual verify/reject work — no
- * duplicate document system, no new persistence.
+ * Global Compliance Verification work queue — header, counted stage filters,
+ * Cards/Table toggle, and Trip/Vehicle/Driver checklist cards.
  */
-import React, { useCallback, useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { useRouter } from "expo-router";
-import { ChevronLeft } from "lucide-react-native";
 import { ChromeBelowTopNavLoadingScreen } from "@/components/chromeLoadingScreens";
-import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
-import { useLayoutInsets } from "@/lib/layoutInsets";
-import { useMemberAccess } from "@/lib/useMemberAccess";
 import { useAuth } from "@/contexts/AuthContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { useComplianceProductEnabled } from "@/features/tripCompliance/hooks/useComplianceProductEnabled";
-import { ROUTES } from "@/lib/routes";
+import { ComplianceDocumentReviewSheet } from "@/features/tripCompliance/components/ComplianceDocumentReviewSheet";
 import { ComplianceTripCard } from "@/features/tripCompliance/components/ComplianceTripCard";
 import { ComplianceTripsTable } from "@/features/tripCompliance/components/ComplianceTripsTable";
-import { ComplianceDocumentReviewSheet } from "@/features/tripCompliance/components/ComplianceDocumentReviewSheet";
-import { markTripComplianceVerified } from "@/features/tripCompliance/services/tripComplianceWrite.service";
-import { alertMessage } from "@/features/tripCompliance/utils/crossPlatformAlert.util";
+import { useComplianceProductEnabled } from "@/features/tripCompliance/hooks/useComplianceProductEnabled";
 import {
   useComplianceStageFilter,
   useComplianceTripsQuery,
   useInvalidateComplianceTrips,
 } from "@/features/tripCompliance/hooks/useComplianceTripsQuery";
-import { COMPLIANCE_STAGE_LABEL, COMPLIANCE_STAGES } from "@/features/tripCompliance/tripCompliance.types";
+import { COMPLIANCE_STAGE_FILTER_LABEL, COMPLIANCE_STAGES } from "@/features/tripCompliance/tripCompliance.types";
+import { COMPLIANCE_FILTER_COUNT_TONE } from "@/features/tripCompliance/utils/complianceCardVisual.util";
+import { useLayoutInsets } from "@/lib/layoutInsets";
+import { ROUTES } from "@/lib/routes";
+import { useMemberAccess } from "@/lib/useMemberAccess";
+import { useRouter } from "expo-router";
+import { Download, LayoutGrid, Table2, Wallet } from "lucide-react-native";
+import React, { useCallback, useMemo, useState } from "react";
+import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
 
 function StageChip({
   label,
+  count,
+  countColor,
   active,
   onPress,
 }: {
   label: string;
+  count: number;
+  countColor: string;
   active: boolean;
   onPress: () => void;
 }) {
   return (
-    <Text
+    <TouchableOpacity
       onPress={onPress}
       accessibilityRole="button"
+      accessibilityState={{ selected: active }}
       style={[styles.chip, active && styles.chipActive]}
+      hitSlop={{ top: 4, bottom: 4, left: 2, right: 2 }}
     >
-      {label}
-    </Text>
+      <Text style={[styles.chipText, active && styles.chipTextActive]}>{label}</Text>
+      {count > 0 ? (
+        <Text style={[styles.chipCount, { color: active ? Theme.buttonDarkText : countColor }]}>{count}</Text>
+      ) : null}
+    </TouchableOpacity>
   );
 }
 
 export default function ComplianceScreen() {
   const layout = useLayoutInsets();
+  const { width } = useWindowDimensions();
   const router = useRouter();
   const { can: canSurface, isLoading: accessLoading } = useMemberAccess();
   const { enabled: complianceEnabled, isLoading: productsLoading } = useComplianceProductEnabled();
   const canViewCompliance = complianceEnabled && canSurface("trip_compliance.tab");
   const canVerifyDocuments = canSurface("trip_compliance.documents.verify");
-  const canMarkVerified = canSurface("trip_compliance.trip.mark_verified");
   const canManageFinance = canSurface("trip_compliance.finance.manage");
   const canViewFinance = canSurface("trip_compliance.finance.view");
   const { user } = useAuth();
   const { currentOrganization } = useOrganization();
 
   const { data, isLoading, isError, error } = useComplianceTripsQuery(0);
-  const { stage, setStage, filtered } = useComplianceStageFilter(data?.summaries);
+  const { stage, setStage, filtered, counts } = useComplianceStageFilter(data?.summaries);
   const invalidate = useInvalidateComplianceTrips();
   const [viewMode, setViewMode] = useState<"card" | "table">("card");
-  const [review, setReview] = useState<{ tripId: string; documentKey: string | null } | null>(null);
-  const [markingVerifiedTripId, setMarkingVerifiedTripId] = useState<string | null>(null);
+  const [review, setReview] = useState<{
+    tripId: string;
+    documentKey: string | null;
+    scope: "trip" | "vehicle" | "driver";
+  } | null>(null);
 
-  const contentTopInset = layout.isDesktopWeb ? Layout.desktopTopNavOffset : layout.top;
+  const contentTopInset = layout.isDesktopWeb ? 62 : layout.top;
+  const pagePad = 16;
+  const gridGap = 8;
+  const columns = width >= 1100 ? 3 : width >= 760 ? 2 : 1;
+  const usableWidth = Math.max(280, width - pagePad * 2);
+  const nativeCardWidth =
+    columns === 1 ? usableWidth : Math.floor((usableWidth - gridGap * (columns - 1)) / columns);
+  const cardSlotStyle =
+    Platform.OS === "web"
+      ? {
+          width: `calc((100% - ${gridGap * (columns - 1)}px) / ${columns})`,
+        }
+      : { width: nativeCardWidth };
 
   const openTrip = useCallback(
     (tripId: string) => {
@@ -80,19 +98,11 @@ export default function ComplianceScreen() {
     [router],
   );
 
-  const handleMarkVerified = useCallback(
-    async (tripId: string) => {
-      if (!user?.uid) return;
-      setMarkingVerifiedTripId(tripId);
-      const { error: err } = await markTripComplianceVerified({ tripId, actorId: user.uid });
-      setMarkingVerifiedTripId(null);
-      if (err) {
-        alertMessage("Compliance not verified", err.message);
-        return;
-      }
-      invalidate();
+  const openDetails = useCallback(
+    (tripId: string) => {
+      router.push(ROUTES.complianceDetail(tripId) as Parameters<typeof router.push>[0]);
     },
-    [user?.uid, invalidate],
+    [router],
   );
 
   const reviewingSummary = useMemo(
@@ -104,15 +114,9 @@ export default function ComplianceScreen() {
     return <ChromeBelowTopNavLoadingScreen variant="preparing" />;
   }
 
-  // Route-level enforcement mirrors the nav gate — Compliance OFF or missing
-  // trip_compliance.tab both land here, not just a hidden nav item.
   if (!canViewCompliance) {
     return (
       <View style={[styles.centered, { paddingTop: contentTopInset }]}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backBtnStandalone}>
-          <ChevronLeft size={18} color={Theme.textPrimary} strokeWidth={2.2} />
-          <Text style={styles.backBtnText}>Back</Text>
-        </TouchableOpacity>
         <Text style={styles.message}>
           {complianceEnabled
             ? "You don't have access to Compliance."
@@ -125,57 +129,78 @@ export default function ComplianceScreen() {
   return (
     <ScrollView
       style={[styles.screen, { paddingTop: contentTopInset }]}
-      contentContainerStyle={styles.content}
+      contentContainerStyle={[styles.content, { paddingBottom: 24 + layout.bottom, paddingHorizontal: pagePad }]}
     >
-      <TouchableOpacity onPress={() => router.back()} style={styles.backBtn}>
-        <ChevronLeft size={16} color={Theme.textMuted} strokeWidth={2.2} />
-        <Text style={styles.backBtnMuted}>Back</Text>
-      </TouchableOpacity>
-
       <View style={styles.headerRow}>
         <View style={styles.headerTextWrap}>
-          <Text style={styles.title}>Compliance</Text>
+          <View style={styles.titleRow}>
+            <Text style={styles.title}>Compliance Verification</Text>
+            <View style={styles.activeBadge}>
+              <View style={styles.activeDot} />
+              <Text style={styles.activeBadgeText}>{counts.all} Active Trips</Text>
+            </View>
+          </View>
           <Text style={styles.subtitle}>
-            Document verification and settlement, in parallel with Trip execution.
+            Real-time carrier document audit, driver credentials, and settlement milestones.
           </Text>
         </View>
         <View style={styles.headerActions}>
-          {canManageFinance ? (
-            <TouchableOpacity
-              style={styles.headerBtn}
-              onPress={() => router.push(ROUTES.COMPLIANCE_BULK_PAYMENT as Parameters<typeof router.push>[0])}
-            >
-              <Text style={styles.headerBtnText}>Bulk Payment</Text>
-            </TouchableOpacity>
-          ) : null}
           {canViewFinance ? (
             <TouchableOpacity
-              style={styles.headerBtn}
+              style={styles.reportBtn}
               onPress={() => router.push(ROUTES.COMPLIANCE_REPORT as Parameters<typeof router.push>[0])}
+              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
             >
-              <Text style={styles.headerBtnText}>Report</Text>
+              <Download size={13} color={Theme.textPrimary} strokeWidth={2.2} />
+              <Text style={styles.reportBtnText}>Export Report</Text>
+            </TouchableOpacity>
+          ) : null}
+          {canManageFinance ? (
+            <TouchableOpacity
+              style={styles.bulkBtn}
+              onPress={() => router.push(ROUTES.COMPLIANCE_BULK_PAYMENT as Parameters<typeof router.push>[0])}
+              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+            >
+              <Wallet size={13} color={Theme.complianceBulkText} strokeWidth={2.2} />
+              <Text style={styles.bulkBtnText}>Bulk Payment</Text>
             </TouchableOpacity>
           ) : null}
         </View>
       </View>
 
       <View style={styles.toolbarRow}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipRow}>
-          <StageChip label="ALL" active={stage === "all"} onPress={() => setStage("all")} />
+        <View style={styles.chipWrap}>
+          <StageChip
+            label="All"
+            count={counts.all}
+            countColor={COMPLIANCE_FILTER_COUNT_TONE.all}
+            active={stage === "all"}
+            onPress={() => setStage("all")}
+          />
           {COMPLIANCE_STAGES.map((s) => (
             <StageChip
               key={s}
-              label={COMPLIANCE_STAGE_LABEL[s].toUpperCase()}
+              label={COMPLIANCE_STAGE_FILTER_LABEL[s]}
+              count={counts[s]}
+              countColor={COMPLIANCE_FILTER_COUNT_TONE[s]}
               active={stage === s}
               onPress={() => setStage(s)}
             />
           ))}
-        </ScrollView>
+        </View>
         <View style={styles.viewToggle}>
-          <TouchableOpacity onPress={() => setViewMode("card")} style={[styles.toggleBtn, viewMode === "card" && styles.toggleBtnActive]}>
+          <TouchableOpacity
+            onPress={() => setViewMode("card")}
+            style={[styles.toggleBtn, viewMode === "card" && styles.toggleBtnActive]}
+          >
+            <LayoutGrid size={13} color={viewMode === "card" ? Theme.buttonDarkText : Theme.textMuted} strokeWidth={2.2} />
             <Text style={[styles.toggleBtnText, viewMode === "card" && styles.toggleBtnTextActive]}>Cards</Text>
           </TouchableOpacity>
-          <TouchableOpacity onPress={() => setViewMode("table")} style={[styles.toggleBtn, viewMode === "table" && styles.toggleBtnActive]}>
+          <TouchableOpacity
+            onPress={() => setViewMode("table")}
+            style={[styles.toggleBtn, viewMode === "table" && styles.toggleBtnActive]}
+          >
+            <Table2 size={13} color={viewMode === "table" ? Theme.buttonDarkText : Theme.textMuted} strokeWidth={2.2} />
             <Text style={[styles.toggleBtnText, viewMode === "table" && styles.toggleBtnTextActive]}>Table</Text>
           </TouchableOpacity>
         </View>
@@ -191,20 +216,22 @@ export default function ComplianceScreen() {
         <ComplianceTripsTable
           summaries={filtered}
           onOpenTrip={openTrip}
-          onReview={(tripId, documentKey) => setReview({ tripId, documentKey })}
+          onOpenDetails={openDetails}
+          onReview={(tripId, documentKey) => setReview({ tripId, documentKey, scope: "trip" })}
         />
       ) : (
-        filtered.map((summary) => (
-          <ComplianceTripCard
-            key={summary.trip.id}
-            summary={summary}
-            canMarkVerified={canMarkVerified}
-            markingVerified={markingVerifiedTripId === summary.trip.id}
-            onReviewDocuments={() => setReview({ tripId: summary.trip.id, documentKey: null })}
-            onViewTrip={() => openTrip(summary.trip.id)}
-            onMarkVerified={() => handleMarkVerified(summary.trip.id)}
-          />
-        ))
+        <View style={[styles.cardGrid, { gap: gridGap }]}>
+          {filtered.map((summary) => (
+            <View key={summary.trip.id} style={cardSlotStyle}>
+              <ComplianceTripCard
+                summary={summary}
+                onReviewDocuments={(scope) => setReview({ tripId: summary.trip.id, documentKey: null, scope })}
+                onViewTrip={() => openTrip(summary.trip.id)}
+                onOpenDetails={() => openDetails(summary.trip.id)}
+              />
+            </View>
+          ))}
+        </View>
       )}
 
       {reviewingSummary ? (
@@ -219,6 +246,13 @@ export default function ComplianceScreen() {
           canVerify={canVerifyDocuments}
           initialSelectedKey={review?.documentKey ?? null}
           onChanged={invalidate}
+          scope={review?.scope ?? "trip"}
+          vehicleId={reviewingSummary.trip.vehicle_id}
+          driverId={reviewingSummary.trip.driver_id}
+          vehicleDocuments={reviewingSummary.vehicleDocuments ?? []}
+          driverDocuments={reviewingSummary.driverDocuments ?? []}
+          vehicleLabel={reviewingSummary.trip.vehicle_display_number?.trim() || "Unassigned"}
+          driverLabel={reviewingSummary.trip.driver_display_name?.trim() || "Unassigned"}
         />
       ) : null}
     </ScrollView>
@@ -226,41 +260,90 @@ export default function ComplianceScreen() {
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1, backgroundColor: Theme.screenBackground },
-  content: { padding: 16, paddingBottom: 48, gap: 10 },
-  backBtn: { flexDirection: "row", alignItems: "center", gap: 2, alignSelf: "flex-start", marginBottom: 4 },
-  backBtnStandalone: { flexDirection: "row", alignItems: "center", gap: 2, position: "absolute", top: 16, left: 16 },
-  backBtnText: { fontSize: 13, fontWeight: "600", color: Theme.textPrimary },
-  backBtnMuted: { fontSize: 12, fontWeight: "600", color: Theme.textMuted },
-  title: { fontSize: 22, fontWeight: "700", color: Theme.textPrimary },
-  subtitle: { fontSize: 13, color: Theme.textMuted, marginBottom: 4 },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", gap: 12 },
-  headerTextWrap: { flex: 1 },
-  headerActions: { flexDirection: "row", gap: 8 },
-  headerBtn: { paddingHorizontal: 12, paddingVertical: 8, borderRadius: 8, backgroundColor: "#111827" },
-  headerBtnText: { fontSize: 12, color: "#FFFFFF", fontWeight: "600" },
-  toolbarRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8 },
-  chipRow: { marginBottom: 8, flex: 1 },
-  viewToggle: { flexDirection: "row", backgroundColor: "#F1F2F6", borderRadius: 8, padding: 2, marginBottom: 8 },
-  toggleBtn: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 6 },
-  toggleBtnActive: { backgroundColor: "#111827" },
-  toggleBtnText: { fontSize: 11, fontWeight: "700", color: Theme.textMuted },
-  toggleBtnTextActive: { color: "#FFFFFF" },
-  chip: {
-    marginRight: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+  screen: { flex: 1, backgroundColor: Theme.compliancePageBg },
+  content: { paddingTop: 4, gap: 8 },
+  centered: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: Theme.compliancePageBg },
+  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" },
+  headerTextWrap: { flex: 1, minWidth: 200 },
+  titleRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  title: { fontSize: 20, fontWeight: "800", color: Theme.textPrimaryDark, letterSpacing: -0.3, lineHeight: 24 },
+  activeBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    backgroundColor: Theme.complianceActiveBadgeBg,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
     borderRadius: 999,
-    backgroundColor: "#F1F2F6",
-    color: Theme.textMuted,
-    fontSize: 11,
-    fontWeight: "600",
-    overflow: "hidden",
+  },
+  activeDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Theme.complianceActiveBadgeFg },
+  activeBadgeText: { fontSize: 11, fontWeight: "700", color: Theme.complianceActiveBadgeFg },
+  subtitle: { fontSize: 12, color: Theme.textMuted, marginTop: 2, lineHeight: 16 },
+  headerActions: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  bulkBtn: {
+    minHeight: 34,
+    paddingHorizontal: 12,
+    borderRadius: 9,
+    backgroundColor: Theme.complianceBulk,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  bulkBtnText: { fontSize: 12, fontWeight: "700", color: Theme.complianceBulkText },
+  reportBtn: {
+    minHeight: 34,
+    paddingHorizontal: 11,
+    borderRadius: 9,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.complianceCardBorder,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+  },
+  reportBtnText: { fontSize: 12, fontWeight: "700", color: Theme.textPrimary },
+  toolbarRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" },
+  chipWrap: { flex: 1, flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, minWidth: 220 },
+  chip: {
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 999,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.complianceCardBorder,
+    minHeight: 30,
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
   },
   chipActive: {
-    backgroundColor: "#111827",
-    color: "#FFFFFF",
+    backgroundColor: Theme.buttonDark,
+    borderColor: Theme.buttonDark,
   },
-  centered: { flex: 1, alignItems: "center", justifyContent: "center" },
-  message: { fontSize: 13, color: Theme.textMuted, textAlign: "center", paddingVertical: 24 },
+  chipText: { fontSize: 11, fontWeight: "600", color: Theme.textMuted },
+  chipTextActive: { color: Theme.buttonDarkText },
+  chipCount: { fontSize: 11, fontWeight: "800" },
+  viewToggle: {
+    flexDirection: "row",
+    backgroundColor: Theme.cardWhite,
+    borderRadius: 8,
+    padding: 2,
+    borderWidth: 1,
+    borderColor: Theme.complianceCardBorder,
+    gap: 2,
+  },
+  toggleBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    paddingHorizontal: 8,
+    paddingVertical: 5,
+    borderRadius: 6,
+    minHeight: 30,
+  },
+  toggleBtnActive: { backgroundColor: Theme.buttonDark },
+  toggleBtnText: { fontSize: 11, fontWeight: "700", color: Theme.textMuted },
+  toggleBtnTextActive: { color: Theme.buttonDarkText },
+  cardGrid: { flexDirection: "row", flexWrap: "wrap", alignItems: "stretch" },
+  message: { fontSize: 12, color: Theme.textMuted, textAlign: "center", paddingVertical: 16 },
 });

@@ -599,5 +599,7 @@ export const queryKeys = {
   tripCompliance: {
     list: (orgId: string, page: number) =>
       ["q", "tripCompliance", "list", orgId, page] as const,
+    detail: (orgId: string, tripId: string) =>
+      ["q", "tripCompliance", "detail", orgId, tripId] as const,
   },
 } as const;

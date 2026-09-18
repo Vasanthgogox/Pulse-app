@@ -5,17 +5,19 @@
  * the same ComplianceDocumentReviewSheet used by the card view's "Review
  * Documents" — no duplicate approve/reject wiring.
  */
-import React, { useMemo, useState } from "react";
-import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
-import { ChevronDown, ChevronRight } from "lucide-react-native";
 import Theme from "@/constants/Theme";
 import { ComplianceStatusChip } from "@/features/tripCompliance/components/ComplianceStatusIcon";
-import { deriveComplianceDocumentRows, complianceProgress, labelForDocType } from "@/features/tripCompliance/utils/complianceDocumentRows.util";
 import { COMPLIANCE_STAGE_LABEL, type ComplianceTripSummary } from "@/features/tripCompliance/tripCompliance.types";
+import { deriveComplianceDocumentRows, labelForDocType } from "@/features/tripCompliance/utils/complianceDocumentRows.util";
+import { ensureComplianceChecklist } from "@/features/tripCompliance/utils/complianceChecklist.util";
+import { ChevronDown, ChevronRight } from "lucide-react-native";
+import React, { useMemo, useState } from "react";
+import { ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 export type ComplianceTripsTableProps = {
   summaries: ComplianceTripSummary[];
   onOpenTrip: (tripId: string) => void;
+  onOpenDetails?: (tripId: string) => void;
   /** Opens the review sheet; documentKey null opens straight to the document list. */
   onReview: (tripId: string, documentKey: string | null) => void;
 };
@@ -23,15 +25,17 @@ export type ComplianceTripsTableProps = {
 function TripRowContent({
   summary,
   onOpenTrip,
+  onOpenDetails,
   onReview,
 }: {
   summary: ComplianceTripSummary;
   onOpenTrip: (tripId: string) => void;
+  onOpenDetails?: (tripId: string) => void;
   onReview: (tripId: string, documentKey: string | null) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const rows = useMemo(() => deriveComplianceDocumentRows(summary.documents), [summary.documents]);
-  const { verified, total } = complianceProgress(rows);
+  const checklist = ensureComplianceChecklist(summary);
 
   return (
     <View>
@@ -43,14 +47,17 @@ function TripRowContent({
             <ChevronRight size={14} color={Theme.textMuted} strokeWidth={2.2} />
           )}
         </TouchableOpacity>
-        <View style={styles.colTrip}>
+        <TouchableOpacity
+          style={styles.colTrip}
+          onPress={() => (onOpenDetails ?? onOpenTrip)(summary.trip.id)}
+        >
           <Text style={styles.cell} numberOfLines={1}>
             {summary.trip.booking_ref ?? summary.trip.id.slice(0, 8)}
           </Text>
           <Text style={[styles.cell, styles.muted]} numberOfLines={1}>
             {summary.trip.client_name || "—"}
           </Text>
-        </View>
+        </TouchableOpacity>
         <Text style={[styles.cell, styles.colStage]}>{COMPLIANCE_STAGE_LABEL[summary.stage]}</Text>
         <View style={styles.colDocs}>
           {rows.slice(0, 4).map((row) => (
@@ -58,7 +65,7 @@ function TripRowContent({
           ))}
         </View>
         <Text style={[styles.cell, styles.colProgress]}>
-          {total > 0 ? `${verified} / ${total}` : "—"}
+          {`${checklist.verified} / ${checklist.total}`}
         </Text>
         <Text style={[styles.cell, styles.colMoney]}>
           {summary.advance ? `₹${summary.advance.amount.toLocaleString("en-IN")}` : "—"}
@@ -68,7 +75,7 @@ function TripRowContent({
         </Text>
         <View style={styles.colAction}>
           <TouchableOpacity onPress={() => onReview(summary.trip.id, null)}>
-            <Text style={styles.actionLink}>Review</Text>
+            <Text style={styles.actionLink}>Verify Docs</Text>
           </TouchableOpacity>
           <TouchableOpacity onPress={() => onOpenTrip(summary.trip.id)}>
             <Text style={[styles.actionLink, styles.viewTripLink]}>View Trip</Text>
@@ -113,7 +120,7 @@ function TripRowContent({
   );
 }
 
-export function ComplianceTripsTable({ summaries, onOpenTrip, onReview }: ComplianceTripsTableProps) {
+export function ComplianceTripsTable({ summaries, onOpenTrip, onOpenDetails, onReview }: ComplianceTripsTableProps) {
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator style={styles.tableScroll}>
       <View style={styles.table}>
@@ -129,7 +136,13 @@ export function ComplianceTripsTable({ summaries, onOpenTrip, onReview }: Compli
         </View>
 
         {summaries.map((s) => (
-          <TripRowContent key={s.trip.id} summary={s} onOpenTrip={onOpenTrip} onReview={onReview} />
+          <TripRowContent
+            key={s.trip.id}
+            summary={s}
+            onOpenTrip={onOpenTrip}
+            onOpenDetails={onOpenDetails}
+            onReview={onReview}
+          />
         ))}
       </View>
     </ScrollView>

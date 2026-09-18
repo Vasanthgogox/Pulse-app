@@ -1,9 +1,13 @@
 import { supabase } from "@/lib/supabase";
+import type { DocumentRow } from "@/features/compliance/services/documents.service";
+import { getDocumentsForEntities } from "@/features/compliance/services/documents.service";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { interpretLedgerRowStructured } from "@/features/finance/ledger/ledgerEntryModel";
+import { buildComplianceChecklist } from "@/features/tripCompliance/utils/complianceChecklist.util";
 import {
   REQUIRED_COMPLIANCE_DOCUMENT_TYPES,
   type ComplianceDocumentRow,
+  type ComplianceEntityDocument,
   type ComplianceStage,
   type CompliancePaymentSummary,
   type ComplianceTripSummary,
@@ -164,6 +168,21 @@ export async function fetchComplianceTransactions(
   return byTrip;
 }
 
+function toEntityDocument(doc: DocumentRow): ComplianceEntityDocument {
+  return {
+    id: doc.id,
+    entity_type: doc.entity_type === "driver" ? "driver" : "vehicle",
+    entity_id: doc.entity_id,
+    doc_type: doc.doc_type,
+    status: doc.status,
+    storage_path: doc.storage_path,
+    expiry_date: doc.expiry_date,
+    verified_at: doc.verified_at,
+    notes: doc.notes,
+    created_at: doc.created_at,
+  };
+}
+
 export function toPaymentSummary(rows: RawTxnRow[]): CompliancePaymentSummary | null {
   if (rows.length === 0) return null;
   // Most recent posting represents the payment's current display state —
@@ -211,9 +230,34 @@ export function deriveComplianceStage(input: {
   return "payment_settled";
 }
 
+async function fetchEntityDocumentsForTrips(
+  trips: TripRow[],
+): Promise<Map<string, DocumentRow[]>> {
+  const byEntity = new Map<string, DocumentRow[]>();
+  const orgId = trips.find((trip) => trip.organization_id)?.organization_id;
+  const entityIds = Array.from(
+    new Set(
+      trips.flatMap((trip) => [trip.vehicle_id, trip.driver_id].filter((id): id is string => Boolean(id))),
+    ),
+  );
+  if (!orgId || entityIds.length === 0) return byEntity;
+
+  const { error, documents } = await getDocumentsForEntities(orgId, entityIds, ["vehicle", "driver"]);
+  if (error) {
+    if (isMissingColumnOrRelation(error)) return byEntity;
+    throw error;
+  }
+  for (const doc of documents) {
+    const list = byEntity.get(doc.entity_id) ?? [];
+    list.push(doc);
+    byEntity.set(doc.entity_id, list);
+  }
+  return byEntity;
+}
+
 /**
- * Batched compliance read for a page of trips — exactly 3 queries regardless
- * of page size (trips, trip_documents, transactions), no per-trip RPC/query.
+ * Batched compliance read for a page of trips — trips + trip_documents +
+ * flags + transactions + one entity_documents query. No per-card RPC.
  * Reuses `getTripsByOrganization`'s existing single-query trip fetch — pass
  * its result in rather than re-fetching, so a Compliance list page never
  * duplicates the same trips query the Trips tab already runs.
@@ -222,10 +266,11 @@ export async function buildComplianceTripSummaries(
   trips: TripRow[],
 ): Promise<ComplianceTripSummary[]> {
   const tripIds = trips.map((t) => t.id);
-  const [docsByTrip, flagsByTrip, txnsByTrip] = await Promise.all([
+  const [docsByTrip, flagsByTrip, txnsByTrip, entityDocsById] = await Promise.all([
     fetchTripDocumentsForTrips(tripIds),
     fetchComplianceTripFlags(tripIds),
     fetchComplianceTransactions(tripIds),
+    fetchEntityDocumentsForTrips(trips),
   ]);
 
   return trips.map((trip) => {
@@ -235,6 +280,19 @@ export async function buildComplianceTripSummaries(
     const advance = toPaymentSummary(txns.advance);
     const balance = toPaymentSummary(txns.balance);
     const hardCopyReceived = Boolean(flags?.pod_hard_copy_courier || flags?.pod_hard_copy_awb_number || flags?.pod_hard_copy_received_by);
+    const vehicleDocumentRows = trip.vehicle_id
+      ? (entityDocsById.get(trip.vehicle_id) ?? []).filter((d) => d.entity_type === "vehicle")
+      : [];
+    const driverDocumentRows = trip.driver_id
+      ? (entityDocsById.get(trip.driver_id) ?? []).filter((d) => d.entity_type === "driver")
+      : [];
+    const vehicleDocuments = vehicleDocumentRows.map(toEntityDocument);
+    const driverDocuments = driverDocumentRows.map(toEntityDocument);
+    const checklist = buildComplianceChecklist({
+      tripDocuments: documents,
+      vehicleDocuments: vehicleDocumentRows,
+      driverDocuments: driverDocumentRows,
+    });
 
     const documentCounts = {
       total: documents.length,
@@ -256,7 +314,10 @@ export async function buildComplianceTripSummaries(
       trip,
       stage,
       documents,
+      vehicleDocuments,
+      driverDocuments,
       documentCounts,
+      checklist,
       complianceVerifiedAt: flags?.compliance_verified_at ?? null,
       complianceVerifiedBy: flags?.compliance_verified_by ?? null,
       advance,

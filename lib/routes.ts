@@ -361,6 +361,8 @@ export const ROUTES = {
   COMPLIANCE:    '/compliance'    as const,
   COMPLIANCE_BULK_PAYMENT: '/compliance/bulk-payment' as const,
   COMPLIANCE_REPORT:       '/compliance/report'       as const,
+  complianceDetail: (tripId: string) =>
+    `/compliance/${encodeURIComponent(tripId)}` as const,
   /** A4 — Business Find Loads: open Marketplace discovery, separate from
    * Load Center's relationship-based Get Load tab. */
   FIND_LOADS:    '/find-loads'    as const,

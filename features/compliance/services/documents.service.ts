@@ -209,6 +209,30 @@ export async function getDocumentsByEntity(
   };
 }
 
+/**
+ * Batched entity-document read for a page of vehicles/drivers — one query,
+ * not one round-trip per card. Used by the Compliance work queue.
+ */
+export async function getDocumentsForEntities(
+  orgId: string,
+  entityIds: string[],
+  entityTypes: EntityType[] = ["vehicle", "driver"],
+): Promise<{ error: Error | null; documents: DocumentRow[] }> {
+  if (!orgId || entityIds.length === 0) return { error: null, documents: [] };
+  const { data, error } = await supabase()
+    .from("entity_documents")
+    .select("*")
+    .eq("organization_id", orgId)
+    .in("entity_type", entityTypes)
+    .in("entity_id", entityIds)
+    .neq("status", "replaced");
+
+  return {
+    error: (error as Error | null) ?? null,
+    documents: (data ?? []) as DocumentRow[],
+  };
+}
+
 export interface GetOrgDocumentsOptions {
   entityType?: EntityType;
   status?: DocumentRow["status"] | "any";

@@ -1,113 +1,113 @@
 import 'react-native-gesture-handler';
 // Shadow / pointerEvents RN Web compat — must run before any StyleSheet.create in the tree.
+import { ensureWebShellParity } from '@/lib/htmlShell';
 import '@/lib/installWebRnCompatPatches';
 import { ensureWebRnCompatPatches } from '@/lib/installWebRnCompatPatches';
-import { ensureWebShellParity } from '@/lib/htmlShell';
 // Background GPS task must be registered before any component mounts — do not move this import.
-import '@/lib/tracking/backgroundTasks';
-import { markStartupPhase } from '@/lib/startupMetrics';
-import {
-  isPublicAuthRoute,
-  shouldMountAuthenticatedDataPlane,
-  shouldMountRootOverlayTabBar,
-  shouldRedirectDataPlaneRouteWithoutSession,
-  shouldRenderPublicAuthTree,
-} from '@/lib/bootGate';
 import { AppAlertHost } from '@/components/AppAlertHost';
-import { ConfirmDialogHost } from '@/components/ConfirmDialogHost';
+import { AppBootGate } from '@/components/AppBootGate';
 import { AppErrorBoundary } from '@/components/AppErrorBoundary';
-import { initCrashReporter, captureException } from '@/lib/crashReporter';
+import { AppLoadingSplash } from '@/components/AppLoadingSplash';
+import { ConfirmDialogHost } from '@/components/ConfirmDialogHost';
 import { ContentErrorState } from '@/components/ContentErrorState';
 import { GlobalOperationsToast } from '@/components/GlobalOperationsToast';
-import { DemoTabBar } from '@/components/demo/DemoTabBar';
+import { NavigationLoadingOverlay } from '@/components/NavigationLoadingOverlay';
 import type { DemoTabId } from '@/components/demo/DemoTabBar';
-import { useMemberAccess } from '@/lib/useMemberAccess';
-import { useMemberCapabilities } from '@/lib/useMemberCapabilities';
+import { DemoTabBar } from '@/components/demo/DemoTabBar';
 import Layout from '@/constants/Layout';
 import Theme from '@/constants/Theme';
-import { routeStackScreenOptions } from '@/lib/routeStackOptions';
-import { preloadFinanceWarmup } from '@/lib/preloadFinanceWarmup';
 import {
-  preloadPulseLoadsRoute,
-  preloadTabScreen,
-  scheduleDispatcherTabPreloads,
-} from '@/lib/preloadRoutes';
-import type { PreloadableTab } from '@/lib/preloadRoutes';
-import { pathnameHasRootTopNav } from '@/lib/rootChromeRoutes';
-import { ROUTES } from '@/lib/routes';
-import { rememberCurrentPath } from '@/lib/lastRoute';
-import {
-  DemoTabBarAutoHideShell,
-  DemoTabBarScrollProvider,
-  useDemoTabBarScrollOptional,
+    DemoTabBarAutoHideShell,
+    DemoTabBarScrollProvider,
+    useDemoTabBarScrollOptional,
 } from '@/contexts/DemoTabBarScrollContext';
 import * as authService from '@/features/auth/services/auth.service';
 import { isSessionExpiredError } from '@/features/auth/services/auth.service';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { makeQueryClient } from '@/lib/queryClient';
+import {
+    isPublicAuthRoute,
+    shouldMountAuthenticatedDataPlane,
+    shouldMountRootOverlayTabBar,
+    shouldRedirectDataPlaneRouteWithoutSession,
+    shouldRenderPublicAuthTree,
+} from '@/lib/bootGate';
+import { QUERY_CACHE_BUSTER } from '@/lib/cache/cacheBuster';
+import { captureException, initCrashReporter } from '@/lib/crashReporter';
+import { installDevConsoleFilters } from '@/lib/devConsoleFilters';
+import { installDriverInviteDeepLinkListener } from '@/lib/driverInviteDeepLink.util';
+import { rememberCurrentPath } from '@/lib/lastRoute';
+import { preloadFinanceWarmup } from '@/lib/preloadFinanceWarmup';
+import type { PreloadableTab } from '@/lib/preloadRoutes';
+import {
+    preloadPulseLoadsRoute,
+    preloadTabScreen,
+    scheduleDispatcherTabPreloads,
+} from '@/lib/preloadRoutes';
 import { purgeEmptyEntityQueriesFromCache } from '@/lib/queries/entityListQueryOptions';
 import {
-  isLinkedOrgDisplayQueryKey,
-  purgeLinkedOrgDisplayQueries,
+    isLinkedOrgDisplayQueryKey,
+    purgeLinkedOrgDisplayQueries,
 } from '@/lib/queries/linkedOrgDisplayCache';
+import { makeQueryClient } from '@/lib/queryClient';
 import {
-  installForegroundPruning,
-  installRealtimeDiagnosticsGlobalHook,
-  startRealtimeDiagnosticsLogger,
-  stopRealtimeDiagnosticsLogger,
+    installForegroundPruning,
+    installRealtimeDiagnosticsGlobalHook,
+    startRealtimeDiagnosticsLogger,
+    stopRealtimeDiagnosticsLogger,
 } from '@/lib/realtimeRegistry';
+import { pathnameHasRootTopNav } from '@/lib/rootChromeRoutes';
+import { routeStackScreenOptions } from '@/lib/routeStackOptions';
+import { ROUTES } from '@/lib/routes';
+import { safeHideSplashAsync, safePreventAutoHideAsync } from '@/lib/safeSplashScreen.util';
+import { markStartupPhase } from '@/lib/startupMetrics';
 import { hasSupabaseConfig, SUPABASE_CONFIG_MISSING_MESSAGE } from '@/lib/supabase';
+import '@/lib/tracking/backgroundTasks';
+import { useMemberAccess } from '@/lib/useMemberAccess';
+import { useMemberCapabilities } from '@/lib/useMemberCapabilities';
+import { useWebLayoutWidth } from '@/lib/useWebLayoutWidth';
 import {
-  installWebDeployRecoveryListener,
-  isStaleWebChunkError,
-  clearNativeBundleReloadGuard,
-  installNativeBundleRecoveryHandler,
-  isStaleNativeBundleError,
-  recoverStaleNativeBundle,
-  recoverStaleWebDeploy,
+    clearNativeBundleReloadGuard,
+    installNativeBundleRecoveryHandler,
+    installWebDeployRecoveryListener,
+    isStaleNativeBundleError,
+    isStaleWebChunkError,
+    recoverStaleNativeBundle,
+    recoverStaleWebDeploy,
 } from '@/lib/webDeployRecovery';
 import {
-  installWebViewportHeight,
+    installWebViewportHeight,
 } from '@/lib/webViewportHeight';
-import { installDevConsoleFilters } from '@/lib/devConsoleFilters';
-import type { ViewStyle } from 'react-native';
 import FontAwesome from '@expo/vector-icons/FontAwesome';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
 import { createAsyncStoragePersister } from '@tanstack/query-async-storage-persister';
-import { QUERY_CACHE_BUSTER } from '@/lib/cache/cacheBuster';
+import { useQueryClient } from '@tanstack/react-query';
 import { PersistQueryClientProvider } from '@tanstack/react-query-persist-client';
 import { useFonts } from 'expo-font';
 import { Redirect, Stack, usePathname, useRouter, type ErrorBoundaryProps } from 'expo-router';
-import { safePreventAutoHideAsync, safeHideSplashAsync } from '@/lib/safeSplashScreen.util';
-import { useQueryClient } from '@tanstack/react-query';
-import { installDriverInviteDeepLinkListener } from '@/lib/driverInviteDeepLink.util';
 import { useEffect, useMemo } from 'react';
-import { AppBootGate } from '@/components/AppBootGate';
-import { AppLoadingSplash } from '@/components/AppLoadingSplash';
-import { NavigationLoadingOverlay } from '@/components/NavigationLoadingOverlay';
+import type { ViewStyle } from 'react-native';
 import { LogBox, Platform, StyleSheet, Text, View } from 'react-native';
-import { useWebLayoutWidth } from '@/lib/useWebLayoutWidth';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import 'react-native-reanimated';
 import { SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 
-import { useColorScheme } from '@/components/useColorScheme';
-import { AuthProvider, useAuth, useOptionalAuth } from '@/contexts/AuthContext';
-import { PendingOnboardingProvider } from '@/contexts/PendingOnboardingContext';
+import { LazyChatProviders } from '@/components/LazyChatProviders';
 import { PendingInviteResumeGate } from '@/components/PendingInviteResumeGate';
-import { ReferralCaptureGate } from '@/components/ReferralCaptureGate';
 import { PushTokenRegistration } from '@/components/PushTokenRegistration';
-import { NavigationPolicyShadowHost } from '@/lib/navigationPolicy/NavigationPolicyShadowHost';
+import { ReferralCaptureGate } from '@/components/ReferralCaptureGate';
+import { useColorScheme } from '@/components/useColorScheme';
+import { ActiveWorkspaceProvider } from '@/contexts/ActiveWorkspaceContext';
+import { AuthProvider, useAuth, useOptionalAuth } from '@/contexts/AuthContext';
+import { KeyboardAccessoryProvider } from '@/contexts/KeyboardAccessoryContext';
 import { LanguageProvider, tGlobal } from '@/contexts/LanguageContext';
 import { NetworkProvider } from '@/contexts/NetworkContext';
 import { OrganizationProvider, useOptionalOrganization } from '@/contexts/OrganizationContext';
-import { OrgVerificationReminderProvider } from '@/features/organization/components/workspace/kyc/OrgVerificationReminderProvider';
-import { ActiveWorkspaceProvider } from '@/contexts/ActiveWorkspaceContext';
-import { KeyboardAccessoryProvider } from '@/contexts/KeyboardAccessoryContext';
+import { PendingOnboardingProvider } from '@/contexts/PendingOnboardingContext';
 import { WalletProvider } from '@/contexts/WalletContext';
-import { LazyChatProviders } from '@/components/LazyChatProviders';
+import { OrgVerificationReminderProvider } from '@/features/organization/components/workspace/kyc/OrgVerificationReminderProvider';
 import { isFloatingChatHostRoute } from '@/lib/floatingChatHostRoute.util';
 import { GlobalSyncProvider } from '@/lib/globalSync/GlobalSyncContext';
+import { NavigationPolicyShadowHost } from '@/lib/navigationPolicy/NavigationPolicyShadowHost';
 
 markStartupPhase('js_parse_start');
 
