@@ -15,11 +15,11 @@ export function checklistTone(verified: number, total: number): ComplianceCheckl
 }
 
 export function isEntityDocumentSlotVerified(
-  doc: { status: string; expiry_date?: string | null } | undefined,
+  doc: { status: string; expiry_date?: string | null; storage_path?: string | null } | undefined,
   now = new Date(),
 ): boolean {
   if (!doc) return false;
-  if (doc.status === "expired" || doc.status === "rejected" || doc.status === "replaced" || doc.status === "pending") {
+  if (doc.status === "expired" || doc.status === "rejected" || doc.status === "replaced") {
     return false;
   }
   if (doc.expiry_date) {
@@ -28,7 +28,13 @@ export function isEntityDocumentSlotVerified(
       return false;
     }
   }
+  if (doc.storage_path) return true;
   return doc.status === "verified" || doc.status === "active";
+}
+
+export function isTripVaultDocumentOnFile(doc: ComplianceDocumentRow): boolean {
+  if (!doc.document_type || doc.status === "rejected") return false;
+  return Boolean(doc.storage_path) || doc.status === "verified";
 }
 
 function buildGroup(
@@ -51,13 +57,13 @@ function buildGroup(
 
 export function buildComplianceChecklist(input: {
   tripDocuments: ComplianceDocumentRow[];
-  vehicleDocuments: Array<{ doc_type: string; status: string; expiry_date?: string | null }>;
-  driverDocuments: Array<{ doc_type: string; status: string; expiry_date?: string | null }>;
+  vehicleDocuments: Array<{ doc_type: string; status: string; expiry_date?: string | null; storage_path?: string | null }>;
+  driverDocuments: Array<{ doc_type: string; status: string; expiry_date?: string | null; storage_path?: string | null }>;
   now?: Date;
 }): ComplianceChecklist {
   const now = input.now ?? new Date();
   const tripVerified = new Set(
-    input.tripDocuments.filter((doc) => doc.status === "verified" && doc.document_type).map((doc) => doc.document_type as string),
+    input.tripDocuments.filter((doc) => isTripVaultDocumentOnFile(doc)).map((doc) => doc.document_type as string),
   );
   const vehicleVerified = new Set(
     input.vehicleDocuments.filter((doc) => isEntityDocumentSlotVerified(doc, now)).map((doc) => doc.doc_type),
@@ -99,8 +105,8 @@ export function ensureComplianceChecklist(
     | {
         checklist?: ComplianceChecklist | null;
         documents?: ComplianceDocumentRow[];
-        vehicleDocuments?: Array<{ doc_type: string; status: string; expiry_date?: string | null }>;
-        driverDocuments?: Array<{ doc_type: string; status: string; expiry_date?: string | null }>;
+        vehicleDocuments?: Array<{ doc_type: string; status: string; expiry_date?: string | null; storage_path?: string | null }>;
+        driverDocuments?: Array<{ doc_type: string; status: string; expiry_date?: string | null; storage_path?: string | null }>;
       }
     | null
     | undefined,

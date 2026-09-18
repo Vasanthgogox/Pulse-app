@@ -19,7 +19,7 @@ import Animated, {
 const PADDING = 6;
 const GAP = 6;
 const INACTIVE_W = 44;
-const ACTIVE_W = 160;
+const ACTIVE_W = 172;
 const HEIGHT = 44;
 
 const WIDTH_MOTION = {
@@ -297,7 +297,7 @@ const styles = StyleSheet.create({
     borderRadius: 999,
     padding: PADDING,
     minWidth: 0,
-    maxWidth: 520,
+    maxWidth: 560,
     overflow: "hidden",
     ...WEB_BOX,
   },
@@ -381,9 +381,10 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: "#ffffff",
     textTransform: "uppercase",
-    letterSpacing: 1.1,
+    letterSpacing: 0.8,
     lineHeight: 14,
     includeFontPadding: false,
+    ...(Platform.OS === "web" ? { whiteSpace: "nowrap" as const } : null),
   },
   subtitleActive: {
     marginTop: 2,
@@ -402,9 +403,10 @@ const styles = StyleSheet.create({
     fontStyle: "italic",
     color: "#1e293b",
     textTransform: "uppercase",
-    letterSpacing: 1.1,
+    letterSpacing: 0.8,
     lineHeight: 14,
     includeFontPadding: false,
+    ...(Platform.OS === "web" ? { whiteSpace: "nowrap" as const } : null),
   },
   subtitleHover: {
     marginTop: 2,

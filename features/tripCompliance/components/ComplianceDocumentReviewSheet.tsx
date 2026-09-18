@@ -13,6 +13,10 @@ import {
   uploadComplianceDocument,
   verifyDocument,
 } from "@/features/compliance/services/documents.service";
+import { supabase } from "@/lib/supabase";
+import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
+import { getVehicleDocumentViewUrl, uploadAndSaveVehicleDocument } from "@/features/vehicles/services/vehicleDocuments.service";
+import type { VehicleComplianceDocType } from "@/features/vehicles/utils/vehicleDocuments.util";
 import { ComplianceInputModal } from "@/features/tripCompliance/components/ComplianceInputModal";
 import { COMPLIANCE_STATUS_META, ComplianceStatusChip } from "@/features/tripCompliance/components/ComplianceStatusIcon";
 import { setTripDocumentVerification } from "@/features/tripCompliance/services/tripComplianceWrite.service";
@@ -46,7 +50,20 @@ function formatDate(iso: string | null | undefined): string {
   }
 }
 
+const VAULT_VEHICLE_TYPES = new Set(["rc", "insurance", "fitness", "pollution"]);
+
 export type ComplianceReviewScope = ComplianceChecklistGroup["key"];
+
+async function viewUrlForEntityDoc(doc: ComplianceEntityDocument): Promise<string | null> {
+  if (!doc.storage_path) return null;
+  if (doc.source === "vehicle-vault") return getVehicleDocumentViewUrl(doc.storage_path);
+  if (doc.source === "driver-kyc") {
+    const { data } = await supabase().storage.from("driver-documents").createSignedUrl(doc.storage_path, 3600);
+    return data?.signedUrl ?? null;
+  }
+  const { url } = await getComplianceDocumentSignedUrl(doc.storage_path);
+  return url;
+}
 
 const SCOPE_COPY: Record<
   ComplianceReviewScope,
@@ -120,6 +137,10 @@ export function ComplianceDocumentReviewSheet({
   const [uploadingMissing, setUploadingMissing] = useState(false);
 
   const selected: ComplianceDocRow | null = rows.find((r) => r.key === selectedKey) ?? null;
+  const canModerateSelected =
+    scope === "trip"
+      ? Boolean(selected?.doc)
+      : selected?.entityDoc?.source !== "vehicle-vault" && selected?.entityDoc?.source !== "driver-kyc";
   const copy = SCOPE_COPY[scope];
   const entityId = scope === "vehicle" ? vehicleId : scope === "driver" ? driverId : tripId;
   const entityAssigned = scope === "trip" || Boolean(entityId);
@@ -148,14 +169,19 @@ export function ComplianceDocumentReviewSheet({
         cancelled = true;
       };
     }
-    const load = scope === "trip" ? getDocumentViewUrl(storagePath) : getComplianceDocumentSignedUrl(storagePath).then((r) => r.url);
+    const load =
+      scope === "trip"
+        ? getDocumentViewUrl(storagePath)
+        : selected?.entityDoc
+          ? viewUrlForEntityDoc(selected.entityDoc)
+          : getComplianceDocumentSignedUrl(storagePath).then((r) => r.url);
     void load.then((url) => {
       if (!cancelled) setPreviewUrl(url);
     });
     return () => {
       cancelled = true;
     };
-  }, [storagePath, scope]);
+  }, [storagePath, scope, selected?.entityDoc]);
 
   const handleOpenDocument = useCallback(() => {
     if (previewUrl) void Linking.openURL(previewUrl);
@@ -181,7 +207,7 @@ export function ComplianceDocumentReviewSheet({
         return;
       }
     } else {
-      if (!selected?.entityDoc) {
+      if (!selected?.entityDoc || selected.entityDoc.source === "vehicle-vault" || selected.entityDoc.source === "driver-kyc") {
         setBusy(false);
         return;
       }
@@ -218,7 +244,7 @@ export function ComplianceDocumentReviewSheet({
           return;
         }
       } else {
-        if (!selected?.entityDoc) {
+        if (!selected?.entityDoc || selected.entityDoc.source === "vehicle-vault" || selected.entityDoc.source === "driver-kyc") {
           setBusy(false);
           return;
         }
@@ -256,7 +282,30 @@ export function ComplianceDocumentReviewSheet({
             type as TripDocumentType,
           );
           if (error) throw error;
+        } else if (scope === "vehicle" && VAULT_VEHICLE_TYPES.has(type) && vehicleId) {
+          const { vehicle, error: vehicleError } = await getVehicleById(organizationId, vehicleId);
+          if (vehicleError) throw vehicleError;
+          const expiry =
+            rows.find((row) => row.type === type)?.entityDoc?.expiry_date ??
+            new Date(Date.now() + 365 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+          const { error } = await uploadAndSaveVehicleDocument(
+            organizationId,
+            vehicleId,
+            type as VehicleComplianceDocType,
+            {
+              arrayBuffer,
+              fileName: asset.name ?? `${type}.pdf`,
+              mimeType: asset.mimeType ?? "application/pdf",
+            },
+            expiry,
+            vehicle?.documents ?? null,
+          );
+          if (error) throw error;
         } else {
+          const existing = rows.find((row) => row.type === type)?.entityDoc;
+          if (existing?.source === "vehicle-vault" || existing?.source === "driver-kyc") {
+            throw new Error("Replace this file from Trip Operations Asset Vault.");
+          }
           const upload = {
             orgId: organizationId,
             entityType: scope,
@@ -269,9 +318,8 @@ export function ComplianceDocumentReviewSheet({
             },
             uploadedBy: actorId,
           };
-          const existingId = rows.find((row) => row.type === type)?.entityDoc?.id;
-          const { error } = existingId
-            ? await replaceComplianceDocument({ existingDocId: existingId, upload })
+          const { error } = existing?.id
+            ? await replaceComplianceDocument({ existingDocId: existing.id, upload })
             : await uploadComplianceDocument(upload);
           if (error) throw error;
         }
@@ -282,7 +330,7 @@ export function ComplianceDocumentReviewSheet({
         setUploadingMissing(false);
       }
     },
-    [tripId, actorId, onChanged, scope, entityAssigned, entityId, organizationId, rows, unassignedMessage],
+    [tripId, actorId, onChanged, scope, entityAssigned, entityId, organizationId, rows, unassignedMessage, vehicleId],
   );
 
   const uploadedAt = selected?.doc?.uploaded_at ?? selected?.entityDoc?.created_at ?? null;
@@ -368,7 +416,7 @@ export function ComplianceDocumentReviewSheet({
                 <Text style={styles.rejectReasonText}>Reason: {rejectionReason}</Text>
               ) : null}
 
-              {canVerify ? (
+              {canVerify && canModerateSelected ? (
                 <View style={styles.actionsRow}>
                   {busy ? (
                     <ActivityIndicator size="small" color={Theme.textMuted} />

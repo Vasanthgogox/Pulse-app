@@ -1,0 +1,77 @@
+/**
+ * Map Trip Operations Asset Vault files onto Compliance entity rows.
+ * Vehicle files live on `vehicles.documents` (same JSON the vault reads).
+ */
+import type { VehicleDocuments } from "@/features/vehicles/utils/vehicleDocuments.util";
+import {
+  COMPLIANCE_VEHICLE_DOCUMENT_TYPES,
+  type ComplianceEntityDocument,
+} from "@/features/tripCompliance/tripCompliance.types";
+
+const VAULT_VEHICLE_TYPES = ["rc", "insurance", "fitness", "pollution"] as const;
+
+function extraDocType(fileName: string | undefined): string | null {
+  const name = (fileName ?? "").toLowerCase();
+  if (name.includes("permit")) return "permit";
+  if (name.includes("tax") || name.includes("road_tax")) return "road_tax";
+  return null;
+}
+
+export function vehicleVaultDocumentsToEntityDocs(
+  vehicleId: string,
+  documents: VehicleDocuments | null | undefined,
+): ComplianceEntityDocument[] {
+  if (!documents) return [];
+  const rows: ComplianceEntityDocument[] = [];
+
+  for (const docType of VAULT_VEHICLE_TYPES) {
+    const slot = documents[docType];
+    const path = slot?.url?.trim();
+    if (!path) continue;
+    rows.push({
+      id: `${vehicleId}-${docType}`,
+      entity_type: "vehicle",
+      entity_id: vehicleId,
+      doc_type: docType,
+      status: "active",
+      storage_path: path,
+      expiry_date: slot?.expiryDate ?? null,
+      verified_at: slot?.uploadedAt ?? null,
+      notes: null,
+      created_at: slot?.uploadedAt ?? new Date(0).toISOString(),
+      source: "vehicle-vault",
+    });
+  }
+
+  for (const extra of documents.extras ?? []) {
+    const path = extra.url?.trim();
+    const docType = extraDocType(extra.fileName);
+    if (!path || !docType || !COMPLIANCE_VEHICLE_DOCUMENT_TYPES.includes(docType)) continue;
+    if (rows.some((row) => row.doc_type === docType)) continue;
+    rows.push({
+      id: extra.id || `${vehicleId}-${docType}`,
+      entity_type: "vehicle",
+      entity_id: vehicleId,
+      doc_type: docType,
+      status: "active",
+      storage_path: path,
+      expiry_date: extra.expiryDate ?? null,
+      verified_at: extra.uploadedAt ?? null,
+      notes: extra.fileName ?? null,
+      created_at: extra.uploadedAt ?? new Date(0).toISOString(),
+      source: "vehicle-vault",
+    });
+  }
+
+  return rows;
+}
+
+export function mergeComplianceEntityDocs(
+  preferred: ComplianceEntityDocument[],
+  fallback: ComplianceEntityDocument[],
+): ComplianceEntityDocument[] {
+  const byType = new Map<string, ComplianceEntityDocument>();
+  for (const doc of fallback) byType.set(doc.doc_type, doc);
+  for (const doc of preferred) byType.set(doc.doc_type, doc);
+  return Array.from(byType.values());
+}

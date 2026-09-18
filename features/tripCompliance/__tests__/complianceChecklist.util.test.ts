@@ -80,10 +80,10 @@ describe("buildComplianceChecklist", () => {
       ],
       now: new Date("2026-09-01T00:00:00Z"),
     });
-    expect(checklist.groups[0]).toMatchObject({ verified: 2, total: 3, tone: "warning" });
+    expect(checklist.groups[0]).toMatchObject({ verified: 3, total: 3, tone: "success" });
     expect(checklist.groups[1]).toMatchObject({ verified: 3, total: 6, tone: "warning" });
     expect(checklist.groups[2]).toMatchObject({ verified: 1, total: 2, tone: "warning" });
-    expect(checklist.verified).toBe(6);
+    expect(checklist.verified).toBe(7);
     expect(checklist.tone).toBe("warning");
   });
 

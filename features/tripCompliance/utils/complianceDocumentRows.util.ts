@@ -63,6 +63,7 @@ function latestEntityDoc(documents: ComplianceEntityDocument[]): ComplianceEntit
 function entityRowStatus(doc: ComplianceEntityDocument | null, now = new Date()): ComplianceDocRowStatus {
   if (!doc) return "missing";
   if (doc.status === "rejected") return "rejected";
+  if (doc.status === "pending") return "pending";
   if (isEntityDocumentSlotVerified(doc, now)) return "verified";
   return "pending";
 }

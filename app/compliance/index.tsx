@@ -77,7 +77,7 @@ export default function ComplianceScreen() {
     scope: "trip" | "vehicle" | "driver";
   } | null>(null);
 
-  const contentTopInset = layout.isDesktopWeb ? 62 : layout.top;
+  const contentTopInset = layout.isDesktopWeb ? 80 : layout.top;
   const pagePad = 16;
   const gridGap = 8;
   const columns = width >= 1100 ? 3 : width >= 760 ? 2 : 1;
@@ -131,40 +131,40 @@ export default function ComplianceScreen() {
       style={[styles.screen, { paddingTop: contentTopInset }]}
       contentContainerStyle={[styles.content, { paddingBottom: 24 + layout.bottom, paddingHorizontal: pagePad }]}
     >
-      <View style={styles.headerRow}>
-        <View style={styles.headerTextWrap}>
-          <View style={styles.titleRow}>
-            <Text style={styles.title}>Compliance Verification</Text>
-            <View style={styles.activeBadge}>
-              <View style={styles.activeDot} />
-              <Text style={styles.activeBadgeText}>{counts.all} Active Trips</Text>
-            </View>
+      <View style={styles.header}>
+        <View style={styles.headerTop}>
+          <Text style={styles.title}>Compliance Verification</Text>
+          <View style={styles.headerActions}>
+            {canViewFinance ? (
+              <TouchableOpacity
+                style={styles.reportBtn}
+                onPress={() => router.push(ROUTES.COMPLIANCE_REPORT as Parameters<typeof router.push>[0])}
+                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+              >
+                <Download size={13} color={Theme.textPrimary} strokeWidth={2.2} />
+                <Text style={styles.reportBtnText}>Export Report</Text>
+              </TouchableOpacity>
+            ) : null}
+            {canManageFinance ? (
+              <TouchableOpacity
+                style={styles.bulkBtn}
+                onPress={() => router.push(ROUTES.COMPLIANCE_BULK_PAYMENT as Parameters<typeof router.push>[0])}
+                hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+              >
+                <Wallet size={13} color={Theme.complianceBulkText} strokeWidth={2.2} />
+                <Text style={styles.bulkBtnText}>Bulk Payment</Text>
+              </TouchableOpacity>
+            ) : null}
+          </View>
+        </View>
+        <View style={styles.headerMeta}>
+          <View style={styles.activeBadge}>
+            <View style={styles.activeDot} />
+            <Text style={styles.activeBadgeText}>{counts.all} Active Trips</Text>
           </View>
           <Text style={styles.subtitle}>
             Real-time carrier document audit, driver credentials, and settlement milestones.
           </Text>
-        </View>
-        <View style={styles.headerActions}>
-          {canViewFinance ? (
-            <TouchableOpacity
-              style={styles.reportBtn}
-              onPress={() => router.push(ROUTES.COMPLIANCE_REPORT as Parameters<typeof router.push>[0])}
-              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-            >
-              <Download size={13} color={Theme.textPrimary} strokeWidth={2.2} />
-              <Text style={styles.reportBtnText}>Export Report</Text>
-            </TouchableOpacity>
-          ) : null}
-          {canManageFinance ? (
-            <TouchableOpacity
-              style={styles.bulkBtn}
-              onPress={() => router.push(ROUTES.COMPLIANCE_BULK_PAYMENT as Parameters<typeof router.push>[0])}
-              hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-            >
-              <Wallet size={13} color={Theme.complianceBulkText} strokeWidth={2.2} />
-              <Text style={styles.bulkBtnText}>Bulk Payment</Text>
-            </TouchableOpacity>
-          ) : null}
         </View>
       </View>
 
@@ -261,47 +261,56 @@ export default function ComplianceScreen() {
 
 const styles = StyleSheet.create({
   screen: { flex: 1, backgroundColor: Theme.compliancePageBg },
-  content: { paddingTop: 4, gap: 8 },
+  content: { paddingTop: 6, gap: 8 },
   centered: { flex: 1, alignItems: "center", justifyContent: "center", backgroundColor: Theme.compliancePageBg },
-  headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" },
-  headerTextWrap: { flex: 1, minWidth: 200 },
-  titleRow: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
-  title: { fontSize: 20, fontWeight: "800", color: Theme.textPrimaryDark, letterSpacing: -0.3, lineHeight: 24 },
+  header: { gap: 4 },
+  headerTop: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 12 },
+  title: {
+    flexGrow: 0,
+    flexShrink: 0,
+    fontSize: 18,
+    fontWeight: "800",
+    color: Theme.textPrimaryDark,
+    lineHeight: 22,
+    ...(Platform.OS === "web" ? { whiteSpace: "nowrap" as const } : null),
+  },
+  headerMeta: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
   activeBadge: {
+    flexShrink: 0,
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
     backgroundColor: Theme.complianceActiveBadgeBg,
-    paddingHorizontal: 8,
-    paddingVertical: 3,
+    paddingHorizontal: 7,
+    paddingVertical: 2,
     borderRadius: 999,
   },
   activeDot: { width: 5, height: 5, borderRadius: 3, backgroundColor: Theme.complianceActiveBadgeFg },
-  activeBadgeText: { fontSize: 11, fontWeight: "700", color: Theme.complianceActiveBadgeFg },
-  subtitle: { fontSize: 12, color: Theme.textMuted, marginTop: 2, lineHeight: 16 },
-  headerActions: { flexDirection: "row", alignItems: "center", gap: 8, flexWrap: "wrap" },
+  activeBadgeText: { fontSize: 10, fontWeight: "700", color: Theme.complianceActiveBadgeFg },
+  subtitle: { flex: 1, minWidth: 180, fontSize: 11, color: Theme.textMuted, lineHeight: 14 },
+  headerActions: { flexShrink: 0, flexDirection: "row", alignItems: "center", gap: 6 },
   bulkBtn: {
-    minHeight: 34,
-    paddingHorizontal: 12,
-    borderRadius: 9,
+    minHeight: 30,
+    paddingHorizontal: 10,
+    borderRadius: 8,
     backgroundColor: Theme.complianceBulk,
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
   },
-  bulkBtnText: { fontSize: 12, fontWeight: "700", color: Theme.complianceBulkText },
+  bulkBtnText: { fontSize: 11, fontWeight: "700", color: Theme.complianceBulkText },
   reportBtn: {
-    minHeight: 34,
-    paddingHorizontal: 11,
-    borderRadius: 9,
+    minHeight: 30,
+    paddingHorizontal: 10,
+    borderRadius: 8,
     backgroundColor: Theme.cardWhite,
     borderWidth: 1,
     borderColor: Theme.complianceCardBorder,
     flexDirection: "row",
     alignItems: "center",
-    gap: 5,
+    gap: 4,
   },
-  reportBtnText: { fontSize: 12, fontWeight: "700", color: Theme.textPrimary },
+  reportBtnText: { fontSize: 11, fontWeight: "700", color: Theme.textPrimary },
   toolbarRow: { flexDirection: "row", alignItems: "center", justifyContent: "space-between", gap: 8, flexWrap: "wrap" },
   chipWrap: { flex: 1, flexDirection: "row", alignItems: "center", flexWrap: "wrap", gap: 6, minWidth: 220 },
   chip: {

@@ -82,7 +82,9 @@ export type ComplianceDocumentRow = {
   rejection_reason: string | null;
 };
 
-/** Vehicle/driver docs from `entity_documents`, used by checklist + review sheets. */
+/** Vehicle/driver docs shown on Compliance — vault JSONB, KYC, or entity_documents. */
+export type ComplianceEntityDocumentSource = "vehicle-vault" | "driver-kyc" | "entity";
+
 export type ComplianceEntityDocument = {
   id: string;
   entity_type: "vehicle" | "driver";
@@ -94,6 +96,7 @@ export type ComplianceEntityDocument = {
   verified_at: string | null;
   notes: string | null;
   created_at: string;
+  source?: ComplianceEntityDocumentSource;
 };
 
 /** Canonical Finance payment state, read (not duplicated) from `transactions`. */
