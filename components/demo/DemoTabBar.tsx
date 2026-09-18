@@ -661,11 +661,11 @@ export function DemoTabBar({
     ];
     // Hide primary-domain tabs the member's functional role can't reach.
     const navItems = allNavItems.filter((item) => {
-      if (item.id === "finance") return visibility.finance;
-      if (item.id === "trips") return visibility.trips;
-      if (item.id === "network") return visibility.network;
-      if (item.id === "loadCenter") return visibility.loadCenter;
-      if (item.id === "compliance") return visibility.compliance;
+      if (item.id === "finance") return visibility.finance !== false;
+      if (item.id === "trips") return visibility.trips !== false;
+      if (item.id === "network") return visibility.network !== false;
+      if (item.id === "loadCenter") return visibility.loadCenter !== false;
+      if (item.id === "compliance") return visibility.compliance !== false;
       return true;
     });
 
