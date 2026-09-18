@@ -51,7 +51,6 @@ import { shareDraftIndent } from "@/features/indents/services/indents.service";
 import { resolveMarketIndentShipperLabel } from "@/features/indents/utils/indentPartyDisplay.util";
 import { indentCanBroadcastToPulseNetwork } from "@/features/network/utils/indentBroadcastEligibility.util";
 import { indentDisplayOriginDest, indentRoutePlan } from "@/features/network/utils/executionPlanRouteSummary";
-import { looksLikePlannerStopSummary } from "@/features/network/utils/storyDisplay";
 import {
   resolveAwardedVendorName,
   resolveGiveLoadAwardedAmountInr,
@@ -122,7 +121,7 @@ import { useMemberAccess } from "@/lib/useMemberAccess";
 import { formatINR } from "@/lib/format";
 import { ROUTES } from "@/lib/routes";
 import { resolveLoadCenterPromoVariant } from "@/lib/loadCenterPromoAssets";
-import { useRouter, useFocusEffect } from "expo-router";
+import { useRouter } from "expo-router";
 import {
     useIndentOfferCountsQuery,
     useDriversQuery,
@@ -266,7 +265,6 @@ export function LoadCenterView({
     isRefetching: marketRefetching,
     refetch: refetchMarketIndents,
   } = useMarketIndentsQuery(orgId, {
-    urgent: true,
     enabled: !isTripsPresentation,
   });
   const commercePlanIds = useMemo(() => {
@@ -288,40 +286,6 @@ export function LoadCenterView({
     orgId,
     commercePlanIds,
   );
-  const syncedRouteIds = useRef(new Set<string>());
-  useEffect(() => {
-    if (!orgId || !planRouteById) return;
-    let cancelled = false;
-    void (async () => {
-      for (const load of indents) {
-        if (cancelled) return;
-        if ((load.organization_id ?? "") !== orgId) continue;
-        if (
-          !looksLikePlannerStopSummary(load.pickup_area) &&
-          !looksLikePlannerStopSummary(load.drop_location)
-        ) {
-          continue;
-        }
-        const route = indentDisplayOriginDest(load, planRouteById);
-        if (
-          route.origin === (load.pickup_area || "—") &&
-          route.dest === (load.drop_location || "—")
-        ) {
-          continue;
-        }
-        if (syncedRouteIds.current.has(load.id)) continue;
-        syncedRouteIds.current.add(load.id);
-        const { error } = await updateIndent(load.id, {
-          pickup_area: route.origin,
-          drop_location: route.dest,
-        });
-        if (error) syncedRouteIds.current.delete(load.id);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [orgId, indents, planRouteById]);
   const { data: myQuotes = [], refetch: refetchMyQuotes } =
     useMyDirectQuotesQuery(orgId);
   const { data: trips = [] } = useTripsQuery(orgId);
@@ -375,13 +339,6 @@ export function LoadCenterView({
   const [boostPostId, setBoostPostId] = useState<string | null>(null);
   const queryClient = useQueryClient();
   const { openTripDetail } = useOpenTripDetail();
-
-  useFocusEffect(
-    useCallback(() => {
-      if (!orgId || isTripsPresentation) return;
-      void refetchMarketIndents();
-    }, [orgId, isTripsPresentation, refetchMarketIndents]),
-  );
 
   const isClaimedTab = loadSubTab === "AWARDED";
   const isGiveGetTab =
