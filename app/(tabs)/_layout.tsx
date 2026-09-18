@@ -236,7 +236,16 @@ function AuthenticatedTabLayout() {
         warmFinanceData: access.finance || access.tripops,
       });
     });
-  }, [loading, orgId, profile?.role, queryClient, access]);
+  }, [
+    loading,
+    orgId,
+    profile?.role,
+    queryClient,
+    access.isLoading,
+    access.finance,
+    access.tripops,
+    access.sales,
+  ]);
 
   // Pre-warm chat providers + bootstrap as soon as auth + org are ready.
   // This runs immediately (not idle), so provider modules and the bootstrap RPC
@@ -263,7 +272,7 @@ function AuthenticatedTabLayout() {
     return () => {
       timers.forEach(clearTimeout);
     };
-  }, [isDesktopWeb, access]);
+  }, [isDesktopWeb, access.isLoading, access.tripops, access.finance, access.sales]);
 
   if (!loading && user && profile && profile.role !== 'driver') {
     tabsUnlockedRef.current = true;

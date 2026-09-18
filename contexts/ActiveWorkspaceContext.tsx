@@ -11,6 +11,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type Context,
@@ -545,17 +546,17 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
       if (authStatus === 'unauthenticated' || authStatus === 'expired') {
         const signal = { cancelled: false };
         sessionSignalRef.current = signal;
-        void requestLoadWorkspaces();
+        void requestLoadWorkspacesRef.current();
       }
       return;
     }
     const signal = { cancelled: false };
     sessionSignalRef.current = signal;
-    void requestLoadWorkspaces();
+    void requestLoadWorkspacesRef.current();
     return () => {
       signal.cancelled = true;
     };
-  }, [userId, authStatus, requestLoadWorkspaces, clearRetryTimer]);
+  }, [userId, authStatus, clearRetryTimer]);
 
   // ── Live permission/role updates ────────────────────────────────────────────
   // Revokes (e.g. removing "create indent") are enforced server-side via RLS
@@ -575,10 +576,10 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
         },
       ],
       () => {
-        void requestLoadWorkspaces();
+        void requestLoadWorkspacesRef.current();
       },
     );
-  }, [userId, authStatus, requestLoadWorkspaces]);
+  }, [userId, authStatus]);
 
   // ── Public actions ──────────────────────────────────────────────────────────
 
@@ -614,20 +615,36 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
   const canManageWorkspace =
     memberRole === 'owner' || memberRole === 'admin';
 
-  const value: ActiveWorkspaceState = {
-    workspaces,
-    activeWorkspace,
-    memberRole,
-    memberPlatformRole,
-    memberDomains,
-    memberSurfaces,
-    isLoading,
-    membershipResolved,
-    error,
-    switchWorkspace,
-    refresh,
-    canManageWorkspace,
-  };
+  const value = useMemo<ActiveWorkspaceState>(
+    () => ({
+      workspaces,
+      activeWorkspace,
+      memberRole,
+      memberPlatformRole,
+      memberDomains,
+      memberSurfaces,
+      isLoading,
+      membershipResolved,
+      error,
+      switchWorkspace,
+      refresh,
+      canManageWorkspace,
+    }),
+    [
+      workspaces,
+      activeWorkspace,
+      memberRole,
+      memberPlatformRole,
+      memberDomains,
+      memberSurfaces,
+      isLoading,
+      membershipResolved,
+      error,
+      switchWorkspace,
+      refresh,
+      canManageWorkspace,
+    ],
+  );
 
   return (
     <ActiveWorkspaceContext.Provider value={value}>

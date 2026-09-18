@@ -29,6 +29,8 @@ export function MemberDomainGate({ kind, children }: Props) {
   const router = useRouter();
   const access = useMemberCapabilities();
   const { membershipResolved, refresh } = useActiveWorkspace();
+  const refreshRef = useRef(refresh);
+  refreshRef.current = refresh;
   const { t } = useOptionalLanguage();
   // On desktop web the tab layout mounts all three tab scenes at once
   // (`lazy: false`), so an unfocused denied gate must NOT fire a redirect or
@@ -58,8 +60,8 @@ export function MemberDomainGate({ kind, children }: Props) {
     if (!isFocused || isLoading || !membershipResolved || allowed || home) return;
     if (softRefreshAttempted.current) return;
     softRefreshAttempted.current = true;
-    void refresh();
-  }, [isFocused, isLoading, membershipResolved, allowed, home, refresh]);
+    void refreshRef.current();
+  }, [isFocused, isLoading, membershipResolved, allowed, home]);
 
   if (isLoading || !membershipResolved) {
     // Inert placeholder — NOT the branded AppLoadingSplash (canvas-based, crashes

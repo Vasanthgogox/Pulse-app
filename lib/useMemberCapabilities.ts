@@ -98,9 +98,7 @@ export function useMemberCapabilities(): MemberDomainAccess {
     isLoading ||
     authStatus === "restoring" ||
     (authStatus === "authenticated" && !membershipResolved) ||
-    (!orgReady &&
-      (org?.isLoading !== false || Boolean(memberRole)) &&
-      authStatus === "authenticated");
+    (authStatus === "authenticated" && !orgReady && Boolean(org?.isLoading));
 
   return useMemo(() => {
     const isOwnerOrAdmin = memberRole === "owner" || memberRole === "admin";

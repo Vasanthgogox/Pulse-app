@@ -46,11 +46,15 @@ export function useOrgCapabilities(): Capability[] {
 export function useCapabilities(): Capability[] {
   const orgCaps = useOrgCapabilities();
   const workspace = useOptionalActiveWorkspace();
+  const hasWorkspace = Boolean(workspace);
+  const isLoading = workspace?.isLoading ?? false;
+  const memberRole = workspace?.memberRole ?? null;
+  const memberPlatformRole = workspace?.memberPlatformRole ?? null;
+  const memberSurfaces = workspace?.memberSurfaces ?? null;
 
   return useMemo(() => {
-    if (!workspace || workspace.isLoading) return orgCaps;
+    if (!hasWorkspace || isLoading) return orgCaps;
 
-    const { memberRole, memberPlatformRole, memberSurfaces } = workspace;
     const bypass =
       memberRole === "owner" ||
       memberRole === "admin" ||
@@ -66,5 +70,5 @@ export function useCapabilities(): Capability[] {
           : {};
 
     return capabilitiesFromMemberSurfaces(orgCaps, surfaces, false);
-  }, [orgCaps, workspace]);
+  }, [orgCaps, hasWorkspace, isLoading, memberRole, memberPlatformRole, memberSurfaces]);
 }
