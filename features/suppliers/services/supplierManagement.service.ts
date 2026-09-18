@@ -4,8 +4,8 @@ import {
   getSupplierDetails,
   mergeSupplierDisplayFields,
 } from "@/features/suppliers/services/suppliers.service";
-import { getTripsForOrg } from "@/features/trips/services/trips.service";
-import { getTransactionsByOrganization } from "@/features/finance/services/finance.service";
+import { getTripsBySupplierForOrg } from "@/features/trips/services/trips.service";
+import type { TripRow } from "@/features/trips/services/trips.service";
 import type { DriverRow } from "@/features/drivers/services/drivers.service";
 import {
   buildSupplierPerformanceFromTrips,
@@ -24,11 +24,10 @@ export async function getSupplierManagementBundle(
   orgId: string,
   supplierId: string,
 ): Promise<{ error: Error | null; bundle: SupplierManagementBundle | null }> {
-  const [supplierRes, detailsRes, tripsRes, txRes, rpcRes] = await Promise.all([
+  const [supplierRes, detailsRes, tripsRes, rpcRes] = await Promise.all([
     getSupplierById(orgId, supplierId),
     getSupplierDetails(supplierId),
-    getTripsForOrg(orgId),
-    getTransactionsByOrganization(orgId),
+    getTripsBySupplierForOrg(orgId, supplierId),
     supabase().rpc("get_supplier_management_bundle", {
       p_org_id: orgId,
       p_supplier_id: supplierId,
@@ -43,7 +42,9 @@ export async function getSupplierManagementBundle(
     !detailsRes.error && detailsRes.supplier
       ? mergeSupplierDisplayFields(supplierRes.supplier, detailsRes.supplier)
       : supplierRes.supplier;
-  const supplierTrips = (tripsRes.trips ?? []).filter((t) => t.supplier_id === supplierId);
+  // Scoped fetch only returns id/supplier_rate (enough for this screen's spend total);
+  // cast satisfies the shared bundle type for the unused legacy desktop panels consumer.
+  const supplierTrips = (tripsRes.trips ?? []) as unknown as TripRow[];
   const rpcData = (rpcRes.data ?? {}) as Record<string, unknown>;
 
   // Drivers and salary requests belong to the supplier's OWN organization
@@ -132,7 +133,7 @@ export async function getSupplierManagementBundle(
     bundle: {
       supplier,
       trips: supplierTrips,
-      transactions: txRes.transactions ?? [],
+      transactions: [],
       drivers,
       driverSalaryRequests,
       contacts,

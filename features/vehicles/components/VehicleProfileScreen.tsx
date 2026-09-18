@@ -2,7 +2,7 @@ import { CenteredLoadingView } from "@/components/CenteredLoadingView";
 import { ContentErrorState } from "@/components/ContentErrorState";
 import Theme from "@/constants/Theme";
 import { useOrganization } from "@/contexts/OrganizationContext";
-import { getTripsForOrg } from "@/features/trips/services/trips.service";
+import { getVehicleTripCount } from "@/features/trips/services/trips.service";
 import { VehicleProfileHub } from "@/features/vehicles/components/desktop/VehicleProfileHub";
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
 import type { VehicleRow } from "@/features/vehicles/services/vehicles.service";
@@ -29,16 +29,15 @@ export function VehicleProfileScreen({ vehicleId, onBack }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const [vehicleRes, tripsRes] = await Promise.all([
+      const [vehicleRes, tripCountRes] = await Promise.all([
         getVehicleById(orgId, vehicleId),
-        getTripsForOrg(orgId),
+        getVehicleTripCount(orgId, vehicleId),
       ]);
       if (vehicleRes.error || !vehicleRes.vehicle) {
         throw vehicleRes.error ?? new Error("Vehicle not found");
       }
       setVehicle(vehicleRes.vehicle);
-      const trips = (tripsRes.trips ?? []).filter((t) => t.vehicle_id === vehicleId);
-      setTripCount(trips.length);
+      setTripCount(tripCountRes.count);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Failed to load vehicle");
     } finally {

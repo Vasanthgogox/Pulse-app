@@ -304,12 +304,7 @@ function KanbanColumn({
             ({ scrollbarWidth: "thin" } as ViewStyle),
         ]}
         showsVerticalScrollIndicator={isHovered}
-        contentContainerStyle={[
-          { paddingRight: 0 },
-          transactions.length === 0 && showPartyPromosInColumns
-            ? { flexGrow: 1 }
-            : null,
-        ]}
+        contentContainerStyle={styles.columnScrollContent}
       >
         {transactions.length === 0 ? (
           showPartyPromosInColumns ? (
@@ -581,20 +576,18 @@ export function FinanceKanbanTab({
 
   return (
     <>
-      <View style={styles.wrapper}>
-        <View style={styles.kanbanContainer}>
-          {columnTypes.map((type) => (
-              <KanbanColumn 
-                key={type}
-                type={type}
-                transactions={columns[type]}
-                t={t}
-                renderCard={renderCard}
-                showPartyPromosInColumns={showPartyPromosInColumns}
-                onKanbanPartyAddPress={onKanbanPartyAddPress}
-              />
-          ))}
-        </View>
+      <View style={styles.board}>
+        {columnTypes.map((type) => (
+          <KanbanColumn
+            key={type}
+            type={type}
+            transactions={columns[type]}
+            t={t}
+            renderCard={renderCard}
+            showPartyPromosInColumns={showPartyPromosInColumns}
+            onKanbanPartyAddPress={onKanbanPartyAddPress}
+          />
+        ))}
       </View>
       {previewTransaction ? (
         <LedgerTransactionPreviewModal
@@ -610,35 +603,28 @@ export function FinanceKanbanTab({
 }
 
 const styles = StyleSheet.create({
-  wrapper: {
+  /** Board: fill remaining viewport height; columns in a row. */
+  board: {
     flex: 1,
-    width: '100%',
-    alignSelf: 'stretch',
-    backgroundColor: Theme.screenBackground,
-  },
-  kanbanContainer: {
-    flex: 1,
-    paddingHorizontal: 0,
-    paddingBottom: 12,
-    paddingTop: 4,
     flexDirection: 'row',
     gap: 12,
     width: '100%',
     alignSelf: 'stretch',
     minHeight: 280,
-    alignItems: 'stretch',
-    justifyContent: 'flex-start',
-  },
-  column: {
-    flexGrow: 1,
-    flexShrink: 1,
-    flexBasis: 0,
     minWidth: 0,
-    maxWidth: '100%',
+    paddingTop: 4,
+    paddingBottom: 12,
+    alignItems: 'stretch',
+    backgroundColor: Theme.screenBackground,
+  },
+  /** Column: equal width + stretch to board height. */
+  column: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
     backgroundColor: Theme.surfaceGray,
     borderRadius: 12,
     padding: 10,
-    minHeight: 0,
     alignSelf: 'stretch',
   },
   columnHeader: {
@@ -679,8 +665,16 @@ const styles = StyleSheet.create({
     fontWeight: "500",
     color: Theme.textOnDark,
   },
+  /** Scroll area claims full remaining column height under the header. */
   columnScroll: {
     flex: 1,
+    minHeight: 0,
+  },
+  /** Pin cards/promos to top; empty space stays below without stretching cards. */
+  columnScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'flex-start',
+    paddingRight: 0,
   },
   cardContainer: {
     marginBottom: 8,
@@ -839,8 +833,9 @@ const styles = StyleSheet.create({
     letterSpacing: 1,
   },
   emptyPromoFill: {
-    flex: 1,
-    minHeight: 0,
+    // Promo stays content-sized at the top; do not stretch into empty board space.
+    alignSelf: 'stretch',
+    flexGrow: 0,
   },
   emptyColumn: {
     paddingVertical: 28,

@@ -15,12 +15,11 @@ import { useClientManagementBundleQuery } from "@/features/clients/hooks/useClie
 import type { ClientManagementBundle } from "@/features/clients/types/clientManagement.types";
 import { KYC_DOC_LABELS } from "@/features/clients/types/clientManagement.types";
 import type { ClientRow } from "@/features/clients/services/clients.service";
-import { getClientDetailBundle } from "@/features/clients/services/clients.service";
 import { computeKycScore } from "@/features/clients/utils/clientManagement.util";
 import { formatCityStateLabel } from "@/lib/placeCityState.util";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { formatINR } from "@/lib/format";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import { View } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
 
@@ -96,24 +95,9 @@ export function ClientProfileScreen({ clientId, onBack }: Props) {
   const orgId = currentOrganization?.id ?? null;
 
   const bundleQ = useClientManagementBundleQuery(orgId, clientId);
-  const [legacyClient, setLegacyClient] = useState<ClientRow | null>(null);
-  const [legacyLoading, setLegacyLoading] = useState(true);
-
-  const loadLegacy = useCallback(async () => {
-    if (!orgId || !clientId) return;
-    setLegacyLoading(true);
-    const { client } = await getClientDetailBundle(orgId, clientId);
-    setLegacyClient(client);
-    setLegacyLoading(false);
-  }, [orgId, clientId]);
-
-  useEffect(() => {
-    void loadLegacy();
-  }, [loadLegacy]);
 
   const bundle = bundleQ.data;
-  const clientFromBundle = bundle?.client as ClientRow | null | undefined;
-  const client = clientFromBundle ?? legacyClient;
+  const client = bundle?.client as ClientRow | null | undefined;
 
   const warehouses = useMemo(
     () => (bundle ? mapWarehouses(bundle) : []),
@@ -133,7 +117,7 @@ export function ClientProfileScreen({ clientId, onBack }: Props) {
     return `${score}%`;
   }, [bundle]);
 
-  if (!orgId || legacyLoading || bundleQ.isLoading) {
+  if (!orgId || bundleQ.isLoading) {
     return <CenteredLoadingView />;
   }
 
@@ -144,7 +128,6 @@ export function ClientProfileScreen({ clientId, onBack }: Props) {
         message={bundleQ.error?.message ?? "Client not found"}
         onRetry={() => {
           void bundleQ.refetch();
-          void loadLegacy();
         }}
       />
     );
@@ -194,7 +177,6 @@ export function ClientProfileScreen({ clientId, onBack }: Props) {
           editableLaneRates={bundle.lane_rates}
           onProfileEntitiesChange={() => {
             void bundleQ.refetch();
-            void loadLegacy();
           }}
           onClose={onBack}
           onEditPress={() => {}}

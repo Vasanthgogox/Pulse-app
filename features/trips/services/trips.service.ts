@@ -1163,6 +1163,48 @@ export async function getVehicleOngoingTrip(
   return { error: null, trip: rows[0] ?? null };
 }
 
+/** Trip count for a single driver, scoped by org — for profile screens that only need a count. */
+export async function getDriverTripCount(
+  orgId: string,
+  driverId: string,
+): Promise<{ error: Error | null; count: number }> {
+  const { count, error } = await supabase()
+    .from("trips")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", orgId)
+    .eq("driver_id", driverId);
+  if (error) return { error: new Error(error.message), count: 0 };
+  return { error: null, count: count ?? 0 };
+}
+
+/** Trip count for a single vehicle, scoped by org — for profile screens that only need a count. */
+export async function getVehicleTripCount(
+  orgId: string,
+  vehicleId: string,
+): Promise<{ error: Error | null; count: number }> {
+  const { count, error } = await supabase()
+    .from("trips")
+    .select("id", { count: "exact", head: true })
+    .eq("organization_id", orgId)
+    .eq("vehicle_id", vehicleId);
+  if (error) return { error: new Error(error.message), count: 0 };
+  return { error: null, count: count ?? 0 };
+}
+
+/** Trip rows for a single supplier, scoped by org — for profile screens that only need spend/volume. */
+export async function getTripsBySupplierForOrg(
+  orgId: string,
+  supplierId: string,
+): Promise<{ error: Error | null; trips: Pick<TripRow, "id" | "supplier_rate">[] }> {
+  const { data, error } = await supabase()
+    .from("trips")
+    .select("id, supplier_rate")
+    .eq("organization_id", orgId)
+    .eq("supplier_id", supplierId);
+  if (error) return { error: new Error(error.message), trips: [] };
+  return { error: null, trips: (data ?? []) as Pick<TripRow, "id" | "supplier_rate">[] };
+}
+
 /** Human-readable trip id for assignment conflict messages. */
 export function formatTripAssignmentLabel(
   trip:

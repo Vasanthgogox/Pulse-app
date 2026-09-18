@@ -7,7 +7,7 @@ import {
   getDriverDetailBundle,
   getDriverTenures,
 } from "@/features/drivers/services/drivers.service";
-import { getTripsForOrg } from "@/features/trips/services/trips.service";
+import { getDriverTripCount } from "@/features/trips/services/trips.service";
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
 import { useCallback, useEffect, useState } from "react";
 import { View } from "react-native";
@@ -37,9 +37,9 @@ export function DriverProfileScreen({ driverId, onBack }: Props) {
     setLoading(true);
     setError(null);
     try {
-      const [bundleRes, tripsRes, tenuresRes] = await Promise.all([
+      const [bundleRes, tripCountRes, tenuresRes] = await Promise.all([
         getDriverDetailBundle(orgId, driverId),
-        getTripsForOrg(orgId),
+        getDriverTripCount(orgId, driverId),
         getDriverTenures(orgId, driverId),
       ]);
       if (bundleRes.error || !bundleRes.driver) {
@@ -47,8 +47,7 @@ export function DriverProfileScreen({ driverId, onBack }: Props) {
       }
       setDriver(bundleRes.driver);
       setRatingCount(bundleRes.ratings?.length ?? 0);
-      const trips = (tripsRes.trips ?? []).filter((t) => t.driver_id === driverId);
-      setTripCount(trips.length);
+      setTripCount(tripCountRes.count);
       setTenureCount(tenuresRes.tenures?.length ?? 0);
       const vehicleId = bundleRes.driver.assigned_vehicle_id;
       if (vehicleId) {
