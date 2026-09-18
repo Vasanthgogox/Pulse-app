@@ -782,17 +782,55 @@ export async function getLinkedDriverForCurrentUser(
 /**
  * Links unlinked driver roster rows to the current auth user by profile email/phone.
  * Idempotent — safe to call on every driver-home load (e.g. trip assigned after signup).
+ *
+ * Single-flight + short cooldown: password sign-in and driver-home mount can both
+ * request a sync within the same second; coalesce to one RPC (incident 2026-09-18).
  */
+let syncLinkedDriversInflight: Promise<{
+  error: Error | null;
+  linkedCount: number;
+}> | null = null;
+let syncLinkedDriversLastDoneAt = 0;
+const SYNC_LINKED_DRIVERS_COOLDOWN_MS = 5_000;
+let syncLinkedDriversLastResult: {
+  error: Error | null;
+  linkedCount: number;
+} = { error: null, linkedCount: 0 };
+
 export async function syncLinkedDriverRowsForCurrentUser(): Promise<{
   error: Error | null;
   linkedCount: number;
 }> {
-  const { data, error } = await supabase().rpc("sync_my_driver_rows_user_id");
-  if (error) return { error: new Error(error.message), linkedCount: 0 };
-  return {
-    error: null,
-    linkedCount: typeof data === "number" ? data : 0,
-  };
+  if (syncLinkedDriversInflight) return syncLinkedDriversInflight;
+  const now = Date.now();
+  if (now - syncLinkedDriversLastDoneAt < SYNC_LINKED_DRIVERS_COOLDOWN_MS) {
+    return syncLinkedDriversLastResult;
+  }
+  syncLinkedDriversInflight = (async () => {
+    try {
+      const { data, error } = await supabase().rpc("sync_my_driver_rows_user_id");
+      if (error) {
+        syncLinkedDriversLastResult = { error: new Error(error.message), linkedCount: 0 };
+      } else {
+        syncLinkedDriversLastResult = {
+          error: null,
+          linkedCount: typeof data === "number" ? data : 0,
+        };
+      }
+      syncLinkedDriversLastDoneAt = Date.now();
+      return syncLinkedDriversLastResult;
+    } finally {
+      syncLinkedDriversInflight = null;
+    }
+  })();
+  return syncLinkedDriversInflight;
+}
+
+/** Test-only: reset dedupe state between unit tests. */
+export function __resetSyncLinkedDriversDedupeForTests(): void {
+  syncLinkedDriversInflight = null;
+  syncLinkedDriversLastDoneAt = 0;
+  syncLinkedDriversLastResult = { error: null, linkedCount: 0 };
 }
 
 /**

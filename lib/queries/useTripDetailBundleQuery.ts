@@ -11,6 +11,7 @@ import { useQuery, type QueryClient } from '@tanstack/react-query';
 import { supabase } from '@/lib/supabase';
 import { throwIfCancelled, withAbortSignal } from '@/lib/supabaseAbort.util';
 import { queryKeys } from '@/lib/queryKeys';
+import { shouldRetryQuery } from '@/lib/queryClient';
 
 // ── Feature flag ─────────────────────────────────────────────────────────────
 // Globally enabled: replaces 18-24 serial DB round-trips with one RPC call.
@@ -299,7 +300,7 @@ export function useTripDetailBundleQuery(
     enabled: isBundleEnabled(viewerOrgId) && !!tripId && !!viewerOrgId,
     staleTime: 60_000,
     gcTime: 5 * 60_000,
-    retry: 1,
+    retry: shouldRetryQuery,
   });
 
   if (!isBundleEnabled(viewerOrgId)) {
