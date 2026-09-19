@@ -57,8 +57,12 @@ export interface CreateIndentInput {
   vehicle_type: string;
   /** Required: load type (e.g. FMCG). */
   load_type: string;
-  /** Required: weight in kg (UI converts from tons). */
-  weight: number;
+  /**
+   * Weight in kg (UI converts from tons). Null is allowed only for a per-MT
+   * sale, where the rate carries the price and the real weight is measured at
+   * loading — `createIndent` enforces that (see `perMtWeightOptional`).
+   */
+  weight: number | null;
   pickup_date?: string | null;
   circulation_target?: CirculationTarget | null;
   routeStops?: Array<{

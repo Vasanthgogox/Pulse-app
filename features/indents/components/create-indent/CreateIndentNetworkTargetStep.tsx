@@ -30,7 +30,11 @@ function fieldToRaw(value: string): string {
 }
 
 function parseAmount(raw: string): number | null {
-  const n = Number(String(raw).replace(/[^\d.]/g, ""));
+  // `Number("")` is 0, not NaN — without this an empty field reads as a real
+  // zero and callers treat "nothing entered" as an amount.
+  const digits = String(raw).replace(/[^\d.]/g, "");
+  if (!digits) return null;
+  const n = Number(digits);
   if (!Number.isFinite(n) || n < 0) return null;
   return n;
 }
@@ -69,10 +73,26 @@ function activeMarginPct(
   return null;
 }
 
+/** How a supplier target is quoted. Mirrors `indents.supplier_rate_basis`. */
+export type SupplierRateBasis = "per_mt" | "per_trip";
+
+const BASIS_CHOICES: { value: SupplierRateBasis; label: string }[] = [
+  { value: "per_trip", label: "Per trip" },
+  { value: "per_mt", label: "Per MT" },
+];
+
 export type CreateIndentNetworkTargetStepProps = {
   supplierTarget: string;
   onSupplierTargetChange: (value: string) => void;
   clientPrice?: string;
+  /** "per_mt" means `supplierTarget` is a ₹/MT rate, not a trip total. */
+  supplierRateBasis?: SupplierRateBasis | null;
+  /** Load weight in tons — the multiplier for per-MT entry. */
+  weightTons?: string | null;
+  /** Client sale as ₹/MT. Lets per-MT margins work without a tonnage. */
+  clientUnitRatePerMt?: string | null;
+  /** Omit to hide the basis toggle (callers that set the basis elsewhere). */
+  onSupplierRateBasisChange?: (value: SupplierRateBasis) => void;
   errorMessage?: string;
   compact?: boolean;
   partyPreview?: NumericEntryPartyPreview;
@@ -83,10 +103,13 @@ function MarginPresetChips({
   clientPrice,
   supplierTarget,
   onPick,
+  disabledReason,
 }: {
   clientPrice: string;
   supplierTarget: string;
   onPick: (raw: string) => void;
+  /** Why the presets cannot be used, shown in place of silent dead chips. */
+  disabledReason?: string;
 }) {
   const sale = parseAmount(clientPrice);
   const active = activeMarginPct(clientPrice, supplierTarget);
@@ -94,7 +117,9 @@ function MarginPresetChips({
 
   return (
     <View style={styles.presetsWrap}>
-      <Text style={styles.presetsLabel}>Margin target</Text>
+      <Text style={styles.presetsLabel}>
+        {disabled && disabledReason ? disabledReason : "Margin target"}
+      </Text>
       <View style={styles.presetsRow}>
         {MARGIN_PRESETS.map((pct) => {
           const selected = active === pct;
@@ -137,6 +162,10 @@ export const CreateIndentNetworkTargetStep = memo(
     supplierTarget,
     onSupplierTargetChange,
     clientPrice = "",
+    supplierRateBasis,
+    weightTons,
+    clientUnitRatePerMt,
+    onSupplierRateBasisChange,
     errorMessage,
     compact = false,
     partyPreview,
@@ -162,30 +191,92 @@ export const CreateIndentNetworkTargetStep = memo(
           label: "Supplier target",
           rawValue: raw,
           onRawValueChange: handleRawChange,
+          // Inside the keypad the field is being edited right now, so only an
+          // actual Done attempt should mark it red — carrying the step-level
+          // error straight in reds an untouched field and collides with the
+          // margin presets underneath.
           errorMessage:
-            errorMessage ||
-            (doneAttempted && !targetDisplay
+            doneAttempted && !targetDisplay
               ? "Enter a target greater than 0"
-              : undefined),
+              : undefined,
         },
       ],
-      [raw, handleRawChange, errorMessage, doneAttempted, targetDisplay],
+      [raw, handleRawChange, doneAttempted, targetDisplay],
     );
 
+    /**
+     * On a per-MT indent the target is typed as ₹/MT while the client sale is
+     * a trip total, so the two are not comparable until the sale is divided
+     * back down to ₹/MT. Without a usable weight there is no divisor, and we
+     * leave the comparison off rather than show a margin against mixed units.
+     */
+    const perMtDivisorTons = useMemo(() => {
+      if (supplierRateBasis !== "per_mt") return undefined;
+      const tons = parseAmount(weightTons ?? "");
+      return tons != null && tons > 0 ? tons : undefined;
+    }, [supplierRateBasis, weightTons]);
+
+    /**
+     * Client sale expressed in the same unit the target is typed in.
+     *
+     * A per-MT target is a rate, so it compares against the client's ₹/MT rate
+     * — no tonnage needed, which matters because the real loaded weight is not
+     * known until after loading. Prefer that unit rate; fall back to dividing
+     * a trip total only when a weight happens to be set.
+     */
+    const clientPriceForCompare = useMemo(() => {
+      if (supplierRateBasis === "per_mt") {
+        const unit = parseAmount(clientUnitRatePerMt ?? "");
+        if (unit != null && unit > 0) return String(unit);
+      }
+      if (perMtDivisorTons == null) return clientPrice;
+      const sale = parseAmount(clientPrice);
+      if (sale == null) return clientPrice;
+      return String(sale / perMtDivisorTons);
+    }, [clientPrice, clientUnitRatePerMt, perMtDivisorTons, supplierRateBasis]);
+
+    const showPerMtUnits = supplierRateBasis === "per_mt";
     const marginStrip = (
       <PartnerRateSaleMarginStrip
-        saleValue={clientPrice}
+        saleValue={showPerMtUnits ? clientPriceForCompare : clientPrice}
         partnerRate={supplierTarget}
         saleLabel="Client"
         rateEmptyHint="Type target"
+        unitSuffix={showPerMtUnits ? "/MT" : ""}
       />
     );
 
+    /**
+     * The presets need a client sale to take a percentage of. On a per-MT lane
+     * that sale only exists once a weight is known, so name the missing input
+     * instead of leaving the chips greyed out with no reason.
+     */
+    const marginDisabledReason = useMemo(() => {
+      if (parseAmount(clientPriceForCompare) != null) return undefined;
+      if (supplierRateBasis === "per_mt") {
+        return "Set the client ₹/MT rate to use margin %";
+      }
+      return "Set client sale to use margin %";
+    }, [clientPriceForCompare, supplierRateBasis]);
+
+    /**
+     * A ₹/MT target is not the number a partner quotes against — the trip
+     * total is. Spell it out so the two are never confused at entry.
+     */
+    const perMtTripTotal = useMemo(() => {
+      if (supplierRateBasis !== "per_mt") return null;
+      const rate = parseAmount(supplierTarget);
+      const tons = parseAmount(weightTons ?? "");
+      if (rate == null || rate <= 0 || tons == null || tons <= 0) return null;
+      return Math.round(rate * tons);
+    }, [supplierRateBasis, supplierTarget, weightTons]);
+
     const marginChips = (
       <MarginPresetChips
-        clientPrice={clientPrice}
+        clientPrice={clientPriceForCompare}
         supplierTarget={supplierTarget}
         onPick={onSupplierTargetChange}
+        disabledReason={marginDisabledReason}
       />
     );
 
@@ -236,8 +327,41 @@ export const CreateIndentNetworkTargetStep = memo(
             Required estimate for partners to quote against. Use a margin % to
             fill from client sale, or enter a value.
           </Text>
+          {onSupplierRateBasisChange ? (
+            <View style={styles.basisRow}>
+              {BASIS_CHOICES.map((choice) => {
+                const selected = (supplierRateBasis ?? "per_trip") === choice.value;
+                return (
+                  <Pressable
+                    key={choice.value}
+                    onPress={() => onSupplierRateBasisChange(choice.value)}
+                    style={[
+                      styles.basisChip,
+                      selected && styles.basisChipActive,
+                    ]}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected }}
+                    accessibilityLabel={`Quote target ${choice.label}`}
+                  >
+                    <Text
+                      style={[
+                        styles.basisChipText,
+                        selected && styles.basisChipTextActive,
+                      ]}
+                    >
+                      {choice.label}
+                    </Text>
+                  </Pressable>
+                );
+              })}
+            </View>
+          ) : null}
           <View style={s.sourceRatesBlock}>
-            <DesktopSectionHeading>Supplier target</DesktopSectionHeading>
+            <DesktopSectionHeading>
+              {supplierRateBasis === "per_mt"
+                ? "Supplier target (₹/MT)"
+                : "Supplier target"}
+            </DesktopSectionHeading>
             <Pressable
               style={[
                 s.sourceRateSummaryCard,
@@ -253,12 +377,23 @@ export const CreateIndentNetworkTargetStep = memo(
               <View style={s.sourceRateSummaryCopy}>
                 <Text style={s.sourceRateSummaryLabel}>Supplier target</Text>
                 {targetDisplay ? (
-                  <Text style={s.sourceRateSummaryValue}>{targetDisplay}</Text>
+                  <Text style={s.sourceRateSummaryValue}>
+                    {targetDisplay}
+                    {supplierRateBasis === "per_mt" ? "/MT" : ""}
+                  </Text>
                 ) : (
                   <Text style={s.sourceRateSummaryValueMuted}>
-                    Tap to enter target
+                    {supplierRateBasis === "per_mt"
+                      ? "Tap to enter ₹/MT rate"
+                      : "Tap to enter target"}
                   </Text>
                 )}
+                {perMtTripTotal != null ? (
+                  <Text style={styles.hint}>
+                    Partners quote against ₹
+                    {perMtTripTotal.toLocaleString("en-IN")} for this load
+                  </Text>
+                ) : null}
                 {errorMessage ? (
                   <Text style={s.salePriceError}>{errorMessage}</Text>
                 ) : null}
@@ -302,6 +437,32 @@ const styles = StyleSheet.create({
     width: "100%",
     alignItems: "center",
     gap: 8,
+  },
+  basisRow: {
+    flexDirection: "row",
+    gap: 8,
+    marginBottom: 12,
+  },
+  basisChip: {
+    minHeight: 44,
+    justifyContent: "center",
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderLight,
+    backgroundColor: Theme.surface,
+  },
+  basisChipActive: {
+    borderColor: Theme.accentBrownBorder,
+    backgroundColor: Theme.accentBrownMuted,
+  },
+  basisChipText: {
+    fontSize: 14,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+  },
+  basisChipTextActive: {
+    color: Theme.textPrimary,
   },
   modalAccessory: {
     width: "100%",

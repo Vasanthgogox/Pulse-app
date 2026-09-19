@@ -41,7 +41,9 @@ export function buildIndentPayloadFromAddTripState(
     supplier_rate_basis: state.supplierRateBasis,
     vehicle_type: state.vehicleType.trim(),
     load_type: state.loadType.trim(),
-    weight: tonsNum * 1000,
+    // Per-MT loads may be shared before the weight is known (it is measured at
+    // loading), so send null rather than a fabricated 0 kg.
+    weight: tonsNum > 0 ? tonsNum * 1000 : null,
     pickup_date: state.tripStartDate.trim() || null,
     circulation_target: state.circulationTarget,
     owner_user_id: ids?.ownerUserId,

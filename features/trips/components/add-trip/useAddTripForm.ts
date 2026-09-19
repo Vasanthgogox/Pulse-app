@@ -81,9 +81,27 @@ function computeValidationIssues(state: AddTripFormState): AddTripValidationIssu
   const errClient = runValidators(state.clientName, [required(), maxLength(VALIDATION.CLIENT_SUPPLIER_NAME_MAX_LENGTH)]);
   if (errClient) push('client', `Client: ${errClient}`);
 
-  if (state.saleRateBasis === "per_mt") {
+  const isPerMtSale = state.saleRateBasis === "per_mt";
+  const isBidShareDraft =
+    state.supplySource === 'aggregate' && state.marketFulfillment === 'bid';
+
+  if (isPerMtSale) {
     const errUnit = positiveAmount()(state.saleUnitRate);
     if (errUnit) push("clientPrice", `Per-MT rate: ${errUnit}`);
+    else if (!isBidShareDraft) {
+      // A trip needs a real client price, and on a ₹/MT lane that total only
+      // exists once a weight is known — without it the price settles at 0.
+      // An indent shared for bidding is exempt: the ₹/MT rate is the price,
+      // and the actual weight is not known until the truck is loaded.
+      const tonsTrim = state.tons.trim();
+      const tonsNum = Number(tonsTrim);
+      if (!tonsTrim || !Number.isFinite(tonsNum) || tonsNum <= 0) {
+        push(
+          "tons",
+          `This lane is priced at ₹${state.saleUnitRate}/MT — enter load weight in tons to calculate the client price`,
+        );
+      }
+    }
   } else {
     const errPrice = positiveAmount()(state.clientPrice);
     if (errPrice) push("clientPrice", `Client price: ${errPrice}`);
@@ -127,12 +145,16 @@ function computeValidationIssues(state: AddTripFormState): AddTripValidationIssu
     if (!vt) push('vehicleType', 'Vehicle type: required to share for bidding');
     const lt = state.loadType.trim();
     if (!lt) push('loadType', 'Load type: required to share for bidding');
-    const tonsTrim = state.tons.trim();
-    if (!tonsTrim) push('tons', 'Weight: required to share for bidding');
-    else {
-      const tonsNum = Number(tonsTrim);
-      if (!Number.isFinite(tonsNum) || tonsNum <= 0) {
-        push('tons', 'Tons: enter a valid weight greater than 0');
+    // Per-MT lanes already raise a rate-aware weight message above; adding the
+    // generic one here would surface two `tons` errors for the same field.
+    if (state.saleRateBasis !== 'per_mt') {
+      const tonsTrim = state.tons.trim();
+      if (!tonsTrim) push('tons', 'Weight: required to share for bidding');
+      else {
+        const tonsNum = Number(tonsTrim);
+        if (!Number.isFinite(tonsNum) || tonsNum <= 0) {
+          push('tons', 'Tons: enter a valid weight greater than 0');
+        }
       }
     }
   }

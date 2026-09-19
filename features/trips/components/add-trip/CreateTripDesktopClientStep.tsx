@@ -174,6 +174,13 @@ export const CreateTripDesktopClientStep = memo(
         Boolean(selectedLaneId) ||
         adhocTrip);
 
+    /**
+     * A contract lane carries the agreed rate, so the sale value is not the
+     * user's to retype here — editing it would silently diverge from the
+     * contract. Changing the lane (or going adhoc) is the way to change it.
+     */
+    const saleLockedToLane = Boolean(selectedLaneId) && Boolean(saleDisplay);
+
     useEffect(() => {
       onLaneGateActiveChange?.(showLaneGate);
       return () => onLaneGateActiveChange?.(false);
@@ -379,12 +386,19 @@ export const CreateTripDesktopClientStep = memo(
                   s.sourceRateSummaryCard,
                   clientPriceError && s.sourceRateSummaryCardError,
                 ]}
+                disabled={saleLockedToLane}
                 onPress={() => {
+                  if (saleLockedToLane) return;
                   setSaleDoneAttempted(false);
                   setSaleModalOpen(true);
                 }}
                 accessibilityRole="button"
-                accessibilityLabel="Edit sale value"
+                accessibilityState={{ disabled: saleLockedToLane }}
+                accessibilityLabel={
+                  saleLockedToLane
+                    ? "Sale value set by the contract lane"
+                    : "Edit sale value"
+                }
               >
                 <View style={s.sourceRateSummaryCopy}>
                   <Text style={s.sourceRateSummaryLabel}>Client sale</Text>
@@ -398,12 +412,19 @@ export const CreateTripDesktopClientStep = memo(
                   {clientPriceError ? (
                     <Text style={s.salePriceError}>{saleErrorLabel}</Text>
                   ) : null}
+                  {saleLockedToLane ? (
+                    <Text style={s.lanePathBannerText}>
+                      From the contract lane — change the lane to change this
+                    </Text>
+                  ) : null}
                 </View>
-                <View style={s.sourceRateSummaryAction}>
-                  <Text style={s.sourceRateSummaryActionText}>
-                    {saleDisplay ? "Edit" : "Add sale"}
-                  </Text>
-                </View>
+                {saleLockedToLane ? null : (
+                  <View style={s.sourceRateSummaryAction}>
+                    <Text style={s.sourceRateSummaryActionText}>
+                      {saleDisplay ? "Edit" : "Add sale"}
+                    </Text>
+                  </View>
+                )}
               </Pressable>
             </View>
           ) : null}

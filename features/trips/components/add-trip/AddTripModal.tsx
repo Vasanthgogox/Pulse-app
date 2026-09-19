@@ -174,6 +174,14 @@ export function AddTripModal({
     (wizardEnabled && wizardStep === "allocation") || webAllocSubSteps;
   /** Hide field errors until the user tries to continue / create (avoids red UI on empty open). */
   const [validationAttempted, setValidationAttempted] = useState(false);
+  /**
+   * Each step gets its own clean slate: the flag is set by a continue/create
+   * attempt, so without this a single attempt on any step leaves every later
+   * step opening pre-reddened on fields the user has not reached yet.
+   */
+  useEffect(() => {
+    setValidationAttempted(false);
+  }, [wizardStep, allocationSubStep]);
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [createdResult, setCreatedResult] = useState<AddTripCompleteResult | null>(null);

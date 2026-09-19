@@ -4,7 +4,10 @@ import { StyleSheet, Text, View } from "react-native";
 import Theme from "@/constants/Theme";
 
 function parseAmount(raw: string): number | null {
-  const n = Number(String(raw).replace(/[^\d.]/g, ""));
+  // `Number("")` is 0, not NaN — an empty field must not read as a real zero.
+  const digits = String(raw).replace(/[^\d.]/g, "");
+  if (!digits) return null;
+  const n = Number(digits);
   if (!Number.isFinite(n) || n < 0) return null;
   return n;
 }

@@ -153,6 +153,24 @@ export function CreateTripDesktopWizard({
     [invalidSet],
   );
 
+  /**
+   * Client sale total for the margin reference on the target step.
+   *
+   * Per-MT lanes leave `clientPrice` empty on purpose (the lane rate is ₹/MT,
+   * not a trip total), which would leave the margin strip and the % presets
+   * with nothing to work from. Rebuild the total from the unit rate and tons
+   * so the reference shows; without a usable weight there is still no total.
+   */
+  const clientSaleTotalForTarget = useMemo(() => {
+    if (state.clientPrice.trim()) return state.clientPrice;
+    if (state.saleRateBasis !== "per_mt") return state.clientPrice;
+    const unit = Number(state.saleUnitRate);
+    const tons = Number(state.tons);
+    if (!Number.isFinite(unit) || unit <= 0) return state.clientPrice;
+    if (!Number.isFinite(tons) || tons <= 0) return state.clientPrice;
+    return String(unit * tons);
+  }, [state.clientPrice, state.saleRateBasis, state.saleUnitRate, state.tons]);
+
   const fleet = useAddTripFleetResources(organizationId, state, setters);
 
   const selectedClient = useMemo(
@@ -247,6 +265,11 @@ export function CreateTripDesktopWizard({
       setSelectedLaneId(lane.id);
       setters.setLaneId(lane.id);
       setters.setSaleRateBasis(prefill.saleRateBasis);
+      // A ₹/MT lane is almost always sourced per MT too — preselect the
+      // matching supplier basis so the target is quoted in the same unit.
+      if (prefill.saleRateBasis === "per_mt") {
+        setters.setSupplierRateBasis("per_mt");
+      }
       setters.setSaleUnitRate(
         prefill.saleUnitRate != null ? String(prefill.saleUnitRate) : "",
       );
@@ -703,7 +726,11 @@ export function CreateTripDesktopWizard({
           compact={isMobileLayout}
           supplierTarget={state.supplierTarget}
           onSupplierTargetChange={setters.setSupplierTarget}
-          clientPrice={state.clientPrice}
+          clientPrice={clientSaleTotalForTarget}
+          supplierRateBasis={state.supplierRateBasis}
+          weightTons={state.tons}
+          clientUnitRatePerMt={state.saleUnitRate}
+          onSupplierRateBasisChange={setters.setSupplierRateBasis}
           errorMessage={
             invalid("supplierTarget")
               ? "Enter a supplier target rate greater than 0"

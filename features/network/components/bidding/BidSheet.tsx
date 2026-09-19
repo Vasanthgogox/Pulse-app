@@ -181,6 +181,21 @@ export function BidSheet({
   );
 
   const targetRate = opportunity.pricing.displayPrice;
+
+  /**
+   * Per-MT targets reach the bidder already multiplied out to a trip total, so
+   * the bare figure hides the basis it was quoted on. Spell the multiply out —
+   * the bid itself stays a trip total, which is what every comparison surface
+   * and the award RPC treat it as.
+   */
+  const targetBasisNote = useMemo(() => {
+    const { basis, unitRateInr, tonnes } = opportunity.pricing;
+    if (basis !== "per_mt" || unitRateInr == null) return null;
+    const perMt = `${formatINR(unitRateInr)}/MT`;
+    return tonnes == null
+      ? `Quoted ${perMt} — weight not set on this load`
+      : `${perMt} × ${tonnes}T`;
+  }, [opportunity.pricing]);
   const biddingAllowed =
     opportunity.permissions.canBid ||
     opportunity.permissions.canEditBid ||
@@ -564,7 +579,10 @@ export function BidSheet({
       ) : vsTarget ? (
         <BidVsTargetHint caption={vsTarget.caption} tone={vsTarget.tone} />
       ) : targetRate != null ? (
-        <Text style={styles.hint}>Target {formatINR(targetRate)}</Text>
+        <Text style={styles.hint}>
+          Target {formatINR(targetRate)}
+          {targetBasisNote ? ` (${targetBasisNote})` : ""}
+        </Text>
       ) : (
         <View style={styles.hintSpacer} />
       )}
