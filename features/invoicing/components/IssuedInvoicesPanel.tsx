@@ -3,16 +3,10 @@
  */
 import Theme from "@/constants/Theme";
 import Layout from "@/constants/Layout";
+import { IssuedInvoiceCard } from "@/features/invoicing/components/IssuedInvoiceCard";
 import type { IssuedInvoiceListRow } from "@/features/invoicing/services/invoiceList.service";
 import { issuedInvoicesForPodToggle } from "@/features/invoicing/utils/invoicePodRequired.util";
 import { FlatList, RefreshControl, StyleSheet, Text, View } from "react-native";
-
-function formatInr(n: number): string {
-  return `₹${n.toLocaleString("en-IN", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
 
 export function IssuedInvoicesPanel({
   invoices,
@@ -50,34 +44,7 @@ export function IssuedInvoicesPanel({
           </Text>
         </View>
       }
-      renderItem={({ item }) => (
-        <View style={styles.card}>
-          <View style={styles.cardTop}>
-            <Text style={styles.number} numberOfLines={1}>
-              {item.invoice_number || "—"}
-            </Text>
-            <Text style={styles.status} numberOfLines={1}>
-              {item.status}
-            </Text>
-          </View>
-          <Text style={styles.client} numberOfLines={1}>
-            {item.client_name || "—"}
-          </Text>
-          <View style={styles.metaRow}>
-            <Text style={styles.meta}>Date {item.invoice_date || "—"}</Text>
-            <Text style={styles.meta}>Due {item.due_date || "—"}</Text>
-          </View>
-          <View style={styles.metaRow}>
-            <Text style={styles.total}>{formatInr(item.total_amount)}</Text>
-            <Text style={styles.meta}>
-              {item.trip_ids.length} trip{item.trip_ids.length === 1 ? "" : "s"}
-            </Text>
-          </View>
-          <Text style={styles.unsupported}>
-            Invoice-level payment / allocation is not supported on this surface.
-          </Text>
-        </View>
-      )}
+      renderItem={({ item }) => <IssuedInvoiceCard item={item} />}
     />
   );
 }
@@ -105,52 +72,5 @@ const styles = StyleSheet.create({
     color: Theme.textMuted,
     textAlign: "center",
     paddingHorizontal: 24,
-  },
-  card: {
-    backgroundColor: Theme.surface,
-    borderRadius: 10,
-    borderWidth: StyleSheet.hairlineWidth,
-    borderColor: Theme.border,
-    padding: 12,
-    marginBottom: 10,
-  },
-  cardTop: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  number: {
-    flex: 1,
-    minWidth: 0,
-    fontSize: 14,
-    fontWeight: "800",
-    color: Theme.textPrimary,
-  },
-  status: {
-    fontSize: 11,
-    fontWeight: "700",
-    color: Theme.textSecondary,
-    textTransform: "uppercase",
-  },
-  client: {
-    marginTop: 4,
-    fontSize: 13,
-    fontWeight: "600",
-    color: Theme.textPrimary,
-  },
-  metaRow: {
-    marginTop: 8,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    gap: 8,
-  },
-  meta: { fontSize: 12, fontWeight: "600", color: Theme.textSecondary },
-  total: { fontSize: 14, fontWeight: "800", color: Theme.textPrimary },
-  unsupported: {
-    marginTop: 8,
-    fontSize: 11,
-    fontWeight: "600",
-    color: Theme.textMuted,
   },
 });

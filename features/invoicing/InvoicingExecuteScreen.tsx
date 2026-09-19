@@ -9,9 +9,9 @@ import { useAuth } from "@/contexts/AuthContext";
 import { useTabBarAwareScrollProps } from "@/contexts/DemoTabBarScrollContext";
 import { useOrganization } from "@/contexts/OrganizationContext";
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
-import { InvoiceCreateCtaPanel } from "@/features/invoicing/components/InvoiceCreateCtaPanel";
 import { InvoicePreviewPanel } from "@/features/invoicing/components/InvoicePreviewPanel";
 import { IssuedInvoicesPanel } from "@/features/invoicing/components/IssuedInvoicesPanel";
+import { PendingBillingInsightPanel } from "@/features/invoicing/components/PendingBillingInsightPanel";
 import { ClientProfileScreen } from "@/features/clients/components/ClientProfileScreen";
 import { ROUTES } from "@/lib/routes";
 import { TripCompletionFilterBar } from "@/features/trips/components/TripCompletionFilterBar";
@@ -1572,11 +1572,24 @@ export function InvoicingExecuteScreen({
             </View>
             {isLargeScreen && (
               <View style={styles.rightPanel}>
-                <InvoiceCreateCtaPanel
-                  selectedCount={selectedTripIds.length}
+                <PendingBillingInsightPanel
                   partnerLabel={activeClientLabel}
+                  tripCount={clientTripsBase.length}
+                  eligibleCount={invoiceableTrips.length}
+                  selectedCount={selectedTripIds.length}
+                  selectedFreight={selectedTrips.reduce(
+                    (sum, trip) => sum + (Number(trip.amount) || 0),
+                    0,
+                  )}
+                  pendingFreight={clientTripsBase.reduce(
+                    (sum, trip) => sum + (Number(trip.amount) || 0),
+                    0,
+                  )}
+                  completedTripCount={completionCounts.completed}
+                  notCompletedTripCount={completionCounts.notCompleted}
+                  podRequired={podRequired}
                   blockedReason={buildBlockedReason}
-                  onCreate={handleCreateInvoice}
+                  invoices={issuedInvoices}
                 />
               </View>
             )}
@@ -2532,11 +2545,11 @@ const styles = StyleSheet.create({
     borderRightWidth: 0,
   },
   rightPanel: {
-    flexGrow: 0.85,
+    flexGrow: 0.9,
     flexShrink: 1,
-    flexBasis: 340,
-    minWidth: 300,
-    maxWidth: 420,
+    flexBasis: 360,
+    minWidth: 320,
+    maxWidth: 440,
     backgroundColor: Theme.analyticsCanvas,
     borderLeftWidth: 1,
     borderLeftColor: Theme.borderLight,
