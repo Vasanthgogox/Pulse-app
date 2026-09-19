@@ -58,3 +58,34 @@ export function isInfrastructureErrorMessage(message: string): boolean {
     message,
   );
 }
+
+/**
+ * PostgREST service-level failures: PGRST002 (schema cache could not be loaded)
+ * and PGRST003 (could not acquire a pool connection). Both surface as 503 and
+ * mean "the API layer is unavailable", never "this user has no rows".
+ */
+const SERVICE_UNAVAILABLE_CODES = new Set(['PGRST002', 'PGRST003']);
+
+/**
+ * True when a failure came from the API/DB layer being unavailable rather than
+ * from the query itself. Callers use this to tell a transport failure apart
+ * from a legitimate empty result, so an outage is surfaced once instead of
+ * driving an application-level retry loop.
+ */
+export function isServiceUnavailableError(error: unknown): boolean {
+  if (!error) return false;
+  if (isOriginDownError(error)) return true;
+  const code = (error as { code?: unknown } | null)?.code;
+  if (typeof code === 'string' && SERVICE_UNAVAILABLE_CODES.has(code.toUpperCase())) {
+    return true;
+  }
+  const status = (error as { status?: unknown } | null)?.status;
+  if (typeof status === 'number' && status >= 500) return true;
+  const message =
+    error instanceof Error
+      ? error.message
+      : typeof (error as { message?: unknown } | null)?.message === 'string'
+        ? (error as { message: string }).message
+        : String(error);
+  return /PGRST00[23]|schema cache/i.test(message);
+}

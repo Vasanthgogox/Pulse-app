@@ -20,6 +20,7 @@ import {
 import { useAuth } from '@/contexts/AuthContext';
 import { useOrganization } from '@/contexts/OrganizationContext';
 import { supabase } from '@/lib/supabase';
+import { isServiceUnavailableError } from '@/lib/supabaseHttp.util';
 import { subscribeSharedPostgresChanges } from '@/lib/realtimeRegistry';
 import {
   clearPlatformWorkspaceStore,
@@ -201,7 +202,11 @@ async function waitForSupabaseAccessToken(
 
 async function fetchActiveMembershipRows(
   uid: string,
-): Promise<{ rows: WorkspaceMemberRow[]; error: Error | null }> {
+): Promise<{
+  rows: WorkspaceMemberRow[];
+  error: Error | null;
+  serviceUnavailable: boolean;
+}> {
   const { data, error: dbError } = await Promise.race([
     supabase()
       .from('organization_members')
@@ -214,9 +219,19 @@ async function fetchActiveMembershipRows(
   ]);
 
   if (dbError) {
-    return { rows: [], error: new Error(dbError.message) };
+    // Classify before flattening: `new Error(message)` drops the PostgREST
+    // `code`/`status` the caller needs to tell an outage from an empty result.
+    return {
+      rows: [],
+      error: new Error(dbError.message),
+      serviceUnavailable: isServiceUnavailableError(dbError),
+    };
   }
-  return { rows: (data ?? []) as unknown as WorkspaceMemberRow[], error: null };
+  return {
+    rows: (data ?? []) as unknown as WorkspaceMemberRow[],
+    error: null,
+    serviceUnavailable: false,
+  };
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -368,7 +383,11 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
           return;
         }
 
-        let { rows, error: fetchError } = await fetchActiveMembershipRows(currentUser.uid);
+        let {
+          rows,
+          error: fetchError,
+          serviceUnavailable,
+        } = await fetchActiveMembershipRows(currentUser.uid);
         if (stale()) return;
 
         if (fetchError) {
@@ -377,7 +396,12 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
           setError(fetchError);
           shouldFinishLoading = false;
           if (!stale()) {
-            if (pendingRefreshRef.current) {
+            if (serviceUnavailable) {
+              // PGRST002/PGRST003/5xx: the API layer is down, not slow to warm.
+              // Retrying re-queues work onto an instance that is already failing
+              // and is what turned one outage into a request storm. Surface once.
+              shouldFinishLoading = true;
+            } else if (pendingRefreshRef.current) {
               // Trailing coalesced load will run; do not start a second retry chain.
             } else if (!scheduleOuterRetry()) {
               shouldFinishLoading = true;
@@ -396,13 +420,16 @@ export function ActiveWorkspaceProvider({ children }: { children: ReactNode }) {
               setTimeout(resolve, 200 * (attempt + 1)),
             );
             if (stale()) return;
-            ({ rows, error: fetchError } = await fetchActiveMembershipRows(currentUser.uid));
+            ({ rows, error: fetchError, serviceUnavailable } =
+              await fetchActiveMembershipRows(currentUser.uid));
             if (stale()) return;
             if (fetchError) {
               setError(fetchError);
               shouldFinishLoading = false;
               if (!stale()) {
-                if (pendingRefreshRef.current) {
+                if (serviceUnavailable) {
+                  shouldFinishLoading = true;
+                } else if (pendingRefreshRef.current) {
                   // Trailing coalesced load will run; do not start a second retry chain.
                 } else if (!scheduleOuterRetry()) {
                   shouldFinishLoading = true;

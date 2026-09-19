@@ -17,6 +17,7 @@ import {
   validatePhone,
 } from "@/lib/phoneValidation";
 import { supabase } from "@/lib/supabase";
+import { isServiceUnavailableError } from "@/lib/supabaseHttp.util";
 import {
     VALIDATION,
     containsNullByte,
@@ -1840,19 +1841,55 @@ export function onAuthStateChange(
 const PROFILE_SELECT_COLUMNS =
   "id,email,full_name,role,aggregated,asset,company_name,phone,avatar_url,avatar_seed,bio";
 
+/**
+ * In-flight `getProfile` calls keyed by uid, shared process-wide so AuthContext
+ * and useIdentityQuery collapse onto one request instead of each issuing their
+ * own. Cleared as soon as the fetch settles — this dedupes concurrency, it is
+ * not a result cache.
+ */
+const profileInflight = new Map<string, Promise<AuthProfile | null>>();
+
+/**
+ * Last `getProfile` failure per uid, set only when the API layer was
+ * unavailable (PGRST002/PGRST003/5xx). Callers read it to decide whether an
+ * immediate re-fetch is worth attempting; a null profile alone cannot tell an
+ * outage apart from a user who genuinely has no row.
+ */
+const profileLastErrorWasServiceUnavailable = new Map<string, boolean>();
+
+/** True when this uid's most recent getProfile failed because the API was down. */
+export function lastProfileFetchWasServiceUnavailable(uid: string): boolean {
+  return profileLastErrorWasServiceUnavailable.get(uid) === true;
+}
+
 /** Fetch a specific user's profile from the public.profiles table. */
 export async function getProfile(uid: string): Promise<AuthProfile | null> {
-  try {
-    const { data, error } = await supabase()
-      .from("profiles")
-      .select(PROFILE_SELECT_COLUMNS)
-      .eq("id", uid)
-      .maybeSingle();
-    if (error || !data) return null;
-    return mapDbProfileToAuth(data);
-  } catch {
-    return null;
-  }
+  const existing = profileInflight.get(uid);
+  if (existing) return existing;
+
+  const promise = (async () => {
+    try {
+      const { data, error } = await supabase()
+        .from("profiles")
+        .select(PROFILE_SELECT_COLUMNS)
+        .eq("id", uid)
+        .maybeSingle();
+      profileLastErrorWasServiceUnavailable.set(
+        uid,
+        error ? isServiceUnavailableError(error) : false,
+      );
+      if (error || !data) return null;
+      return mapDbProfileToAuth(data);
+    } catch (e) {
+      profileLastErrorWasServiceUnavailable.set(uid, isServiceUnavailableError(e));
+      return null;
+    } finally {
+      profileInflight.delete(uid);
+    }
+  })();
+
+  profileInflight.set(uid, promise);
+  return promise;
 }
 
 /**
