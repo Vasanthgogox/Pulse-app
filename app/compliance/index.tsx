@@ -16,14 +16,14 @@ import {
   useInvalidateComplianceTrips,
 } from "@/features/tripCompliance/hooks/useComplianceTripsQuery";
 import { COMPLIANCE_STAGE_FILTER_LABEL, COMPLIANCE_STAGES } from "@/features/tripCompliance/tripCompliance.types";
-import { COMPLIANCE_FILTER_COUNT_TONE } from "@/features/tripCompliance/utils/complianceCardVisual.util";
+import { COMPLIANCE_FILTER_COUNT_TONE, matchesComplianceTripSearch } from "@/features/tripCompliance/utils/complianceCardVisual.util";
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import { ROUTES } from "@/lib/routes";
 import { useMemberAccess } from "@/lib/useMemberAccess";
 import { useRouter } from "expo-router";
-import { Download, LayoutGrid, Table2, Wallet } from "lucide-react-native";
+import { Download, LayoutGrid, Search, Table2, Wallet } from "lucide-react-native";
 import React, { useCallback, useMemo, useState } from "react";
-import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, useWindowDimensions, View } from "react-native";
+import { Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, useWindowDimensions, View } from "react-native";
 
 function StageChip({
   label,
@@ -71,6 +71,7 @@ export default function ComplianceScreen() {
   const { stage, setStage, filtered, counts } = useComplianceStageFilter(data?.summaries);
   const invalidate = useInvalidateComplianceTrips();
   const [viewMode, setViewMode] = useState<"card" | "table">("card");
+  const [search, setSearch] = useState("");
   const [review, setReview] = useState<{
     tripId: string;
     documentKey: string | null;
@@ -105,6 +106,11 @@ export default function ComplianceScreen() {
     [router],
   );
 
+  const visible = useMemo(
+    () => filtered.filter((summary) => matchesComplianceTripSearch(summary, search)),
+    [filtered, search],
+  );
+
   const reviewingSummary = useMemo(
     () => (review ? (data?.summaries ?? []).find((s) => s.trip.id === review.tripId) : null),
     [review, data?.summaries],
@@ -130,6 +136,7 @@ export default function ComplianceScreen() {
     <ScrollView
       style={[styles.screen, { paddingTop: contentTopInset }]}
       contentContainerStyle={[styles.content, { paddingBottom: 24 + layout.bottom, paddingHorizontal: pagePad }]}
+      keyboardShouldPersistTaps="handled"
     >
       <View style={styles.header}>
         <View style={styles.headerTop}>
@@ -166,6 +173,21 @@ export default function ComplianceScreen() {
             Real-time carrier document audit, driver credentials, and settlement milestones.
           </Text>
         </View>
+      </View>
+
+      <View style={styles.searchRow}>
+        <Search size={14} color={Theme.textMuted} strokeWidth={2.2} />
+        <TextInput
+          value={search}
+          onChangeText={setSearch}
+          placeholder="Search trip ID, vehicle, driver, or client"
+          placeholderTextColor={Theme.textMuted}
+          style={styles.searchInput}
+          autoCorrect={false}
+          autoCapitalize="none"
+          spellCheck={false}
+          accessibilityLabel="Search compliance trips"
+        />
       </View>
 
       <View style={styles.toolbarRow}>
@@ -210,18 +232,18 @@ export default function ComplianceScreen() {
         <Text style={styles.message}>Loading trips…</Text>
       ) : isError ? (
         <Text style={styles.message}>{(error as Error)?.message ?? "Failed to load Compliance."}</Text>
-      ) : filtered.length === 0 ? (
-        <Text style={styles.message}>No trips in this stage.</Text>
+      ) : visible.length === 0 ? (
+        <Text style={styles.message}>{search.trim() ? "No trips match your search." : "No trips in this stage."}</Text>
       ) : viewMode === "table" ? (
         <ComplianceTripsTable
-          summaries={filtered}
+          summaries={visible}
           onOpenTrip={openTrip}
           onOpenDetails={openDetails}
           onReview={(tripId, documentKey) => setReview({ tripId, documentKey, scope: "trip" })}
         />
       ) : (
         <View style={[styles.cardGrid, { gap: gridGap }]}>
-          {filtered.map((summary) => (
+          {visible.map((summary) => (
             <View key={summary.trip.id} style={cardSlotStyle}>
               <ComplianceTripCard
                 summary={summary}
@@ -289,6 +311,27 @@ const styles = StyleSheet.create({
   activeBadgeText: { fontSize: 10, fontWeight: "700", color: Theme.complianceActiveBadgeFg },
   subtitle: { flex: 1, minWidth: 180, fontSize: 11, color: Theme.textMuted, lineHeight: 14 },
   headerActions: { flexShrink: 0, flexDirection: "row", alignItems: "center", gap: 6 },
+  searchRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minHeight: 36,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    backgroundColor: Theme.cardWhite,
+    borderWidth: 1,
+    borderColor: Theme.complianceCardBorder,
+  },
+  searchInput: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 36,
+    paddingVertical: 0,
+    fontSize: 13,
+    fontWeight: "500",
+    color: Theme.textPrimary,
+    ...(Platform.OS === "web" ? { outlineStyle: "none" as const } : null),
+  },
   bulkBtn: {
     minHeight: 30,
     paddingHorizontal: 10,

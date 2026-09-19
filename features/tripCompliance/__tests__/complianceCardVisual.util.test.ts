@@ -1,4 +1,4 @@
-import { paymentStatusVisual, pendingDocumentsCopy, splitPlace, complianceTripDisplayId, formatComplianceTimestamp } from "@/features/tripCompliance/utils/complianceCardVisual.util";
+import { paymentStatusVisual, pendingDocumentsCopy, splitPlace, complianceTripDisplayId, formatComplianceTimestamp, matchesComplianceTripSearch } from "@/features/tripCompliance/utils/complianceCardVisual.util";
 import type { ComplianceTripSummary } from "@/features/tripCompliance/tripCompliance.types";
 import { emptyComplianceChecklist } from "@/features/tripCompliance/utils/complianceChecklist.util";
 import type { TripRow } from "@/features/trips/services/trips.service";
@@ -44,5 +44,23 @@ describe("complianceCardVisual", () => {
 
   it("formats timestamps as 14 Oct, 03:20 PM", () => {
     expect(formatComplianceTimestamp("2026-10-14T15:20:00")).toBe("14 Oct, 03:20 PM");
+  });
+});
+
+describe("matchesComplianceTripSearch", () => {
+  it("matches trip id, vehicle, and driver without spaces", () => {
+    const row = summary({
+      trip: {
+        id: "uuid-1",
+        display_trip_id: "TRP151",
+        vehicle_display_number: "TN 16 YO 25800",
+        driver_display_name: "Raviri",
+        client_name: "Sunflag",
+      } as TripRow,
+    });
+    expect(matchesComplianceTripSearch(row, "trp151")).toBe(true);
+    expect(matchesComplianceTripSearch(row, "TN16YO")).toBe(true);
+    expect(matchesComplianceTripSearch(row, "raviri")).toBe(true);
+    expect(matchesComplianceTripSearch(row, "missing")).toBe(false);
   });
 });

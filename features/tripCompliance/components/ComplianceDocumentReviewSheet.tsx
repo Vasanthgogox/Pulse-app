@@ -7,16 +7,19 @@
  */
 import Theme from "@/constants/Theme";
 import {
-  getComplianceDocumentSignedUrl,
   rejectDocument,
   replaceComplianceDocument,
   uploadComplianceDocument,
   verifyDocument,
 } from "@/features/compliance/services/documents.service";
-import { supabase } from "@/lib/supabase";
 import { getVehicleById } from "@/features/vehicles/services/vehicles.service";
-import { getVehicleDocumentViewUrl, uploadAndSaveVehicleDocument } from "@/features/vehicles/services/vehicleDocuments.service";
+import { useDocumentPreview } from "@/features/chat/components/DocumentPreviewModal";
+import { uploadAndSaveVehicleDocument } from "@/features/vehicles/services/vehicleDocuments.service";
 import type { VehicleComplianceDocType } from "@/features/vehicles/utils/vehicleDocuments.util";
+import {
+  guessCompliancePreviewMime,
+  resolveComplianceDocumentViewUrl,
+} from "@/features/tripCompliance/services/complianceDocumentView.service";
 import { ComplianceInputModal } from "@/features/tripCompliance/components/ComplianceInputModal";
 import { COMPLIANCE_STATUS_META, ComplianceStatusChip } from "@/features/tripCompliance/components/ComplianceStatusIcon";
 import { setTripDocumentVerification } from "@/features/tripCompliance/services/tripComplianceWrite.service";
@@ -35,11 +38,12 @@ import {
   type ComplianceDocRow,
 } from "@/features/tripCompliance/utils/complianceDocumentRows.util";
 import { alertMessage } from "@/features/tripCompliance/utils/crossPlatformAlert.util";
-import { getDocumentViewUrl, uploadTripDocument, type TripDocumentType } from "@/features/trips/services/tripDocuments.service";
+import { PdfViewer } from "@/components/PdfViewer";
+import { uploadTripDocument, type TripDocumentType } from "@/features/trips/services/tripDocuments.service";
 import * as DocumentPicker from "expo-document-picker";
-import { ChevronLeft, X } from "lucide-react-native";
+import { ChevronLeft, Eye, X } from "lucide-react-native";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import { ActivityIndicator, Linking, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
+import { ActivityIndicator, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TouchableOpacity, View } from "react-native";
 
 function formatDate(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -53,17 +57,6 @@ function formatDate(iso: string | null | undefined): string {
 const VAULT_VEHICLE_TYPES = new Set(["rc", "insurance", "fitness", "pollution"]);
 
 export type ComplianceReviewScope = ComplianceChecklistGroup["key"];
-
-async function viewUrlForEntityDoc(doc: ComplianceEntityDocument): Promise<string | null> {
-  if (!doc.storage_path) return null;
-  if (doc.source === "vehicle-vault") return getVehicleDocumentViewUrl(doc.storage_path);
-  if (doc.source === "driver-kyc") {
-    const { data } = await supabase().storage.from("driver-documents").createSignedUrl(doc.storage_path, 3600);
-    return data?.signedUrl ?? null;
-  }
-  const { url } = await getComplianceDocumentSignedUrl(doc.storage_path);
-  return url;
-}
 
 const SCOPE_COPY: Record<
   ComplianceReviewScope,
@@ -135,6 +128,8 @@ export function ComplianceDocumentReviewSheet({
   const [busy, setBusy] = useState(false);
   const [rejectVisible, setRejectVisible] = useState(false);
   const [uploadingMissing, setUploadingMissing] = useState(false);
+  const [viewingKey, setViewingKey] = useState<string | null>(null);
+  const { open: openDocPreview, node: docPreviewNode } = useDocumentPreview();
 
   const selected: ComplianceDocRow | null = rows.find((r) => r.key === selectedKey) ?? null;
   const canModerateSelected =
@@ -159,33 +154,75 @@ export function ComplianceDocumentReviewSheet({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, tripId, scope]);
 
-  const storagePath = selected?.doc?.storage_path ?? selected?.entityDoc?.storage_path ?? null;
+  const resolveRowViewUrl = useCallback(
+    (row: ComplianceDocRow | null) => {
+      if (!row) return Promise.resolve(null);
+      return resolveComplianceDocumentViewUrl({
+        storagePath: row.doc?.storage_path ?? row.entityDoc?.storage_path,
+        source: scope === "trip" ? "trip" : row.entityDoc?.source,
+        organizationId,
+        entityId,
+        docType: row.type,
+      });
+    },
+    [entityId, organizationId, scope],
+  );
+
+  const openResolvedPreview = useCallback(
+    async (url: string, path: string | null | undefined, label: string) => {
+      await openDocPreview(url, guessCompliancePreviewMime(path ?? url), label);
+    },
+    [openDocPreview],
+  );
 
   useEffect(() => {
     let cancelled = false;
-    if (!storagePath) {
+    if (!selected) {
       setPreviewUrl(null);
       return () => {
         cancelled = true;
       };
     }
-    const load =
-      scope === "trip"
-        ? getDocumentViewUrl(storagePath)
-        : selected?.entityDoc
-          ? viewUrlForEntityDoc(selected.entityDoc)
-          : getComplianceDocumentSignedUrl(storagePath).then((r) => r.url);
-    void load.then((url) => {
+    void resolveRowViewUrl(selected).then((url) => {
       if (!cancelled) setPreviewUrl(url);
     });
     return () => {
       cancelled = true;
     };
-  }, [storagePath, scope, selected?.entityDoc]);
+  }, [resolveRowViewUrl, selected]);
 
   const handleOpenDocument = useCallback(() => {
-    if (previewUrl) void Linking.openURL(previewUrl);
-  }, [previewUrl]);
+    if (!previewUrl || !selected) return;
+    void openResolvedPreview(
+      previewUrl,
+      selected.doc?.storage_path ?? selected.entityDoc?.storage_path,
+      labelForDocType(selected.type),
+    );
+  }, [openResolvedPreview, previewUrl, selected]);
+
+  const handleViewRow = useCallback(
+    async (row: ComplianceDocRow) => {
+      const path = row.doc?.storage_path ?? row.entityDoc?.storage_path ?? null;
+      if (!path && !(organizationId && entityId && row.type)) {
+        alertMessage("No document", `${labelForDocType(row.type)} has not been uploaded yet.`);
+        return;
+      }
+      setViewingKey(row.key);
+      try {
+        const url = await resolveRowViewUrl(row);
+        if (!url) {
+          alertMessage("Couldn't open document", "No preview is available for this file.");
+          return;
+        }
+        await openResolvedPreview(url, path, labelForDocType(row.type));
+      } catch (e) {
+        alertMessage("Couldn't open document", (e as Error).message);
+      } finally {
+        setViewingKey(null);
+      }
+    },
+    [entityId, openResolvedPreview, organizationId, resolveRowViewUrl],
+  );
 
   const handleApprove = useCallback(async () => {
     if (!actorId) return;
@@ -380,6 +417,24 @@ export function ComplianceDocumentReviewSheet({
                         <Text style={styles.docRowLabel}>{labelForDocType(row.type)}</Text>
                         <ComplianceStatusChip status={row.status} label={meta.label} compact />
                       </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => void handleViewRow(row)}
+                        disabled={viewingKey != null}
+                        style={styles.eyeBtn}
+                        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        accessibilityRole="button"
+                        accessibilityLabel={`View ${labelForDocType(row.type)}`}
+                      >
+                        {viewingKey === row.key ? (
+                          <ActivityIndicator size="small" color={Theme.textMuted} />
+                        ) : (
+                          <Eye
+                            size={16}
+                            color={row.doc?.storage_path || row.entityDoc?.storage_path ? Theme.textPrimary : Theme.textMuted}
+                            strokeWidth={2.2}
+                          />
+                        )}
+                      </TouchableOpacity>
                       {canVerify && entityAssigned ? (
                         <TouchableOpacity
                           disabled={uploadingMissing}
@@ -400,9 +455,23 @@ export function ComplianceDocumentReviewSheet({
               <View style={styles.previewBox}>
                 <Text style={styles.previewBoxLabel}>DOCUMENT PREVIEW</Text>
                 {previewUrl ? (
-                  <TouchableOpacity onPress={handleOpenDocument} style={styles.openDocBtn}>
-                    <Text style={styles.openDocBtnText}>Open Document</Text>
-                  </TouchableOpacity>
+                  <>
+                    {guessCompliancePreviewMime(selected.doc?.storage_path ?? selected.entityDoc?.storage_path ?? previewUrl) === "application/pdf" ? (
+                      <View style={styles.inlinePreview}>
+                        <PdfViewer pdfUri={previewUrl} />
+                      </View>
+                    ) : (
+                      <Image
+                        source={{ uri: previewUrl }}
+                        style={styles.inlinePreview}
+                        resizeMode="contain"
+                        accessibilityLabel={`${labelForDocType(selected.type)} preview`}
+                      />
+                    )}
+                    <TouchableOpacity onPress={handleOpenDocument} style={styles.openDocBtn}>
+                      <Text style={styles.openDocBtnText}>Open Document</Text>
+                    </TouchableOpacity>
+                  </>
                 ) : (
                   <ActivityIndicator size="small" color={Theme.textMuted} />
                 )}
@@ -449,6 +518,7 @@ export function ComplianceDocumentReviewSheet({
         onCancel={() => setRejectVisible(false)}
         onSubmit={handleRejectSubmit}
       />
+      {docPreviewNode}
     </Modal>
   );
 }
@@ -482,6 +552,14 @@ const styles = StyleSheet.create({
   },
   docRowMain: { flex: 1, flexDirection: "row", alignItems: "center", gap: 10, minWidth: 0 },
   docRowLabel: { flex: 1, fontSize: 13, fontWeight: "600", color: Theme.textPrimary, minWidth: 0 },
+  eyeBtn: {
+    width: 32,
+    height: 32,
+    borderRadius: 8,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: Theme.compliancePageBg,
+  },
   addBtn: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, backgroundColor: Theme.buttonDark, minHeight: 28, justifyContent: "center" },
   addBtnText: { fontSize: 11, fontWeight: "700", color: Theme.buttonDarkText },
   hint: { fontSize: 12, color: Theme.textMuted, textAlign: "center", marginTop: 16 },
@@ -493,6 +571,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     gap: 10,
     marginBottom: 12,
+  },
+  inlinePreview: {
+    width: "100%",
+    height: 220,
+    borderRadius: 8,
+    overflow: "hidden",
+    backgroundColor: Theme.cardWhite,
   },
   previewBoxLabel: { fontSize: 10, fontWeight: "700", color: Theme.textMuted, letterSpacing: 0.5 },
   openDocBtn: { paddingHorizontal: 14, paddingVertical: 8, borderRadius: 8, backgroundColor: Theme.buttonDark },
