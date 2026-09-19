@@ -13,6 +13,7 @@ import {
   loadMaterialLabel,
   splitLocationParts,
 } from "@/features/network/utils/storyDisplay";
+import { shouldRetryQuery } from "@/lib/queryClient";
 import type { DriverReachStoryRow } from "@/features/reach/services/driverReferrals.service";
 import { isLoadOpportunity } from "@/features/reach/utils/directBidLifecycle";
 import { positiveMoneyOrNull } from "@/lib/format";
@@ -392,7 +393,7 @@ export function DriverPulseStoryViewer({
     },
     enabled: Boolean(activePostId),
     staleTime: 30_000,
-    retry: 1,
+    retry: shouldRetryQuery,
   });
 
   const post = useMemo(() => {

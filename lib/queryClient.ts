@@ -18,6 +18,7 @@ import {
   recordRefetchQueries,
   recordSetQueryData,
 } from '@/lib/platform/scalability/queryCacheMetrics';
+import { isOriginDownError } from '@/lib/supabaseHttp.util';
 
 /** Shared stale-time constants — import in query hooks to apply per-query tiers. */
 export const STALE = {
@@ -188,9 +189,19 @@ function isNetworkFailure(error: unknown): boolean {
  */
 function isTimeoutError(error: unknown): boolean {
   const message = extractErrorMessage(error);
-  return /\b57014\b|statement timeout|canceling statement due to|timed? ?out/i.test(
+  // Cloudflare 522 bodies often say "Connection timed out" after normalizeInfrastructureErrorMessage.
+  // That is a transient proxy failure, not a statement/request timeout — do not suppress its one default retry.
+  if (/\b522\b/.test(message)) return false;
+  return /\b57014\b|statement timeout|canceling statement due to|Request timed out/i.test(
     message,
   );
+}
+
+/** 503/521/57P03: Postgres is unavailable. A second attempt is another punch while it's down.
+ * Delegates to shared classifier so status/code survive plain PostgREST objects.
+ */
+function isQueryOriginDownError(error: unknown): boolean {
+  return isOriginDownError(error);
 }
 
 /**
@@ -229,6 +240,7 @@ export function shouldRetryQuery(failureCount: number, error: unknown): boolean 
   if (failureCount >= 1) return false;
   if (isAbortError(error)) return false;
   if (isTimeoutError(error)) return false;
+  if (isQueryOriginDownError(error)) return false;
   return true;
 }
 

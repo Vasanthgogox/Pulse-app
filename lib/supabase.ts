@@ -80,6 +80,31 @@ function isAuthTokenRequest(input: RequestInfo | URL): boolean {
 // "expired" flash. We add NO second auth listener here (see the note at the end
 // of getSupabase()).
 
+/**
+ * True when a 5xx body is a Postgres statement timeout (57014).
+ *
+ * PostgREST maps 57014 to HTTP 500, which `isRetryableHttpResponse` treats as
+ * transient. It is not: the statement already ran to the timeout limit, so each
+ * retry re-runs the same slow query and holds a pool connection for another full
+ * timeout window. One 25s call becomes ~100s of pool hold across 4 attempts —
+ * the amplifier behind the 2026-09-19 bootstrap incident. Retrying cannot help,
+ * because nothing about the query gets faster on the second try.
+ */
+async function isStatementTimeoutResponse(res: Response): Promise<boolean> {
+  if (res.status < 500) return false;
+  try {
+    const body = await res.clone().json();
+    const code = String(body?.code ?? '');
+    const msg = String(body?.message ?? '').toLowerCase();
+    return (
+      code === '57014' ||
+      /canceling statement due to statement timeout/.test(msg)
+    );
+  } catch {
+    return false;
+  }
+}
+
 /** True only for genuine token-expiry responses — not for plain permission (42501) denials. */
 async function isJwtExpiryResponse(res: Response): Promise<boolean> {
   if (res.status !== 401 && res.status !== 403) return false;
@@ -180,7 +205,11 @@ async function fetchWithTimeoutAndRetry(
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     try {
       const res = await doFetch(init?.signal ?? undefined);
-      if (isRetryableHttpResponse(res) && attempt < maxRetries) {
+      if (
+        isRetryableHttpResponse(res) &&
+        attempt < maxRetries &&
+        !(await isStatementTimeoutResponse(res))
+      ) {
         await new Promise((r) => setTimeout(r, delayForAttempt(attempt)));
         continue;
       }

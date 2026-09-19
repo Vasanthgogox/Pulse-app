@@ -8,6 +8,7 @@ const PENDING_KEY = '@pulse_pending_oauth_metadata_v1';
 const mockUpdateUser = jest.fn();
 const mockGetUser = jest.fn();
 const mockFrom = jest.fn();
+const mockRpc = jest.fn();
 
 jest.mock('@react-native-async-storage/async-storage', () => ({
   __esModule: true,
@@ -25,6 +26,7 @@ jest.mock('@/lib/supabase', () => ({
       getUser: (...a: unknown[]) => mockGetUser(...a),
     },
     from: (...a: unknown[]) => mockFrom(...a),
+    rpc: (...a: unknown[]) => mockRpc(...a),
   }),
 }));
 
@@ -38,8 +40,11 @@ jest.mock('expo-linking', () => ({
   parse: jest.fn(),
 }));
 
-// Prevent driver-sync side effects from pulling extra deps
-jest.mock('@/features/drivers/services/drivers.service', () => ({}), { virtual: true });
+const mockSyncLinked = jest.fn();
+jest.mock('@/features/drivers/services/drivers.service', () => ({
+  syncLinkedDriverRowsForCurrentUser: (...a: unknown[]) => mockSyncLinked(...a),
+  __resetSyncLinkedDriversDedupeForTests: jest.fn(),
+}));
 
 import { applyPendingOAuthMetadata } from '../auth.service';
 
@@ -59,6 +64,10 @@ function updateChain(result: { data: unknown; error: unknown }) {
 describe('applyPendingOAuthMetadata retention', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockRpc.mockReset();
+    mockRpc.mockResolvedValue({ data: 0, error: null });
+    mockSyncLinked.mockReset();
+    mockSyncLinked.mockResolvedValue({ error: null, linkedCount: 0 });
     (AsyncStorage.getItem as jest.Mock).mockResolvedValue(null);
     (AsyncStorage.setItem as jest.Mock).mockResolvedValue(undefined);
     (AsyncStorage.removeItem as jest.Mock).mockResolvedValue(undefined);
@@ -67,6 +76,25 @@ describe('applyPendingOAuthMetadata retention', () => {
   it('returns skipped and does not clear when empty', async () => {
     await expect(applyPendingOAuthMetadata()).resolves.toEqual({ status: 'skipped' });
     expect(AsyncStorage.removeItem).not.toHaveBeenCalled();
+    expect(mockSyncLinked).not.toHaveBeenCalled();
+  });
+
+  it('does not sync drivers when there is no pending OAuth work', async () => {
+    await expect(applyPendingOAuthMetadata()).resolves.toEqual({ status: 'skipped' });
+    expect(mockSyncLinked).not.toHaveBeenCalled();
+  });
+
+  it('does not sync drivers when pending OAuth metadata is corrupt', async () => {
+    (AsyncStorage.getItem as jest.Mock).mockResolvedValue('{not-json');
+    await expect(applyPendingOAuthMetadata()).resolves.toEqual({ status: 'skipped' });
+    expect(AsyncStorage.removeItem).toHaveBeenCalled();
+    expect(mockSyncLinked).not.toHaveBeenCalled();
+  });
+
+  it('does not sync when applyPending is invoked twice with empty pending (restore storm)', async () => {
+    await applyPendingOAuthMetadata();
+    await applyPendingOAuthMetadata();
+    expect(mockSyncLinked).not.toHaveBeenCalled();
   });
 
   it('keeps pending when organization update matches 0 rows', async () => {
@@ -159,5 +187,6 @@ describe('applyPendingOAuthMetadata retention', () => {
 
     await expect(applyPendingOAuthMetadata()).resolves.toEqual({ status: 'success' });
     expect(AsyncStorage.removeItem).toHaveBeenCalledWith(PENDING_KEY);
+    expect(mockSyncLinked).toHaveBeenCalled();
   });
 });

@@ -345,6 +345,16 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         try {
           return await withTimeout(loadVerifiedProfile(), PROFILE_VERIFY_TIMEOUT_MS);
         } catch (e) {
+          // A timeout whose underlying fetch failed with PGRST002/PGRST003/5xx
+          // means the API layer is down. Re-running the same load immediately
+          // just adds a second request to an instance that is already failing.
+          if (
+            isTimeoutError(e) &&
+            authService.lastProfileFetchWasServiceUnavailable(uid)
+          ) {
+            logAuth("profile_verification_service_unavailable", { uid });
+            return null;
+          }
           if (isTimeoutError(e)) {
             try {
               return await withTimeout(loadVerifiedProfile(), PROFILE_VERIFY_TIMEOUT_MS);
