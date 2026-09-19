@@ -48,7 +48,7 @@ import {
     Zap,
 } from "lucide-react-native";
 import { NetworkGrowBanner } from "@/features/network/components/NetworkGrowBanner";
-import React, { useEffect, useMemo, useState } from "react";
+import React, { useEffect, useMemo, useRef, useState } from "react";
 import { FlashList } from "@shopify/flash-list";
 import {
     Alert,
@@ -479,6 +479,8 @@ export function ConnectionsView({
   onChatIntegrated,
   onVisiblePageChange,
 }: ConnectionsViewProps) {
+  const onConnectionsComputedRef = useRef(onConnectionsComputed);
+  onConnectionsComputedRef.current = onConnectionsComputed;
   const windowWidth = useWebLayoutWidth();
   const [search, setSearch] = useState("");
   const [filter, setFilter] = useState<ConnectionFilterTab>("ALL");
@@ -1054,8 +1056,8 @@ export function ConnectionsView({
   const showChrome = !hubMode;
 
   useEffect(() => {
-    onConnectionsComputed?.(connections);
-  }, [connections, onConnectionsComputed]);
+    onConnectionsComputedRef.current?.(connections);
+  }, [connections]);
 
   const isMobileHub = windowWidth < SPLIT_STACK_BREAKPOINT;
   const hubListCompact =

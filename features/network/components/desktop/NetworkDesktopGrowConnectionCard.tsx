@@ -148,7 +148,7 @@ export function NetworkDesktopGrowConnectionCard({
     <View
       style={[styles.card, growStyles.card]}
       onLayout={(event) => {
-        const nextWidth = event.nativeEvent.layout.width;
+        const nextWidth = Math.floor(event.nativeEvent.layout.width);
         setCardWidth((prev) => (prev === nextWidth ? prev : nextWidth));
       }}
     >

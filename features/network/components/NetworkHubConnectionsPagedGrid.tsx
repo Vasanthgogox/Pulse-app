@@ -72,6 +72,9 @@ export function NetworkHubConnectionsPagedGrid<T>({
   const [viewportWidth, setViewportWidth] = useState(0);
   const listRef = useRef<ScrollView>(null);
   const pageRef = useRef(0);
+  const viewportWidthRef = useRef(0);
+  const visibleIdsRef = useRef("");
+  const emptyPageRef = useRef<T[]>([]);
   const { columns, rows, pageSize } = layout;
   const isWeb = Platform.OS === "web";
   const slideWidth = viewportWidth > 0 ? Math.floor(viewportWidth) : 0;
@@ -82,11 +85,15 @@ export function NetworkHubConnectionsPagedGrid<T>({
     [items, pageSize, pageCount],
   );
 
-  const visiblePageItems = pages[Math.min(page, pageCount - 1)] ?? [];
+  const visiblePageItems =
+    pages[Math.min(page, pageCount - 1)] ?? emptyPageRef.current;
 
   useEffect(() => {
+    const ids = visiblePageItems.map(keyExtractor).join("|");
+    if (ids === visibleIdsRef.current) return;
+    visibleIdsRef.current = ids;
     onVisiblePageChange?.(visiblePageItems);
-  }, [visiblePageItems, onVisiblePageChange]);
+  }, [keyExtractor, onVisiblePageChange, visiblePageItems]);
 
   const singleColumn = columns === 1;
 
@@ -135,7 +142,7 @@ export function NetworkHubConnectionsPagedGrid<T>({
 
   useEffect(() => {
     pageRef.current = 0;
-    setPage(0);
+    setPage((current) => (current === 0 ? current : 0));
     if (slideWidth > 0) {
       scrollPagerTo(0, false);
     }
@@ -225,9 +232,10 @@ export function NetworkHubConnectionsPagedGrid<T>({
       style={styles.root}
       onLayout={(e) => {
         const w = Math.floor(e.nativeEvent.layout.width);
-        if (w > 0 && w !== viewportWidth) {
-          setViewportWidth(w);
-        }
+        if (w <= 0) return;
+        if (Math.abs(w - viewportWidthRef.current) < 2) return;
+        viewportWidthRef.current = w;
+        setViewportWidth(w);
       }}
     >
       {pageCount > 1 && slideWidth > 0 ? (

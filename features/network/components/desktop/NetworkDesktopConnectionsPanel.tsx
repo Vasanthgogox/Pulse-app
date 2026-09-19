@@ -110,13 +110,29 @@ export function NetworkDesktopConnectionsPanel({
     else setLocalSortMode(mode);
   };
 
-  const handleConnectionsComputed = (items: ConnectedOrg[]) => {
-    setConnections(items);
+  const handleConnectionsComputed = useCallback((items: ConnectedOrg[]) => {
+    setConnections((prev) => {
+      if (
+        prev.length === items.length &&
+        prev.every((row, index) => row.id === items[index]?.id)
+      ) {
+        return prev;
+      }
+      return items;
+    });
     onConnectionsComputed?.(items);
-  };
+  }, [onConnectionsComputed]);
 
   const handleVisiblePageChange = useCallback((items: ConnectedOrg[]) => {
-    setVisiblePageConnections(items);
+    setVisiblePageConnections((prev) => {
+      if (
+        prev.length === items.length &&
+        prev.every((row, index) => row.id === items[index]?.id)
+      ) {
+        return prev;
+      }
+      return items;
+    });
   }, []);
 
   const handleInvitePartner = useCallback(

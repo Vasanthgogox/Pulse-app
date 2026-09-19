@@ -431,10 +431,13 @@ const styles = StyleSheet.create({
   heroCompact: {
     paddingTop: 14,
     paddingBottom: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 14,
     backgroundColor: Theme.cardWhite,
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: Theme.borderLight,
+    width: "100%",
+    maxWidth: "100%",
+    alignSelf: "stretch",
   },
   heroCompactNoPattern: Platform.select({
     web: { backgroundImage: "none" as const },
@@ -596,6 +599,7 @@ const styles = StyleSheet.create({
     width: "100%",
     flexDirection: "row",
     gap: 8,
+    minWidth: 0,
   },
   statTile: {
     flex: 1,
@@ -604,7 +608,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     gap: 3,
     paddingVertical: 10,
-    paddingHorizontal: 8,
+    paddingHorizontal: 6,
     borderRadius: 10,
     backgroundColor: Theme.surface,
     borderWidth: 1,

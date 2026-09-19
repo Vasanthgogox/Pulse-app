@@ -312,7 +312,7 @@ export function LoadCenterPartnerRecommendations({
     setProfileTrips(snap.total_trips ?? 0);
     setProfileNode((prev) => {
       if (!prev || prev.id !== profileTargetId) return prev;
-      return {
+      const next = {
         ...prev,
         name: snap.name?.trim() || prev.name,
         type: snap.type ?? prev.type,
@@ -341,6 +341,28 @@ export function LoadCenterPartnerRecommendations({
         vehicle_count: snap.vehicle_count ?? 0,
         indent_count: snap.indent_count ?? 0,
       };
+      const unchanged =
+        prev.name === next.name &&
+        prev.type === next.type &&
+        prev.location === next.location &&
+        prev.status === next.status &&
+        prev.rating === next.rating &&
+        prev.mutuals === next.mutuals &&
+        prev.phone === next.phone &&
+        prev.avatar_url === next.avatar_url &&
+        prev.avatar_seed === next.avatar_seed &&
+        prev.is_integrated === next.is_integrated &&
+        prev.is_kyc_verified === next.is_kyc_verified &&
+        prev.registered_address === next.registered_address &&
+        prev.branch_count === next.branch_count &&
+        prev.sector === next.sector &&
+        prev.website === next.website &&
+        prev.gstin === next.gstin &&
+        prev.operating_model === next.operating_model &&
+        prev.member_since_year === next.member_since_year &&
+        prev.vehicle_count === next.vehicle_count &&
+        prev.indent_count === next.indent_count;
+      return unchanged ? prev : next;
     });
   }, [profileSnapshotQ.data, profileTargetId]);
 
