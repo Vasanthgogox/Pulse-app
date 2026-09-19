@@ -25,6 +25,7 @@ export interface FinanceTabBodyProps {
   financeSubTab: FinanceSubTab;
   organizationId: string | null;
   ledgerLoading: boolean;
+  ledgerFetchError?: string | null;
   ledgerTransactions: LedgerRow[] | null;
   ledgerForEntityAggregation?: LedgerRow[] | null;
   filteredLedgerForDisplay: LedgerRow[];

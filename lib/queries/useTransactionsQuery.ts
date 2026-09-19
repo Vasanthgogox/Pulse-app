@@ -5,11 +5,9 @@ import { useCallback } from 'react';
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getTransactionsByOrganization,
-  syncTransactionsWithCache,
   type LedgerRow,
 } from '@/features/finance/services/finance.service';
 import { clearDomainCacheMeta } from '@/lib/cache/cacheMetadataStore';
-import { fetchEntityListWithFallback } from '@/lib/queries/fetchEntityListWithFallback';
 import { refetchOnMountIfEntityListEmpty } from '@/lib/queries/entityListQueryOptions';
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
@@ -17,27 +15,15 @@ import { LEDGER_PAGE_SIZE } from '@/lib/pagination';
 
 /** Full list (no pagination). Use for aggregation e.g. Trips tab "received by trip". */
 export function useTransactionsQuery(orgId: string | null) {
-  const qc = useQueryClient();
   return useQuery({
     queryKey: queryKeys.transactions.finite(orgId ?? ''),
     queryFn: async () => {
-      const existing =
-        (qc.getQueryData(queryKeys.transactions.finite(orgId ?? '')) as
-          | LedgerRow[]
-          | undefined) ?? [];
-      return fetchEntityListWithFallback({
-        orgId: orgId!,
-        domain: 'transactions',
-        cachedRows: existing,
-        sync: async (id, cached) => {
-          const res = await syncTransactionsWithCache(id, cached);
-          return { error: res.error, rows: res.transactions };
-        },
-        fetchDirect: async (id) => {
-          const res = await getTransactionsByOrganization(id);
-          return { error: res.error, rows: res.transactions };
-        },
-      });
+      // Skip delta-sync (`get_transactions_delta` max ~15s here). That RPC plus
+      // a follow-up full fetch stacked past the 12s client timeout and left
+      // Finance on Loading. Direct org-scoped select is enough for the tab.
+      const res = await getTransactionsByOrganization(orgId!);
+      if (res.error) throw res.error;
+      return res.transactions;
     },
     enabled: !!orgId,
     staleTime: STALE.realtime,

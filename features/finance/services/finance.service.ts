@@ -909,10 +909,13 @@ export async function getTransactionsByOrganization(
   transactions: LedgerRow[];
   hasMore?: boolean;
 }> {
-  const base = (tripSelect: string) =>
+  // No nested `trips!trip_id` embed: that PostgREST join was 8–12s on this
+  // project and timed out the 12s client fetch, leaving Finance on "Loading…".
+  // Trip labels still resolve from `trip_number` / description meta in toLedgerRow.
+  const base = () =>
     supabase()
       .from("transactions")
-      .select(tripSelect)
+      .select("*")
       .eq("organization_id", orgId)
       .order("transaction_date", { ascending: false })
       .order("created_at", { ascending: false });
@@ -923,27 +926,16 @@ export async function getTransactionsByOrganization(
     const limit = opts.limit ?? LEDGER_PAGE_SIZE;
     const offset = opts.offset ?? 0;
     const { from, to } = toRange(offset, limit);
-    let { data, error } = await base(LEDGER_TX_SELECT_WITH_TRIPS).range(from, to);
-    if (error && isMissingTripsDisplayTripIdError(error)) {
-      ({ data, error } = await base(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY).range(
-        from,
-        to,
-      ));
-    }
+    const { data, error } = await base().range(from, to);
     if (error) return { error: new Error(error.message), transactions: [] };
-    const rows = (data ?? []) as unknown as Row[];
-    const transactions: LedgerRow[] = rows.map(toLedgerRow);
+    const transactions: LedgerRow[] = ((data ?? []) as unknown as Row[]).map(toLedgerRow);
     return { error: null, transactions, hasMore: transactions.length === limit };
   }
 
-  let { data, error } = await base(LEDGER_TX_SELECT_WITH_TRIPS).limit(500);
-  if (error && isMissingTripsDisplayTripIdError(error)) {
-    ({ data, error } = await base(LEDGER_TX_SELECT_WITH_TRIPS_LEGACY).limit(500));
-  }
+  const { data, error } = await base().limit(500);
   if (error) return { error: new Error(error.message), transactions: [] };
 
-  const rows = (data ?? []) as unknown as Row[];
-  const transactions: LedgerRow[] = rows.map(toLedgerRow);
+  const transactions: LedgerRow[] = ((data ?? []) as unknown as Row[]).map(toLedgerRow);
 
   return { error: null, transactions };
 }

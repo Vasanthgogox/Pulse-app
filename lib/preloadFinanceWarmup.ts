@@ -42,17 +42,10 @@ export function prefetchFinanceQueries(
   void queryClient.prefetchQuery({
     queryKey: queryKeys.transactions.finite(orgId),
     queryFn: async () => {
-      // Lazy-load finance.service so this preloader stays out of the startup
-      // chunk. Without `await import`, `_layout.tsx` would drag the entire
-      // finance feature graph (~hundreds of KB) into the main bundle.
-      const { syncTransactionsWithCache } = await import(
+      const { getTransactionsByOrganization } = await import(
         '@/features/finance/services/finance.service'
       );
-      const existing =
-        (queryClient.getQueryData(queryKeys.transactions.finite(orgId)) as
-          | Array<{ id: string }>
-          | undefined) ?? [];
-      const res = await syncTransactionsWithCache(orgId, existing as never);
+      const res = await getTransactionsByOrganization(orgId);
       if (res.error) throw res.error;
       return res.transactions;
     },

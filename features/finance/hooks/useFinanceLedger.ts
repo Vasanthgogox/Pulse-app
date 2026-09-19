@@ -43,6 +43,7 @@ export interface UseFinanceLedgerArgs {
 export interface UseFinanceLedgerResult {
   ledgerTransactions: LedgerRow[] | null;
   ledgerLoading: boolean;
+  ledgerFetchError: string | null;
   ledgerRefreshKey: number;
   setLedgerTransactions: React.Dispatch<
     React.SetStateAction<LedgerRow[] | null>
@@ -128,12 +129,20 @@ export function useFinanceLedger({
   const {
     data: ledgerTransactionsData,
     isLoading: ledgerQueryLoading,
+    isError: ledgerQueryIsError,
+    error: ledgerQueryError,
     refetch,
     isFetching: ledgerRefetching,
   } = useTransactionsQuery(orgId);
   const ledgerTransactions = ledgerTransactionsData ?? null;
   /** isLoading — first fetch only; keeps cached rows visible while refetching. */
   const ledgerLoading = Boolean(orgId) && ledgerQueryLoading;
+  const ledgerFetchError =
+    ledgerQueryIsError && ledgerTransactions === null
+      ? ledgerQueryError instanceof Error
+        ? ledgerQueryError.message
+        : "Ledger could not be loaded."
+      : null;
 
   const [ledgerRefreshKey, setLedgerRefreshKeyState] = useState(0);
   const setLedgerRefreshKey = useCallback(
@@ -622,6 +631,7 @@ export function useFinanceLedger({
   return {
     ledgerTransactions,
     ledgerLoading,
+    ledgerFetchError,
     ledgerRefreshKey,
     setLedgerTransactions: setLedgerTransactionsNoop,
     setLedgerRefreshKey,

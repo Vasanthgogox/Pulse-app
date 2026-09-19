@@ -272,6 +272,7 @@ export function FinanceScreen() {
   const {
     ledgerTransactions,
     ledgerLoading,
+    ledgerFetchError,
     ledgerRefreshKey,
     setLedgerTransactions,
     setLedgerRefreshKey,
@@ -1660,6 +1661,7 @@ export function FinanceScreen() {
               )}
               organizationId={orgId}
               ledgerLoading={ledgerLoading}
+              ledgerFetchError={ledgerFetchError}
               ledgerTransactions={ledgerTransactions}
               ledgerForEntityAggregation={filteredLedger}
               filteredLedgerForDisplay={filteredLedgerForDisplay}

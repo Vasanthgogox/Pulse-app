@@ -7,6 +7,7 @@ import { Text, View } from "react-native";
 export function FinanceCashLedgerPanel({
   organizationId: orgId,
   ledgerLoading,
+  ledgerFetchError,
   ledgerTransactions,
   filteredLedgerForDisplay,
   ledgerRefreshKey,
@@ -45,6 +46,8 @@ export function FinanceCashLedgerPanel({
       {header}
       {ledgerLoading && ledgerTransactions === null ? (
         <Text style={styles.ledgerLoading}>Loading…</Text>
+      ) : ledgerFetchError ? (
+        <Text style={styles.ledgerLoading}>{ledgerFetchError}</Text>
       ) : ledgerEmpty ? (
         <LedgerTab
           organizationId={orgId}

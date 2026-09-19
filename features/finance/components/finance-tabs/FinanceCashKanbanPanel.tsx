@@ -5,6 +5,7 @@ import { Text, View } from "react-native";
 
 export function FinanceCashKanbanPanel({
   ledgerLoading,
+  ledgerFetchError,
   ledgerTransactions,
   filteredLedgerForKanban,
   getVehicleNumberForTripId,
@@ -23,6 +24,8 @@ export function FinanceCashKanbanPanel({
     <View style={styles.tableBodyWrap}>
       {ledgerLoading && ledgerTransactions === null ? (
         <Text style={styles.ledgerLoading}>Loading…</Text>
+      ) : ledgerFetchError ? (
+        <Text style={styles.ledgerLoading}>{ledgerFetchError}</Text>
       ) : (
         <FinanceKanbanTab
           transactions={filteredLedgerForKanban}
