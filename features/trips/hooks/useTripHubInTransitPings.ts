@@ -1,5 +1,4 @@
-import { getLatestDriverLocationForTripOrDriver } from "@/features/driver/services/driverLocation.service";
-import { getDriverPresenceForTrip } from "@/features/tracking/services/driverPresence.service";
+import { getDriverPresenceForTrips } from "@/features/tracking/services/driverPresence.service";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import {
   formatHubPingOfflineLabel,
@@ -8,7 +7,6 @@ import {
 import {
   isDriverLocationRecentlySeen,
   isTripTrackingActive,
-  latestIsoTimestamp,
 } from "@/features/trips/utils/tripTrackingStatus.util";
 import { useAppStateIsActive } from "@/lib/hooks/useAppStateIsActive";
 import { queryKeys } from "@/lib/queryKeys";
@@ -23,8 +21,6 @@ export type TripHubInTransitPingMeta = {
 
 /** Plain object — TanStack Query cannot round-trip `Map` through cache. */
 export type TripHubInTransitPingIndex = Record<string, TripHubInTransitPingMeta>;
-
-const PING_FETCH_CHUNK = 8;
 
 function shouldFetchHubPing(trip: TripRow): boolean {
   return (
@@ -47,39 +43,25 @@ export function buildTripHubInTransitPingMeta(
   };
 }
 
-async function fetchPingForTrip(
-  tripId: string,
-  driverId: string,
-): Promise<TripHubInTransitPingMeta> {
-  const [locRes, presenceRes] = await Promise.all([
-    getLatestDriverLocationForTripOrDriver(tripId, driverId),
-    getDriverPresenceForTrip(tripId),
-  ]);
-
-  const recordedAt = latestIsoTimestamp([
-    locRes.location?.recorded_at,
-    presenceRes.presence?.recorded_at,
-  ]);
-  return buildTripHubInTransitPingMeta(recordedAt);
-}
-
 async function fetchInTransitPings(
   trips: TripRow[],
 ): Promise<TripHubInTransitPingIndex> {
   const eligible = trips.filter(shouldFetchHubPing);
   const index: TripHubInTransitPingIndex = {};
+  if (eligible.length === 0) return index;
 
-  for (let i = 0; i < eligible.length; i += PING_FETCH_CHUNK) {
-    const chunk = eligible.slice(i, i + PING_FETCH_CHUNK);
-    const rows = await Promise.all(
-      chunk.map(async (trip) => {
-        const meta = await fetchPingForTrip(trip.id, trip.driver_id!);
-        return { tripId: trip.id, meta };
-      }),
+  // One query for the whole list. The previous per-trip pair (location RPC +
+  // presence) was 16–32 concurrent REST calls per reload and filled PostgREST
+  // on login (2026-09-19 11:11–11:43 IST: 95 get_latest_driver_location_for_trip
+  // calls, then PGRST002). driver_presence is the primary last-seen source.
+  const { presenceByTripId } = await getDriverPresenceForTrips(
+    eligible.map((trip) => trip.id),
+  );
+
+  for (const trip of eligible) {
+    index[trip.id] = buildTripHubInTransitPingMeta(
+      presenceByTripId.get(trip.id)?.recorded_at,
     );
-    for (const { tripId, meta } of rows) {
-      index[tripId] = meta;
-    }
   }
 
   return index;
@@ -112,7 +94,7 @@ export function useTripHubInTransitPings(
     enabled: !!organizationId && inTransitIds.length > 0,
     staleTime: 90_000,
     // Only poll while the app is foregrounded — a backgrounded web tab was
-    // otherwise issuing 2 DB reads per in-transit trip every 2 min indefinitely.
+    // otherwise hitting the DB every 2 min indefinitely.
     refetchInterval: isActive ? 120_000 : false,
     queryFn: () => fetchInTransitPings(trips.filter(shouldFetchHubPing)),
   });
