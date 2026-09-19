@@ -1,6 +1,8 @@
 /**
- * Finance entity list fetch — sync cache with direct API fallback when cache is empty or sync fails.
- * Prevents persisted/delta-sync empty arrays from blocking party tabs on mobile cold start.
+ * Entity list fetch. Prefer a direct table/RPC read.
+ * Delta-sync (`get_*_delta`) was tried first and could sit on a 12s+ timeout
+ * with no fallback — that left Finance/Trips/party tabs on Loading during DB
+ * degradation. Direct first; sync only if direct fails.
  */
 import type { CacheDomain } from '@/lib/cache/deltaTypes';
 import { clearDomainCacheMeta } from '@/lib/cache/cacheMetadataStore';
@@ -18,20 +20,22 @@ export async function fetchEntityListWithFallback<T>(params: {
   const { orgId, domain, cachedRows, sync, fetchDirect } = params;
 
   try {
+    const direct = await fetchDirect(orgId);
+    if (!direct.error) {
+      return direct.rows;
+    }
+  } catch {
+    // Fall through to delta-sync.
+  }
+
+  try {
     const synced = await sync(orgId, cachedRows);
     if (synced.error) throw synced.error;
-    if (synced.rows.length > 0) return synced.rows;
+    if (synced.rows.length > 0) {
+      await clearDomainCacheMeta(domain, orgId);
+    }
+    return synced.rows;
   } catch (syncError) {
-    // Sync already attempted getFull on failure — do not duplicate the same API call.
     throw syncError;
   }
-
-  const direct = await fetchDirect(orgId);
-  if (direct.error) throw direct.error;
-  if (direct.rows.length > 0) {
-    await clearDomainCacheMeta(domain, orgId);
-    return direct.rows;
-  }
-
-  return [];
 }

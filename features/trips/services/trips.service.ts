@@ -180,6 +180,9 @@ type TripIndentJoin = {
   execution_plan_id?: string | null;
 };
 
+/** Nested indent embeds hit per-row RLS and time out with the 12s client fetch. */
+const TRIP_SELECT_LIGHT = "*";
+
 function normalizeTripRowWithIndent(
   row: TripRow & {
     active_indent?: TripIndentJoin | null;
@@ -223,12 +226,18 @@ function normalizeTripRowWithIndent(
 export async function getTripsForOrg(
   orgId: string,
 ): Promise<{ error: Error | null; trips: TripRow[] }> {
-  const { data, error } = await supabase().rpc('get_trips_for_org', { p_org_id: orgId });
-  if (error) return { error: new Error(error.message), trips: [] };
-  const trips = ((data ?? []) as TripRow[]).map((row) =>
-    normalizeTripRowWithIndent(row as TripRow & { indents?: TripIndentJoin | null }),
-  );
-  return { error: null, trips };
+  try {
+    const { data, error } = await supabase().rpc('get_trips_for_org', { p_org_id: orgId });
+    if (!error) {
+      const trips = ((data ?? []) as TripRow[]).map((row) =>
+        normalizeTripRowWithIndent(row as TripRow & { indents?: TripIndentJoin | null }),
+      );
+      return { error: null, trips };
+    }
+  } catch {
+    // Client fetch timeout / 503 — still hydrate owner-org trips.
+  }
+  return getTripsByOrganization(orgId);
 }
 
 export async function getTripsByOrganization(
@@ -237,9 +246,7 @@ export async function getTripsByOrganization(
 ): Promise<{ error: Error | null; trips: TripRow[]; hasMore?: boolean }> {
   const q = supabase()
     .from("trips")
-    .select(
-      "*, active_indent:indents!trips_indent_id_fkey(indent_operational_code, indent_number, indent_code, execution_plan_id), source_indent:indents!trips_source_indent_id_fkey(indent_operational_code, indent_number, indent_code, execution_plan_id)",
-    )
+    .select(TRIP_SELECT_LIGHT)
     .eq("organization_id", orgId)
     .order("created_at", { ascending: false });
 
@@ -523,9 +530,7 @@ export async function getTripById(
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
   const { data, error } = await supabase()
     .from("trips")
-    .select(
-      "*, active_indent:indents!trips_indent_id_fkey(indent_operational_code, indent_number, indent_code, execution_plan_id), source_indent:indents!trips_source_indent_id_fkey(indent_operational_code, indent_number, indent_code, execution_plan_id)",
-    )
+    .select(TRIP_SELECT_LIGHT)
     .eq("id", tripId)
     .maybeSingle();
   if (error) return { error: new Error(error.message), trip: null };
@@ -546,9 +551,7 @@ export async function getTripsByIds(
   if (tripIds.length === 0) return { error: null, trips: [] };
   const { data, error } = await supabase()
     .from("trips")
-    .select(
-      "*, active_indent:indents!trips_indent_id_fkey(indent_operational_code, indent_number, indent_code, execution_plan_id), source_indent:indents!trips_source_indent_id_fkey(indent_operational_code, indent_number, indent_code, execution_plan_id)",
-    )
+    .select(TRIP_SELECT_LIGHT)
     .in("id", tripIds);
   if (error) return { error: new Error(error.message), trips: [] };
   const raw = (data ?? []) as (TripRow & {
@@ -613,9 +616,7 @@ export async function getTripByIndentId(
 ): Promise<{ error: Error | null; trip: TripRow | null }> {
   const { data, error } = await supabase()
     .from("trips")
-    .select(
-      "*, active_indent:indents!trips_indent_id_fkey(indent_operational_code, indent_number, indent_code, execution_plan_id), source_indent:indents!trips_source_indent_id_fkey(indent_operational_code, indent_number, indent_code, execution_plan_id)",
-    )
+    .select(TRIP_SELECT_LIGHT)
     .eq("indent_id", indentId)
     .order("created_at", { ascending: false })
     .limit(1)

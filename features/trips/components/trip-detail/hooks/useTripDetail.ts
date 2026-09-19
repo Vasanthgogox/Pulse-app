@@ -2353,11 +2353,11 @@ export function useTripDetail({
     }
   }, [tripId, queryClient]);
 
-  // Initial load — skipped on bundle path (bundle seeding effect owns initial hydration)
+  // Seed the trip row even when the bundle RPC is slow or failing.
   useEffect(() => {
-    if (bundleActive) return;
+    if (bundle?.trip?.id === tripId) return;
     load();
-  }, [load]);
+  }, [load, bundle?.trip?.id, tripId]);
 
   // Supplier retry when org becomes available — skipped on bundle path
   useEffect(() => {

@@ -10,12 +10,14 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   INDENTS_CACHE_DOMAIN,
+  getIndentsByOrganization,
   getMarketIndentsForOrganization,
   syncIndentsWithCache,
 } from '@/features/indents/services/indents.service';
 import type { DirectQuoteRow } from '@/features/indents/services/direct-quotes.service';
 import type { IndentRow } from '@/features/indents/services/indents.service';
 import { findIndentInMarketList } from '@/features/indents/utils/findIndentInList.util';
+import { fetchEntityListWithFallback } from '@/lib/queries/fetchEntityListWithFallback';
 import { clearDomainCacheMeta } from '@/lib/cache/cacheMetadataStore';
 import { useAppQueryGate } from '@/lib/hooks/useAppQueryGate';
 import { refetchOnMountIfEntityListEmpty } from '@/lib/queries/entityListQueryOptions';
@@ -42,9 +44,19 @@ export function useIndentsQuery(orgId: string | null) {
       // persisted list). Typing the read as IndentRow[] keeps this cast-free.
       const existing =
         qc.getQueryData<IndentRow[]>(queryKeys.indents.finite(orgId ?? '')) ?? [];
-      const res = await syncIndentsWithCache(orgId!, existing);
-      if (res.error) throw res.error;
-      return res.indents;
+      return fetchEntityListWithFallback<IndentRow>({
+        orgId: orgId!,
+        domain: INDENTS_CACHE_DOMAIN,
+        cachedRows: existing,
+        sync: async (id, cachedRows) => {
+          const res = await syncIndentsWithCache(id, cachedRows);
+          return { error: res.error, rows: res.indents };
+        },
+        fetchDirect: async (id) => {
+          const res = await getIndentsByOrganization(id);
+          return { error: res.error, rows: res.indents };
+        },
+      });
     },
     enabled: !!orgId,
     staleTime: STALE.moderate,

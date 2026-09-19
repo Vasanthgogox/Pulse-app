@@ -27,15 +27,25 @@ export function prefetchFinanceQueries(
   void queryClient.prefetchQuery({
     queryKey: queryKeys.trips.finite(orgId),
     queryFn: async () => {
-      // Same RPC as useTripsQuery — shared cache key avoids a second get_trips_for_org.
-      const { data, error } = await supabase().rpc('get_trips_for_org', {
-        p_org_id: orgId,
-      });
-      if (error) throw new Error(error.message);
-      // Loose typing here keeps `finance.service`'s `TripRow` (and its whole
-      // dependency tree) out of the startup graph. Callers reading from the
-      // query cache type-cast at the consumer site.
-      return (data ?? []) as unknown;
+      // Same path as useTripsQuery / getTripsForOrg (RPC, then owner-org table).
+      try {
+        const { data, error } = await supabase().rpc('get_trips_for_org', {
+          p_org_id: orgId,
+        });
+        if (!error) {
+          return (data ?? []) as unknown;
+        }
+      } catch {
+        // Timeout / origin-down — fall through to table read.
+      }
+      const fallback = await supabase()
+        .from('trips')
+        .select('*')
+        .eq('organization_id', orgId)
+        .order('created_at', { ascending: false })
+        .limit(200);
+      if (fallback.error) throw new Error(fallback.error.message);
+      return (fallback.data ?? []) as unknown;
     },
   });
 

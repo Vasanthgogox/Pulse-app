@@ -9,9 +9,8 @@ import {
   getClientsByOrganization,
   type ClientRow,
 } from "@/features/clients/services/clients.service";
-import type { TripRow } from "@/features/trips/services/trips.service";
+import { getTripsForOrg, type TripRow } from "@/features/trips/services/trips.service";
 import { buildUniqueLinkedOrgIdMap, isLoadBasedTrip } from "@/features/trips/visibility/tripVisibility";
-import { supabase } from "@/lib/supabase";
 import { queryKeys } from "@/lib/queryKeys";
 import { useAuth } from "@/contexts/AuthContext";
 
@@ -42,11 +41,9 @@ export function useClientAnalyticsData(clientId: string) {
     const tripsPromise = queryClient.ensureQueryData({
       queryKey: queryKeys.trips.finite(orgId),
       queryFn: async () => {
-        const { data, error: tripsError } = await supabase().rpc("get_trips_for_org", {
-          p_org_id: orgId,
-        });
-        if (tripsError) throw new Error(tripsError.message);
-        return (data ?? []) as TripRow[];
+        const res = await getTripsForOrg(orgId);
+        if (res.error) throw res.error;
+        return res.trips;
       },
     });
 

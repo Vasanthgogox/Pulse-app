@@ -223,45 +223,65 @@ export interface TripDetailBundle {
 
 // ── Fetcher ──────────────────────────────────────────────────────────────────
 
+function emptyBundleFromTrip(trip: BundleTrip): TripDetailBundle {
+  return {
+    trip,
+    assignment_audit: [],
+    driver: null,
+    vehicle: null,
+    client_detail: null,
+    supplier_detail: null,
+    transactions: [],
+    adjustments: [],
+    documents: [],
+    otp: null,
+    latest_driver_location: null,
+  };
+}
+
+async function fetchTripRowLight(
+  tripId: string,
+  signal?: AbortSignal,
+): Promise<BundleTrip | null> {
+  const { data, error } = await withAbortSignal(
+    supabase().from('trips').select('*').eq('id', tripId),
+    signal,
+  ).maybeSingle();
+  throwIfCancelled(signal, error);
+  if (error || !data) return null;
+  return data as BundleTrip;
+}
+
 async function fetchTripDetailBundle(
   tripId: string,
   viewerOrgId: string,
   signal?: AbortSignal,
 ): Promise<TripDetailBundle | null> {
-  const { data, error } = await withAbortSignal(
-    supabase().rpc('get_trip_detail_bundle', {
-      p_trip_id: tripId,
-      p_viewer_org_id: viewerOrgId,
-    }),
-    signal,
-  );
-  throwIfCancelled(signal, error);
-  if (error) throw new Error(error.message);
-  const bundle = (data as TripDetailBundle | null) ?? null;
-  const tripIdFromBundle = bundle?.trip?.id;
-  if (!bundle?.trip || !tripIdFromBundle) return bundle;
-  // Live RPC still omits these keys until 20270912143000 is applied.
-  // Extra-select from trips so Business App DCO identity does not wait on that gate.
-  const hasDcoContract =
-    Object.prototype.hasOwnProperty.call(bundle.trip, "operating_mode") &&
-    Object.prototype.hasOwnProperty.call(bundle.trip, "dco_payee_id");
-  if (hasDcoContract) return bundle;
-  const extra = await withAbortSignal(
-    supabase()
-      .from("trips")
-      .select("operating_mode, dco_payee_id")
-      .eq("id", tripIdFromBundle),
-    signal,
-  ).maybeSingle();
-  throwIfCancelled(signal, extra.error);
-  if (extra.data) {
-    bundle.trip = {
-      ...bundle.trip,
-      operating_mode: extra.data.operating_mode ?? null,
-      dco_payee_id: extra.data.dco_payee_id ?? null,
-    };
+  try {
+    const { data, error } = await withAbortSignal(
+      supabase().rpc('get_trip_detail_bundle', {
+        p_trip_id: tripId,
+        p_viewer_org_id: viewerOrgId,
+      }),
+      signal,
+    );
+    throwIfCancelled(signal, error);
+    const bundle = (data as TripDetailBundle | null) ?? null;
+    if (!error && bundle?.trip?.id) {
+      return bundle;
+    }
+  } catch (err) {
+    throwIfCancelled(
+      signal,
+      err && typeof err === 'object'
+        ? (err as { message?: string; name?: string })
+        : null,
+    );
   }
-  return bundle;
+
+  const light = await fetchTripRowLight(tripId, signal);
+  if (light) return emptyBundleFromTrip(light);
+  return null;
 }
 
 // ── Hook ─────────────────────────────────────────────────────────────────────

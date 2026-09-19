@@ -5,11 +5,11 @@
 import { useInfiniteQuery, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   getTripsByOrganization,
+  getTripsForOrg,
   getShipperDisplayNamesForSupplierTrips,
   updateTripStatus,
   type TripRow,
 } from '@/features/trips/services/trips.service';
-import { supabase } from '@/lib/supabase';
 import { queryKeys } from '@/lib/queryKeys';
 import { STALE } from '@/lib/queryClient';
 import { refetchOnMountIfEntityListEmpty } from '@/lib/queries/entityListQueryOptions';
@@ -23,10 +23,10 @@ export function useTripsQuery(orgId: string | null) {
   return useQuery<TripRow[], Error>({
     queryKey: queryKeys.trips.finite(orgId ?? ''),
     queryFn: async () => {
-      const { data, error } = await supabase().rpc('get_trips_for_org', { p_org_id: orgId! });
-      if (error) throw new Error(error.message);
+      const res = await getTripsForOrg(orgId!);
+      if (res.error) throw res.error;
       if (!isStartupComplete()) markStartupPhase('trips_query_done');
-      return (data ?? []) as TripRow[];
+      return res.trips;
     },
     enabled: !!orgId && status !== 'restoring',
     staleTime: STALE.realtime,
