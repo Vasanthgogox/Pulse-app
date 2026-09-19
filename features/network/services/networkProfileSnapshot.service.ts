@@ -242,24 +242,17 @@ export async function getOrgProfileSnapshot(
     return { error: null, snapshot: null };
   }
 
-  const isSelf = viewerOrgId === targetOrgId;
-  const connectionOrFilter = [
-    `and(from_organization_id.eq.${viewerOrgId},to_organization_id.eq.${targetOrgId})`,
-    `and(from_organization_id.eq.${targetOrgId},to_organization_id.eq.${viewerOrgId})`,
-  ].join(",");
-
-  const emptyCount = Promise.resolve({ count: 0 as number | null, error: null });
+  const connectionSelect =
+    "status, from_organization_id, to_organization_id, request_shipper_client, request_carrier_supplier";
 
   const [
     partnerDisplayRes,
     orgLoadRes,
-    connRes,
+    connFwdRes,
+    connRevRes,
     clientLinkRes,
     supplierLinkRes,
     locationsRes,
-    clientTripsRes,
-    supplierTripsRes,
-    ratingRes,
   ] = await Promise.all([
     supabase().rpc("get_connection_partner_display_batch", {
       p_linked_organization_ids: [targetOrgId],
@@ -267,11 +260,15 @@ export async function getOrgProfileSnapshot(
     loadOrganizationRow(targetOrgId),
     supabase()
       .from("connection_requests")
-      .select(
-        "status, from_organization_id, to_organization_id, request_shipper_client, request_carrier_supplier",
-      )
-      .or(connectionOrFilter)
-      .limit(1)
+      .select(connectionSelect)
+      .eq("from_organization_id", viewerOrgId)
+      .eq("to_organization_id", targetOrgId)
+      .maybeSingle(),
+    supabase()
+      .from("connection_requests")
+      .select(connectionSelect)
+      .eq("from_organization_id", targetOrgId)
+      .eq("to_organization_id", viewerOrgId)
       .maybeSingle(),
     supabase()
       .from("clients")
@@ -294,34 +291,9 @@ export async function getOrgProfileSnapshot(
       .select("id, location_type, address_line, city, state")
       .eq("organization_id", targetOrgId)
       .order("sort_order", { ascending: true }),
-    isSelf
-      ? emptyCount
-      : supabase()
-          .from("trips")
-          .select("id, clients!inner(linked_organization_id)", {
-            count: "exact",
-            head: true,
-          })
-          .eq("organization_id", viewerOrgId)
-          .eq("clients.linked_organization_id", targetOrgId)
-          .is("deleted_at", null),
-    isSelf
-      ? emptyCount
-      : supabase()
-          .from("trips")
-          .select("id, suppliers!inner(linked_organization_id)", {
-            count: "exact",
-            head: true,
-          })
-          .eq("organization_id", viewerOrgId)
-          .eq("suppliers.linked_organization_id", targetOrgId)
-          .is("deleted_at", null),
-    supabase()
-      .from("ratings")
-      .select("score")
-      .eq("organization_id", viewerOrgId)
-      .eq("rated_id", targetOrgId),
   ]);
+
+  const connRes = { data: connFwdRes.data ?? connRevRes.data };
 
   const partnerBatchMap = partnerDisplayRes.error
     ? null
@@ -442,14 +414,7 @@ export async function getOrgProfileSnapshot(
   const gstin = orgRow.gstin?.trim() || nonEmptyString(partnerProfile?.gstin);
   const operatingModel = orgRow.operating_model?.trim() || null;
 
-  let totalTrips = partnerTripCount ?? 0;
-  if (!isSelf) {
-    const sharedCount =
-      (clientTripsRes.count ?? 0) + (supplierTripsRes.count ?? 0);
-    if (sharedCount > 0) {
-      totalTrips = sharedCount;
-    }
-  }
+  const totalTrips = partnerTripCount ?? 0;
 
   const vehicleCount =
     typeof partnerBatch?.vehicleCount === "number"
@@ -464,14 +429,7 @@ export async function getOrgProfileSnapshot(
         ? partnerProfile.networkIndentCount
         : 0;
 
-  let rating: number | null = null;
-  if (!ratingRes.error && Array.isArray(ratingRes.data) && ratingRes.data.length > 0) {
-    const rows = ratingRes.data as Array<{ score: number | null }>;
-    const total = rows.reduce((acc, r) => acc + Number(r.score ?? 0), 0);
-    rating = Number((total / rows.length).toFixed(2));
-  } else if (partnerRating != null) {
-    rating = partnerRating;
-  }
+  const rating = partnerRating;
 
   const snapshot: NetworkProfileSnapshot = {
     id: orgRow.id,

@@ -540,6 +540,13 @@ export async function getIndentOfferCountsForOwnerIndents(
 ): Promise<{ error: Error | null; counts: Record<string, number> }> {
   if (indentIds.length === 0) return { error: null, counts: {} };
 
+  const POSTGREST_IN_CHUNK = 40;
+  const uniqueIds = [...new Set(indentIds.filter(Boolean))];
+  const indentChunks: string[][] = [];
+  for (let i = 0; i < uniqueIds.length; i += POSTGREST_IN_CHUNK) {
+    indentChunks.push(uniqueIds.slice(i, i + POSTGREST_IN_CHUNK));
+  }
+
   const biddersByIndent = new Map<string, Set<string>>();
   const trackBidder = (indentId: string, bidderKey: string) => {
     if (!indentId || !bidderKey) return;
@@ -551,65 +558,76 @@ export async function getIndentOfferCountsForOwnerIndents(
     set.add(bidderKey);
   };
 
-  const { data: quotes, error: qErr } = await supabase()
-    .from('direct_quotes')
-    .select('indent_id, bidder_organization_id, status')
-    .in('indent_id', indentIds);
+  const quotes: Array<{
+    indent_id: string;
+    bidder_organization_id: string;
+    status?: string;
+  }> = [];
+  for (const chunk of indentChunks) {
+    const { data, error: qErr } = await supabase()
+      .from('direct_quotes')
+      .select('indent_id, bidder_organization_id, status')
+      .in('indent_id', chunk)
+      .eq('status', 'pending');
 
-  if (qErr) return { error: new Error(qErr.message), counts: {} };
+    if (qErr) return { error: new Error(qErr.message), counts: {} };
+    quotes.push(...((data ?? []) as typeof quotes));
+  }
 
-  for (const row of quotes ?? []) {
-    const status = String((row as { status?: string }).status ?? '').toLowerCase();
-    if (status && status !== 'pending') continue;
-    trackBidder(
-      (row as { indent_id: string }).indent_id,
-      (row as { bidder_organization_id: string }).bidder_organization_id,
-    );
+  for (const row of quotes) {
+    trackBidder(row.indent_id, row.bidder_organization_id);
   }
 
   // Include inactive posts — a DCO bid must still badge after the 24h story window.
-  const { data: posts, error: pErr } = await supabase()
-    .from('posts')
-    .select('id, source_indent_id')
-    .eq('organization_id', ownerOrgId)
-    .eq('type', 'LOAD')
-    .in('source_indent_id', indentIds);
+  const posts: Array<{ id: string; source_indent_id: string | null }> = [];
+  for (const chunk of indentChunks) {
+    const { data, error: pErr } = await supabase()
+      .from('posts')
+      .select('id, source_indent_id')
+      .eq('organization_id', ownerOrgId)
+      .eq('type', 'LOAD')
+      .in('source_indent_id', chunk);
 
-  if (pErr) return { error: new Error(pErr.message), counts: {} };
+    if (pErr) return { error: new Error(pErr.message), counts: {} };
+    posts.push(...((data ?? []) as typeof posts));
+  }
 
-  const postRows = (posts ?? []) as { id: string; source_indent_id: string | null }[];
+  const postRows = posts;
   const postIds = postRows.map((r) => r.id);
   const indentByPost = new Map(postRows.map((r) => [r.id, r.source_indent_id ?? '']));
 
   if (postIds.length > 0) {
-    const { data: bids, error: bErr } = await supabase()
-      .from('bids')
-      .select('post_id, bidder_organization_id')
-      .in('post_id', postIds)
-      .eq('status', 'pending');
+    for (let i = 0; i < postIds.length; i += POSTGREST_IN_CHUNK) {
+      const postChunk = postIds.slice(i, i + POSTGREST_IN_CHUNK);
+      const { data: bids, error: bErr } = await supabase()
+        .from('bids')
+        .select('post_id, bidder_organization_id')
+        .in('post_id', postChunk)
+        .eq('status', 'pending');
 
-    if (bErr) return { error: new Error(bErr.message), counts: {} };
+      if (bErr) return { error: new Error(bErr.message), counts: {} };
 
-    for (const row of bids ?? []) {
-      const pid = (row as { post_id: string }).post_id;
-      const iid = indentByPost.get(pid);
-      if (!iid) continue;
-      trackBidder(iid, (row as { bidder_organization_id: string }).bidder_organization_id);
-    }
+      for (const row of bids ?? []) {
+        const pid = (row as { post_id: string }).post_id;
+        const iid = indentByPost.get(pid);
+        if (!iid) continue;
+        trackBidder(iid, (row as { bidder_organization_id: string }).bidder_organization_id);
+      }
 
-    const { data: directBids, error: dErr } = await supabase()
-      .from('driver_direct_bids')
-      .select('post_id, driver_user_id')
-      .in('post_id', postIds)
-      .eq('status', 'pending');
+      const { data: directBids, error: dErr } = await supabase()
+        .from('driver_direct_bids')
+        .select('post_id, driver_user_id')
+        .in('post_id', postChunk)
+        .eq('status', 'pending');
 
-    if (dErr) return { error: new Error(dErr.message), counts: {} };
+      if (dErr) return { error: new Error(dErr.message), counts: {} };
 
-    for (const row of directBids ?? []) {
-      const pid = (row as { post_id: string }).post_id;
-      const iid = indentByPost.get(pid);
-      if (!iid) continue;
-      trackBidder(iid, `ddb:${(row as { driver_user_id: string }).driver_user_id}`);
+      for (const row of directBids ?? []) {
+        const pid = (row as { post_id: string }).post_id;
+        const iid = indentByPost.get(pid);
+        if (!iid) continue;
+        trackBidder(iid, `ddb:${(row as { driver_user_id: string }).driver_user_id}`);
+      }
     }
   }
 

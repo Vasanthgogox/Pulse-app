@@ -118,13 +118,18 @@ export async function getDirectQuoteCountsByIndentIds(
   if (indentIds.length === 0) {
     return { error: null, counts: {} };
   }
-  const { data, error } = await supabase()
-    .from('direct_quotes')
-    .select('indent_id')
-    .in('indent_id', indentIds);
+  const uniqueIds = [...new Set(indentIds.filter(Boolean))];
+  const rows: Array<{ indent_id: string }> = [];
+  for (let i = 0; i < uniqueIds.length; i += 40) {
+    const chunk = uniqueIds.slice(i, i + 40);
+    const { data, error } = await supabase()
+      .from('direct_quotes')
+      .select('indent_id')
+      .in('indent_id', chunk);
 
-  if (error) return { error: new Error(error.message), counts: {} };
-  const rows = (data ?? []) as { indent_id: string }[];
+    if (error) return { error: new Error(error.message), counts: {} };
+    rows.push(...((data ?? []) as Array<{ indent_id: string }>));
+  }
   const counts: Record<string, number> = {};
   for (const row of rows) {
     const id = row.indent_id;

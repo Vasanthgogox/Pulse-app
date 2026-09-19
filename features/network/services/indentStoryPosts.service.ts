@@ -115,6 +115,16 @@ export async function deactivatePostsForIndent(
 /**
  * Latest LOAD story per indent (own org). Used to color the Pulse button.
  */
+const POSTGREST_IN_CHUNK = 40;
+
+function chunkIds(ids: string[], size = POSTGREST_IN_CHUNK): string[][] {
+  const chunks: string[][] = [];
+  for (let i = 0; i < ids.length; i += size) {
+    chunks.push(ids.slice(i, i + size));
+  }
+  return chunks;
+}
+
 export async function getIndentStoryStates(
   orgId: string,
   indentIds: string[],
@@ -124,30 +134,34 @@ export async function getIndentStoryStates(
     return { error: null, byIndentId: {} };
   }
 
-  const { data, error } = await supabase()
-    .from('posts')
-    .select(
-      'id, source_indent_id, is_active, expires_at, created_at, indents!posts_source_indent_id_fkey(status)',
-    )
-    .eq('organization_id', orgId)
-    .eq('type', 'LOAD')
-    .in('source_indent_id', ids)
-    .order('created_at', { ascending: false });
+  const rows: Array<{
+    id: string;
+    source_indent_id?: string | null;
+    is_active: boolean;
+    expires_at: string | null;
+    created_at: string;
+  }> = [];
 
-  if (error) return { error: new Error(error.message), byIndentId: {} };
+  for (const chunk of chunkIds(ids)) {
+    const { data, error } = await supabase()
+      .from('posts')
+      .select('id, source_indent_id, is_active, expires_at, created_at')
+      .eq('organization_id', orgId)
+      .eq('type', 'LOAD')
+      .in('source_indent_id', chunk)
+      .order('created_at', { ascending: false });
+
+    if (error) return { error: new Error(error.message), byIndentId: {} };
+    rows.push(...((data ?? []) as typeof rows));
+  }
 
   const byIndentId: Record<string, IndentStoryState> = {};
-  for (const row of data ?? []) {
-    const indentId = (row as { source_indent_id?: string | null }).source_indent_id;
+  for (const row of rows) {
+    const indentId = row.source_indent_id;
     if (!indentId || byIndentId[indentId]) continue;
-    const indent = (row as { indents?: { status?: string | null } | { status?: string | null }[] | null })
-      .indents;
-    const indentRow = Array.isArray(indent) ? indent[0] : indent;
-    const live =
-      isIndentStoryLive(row) && !isIndentTerminalForStory(indentRow?.status);
     byIndentId[indentId] = {
       postId: row.id,
-      isLive: live,
+      isLive: isIndentStoryLive(row),
       expiresAt: row.expires_at ?? null,
     };
   }
