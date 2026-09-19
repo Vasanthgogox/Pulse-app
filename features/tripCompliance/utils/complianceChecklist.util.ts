@@ -111,7 +111,6 @@ export function ensureComplianceChecklist(
     | null
     | undefined,
 ): ComplianceChecklist {
-  if (isCurrentComplianceChecklist(summary?.checklist)) return summary!.checklist as ComplianceChecklist;
   return buildComplianceChecklist({
     tripDocuments: summary?.documents ?? [],
     vehicleDocuments: summary?.vehicleDocuments ?? [],

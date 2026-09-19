@@ -6,8 +6,12 @@ import { interpretLedgerRowStructured } from "@/features/finance/ledger/ledgerEn
 import { buildComplianceChecklist } from "@/features/tripCompliance/utils/complianceChecklist.util";
 import {
   mergeComplianceEntityDocs,
+  normalizeTripDocumentType,
+  normalizeVaultVehicleNumber,
   vehicleVaultDocumentsToEntityDocs,
 } from "@/features/tripCompliance/utils/complianceVaultDocuments.util";
+import { runWithConcurrencyLimit } from "@/features/trips/services/tripDocumentLrPod.service";
+import { getVehicleForTripViewer } from "@/features/vehicles/services/vehicles.service";
 import type { VehicleDocuments } from "@/features/vehicles/utils/vehicleDocuments.util";
 import {
   REQUIRED_COMPLIANCE_DOCUMENT_TYPES,
@@ -83,7 +87,7 @@ async function fetchTripDocumentsForTrips(
     const doc: ComplianceDocumentRow = {
       id: r.id,
       trip_id: r.trip_id,
-      document_type: r.document_type,
+      document_type: normalizeTripDocumentType(r.document_type),
       file_name: r.file_name,
       storage_path: r.storage_path,
       uploaded_at: r.uploaded_at,
@@ -261,27 +265,86 @@ async function fetchEntityDocumentsForTrips(
   return byEntity;
 }
 
+function indexVehicleVaultDocs(
+  byKey: Map<string, ComplianceEntityDocument[]>,
+  docs: ComplianceEntityDocument[],
+  ...keys: Array<string | null | undefined>
+) {
+  if (docs.length === 0) return;
+  for (const key of keys) {
+    if (key) byKey.set(key, docs);
+  }
+}
+
 async function fetchVehicleVaultDocumentsForTrips(
   trips: TripRow[],
 ): Promise<Map<string, ComplianceEntityDocument[]>> {
-  const byVehicle = new Map<string, ComplianceEntityDocument[]>();
+  const byKey = new Map<string, ComplianceEntityDocument[]>();
+  const orgId = trips.find((trip) => trip.organization_id)?.organization_id ?? null;
   const vehicleIds = Array.from(
     new Set(
       trips.flatMap((trip) => [trip.vehicle_id, trip.owner_vehicle_id].filter((id): id is string => Boolean(id))),
     ),
   );
-  if (vehicleIds.length === 0) return byVehicle;
 
-  const { data, error } = await supabase().from("vehicles").select("id, documents").in("id", vehicleIds);
-  if (error) {
-    if (isMissingColumnOrRelation(error)) return byVehicle;
-    throw new Error(error.message);
+  if (vehicleIds.length > 0) {
+    const { data, error } = await supabase().from("vehicles").select("id, vehicle_number, documents").in("id", vehicleIds);
+    if (error && !isMissingColumnOrRelation(error)) throw new Error(error.message);
+    for (const row of data ?? []) {
+      const docs = vehicleVaultDocumentsToEntityDocs(row.id, (row.documents ?? null) as VehicleDocuments | null);
+      indexVehicleVaultDocs(byKey, docs, row.id, normalizeVaultVehicleNumber(row.vehicle_number));
+    }
   }
-  for (const row of data ?? []) {
-    const docs = vehicleVaultDocumentsToEntityDocs(row.id, (row.documents ?? null) as VehicleDocuments | null);
-    if (docs.length > 0) byVehicle.set(row.id, docs);
+
+  const missingById = trips.filter((trip) => {
+    const id = trip.vehicle_id ?? trip.owner_vehicle_id;
+    return Boolean(id && orgId && !byKey.has(id));
+  });
+  if (missingById.length > 0 && orgId) {
+    await runWithConcurrencyLimit(missingById, 4, async (trip) => {
+      const vehicleId = trip.vehicle_id ?? trip.owner_vehicle_id;
+      if (!vehicleId) return;
+      const { vehicle } = await getVehicleForTripViewer(vehicleId, trip.id, orgId);
+      if (!vehicle) return;
+      const docs = vehicleVaultDocumentsToEntityDocs(vehicleId, (vehicle.documents ?? null) as VehicleDocuments | null);
+      indexVehicleVaultDocs(
+        byKey,
+        docs,
+        vehicleId,
+        trip.vehicle_id,
+        trip.owner_vehicle_id,
+        normalizeVaultVehicleNumber(vehicle.vehicle_number),
+      );
+    });
   }
-  return byVehicle;
+
+  const missingByNumber = trips.filter((trip) => {
+    const number = normalizeVaultVehicleNumber(trip.vehicle_display_number);
+    if (!number || !orgId) return false;
+    const id = trip.vehicle_id ?? trip.owner_vehicle_id;
+    return !((id && byKey.has(id)) || byKey.has(number));
+  });
+  if (missingByNumber.length > 0 && orgId) {
+    const { data, error } = await supabase()
+      .from("vehicles")
+      .select("id, vehicle_number, documents")
+      .eq("organization_id", orgId);
+    if (error && !isMissingColumnOrRelation(error)) throw new Error(error.message);
+    const byNumber = new Map<string, { id: string; documents: VehicleDocuments | null }>();
+    for (const row of data ?? []) {
+      const number = normalizeVaultVehicleNumber(row.vehicle_number);
+      if (number) byNumber.set(number, { id: row.id, documents: (row.documents ?? null) as VehicleDocuments | null });
+    }
+    for (const trip of missingByNumber) {
+      const number = normalizeVaultVehicleNumber(trip.vehicle_display_number);
+      const match = number ? byNumber.get(number) : undefined;
+      if (!match) continue;
+      const docs = vehicleVaultDocumentsToEntityDocs(match.id, match.documents);
+      indexVehicleVaultDocs(byKey, docs, match.id, trip.vehicle_id, trip.owner_vehicle_id, number);
+    }
+  }
+
+  return byKey;
 }
 
 async function fetchDriverKycDocumentsForTrips(
@@ -381,6 +444,7 @@ export async function buildComplianceTripSummaries(
     const vaultVehicle =
       (trip.vehicle_id ? vaultVehicleDocs.get(trip.vehicle_id) : undefined) ??
       (trip.owner_vehicle_id ? vaultVehicleDocs.get(trip.owner_vehicle_id) : undefined) ??
+      vaultVehicleDocs.get(normalizeVaultVehicleNumber(trip.vehicle_display_number)) ??
       [];
     const vehicleDocuments = mergeComplianceEntityDocs(vaultVehicle, entityVehicleDocs);
     const entityDriverDocs = trip.driver_id

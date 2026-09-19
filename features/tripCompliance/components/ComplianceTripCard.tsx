@@ -206,7 +206,7 @@ export function ComplianceTripCard({
             <Check size={12} color={Theme.complianceVerifiedPillFg} strokeWidth={2.4} />
             <Text style={styles.verifiedBtnText}>Verified</Text>
           </TouchableOpacity>
-        ) : (
+        ) : summary.stage !== "pending_for_docs" ? (
           <TouchableOpacity
             style={styles.verifyBtn}
             onPress={() => onReviewDocuments("trip")}
@@ -217,7 +217,7 @@ export function ComplianceTripCard({
             <Check size={12} color={Theme.complianceBulkText} strokeWidth={2.4} />
             <Text style={styles.verifyBtnText}>Verify Docs</Text>
           </TouchableOpacity>
-        )}
+        ) : null}
       </View>
     </View>
   );

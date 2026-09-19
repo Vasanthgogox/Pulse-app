@@ -101,6 +101,30 @@ export function pendingDocumentsCopy(pendingCount: number, verified: number, tot
   return `${pendingCount} document${pendingCount === 1 ? "" : "s"} pending`;
 }
 
+export function matchesComplianceTripSearch(summary: ComplianceTripSummary, query: string): boolean {
+  const needle = query.trim().toLowerCase();
+  if (!needle) return true;
+  const compact = needle.replace(/[\s-]/g, "");
+  const trip = summary.trip;
+  const haystacks = [
+    complianceTripDisplayId(trip),
+    trip.display_trip_id,
+    trip.trip_number,
+    trip.booking_ref,
+    trip.client_name,
+    trip.vehicle_display_number,
+    trip.driver_display_name,
+    trip.pickup_area,
+    trip.drop_location,
+    trip.id,
+  ];
+  return haystacks.some((value) => {
+    const raw = (value ?? "").toLowerCase();
+    if (!raw) return false;
+    return raw.includes(needle) || raw.replace(/[\s-]/g, "").includes(compact);
+  });
+}
+
 export function complianceTripDisplayId(trip: {
   display_trip_id?: string | null;
   trip_number?: string | null;

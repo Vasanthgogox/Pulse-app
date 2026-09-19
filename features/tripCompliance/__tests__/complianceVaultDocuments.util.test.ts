@@ -1,4 +1,11 @@
-import { vehicleVaultDocumentsToEntityDocs, mergeComplianceEntityDocs } from "@/features/tripCompliance/utils/complianceVaultDocuments.util";
+import {
+  complianceStoragePathCandidates,
+  mergeComplianceEntityDocs,
+  normalizeTripDocumentType,
+  normalizeVaultVehicleNumber,
+  parseComplianceStorageRef,
+  vehicleVaultDocumentsToEntityDocs,
+} from "@/features/tripCompliance/utils/complianceVaultDocuments.util";
 import type { ComplianceEntityDocument } from "@/features/tripCompliance/tripCompliance.types";
 import type { VehicleDocuments } from "@/features/vehicles/utils/vehicleDocuments.util";
 
@@ -18,6 +25,72 @@ describe("vehicleVaultDocumentsToEntityDocs", () => {
   it("returns nothing when the vault JSON is empty", () => {
     expect(vehicleVaultDocumentsToEntityDocs("v1", {})).toEqual([]);
     expect(vehicleVaultDocumentsToEntityDocs("v1", null)).toEqual([]);
+  });
+
+  it("maps road-tax extras from filename", () => {
+    const rows = vehicleVaultDocumentsToEntityDocs("v1", {
+      extras: [{ id: "e2", url: "org/v1/tax.pdf", expiryDate: "2027-01-01", fileName: "Road Tax token.pdf" }],
+    });
+    expect(rows.map((row) => row.doc_type)).toEqual(["road_tax"]);
+  });
+});
+
+describe("normalizeTripDocumentType", () => {
+  it("maps vault aliases onto compliance trip types", () => {
+    expect(normalizeTripDocumentType("eway")).toBe("eway_bill");
+    expect(normalizeTripDocumentType("e-way bill")).toBe("eway_bill");
+    expect(normalizeTripDocumentType("tax_invoice")).toBe("invoice");
+    expect(normalizeTripDocumentType("lr")).toBe("lr");
+  });
+});
+
+describe("parseComplianceStorageRef", () => {
+  it("extracts a storage path from a signed URL", () => {
+    expect(
+      parseComplianceStorageRef(
+        "https://x.supabase.co/storage/v1/object/sign/vehicle-documents/org/v1/rc.pdf?token=1",
+      ),
+    ).toEqual({ kind: "path", value: "org/v1/rc.pdf" });
+  });
+
+  it("passes through an already-open https file", () => {
+    expect(parseComplianceStorageRef("https://cdn.example.com/rc.pdf")).toEqual({
+      kind: "url",
+      value: "https://cdn.example.com/rc.pdf",
+    });
+  });
+
+  it("strips a bucket prefix from a vault path", () => {
+    expect(parseComplianceStorageRef("vehicle-documents/org/v1/rc.pdf")).toEqual({
+      kind: "path",
+      value: "org/v1/rc.pdf",
+    });
+  });
+});
+
+describe("complianceStoragePathCandidates", () => {
+  it("keeps the stored path and adds vault-style guesses", () => {
+    expect(
+      complianceStoragePathCandidates({
+        rawPath: "org/v1/rc.pdf",
+        organizationId: "org",
+        entityId: "v1",
+        docType: "rc",
+      }).paths,
+    ).toEqual([
+      "org/v1/rc.pdf",
+      "org/v1/rc.jpg",
+      "org/v1/rc.jpeg",
+      "org/v1/rc.png",
+      "org/v1/rc.webp",
+    ]);
+  });
+});
+
+describe("normalizeVaultVehicleNumber", () => {
+  it("matches trip display numbers to vehicle records", () => {
+    expect(normalizeVaultVehicleNumber("TN 16 YO 25800")).toBe("TN16YO25800");
+    expect(normalizeVaultVehicleNumber("tn16yo25800")).toBe("TN16YO25800");
   });
 });
 
