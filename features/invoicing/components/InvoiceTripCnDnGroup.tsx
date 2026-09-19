@@ -84,7 +84,7 @@ export function InvoiceTripCnDnGroup({
           accessibilityLabel="Add credit or debit note"
           hitSlop={Layout.touchTargetHitSlop}
         >
-          <FontAwesome name="plus" size={11} color={Theme.primary} />
+          <FontAwesome name="plus" size={11} color={Theme.analyticsHeroBg} />
           <Text style={styles.addBtnText}>CN / DN</Text>
         </Pressable>
       </View>
@@ -134,10 +134,12 @@ export function InvoiceTripCnDnGroup({
 
 const styles = StyleSheet.create({
   wrap: {
-    marginTop: 8,
-    paddingTop: 8,
-    borderTopWidth: StyleSheet.hairlineWidth,
-    borderTopColor: Theme.borderLight,
+    marginHorizontal: 12,
+    marginBottom: 10,
+    paddingTop: 10,
+    paddingBottom: 4,
+    borderTopWidth: 1,
+    borderTopColor: Theme.surfaceBorder,
   },
   toolbar: {
     flexDirection: "row",
@@ -147,8 +149,8 @@ const styles = StyleSheet.create({
   },
   toolbarTitle: {
     fontSize: 12,
-    fontWeight: "500",
-    color: Theme.textMuted,
+    fontWeight: "600",
+    color: Theme.textSecondary,
   },
   addBtn: {
     flexDirection: "row",
@@ -159,13 +161,13 @@ const styles = StyleSheet.create({
   },
   addBtnText: {
     fontSize: 13,
-    fontWeight: "500",
-    color: Theme.primary,
+    fontWeight: "700",
+    color: Theme.analyticsHeroBg,
   },
   empty: {
     fontSize: 12,
     fontWeight: "400",
-    color: Theme.textRouteCard,
+    color: Theme.textMuted,
     lineHeight: 17,
     marginBottom: 4,
   },

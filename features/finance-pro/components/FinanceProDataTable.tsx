@@ -167,18 +167,20 @@ export function FinanceProDataTable<T>({
     [filtered, page, rowsPerPage],
   );
 
-  const minWidth = 56 + columns.reduce((sum, col) => sum + Math.min(col.minWidth, 96), 0);
+  const minWidth = columns.reduce((sum, col) => sum + col.minWidth, 0) + 48;
   const clickable = Boolean(onRowPress);
   const gridTemplate =
     Platform.OS === "web"
-      ? (`28px ${columns.map((c) => `minmax(0, ${c.flex}fr)`).join(" ")} 28px` as const)
+      ? columns
+          .map((c) => `minmax(${Math.min(c.minWidth, 120)}px, ${c.flex}fr)`)
+          .join(" ")
       : null;
   const gridStyle =
     gridTemplate != null
       ? ({
           display: "grid",
           gridTemplateColumns: gridTemplate,
-          columnGap: 12,
+          columnGap: 16,
           alignItems: "center",
           width: "100%",
         } as unknown as ViewStyle)
@@ -187,7 +189,6 @@ export function FinanceProDataTable<T>({
   const head = (
     <View style={styles.head}>
       <View style={gridStyle}>
-        <View style={styles.checkCol} />
         {columns.map((col, index) => {
           const variant = inferVariant(col, index, clickable);
           return (
@@ -203,7 +204,6 @@ export function FinanceProDataTable<T>({
             </Text>
           );
         })}
-        <View style={styles.menuCol} />
       </View>
     </View>
   );
@@ -235,9 +235,6 @@ export function FinanceProDataTable<T>({
           disabled={!onRowPress}
         >
           <View style={gridStyle}>
-            <View style={styles.checkCol}>
-              <View style={styles.checkBox} />
-            </View>
             {columns.map((col, index) => {
               const variant = inferVariant(col, index, clickable);
               const cell = col.render(row);
@@ -298,9 +295,6 @@ export function FinanceProDataTable<T>({
                 </View>
               );
             })}
-            <View style={styles.menuCol}>
-              <MoreVertical size={14} color={METRONIC.muted} />
-            </View>
           </View>
         </Pressable>
       ))
@@ -347,16 +341,20 @@ export function FinanceProDataTable<T>({
               </Text>
             ) : null}
           </View>
-        ) : null}
-        {searchBox}
-        {action}
-        <View style={styles.columnsBtn}>
-          <LayoutGrid size={13} color={METRONIC.muted} />
-          <Text style={styles.columnsBtnText}>Columns</Text>
+        ) : (
+          <View style={styles.titleCol} />
+        )}
+        <View style={styles.toolbar}>
+          {searchBox}
+          {action}
+          <View style={styles.columnsBtn}>
+            <LayoutGrid size={13} color={METRONIC.muted} />
+            <Text style={styles.columnsBtnText}>Columns</Text>
+          </View>
+          <Pressable style={styles.menuBtn} hitSlop={8} accessibilityLabel="Table menu">
+            <MoreVertical size={15} color={METRONIC.muted} />
+          </Pressable>
         </View>
-        <Pressable style={styles.menuBtn} hitSlop={8}>
-          <MoreVertical size={15} color={METRONIC.muted} />
-        </Pressable>
       </View>
 
       {Platform.OS === "web" ? (
@@ -476,16 +474,17 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     alignItems: "center",
-    paddingHorizontal: 16,
-    paddingVertical: 10,
+    justifyContent: "space-between",
+    paddingHorizontal: 20,
+    paddingVertical: 14,
     gap: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    borderBottomWidth: 1,
     borderBottomColor: METRONIC.border,
   },
   titleCol: {
+    flex: 1,
     flexShrink: 1,
-    minWidth: 120,
-    maxWidth: 280,
+    minWidth: 160,
     gap: 2,
   },
   title: {
@@ -494,22 +493,30 @@ const styles = StyleSheet.create({
     color: METRONIC.text,
   },
   kicker: {
-    fontSize: 11,
+    fontSize: 12,
     fontWeight: "500",
     color: METRONIC.muted,
-    lineHeight: 14,
+    lineHeight: 16,
+  },
+  toolbar: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "flex-end",
+    gap: 8,
+    flexShrink: 0,
+    marginLeft: "auto",
   },
   menuBtn: {
-    width: 24,
-    height: 24,
+    width: 32,
+    height: 32,
+    borderRadius: 8,
     alignItems: "center",
     justifyContent: "center",
     flexShrink: 0,
   },
   search: {
-    flex: 1,
-    minWidth: 140,
-    maxWidth: 280,
+    width: 220,
+    maxWidth: 220,
     minHeight: 36,
     flexDirection: "row",
     alignItems: "center",
@@ -517,13 +524,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     borderWidth: 1,
     borderColor: METRONIC.border,
-    backgroundColor: Theme.cardWhite,
+    backgroundColor: Theme.surface,
     paddingHorizontal: 10,
     paddingVertical: 4,
   },
   searchContext: {
-    maxWidth: 560,
-    borderColor: "rgba(62, 151, 255, 0.35)",
+    width: 320,
+    maxWidth: 360,
+    borderColor: Theme.brandBlueRing,
+    backgroundColor: Theme.cardWhite,
     paddingLeft: 10,
     paddingRight: 4,
   },
@@ -531,12 +540,13 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 6,
+    minHeight: 36,
     paddingHorizontal: 10,
     paddingVertical: 7,
     borderRadius: 8,
     borderWidth: 1,
     borderColor: METRONIC.border,
-    backgroundColor: Theme.cardWhite,
+    backgroundColor: Theme.surface,
     flexShrink: 0,
   },
   columnsBtnText: {
@@ -559,52 +569,52 @@ const styles = StyleSheet.create({
     width: "100%",
     ...(Platform.OS === "web" ? ({ overflowX: "auto" } as unknown as ViewStyle) : null),
   },
-  tableFill: { width: "100%", minWidth: 720 },
+  tableFill: { width: "100%", minWidth: 640 },
   nativeScroll: { width: "100%" },
   nativeGrow: { flexGrow: 1, minWidth: "100%" },
   head: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
     borderBottomWidth: 1,
     borderBottomColor: METRONIC.border,
-    backgroundColor: "#F9FAFB",
+    backgroundColor: Theme.surface,
   },
   grid: {
     flexDirection: "row",
     alignItems: "center",
-    gap: 14,
+    gap: 16,
     width: "100%",
   },
   headCell: {
-    fontSize: 10,
+    fontSize: 11,
     fontWeight: "700",
     color: METRONIC.muted,
     textTransform: "uppercase",
-    letterSpacing: 0.45,
+    letterSpacing: 0.4,
   },
   headCellFill: { minWidth: 0, width: "100%" },
   headCellRight: { textAlign: "right" },
   row: {
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    minHeight: 52,
-    borderBottomWidth: StyleSheet.hairlineWidth,
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    minHeight: 56,
+    borderBottomWidth: 1,
     borderBottomColor: METRONIC.border,
     justifyContent: "center",
     ...(Platform.OS === "web" ? ({ cursor: "pointer" } as unknown as ViewStyle) : null),
   },
-  rowAlt: { backgroundColor: "#FCFDFE" },
-  rowHover: { backgroundColor: "#F9FAFB" },
-  rowSelected: { backgroundColor: "#EEF4FF" },
+  rowAlt: { backgroundColor: Theme.cardWhite },
+  rowHover: { backgroundColor: Theme.surface },
+  rowSelected: { backgroundColor: Theme.brandBlueWashSubtle },
   rowLast: { borderBottomWidth: 0 },
   cell: { minWidth: 0, justifyContent: "center" },
   cellFill: { width: "100%", minWidth: 0 },
   cellRight: { alignItems: "flex-end" },
   cellText: {
-    fontSize: 12,
+    fontSize: 13,
     fontWeight: "600",
     color: METRONIC.text,
-    lineHeight: 16,
+    lineHeight: 18,
   },
   cellLink: {
     fontWeight: "700",
@@ -616,60 +626,41 @@ const styles = StyleSheet.create({
     textAlign: "right",
   },
   cellMuted: {
-    fontWeight: "500",
-    color: METRONIC.muted,
-  },
-  checkCol: {
-    width: 28,
-    flexShrink: 0,
-    alignItems: "flex-start",
-    justifyContent: "center",
-  },
-  checkBox: {
-    width: 16,
-    height: 16,
-    borderRadius: 4,
-    borderWidth: 1,
-    borderColor: "#D1D5DB",
-    backgroundColor: Theme.cardWhite,
-  },
-  menuCol: {
-    width: 28,
-    flexShrink: 0,
-    alignItems: "center",
-    justifyContent: "center",
+    fontWeight: "600",
+    color: METRONIC.link,
   },
   emptyWrap: { paddingVertical: 32, alignItems: "center" },
   empty: { fontSize: 13, fontWeight: "500", color: METRONIC.muted },
   pill: {
     alignSelf: "flex-start",
-    paddingHorizontal: 7,
-    paddingVertical: 2,
-    borderRadius: 5,
-    backgroundColor: "#F1F1F4",
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 6,
+    backgroundColor: Theme.surfaceGray,
   },
-  pillOk: { backgroundColor: "rgba(80, 205, 137, 0.15)" },
-  pillInfo: { backgroundColor: "rgba(62, 151, 255, 0.1)" },
-  pillWarn: { backgroundColor: "rgba(241, 65, 108, 0.1)" },
+  pillOk: { backgroundColor: Theme.scoreExcellentBg },
+  pillInfo: { backgroundColor: Theme.scoreGoodBg },
+  pillWarn: { backgroundColor: Theme.scoreWarningBg },
   pillText: {
     fontSize: 10,
     fontWeight: "700",
     color: METRONIC.subtle,
     textTransform: "uppercase",
   },
-  pillTextOk: { color: "#47BE7D" },
-  pillTextInfo: { color: METRONIC.link },
-  pillTextWarn: { color: "#F1416C" },
+  pillTextOk: { color: Theme.scoreExcellentFg },
+  pillTextInfo: { color: Theme.scoreGoodFg },
+  pillTextWarn: { color: Theme.scoreWarningFg },
   pagination: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     flexWrap: "nowrap",
     gap: 10,
-    paddingHorizontal: 16,
+    paddingHorizontal: 20,
     paddingVertical: 12,
-    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopWidth: 1,
     borderTopColor: METRONIC.border,
+    backgroundColor: Theme.surface,
   },
   pageSizeRow: {
     flexDirection: "row",
@@ -696,7 +687,7 @@ const styles = StyleSheet.create({
   },
   pageSizeBtnOn: {
     borderColor: METRONIC.link,
-    backgroundColor: "rgba(62, 151, 255, 0.08)",
+    backgroundColor: Theme.brandBlueWashSubtle,
   },
   pageSizeBtnText: {
     fontSize: 11,
@@ -735,7 +726,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     paddingHorizontal: 6,
   },
-  pageNumOn: { backgroundColor: "#F1F1F4" },
+  pageNumOn: { backgroundColor: Theme.surfaceGray },
   pageNumText: {
     fontSize: 11,
     fontWeight: "600",

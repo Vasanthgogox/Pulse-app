@@ -2,6 +2,7 @@
  * Invoicing Execute Screen — adapted from cashflow InvoicingCenter / ClientSidebar / TripList.
  */
 import { CenteredLoadingView } from "@/components/CenteredLoadingView";
+import { PulsePillButton } from "@/components/PulsePillButton";
 import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { useAuth } from "@/contexts/AuthContext";
@@ -10,7 +11,9 @@ import { useOrganization } from "@/contexts/OrganizationContext";
 import { useActiveWorkspace } from "@/contexts/ActiveWorkspaceContext";
 import { InvoicePreviewPanel } from "@/features/invoicing/components/InvoicePreviewPanel";
 import { IssuedInvoicesPanel } from "@/features/invoicing/components/IssuedInvoicesPanel";
+import { PendingBillingInsightPanel } from "@/features/invoicing/components/PendingBillingInsightPanel";
 import { ClientProfileScreen } from "@/features/clients/components/ClientProfileScreen";
+import { ROUTES } from "@/lib/routes";
 import { TripCompletionFilterBar } from "@/features/trips/components/TripCompletionFilterBar";
 import {
   TripCompletionOrPodTags,
@@ -59,7 +62,7 @@ import {
 import FontAwesome from "@expo/vector-icons/FontAwesome";
 import { useQueryClient } from "@tanstack/react-query";
 import { usePulseProductShell } from "@/features/product-shell/PulseProductShell";
-import { useRouter, usePathname } from "expo-router";
+import { useRouter, usePathname, useLocalSearchParams } from "expo-router";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
     Alert,
@@ -78,6 +81,24 @@ import {
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { useLayoutInsets } from "@/lib/layoutInsets";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+
+function parseCreateTripIdsParam(
+  value: string | string[] | undefined,
+): string[] {
+  const raw = Array.isArray(value) ? value.join(",") : value ?? "";
+  return raw
+    .split(",")
+    .map((id) => id.trim())
+    .filter(Boolean);
+}
+
+function parseCreateClientParam(
+  value: string | string[] | undefined,
+): string | null {
+  const raw = Array.isArray(value) ? value[0] : value;
+  const trimmed = (raw ?? "").trim();
+  return trimmed || null;
+}
 
 function canAccessInvoicing(
   profile: ReturnType<typeof useAuth>["profile"],
@@ -238,12 +259,20 @@ function InvoiceBillingSurfaceTabs({
   );
 }
 
-export function InvoicingExecuteScreen() {
+export function InvoicingExecuteScreen({
+  mode = "browse",
+}: {
+  mode?: "browse" | "create";
+}) {
   const insets = useSafeAreaInsets();
   const layout = useLayoutInsets();
   const tabBarScrollProps = useTabBarAwareScrollProps();
   const router = useRouter();
   const pathname = usePathname();
+  const createParams = useLocalSearchParams<{
+    trips?: string | string[];
+    client?: string | string[];
+  }>();
   const productShell = usePulseProductShell();
   const inProductShell =
     productShell === "finance-pro" ||
@@ -409,11 +438,6 @@ export function InvoicingExecuteScreen() {
   /** Below this width: stacked mobile wizard (matches POD / preview column split). */
   const INVOICING_DESKTOP_MIN = 1024;
   const isLargeScreen = width >= INVOICING_DESKTOP_MIN;
-  const [previewExpanded, setPreviewExpanded] = useState(false);
-
-  useEffect(() => {
-    if (!isLargeScreen) setPreviewExpanded(false);
-  }, [isLargeScreen]);
   const allowed = canAccessInvoicing(profile, caps);
   const mobileBottomPad = layout.scrollBottomPadding(16);
 
@@ -569,9 +593,56 @@ export function InvoicingExecuteScreen() {
     const restoreDraft = async () => {
       if (!orgId || draftRestored) return;
       if (!podSettingHydrated || isLoading) return;
+
+      const applyTripSeed = (seedIds: string[]) => {
+        if (seedIds.length === 0) return;
+        const eligible = filterTripsByPodRequired(tripsForInvoice, podRequired);
+        setSelectedTripIds(
+          restoreInvoiceDraftTripIds(
+            seedIds,
+            eligible.filter((trip) => {
+              const resolved = resolveTripInvoicePodPolicy(
+                trip,
+                clientPolicies,
+                podRequired,
+              );
+              if ("error" in resolved) return false;
+              return isTripEligibleForInvoicePodPolicy(
+                resolved.policy,
+                tripPodEvidence(trip),
+              );
+            }),
+            false,
+          ),
+        );
+      };
+
+      const applyClientSeed = (saved: string | null) => {
+        if (!saved) return;
+        const uuidRe =
+          /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+        if (uuidRe.test(saved) || saved.startsWith("name:")) {
+          setActiveClient(saved);
+          return;
+        }
+        const matching = allTrips.filter((t) => t.client === saved);
+        const ids = Array.from(
+          new Set(matching.map((t) => t.client_id).filter(Boolean)),
+        );
+        if (ids.length === 1) setActiveClient(ids[0] ?? null);
+        else setActiveClient(`name:${saved}`);
+      };
+
       try {
+        const paramTrips = parseCreateTripIdsParam(createParams.trips);
+        const paramClient = parseCreateClientParam(createParams.client);
         const raw = await AsyncStorage.getItem(`invoicing_execute_draft_${orgId}`);
+
         if (!raw) {
+          if (mode === "create") {
+            applyClientSeed(paramClient);
+            applyTripSeed(paramTrips);
+          }
           setDraftRestored(true);
           return;
         }
@@ -585,42 +656,20 @@ export function InvoicingExecuteScreen() {
           step?: 0 | 1 | 2;
         };
 
-        if (parsed.activeClient) {
-          const saved = parsed.activeClient;
-          const uuidRe =
-            /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-          if (uuidRe.test(saved) || saved.startsWith("name:")) {
-            setActiveClient(saved);
-          } else {
-            const matching = allTrips.filter((t) => t.client === saved);
-            const ids = Array.from(
-              new Set(matching.map((t) => t.client_id).filter(Boolean)),
-            );
-            if (ids.length === 1) setActiveClient(ids[0] ?? null);
-            else setActiveClient(`name:${saved}`);
-          }
-        }
-        if (Array.isArray(parsed.selectedTripIds)) {
-          const eligible = filterTripsByPodRequired(tripsForInvoice, podRequired);
-          setSelectedTripIds(
-            restoreInvoiceDraftTripIds(
-              parsed.selectedTripIds,
-              eligible.filter((trip) => {
-                const resolved = resolveTripInvoicePodPolicy(
-                  trip,
-                  clientPolicies,
-                  podRequired,
-                );
-                if ("error" in resolved) return false;
-                return isTripEligibleForInvoicePodPolicy(
-                  resolved.policy,
-                  tripPodEvidence(trip),
-                );
-              }),
-              false,
-            ),
-          );
-        }
+        applyClientSeed(
+          mode === "create" && paramClient
+            ? paramClient
+            : parsed.activeClient ?? null,
+        );
+
+        const seedIds =
+          mode === "create" && paramTrips.length > 0
+            ? paramTrips
+            : Array.isArray(parsed.selectedTripIds)
+              ? parsed.selectedTripIds
+              : [];
+        applyTripSeed(seedIds);
+
         if (typeof parsed.clientSearch === "string") setClientSearch(parsed.clientSearch);
         if (typeof parsed.searchQuery === "string") setSearchQuery(parsed.searchQuery);
         if (typeof parsed.startDate === "string") setStartDate(parsed.startDate);
@@ -645,6 +694,9 @@ export function InvoicingExecuteScreen() {
     podRequired,
     podSettingHydrated,
     isLoading,
+    mode,
+    createParams.trips,
+    createParams.client,
   ]);
 
   useEffect(() => {
@@ -785,6 +837,85 @@ export function InvoicingExecuteScreen() {
     }
   }, [clientTrips, clientPolicies, podRequired, selectedTripIds]);
 
+  const handleCreateInvoice = useCallback(async () => {
+    if (buildBlockedReason) {
+      Alert.alert("Create Invoice", buildBlockedReason);
+      return;
+    }
+    if (!activeClient) {
+      Alert.alert("Create Invoice", "Select a strategic partner first.");
+      return;
+    }
+    let tripIds = selectedTripIds;
+    if (tripIds.length === 0) {
+      const invoiceableIds = clientTrips
+        .filter((trip) => {
+          const resolved = resolveTripInvoicePodPolicy(
+            trip,
+            clientPolicies,
+            podRequired,
+          );
+          if ("error" in resolved) return false;
+          return isTripEligibleForInvoicePodPolicy(
+            resolved.policy,
+            tripPodEvidence(trip),
+          );
+        })
+        .map((t) => t.id);
+      if (invoiceableIds.length === 0) {
+        Alert.alert(
+          "Create Invoice",
+          "No eligible trips to invoice for this partner.",
+        );
+        return;
+      }
+      tripIds = invoiceableIds;
+      setSelectedTripIds(invoiceableIds);
+    }
+
+    const payload = {
+      activeClient,
+      selectedTripIds: tripIds,
+      clientSearch,
+      searchQuery,
+      startDate,
+      endDate,
+      step,
+      savedAt: new Date().toISOString(),
+    };
+    if (orgId) {
+      try {
+        await AsyncStorage.setItem(
+          `invoicing_execute_draft_${orgId}`,
+          JSON.stringify(payload),
+        );
+        setDraftSavedAt(payload.savedAt);
+      } catch {
+        // Still navigate — create page can use query params.
+      }
+    }
+    const qs = new URLSearchParams();
+    qs.set("trips", tripIds.join(","));
+    if (activeClient) qs.set("client", activeClient);
+    router.push(
+      `${ROUTES.INVOICING_EXECUTE_CREATE}?${qs.toString()}` as never,
+    );
+  }, [
+    activeClient,
+    buildBlockedReason,
+    clientPolicies,
+    clientSearch,
+    clientTrips,
+    endDate,
+    orgId,
+    podRequired,
+    router,
+    searchQuery,
+    selectedTripIds,
+    startDate,
+    step,
+  ]);
+
   const selectClient = (clientName: string) => {
     setActiveClient(clientName);
     setSelectedTripIds([]);
@@ -840,6 +971,9 @@ export function InvoicingExecuteScreen() {
                 queryKey: queryKeys.invoicing.trips(tripScopeId),
               });
             }
+            if (mode === "create") {
+              router.replace(ROUTES.INVOICING_EXECUTE as never);
+            }
           },
           onError: (err) => {
             const message =
@@ -854,10 +988,12 @@ export function InvoicingExecuteScreen() {
     },
     [
       issueMutation,
+      mode,
       podRequired,
       selectedInvoiceIssueBlockedReason,
       profile?.uid,
       queryClient,
+      router,
       tripScopeId,
       user?.uid,
     ],
@@ -1139,6 +1275,74 @@ export function InvoicingExecuteScreen() {
     </>
   );
 
+  if (mode === "create") {
+    return (
+      <View
+        style={[
+          styles.root,
+          styles.createPageRoot,
+          !inProductShell && { paddingTop: insets.top },
+        ]}
+      >
+        <View style={styles.createPageHeader}>
+          <Pressable
+            style={styles.createBackBtn}
+            onPress={() => router.replace(ROUTES.INVOICING_EXECUTE as never)}
+            accessibilityRole="button"
+            accessibilityLabel="Back to pending billing"
+            hitSlop={Layout.touchTargetHitSlop}
+          >
+            <FontAwesome
+              name="arrow-left"
+              size={14}
+              color={Theme.textPrimaryDark}
+            />
+            <Text style={styles.createBackText}>Pending Billing</Text>
+          </Pressable>
+          <Text style={styles.createPageHint} numberOfLines={1}>
+            {selectedTrips.length > 0
+              ? `${selectedTrips.length} trip${selectedTrips.length === 1 ? "" : "s"} · ${activeClientLabel || "Partner"}`
+              : "Select trips on Pending Billing first"}
+          </Text>
+        </View>
+        {selectedTrips.length === 0 ? (
+          <View style={styles.createEmpty}>
+            <Text style={styles.createEmptyTitle}>No trips selected</Text>
+            <Text style={styles.createEmptyBody}>
+              Go back to Pending Billing, select eligible trips, then create the
+              invoice.
+            </Text>
+            <Pressable
+              style={styles.createEmptyBtn}
+              onPress={() => router.replace(ROUTES.INVOICING_EXECUTE as never)}
+              accessibilityRole="button"
+              accessibilityLabel="Back to pending billing"
+            >
+              <Text style={styles.createEmptyBtnText}>Back to Pending Billing</Text>
+            </Pressable>
+          </View>
+        ) : (
+          <View style={styles.createPageBody}>
+            <InvoicePreviewPanel
+              onPreview={handlePreview}
+              onIssue={handleIssueInvoice}
+              isFinalizing={false}
+              isIssuing={issueMutation.isPending}
+              activeClient={activeClientLabel}
+              selectedTrips={selectedTrips}
+              isStandalone={true}
+              issuer={issuer}
+              workspaceOrgId={workspaceId}
+              onEditClient={(clientId) => void openClientEditor(clientId)}
+              invoiceBuildBlockedReason={buildBlockedReason}
+              invoiceIssueBlockedReason={selectedInvoiceIssueBlockedReason}
+            />
+          </View>
+        )}
+      </View>
+    );
+  }
+
   return (
     <View style={[styles.root, !inProductShell && { paddingTop: insets.top }]}>
       {!inProductShell ? (
@@ -1323,18 +1527,14 @@ export function InvoicingExecuteScreen() {
           />
         ) : isLargeScreen ? (
           <View style={styles.splitLayout}>
-            {!previewExpanded ? (
-              <View style={styles.sidebar}>{renderSidebar()}</View>
-            ) : null}
+            <View style={styles.sidebar}>{renderSidebar()}</View>
             <View
               style={[
                 styles.mainArea,
-                isLargeScreen &&
-                  !previewExpanded && {
-                    borderRightWidth: 1,
-                    borderRightColor: Theme.borderLight,
-                  },
-                previewExpanded && styles.mainAreaCollapsed,
+                {
+                  borderRightWidth: 1,
+                  borderRightColor: Theme.borderLight,
+                },
               ]}
             >
               <TripListContent
@@ -1366,30 +1566,30 @@ export function InvoicingExecuteScreen() {
                 onCompletionFilterChange={setCompletionFilter}
                 completedTripCount={completionCounts.completed}
                 notCompletedTripCount={completionCounts.notCompleted}
+                onCreateInvoice={handleCreateInvoice}
+                createBlockedReason={buildBlockedReason}
               />
             </View>
             {isLargeScreen && (
-              <View
-                style={[
-                  styles.rightPanel,
-                  previewExpanded && styles.rightPanelExpanded,
-                ]}
-              >
-                <InvoicePreviewPanel
-                  onPreview={handlePreview}
-                  onIssue={handleIssueInvoice}
-                  isFinalizing={false}
-                  isIssuing={issueMutation.isPending}
-                  activeClient={activeClientLabel}
-                  selectedTrips={selectedTrips}
-                  isStandalone={true}
-                  issuer={issuer}
-                  workspaceOrgId={workspaceId}
-                  previewExpanded={previewExpanded}
-                  onToggleExpand={() => setPreviewExpanded((v) => !v)}
-                  onEditClient={(clientId) => void openClientEditor(clientId)}
-                  invoiceBuildBlockedReason={buildBlockedReason}
-                  invoiceIssueBlockedReason={selectedInvoiceIssueBlockedReason}
+              <View style={styles.rightPanel}>
+                <PendingBillingInsightPanel
+                  partnerLabel={activeClientLabel}
+                  tripCount={clientTripsBase.length}
+                  eligibleCount={invoiceableTrips.length}
+                  selectedCount={selectedTripIds.length}
+                  selectedFreight={selectedTrips.reduce(
+                    (sum, trip) => sum + (Number(trip.amount) || 0),
+                    0,
+                  )}
+                  pendingFreight={clientTripsBase.reduce(
+                    (sum, trip) => sum + (Number(trip.amount) || 0),
+                    0,
+                  )}
+                  completedTripCount={completionCounts.completed}
+                  notCompletedTripCount={completionCounts.notCompleted}
+                  podRequired={podRequired}
+                  blockedReason={buildBlockedReason}
+                  invoices={issuedInvoices}
                 />
               </View>
             )}
@@ -1494,45 +1694,8 @@ export function InvoicingExecuteScreen() {
                     onCompletionFilterChange={setCompletionFilter}
                     completedTripCount={completionCounts.completed}
                     notCompletedTripCount={completionCounts.notCompleted}
-                  />
-                </View>
-              </View>
-            )}
-
-            {step === 2 && (
-              <View style={styles.mobileStepContainer}>
-                <View style={styles.mobileConfig}>
-                  <Pressable
-                    style={styles.selectRow}
-                    onPress={() => setStep(1)}
-                  >
-                    <FontAwesome
-                      name="arrow-left"
-                      size={14}
-                      color={Theme.textMuted}
-                    />
-                    <Text
-                      style={[styles.selectRowText, { marginLeft: 8 }]}
-                      numberOfLines={1}
-                    >
-                      Back to Trips ({selectedTripIds.length} selected)
-                    </Text>
-                  </Pressable>
-                </View>
-                <View style={{ flex: 1 }}>
-                  <InvoicePreviewPanel
-                    onPreview={handlePreview}
-                    onIssue={handleIssueInvoice}
-                    isFinalizing={false}
-                    isIssuing={issueMutation.isPending}
-                    activeClient={activeClientLabel}
-                    selectedTrips={selectedTrips}
-                    isStandalone={true}
-                    issuer={issuer}
-                    workspaceOrgId={workspaceId}
-                    onEditClient={(clientId) => void openClientEditor(clientId)}
-                    invoiceBuildBlockedReason={buildBlockedReason}
-                    invoiceIssueBlockedReason={selectedInvoiceIssueBlockedReason}
+                    onCreateInvoice={handleCreateInvoice}
+                    createBlockedReason={buildBlockedReason}
                   />
                 </View>
               </View>
@@ -1559,19 +1722,18 @@ export function InvoicingExecuteScreen() {
               (selectedTripIds.length === 0 || Boolean(buildBlockedReason)) &&
                 styles.footerBtnDisabled,
             ]}
-            onPress={() => {
-              if (buildBlockedReason) return;
-              setStep(2);
-            }}
-            disabled={selectedTripIds.length === 0 || Boolean(buildBlockedReason)}
+            onPress={handleCreateInvoice}
+            disabled={Boolean(buildBlockedReason) && selectedTripIds.length === 0}
             accessibilityLabel={
               buildBlockedReason
                 ? buildBlockedReason
-                : `Configure Invoice (${selectedTripIds.length})`
+                : `Create Invoice (${selectedTripIds.length})`
             }
           >
             <Text style={styles.footerBtnText}>
-              Configure Invoice ({selectedTripIds.length})
+              {selectedTripIds.length > 0
+                ? `Create Invoice (${selectedTripIds.length})`
+                : "Create Invoice"}
             </Text>
           </Pressable>
         </View>
@@ -1648,6 +1810,8 @@ type TripListContentProps = {
   onCompletionFilterChange: (next: TripCompletionListFilter) => void;
   completedTripCount: number;
   notCompletedTripCount: number;
+  onCreateInvoice?: () => void;
+  createBlockedReason?: string | null;
 };
 
 function TripListContent({
@@ -1679,6 +1843,8 @@ function TripListContent({
   onCompletionFilterChange,
   completedTripCount,
   notCompletedTripCount,
+  onCreateInvoice,
+  createBlockedReason = null,
 }: TripListContentProps) {
   const [bulkMenuOpen, setBulkMenuOpen] = useState(false);
 
@@ -1783,7 +1949,29 @@ function TripListContent({
             trips stay listed.
           </Text>
         </View>
-        <View style={styles.bulkActionWrap}>
+        <View style={styles.listHeaderActions}>
+          {onCreateInvoice ? (
+            <PulsePillButton
+              label={
+                selectedTripIds.length > 0
+                  ? `Create Invoice (${selectedTripIds.length})`
+                  : "Create Invoice"
+              }
+              accessibilityLabel={
+                createBlockedReason
+                  ? createBlockedReason
+                  : selectedTripIds.length > 0
+                    ? `Create Invoice with ${selectedTripIds.length} trips`
+                    : "Create Invoice"
+              }
+              size={isDesktopTripTable ? "default" : "compact"}
+              showPlusIcon
+              disabled={Boolean(createBlockedReason)}
+              onPress={onCreateInvoice}
+              style={styles.createInvoiceBtn}
+            />
+          ) : null}
+          <View style={styles.bulkActionWrap}>
           <Pressable
             style={[
               isDesktopTripTable
@@ -1846,6 +2034,7 @@ function TripListContent({
               </View>
             </>
           ) : null}
+        </View>
         </View>
       </View>
       <View style={styles.completionFilterStrip}>
@@ -2356,12 +2545,14 @@ const styles = StyleSheet.create({
     borderRightWidth: 0,
   },
   rightPanel: {
-    flexGrow: 1.45,
+    flexGrow: 0.9,
     flexShrink: 1,
-    flexBasis: 520,
-    minWidth: 420,
-    maxWidth: 780,
-    backgroundColor: Theme.screenBackground,
+    flexBasis: 360,
+    minWidth: 320,
+    maxWidth: 440,
+    backgroundColor: Theme.analyticsCanvas,
+    borderLeftWidth: 1,
+    borderLeftColor: Theme.borderLight,
   },
   rightPanelExpanded: {
     flexGrow: 1,
@@ -2369,6 +2560,86 @@ const styles = StyleSheet.create({
     flexBasis: 0,
     minWidth: 0,
     maxWidth: "100%",
+  },
+  createPageRoot: {
+    backgroundColor: Theme.analyticsCanvas,
+  },
+  createPageHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 16,
+    paddingHorizontal: 20,
+    paddingVertical: 14,
+    backgroundColor: Theme.cardWhite,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.borderMedium,
+  },
+  createBackBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    minHeight: Layout.minTouchTargetSize,
+    paddingHorizontal: 4,
+  },
+  createBackText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  createPageHint: {
+    flex: 1,
+    minWidth: 0,
+    textAlign: "right",
+    fontSize: 13,
+    fontWeight: "500",
+    color: Theme.textMuted,
+  },
+  createPageBody: {
+    flex: 1,
+    minHeight: 0,
+    backgroundColor: Theme.analyticsCanvas,
+    ...(Platform.OS === "web"
+      ? ({
+          maxWidth: 1080,
+          width: "100%",
+          alignSelf: "center",
+        } as unknown as ViewStyle)
+      : null),
+  },
+  createEmpty: {
+    flex: 1,
+    alignItems: "center",
+    justifyContent: "center",
+    paddingHorizontal: 24,
+    gap: 10,
+  },
+  createEmptyTitle: {
+    fontSize: 18,
+    fontWeight: "700",
+    color: Theme.textPrimaryDark,
+  },
+  createEmptyBody: {
+    fontSize: 14,
+    fontWeight: "400",
+    color: Theme.textSecondary,
+    textAlign: "center",
+    lineHeight: 20,
+    maxWidth: 420,
+  },
+  createEmptyBtn: {
+    marginTop: 12,
+    minHeight: Layout.minTouchTargetSize,
+    paddingHorizontal: 18,
+    borderRadius: 8,
+    backgroundColor: Theme.analyticsHeroBg,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  createEmptyBtnText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: Theme.screenBackground,
   },
 
   sidebarHeader: {
@@ -2610,6 +2881,7 @@ const styles = StyleSheet.create({
   },
   listHeaderMobile: {
     alignItems: "flex-start",
+    flexWrap: "wrap",
     gap: 10,
     paddingHorizontal: Layout.screenPaddingHorizontal,
     paddingVertical: 12,
@@ -2633,6 +2905,16 @@ const styles = StyleSheet.create({
   listHeaderTextCol: {
     flex: 1,
     minWidth: 0,
+  },
+  listHeaderActions: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 10,
+    flexShrink: 0,
+    marginLeft: 12,
+  },
+  createInvoiceBtn: {
+    flexShrink: 0,
   },
   listHeaderTitle: {
     fontSize: 10,

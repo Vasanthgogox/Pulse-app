@@ -160,6 +160,8 @@ export const ROUTES = {
   PULSE_INVOICE_POD: '/pulse-invoice/pod' as const,
   /** Invoice execution module (existing live-schema execute flow). */
   INVOICING_EXECUTE: '/invoicing-execute' as const,
+  /** Full-page invoice draft / issue form (opened from Pending Billing). */
+  INVOICING_EXECUTE_CREATE: '/invoicing-execute/create' as const,
   /** Members & access inside the workspace flex-card (not `MODALS.TEAM`). */
   WORKSPACE_TEAM:    '/workspace?panel=team' as const,
   /** Step-through business verification wizard (Sprint 1). */

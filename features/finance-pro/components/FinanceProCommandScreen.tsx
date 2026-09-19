@@ -1,10 +1,13 @@
 import { ROUTES } from "@/lib/routes";
+import Theme from "@/constants/Theme";
 import {
-  FinanceProAgeBoard,
+  FinanceProAgeHighlights,
   FinanceProAttentionGrid,
+  FinanceProChartLegend,
   FinanceProDataTable,
-  FinanceProKpiCard,
-  FinanceProKpiRow,
+  FinanceProHeroStat,
+  FinanceProMiniKpi,
+  FinanceProMiniKpiGrid,
   FinanceProMonthStrip,
   FinanceProPanel,
   FinanceProPipelineFlow,
@@ -18,6 +21,7 @@ import { FinanceProWorkspaceFrame } from "./FinanceProWorkspaceFrame";
 import { FINANCE_PRO_LAUNCH } from "./financeProLaunch";
 import {
   formatCount,
+  formatFinanceChip,
   formatFinanceInr,
   formatPct,
 } from "./financeProFormat";
@@ -35,7 +39,7 @@ import {
   toggleVintageMonthSelection,
 } from "../model/canvasContext.util";
 import { buildCommandPresentation } from "../model/commandInvestigation.util";
-import { TrendBarChart, type TrendPoint } from "@/components/analytics";
+import { TrendLineChart, type TrendPoint } from "@/components/analytics";
 import { usePathname, useRouter } from "expo-router";
 import { useState } from "react";
 import { View } from "react-native";
@@ -63,6 +67,7 @@ export function FinanceProCommandScreen() {
           profit: v.outstanding,
           margin: 0,
           tripCount: v.tripCount,
+          customerCount: v.customerCount,
         }));
         const clientCols: FinanceProTableColumn<ClientCollectionRow>[] = [
           { key: "n", label: "Customer", flex: 1.6, minWidth: 160, render: (r) => r.name },
@@ -138,53 +143,85 @@ export function FinanceProCommandScreen() {
 
         return (
           <FinanceProStack>
-            <FinanceProKpiRow>
-              <FinanceProKpiCard
-                label="Outstanding"
-                value={formatFinanceInr(command.outstanding)}
-                sub={`${formatCount(command.clientsWithBalance)} customers · ${formatPct(command.collectionPct)} collected`}
-              />
-              <FinanceProKpiCard
-                label="POD blocked"
-                value={formatFinanceInr(command.podBlockedValue)}
-                sub={`${formatCount(command.podBlockedCount)} trips`}
-                onPress={() =>
-                  setSelection((s) => togglePipelineStageSelection(s, "pod_pending"))
-                }
-              />
-              <FinanceProKpiCard
-                label="Ready to bill"
-                value={formatFinanceInr(command.readyValue)}
-                sub={`${formatCount(command.readyCount)} trips`}
-                onPress={() =>
-                  setSelection((s) => togglePipelineStageSelection(s, "ready_to_invoice"))
-                }
-              />
-              <FinanceProKpiCard
-                label="Open trips"
-                value={formatCount(command.openTripCount)}
-                sub={`${formatFinanceInr(command.billed)} billed`}
-              />
-            </FinanceProKpiRow>
-
             <FinanceProInvestigation
               brief={brief}
               onClear={() => setSelection(clearCanvasSelection())}
               story={story}
             />
 
-            <FinanceProAgeBoard
-              totals={command.ageTotals}
-              selected={selection.ageBucket}
-              onSelect={(bucket) =>
-                setSelection((s) => toggleAgeBucketSelection(s, bucket))
-              }
-            />
+            <FinanceProWidgetRow columns="1-2">
+              <FinanceProMiniKpiGrid>
+                <FinanceProMiniKpi
+                  label="POD blocked"
+                  value={formatFinanceChip(command.podBlockedValue)}
+                  sub={`${formatCount(command.podBlockedCount)} trips waiting`}
+                  onPress={() =>
+                    setSelection((s) => togglePipelineStageSelection(s, "pod_pending"))
+                  }
+                />
+                <FinanceProMiniKpi
+                  label="Ready to bill"
+                  value={formatFinanceChip(command.readyValue)}
+                  sub={`${formatCount(command.readyCount)} trips ready`}
+                  onPress={() =>
+                    setSelection((s) =>
+                      togglePipelineStageSelection(s, "ready_to_invoice"),
+                    )
+                  }
+                />
+                <FinanceProMiniKpi
+                  label="Open trips"
+                  value={formatCount(command.openTripCount)}
+                  sub={`${formatFinanceChip(command.billed)} billed`}
+                />
+                <FinanceProMiniKpi
+                  label="60+ days"
+                  value={formatFinanceChip(command.ageTotals.d60)}
+                  sub="Oldest aging bucket"
+                  onPress={() =>
+                    setSelection((s) => toggleAgeBucketSelection(s, "d60"))
+                  }
+                />
+              </FinanceProMiniKpiGrid>
+              <FinanceProHeroStat
+                label="Outstanding"
+                value={formatFinanceInr(command.outstanding)}
+                badge={`${formatPct(command.collectionPct)} collected`}
+                caption={`${formatCount(command.clientsWithBalance)} customers with open trip-linked exposure.`}
+                progressPct={command.collectionPct}
+                metrics={[
+                  {
+                    label: "Billed",
+                    value: formatFinanceInr(command.billed),
+                  },
+                  {
+                    label: "Collected",
+                    value: formatFinanceInr(command.model.attributedReceipts),
+                  },
+                  {
+                    label: "Customers",
+                    value: formatCount(command.clientsWithBalance),
+                  },
+                ]}
+              />
+            </FinanceProWidgetRow>
 
-            <FinanceProWidgetRow columns="2-1">
+            <FinanceProWidgetRow columns="1-2">
+              <FinanceProAgeHighlights
+                totals={command.ageTotals}
+                selected={selection.ageBucket}
+                onSelect={(bucket) =>
+                  setSelection((s) => toggleAgeBucketSelection(s, bucket))
+                }
+              />
               <FinanceProPanel
                 title="Financial movement"
-                kicker="Billed vs attributed receipts"
+                kicker="Click a point for billed, receipts, and trips"
+                action={
+                  <FinanceProChartLegend
+                    items={[{ label: "Billed", color: Theme.chartSeries5 }]}
+                  />
+                }
               >
                 <FinanceProMonthStrip
                   months={command.vintage}
@@ -203,44 +240,87 @@ export function FinanceProCommandScreen() {
                     if (w > 0 && w !== trendWidth) setTrendWidth(w);
                   }}
                 >
-                  {trend.some((t) => t.revenue || t.expense) ? (
-                    <TrendBarChart
-                      data={trend}
-                      width={Math.max(trendWidth, 240)}
-                      primaryField="revenue"
-                      secondaryField="expense"
-                    />
-                  ) : null}
+                  <TrendLineChart
+                    data={trend}
+                    width={Math.max(trendWidth, 240)}
+                    height={236}
+                    field="revenue"
+                    color={Theme.chartSeries5}
+                    gradientId="commandBilledGrad"
+                    interactive
+                    detailRows={(point) => [
+                      {
+                        label: "Billed",
+                        value: formatFinanceInr(point.revenue),
+                      },
+                      {
+                        label: "Receipts",
+                        value: formatFinanceInr(point.expense),
+                      },
+                      {
+                        label: "Outstanding",
+                        value: formatFinanceInr(point.profit),
+                      },
+                      {
+                        label: "Trips",
+                        value: formatCount(point.tripCount),
+                      },
+                      {
+                        label: "Customers",
+                        value: formatCount(point.customerCount ?? 0),
+                      },
+                    ]}
+                  />
                 </View>
-              </FinanceProPanel>
-              <FinanceProPanel title="Needs attention" kicker="Largest open names">
-                <FinanceProAttentionGrid
-                  columns={1}
-                  stories={attention.slice(0, 3).map((item) => ({
-                    id: item.id,
-                    badge: item.badge,
-                    title: item.title,
-                    amount: formatFinanceInr(item.amount),
-                    facts: item.facts,
-                  }))}
-                  onPress={(id) => {
-                    const item = attention.find((s) => s.id === id);
-                    if (!item) return;
-                    const row = item.clientId
-                      ? command.model.clientRows.find((r) => r.id === item.clientId)
-                      : null;
-                    setSelection({
-                      ...EMPTY_CANVAS_SELECTION,
-                      clientId: row?.id ?? null,
-                      clientName: row?.name ?? null,
-                      pipelineStage: item.pipelineStage,
-                    });
-                  }}
-                />
               </FinanceProPanel>
             </FinanceProWidgetRow>
 
-            <FinanceProPanel title="Billing pipeline" kicker="Click a stage">
+            <FinanceProPanel
+              title="Needs attention"
+              kicker="Customers and stages that need a next action"
+            >
+              <FinanceProAttentionGrid
+                stories={attention.slice(0, 3).map((item) => ({
+                  id: item.id,
+                  badge: item.badge,
+                  title: item.title,
+                  amount: formatFinanceInr(item.amount),
+                  facts: item.facts,
+                }))}
+                onPress={(id) => {
+                  const item = attention.find((s) => s.id === id);
+                  if (!item) return;
+                  const row = item.clientId
+                    ? command.model.clientRows.find((r) => r.id === item.clientId)
+                    : null;
+                  setSelection({
+                    ...EMPTY_CANVAS_SELECTION,
+                    clientId: row?.id ?? null,
+                    clientName: row?.name ?? null,
+                    pipelineStage: item.pipelineStage,
+                  });
+                }}
+              />
+            </FinanceProPanel>
+
+            <FinanceProPanel
+              title="Billing pipeline"
+              kicker="Value sitting in each billing stage"
+              action={
+                <View style={{ flexDirection: "row", flexWrap: "wrap", gap: 16 }}>
+                  <FinanceProQuietAction
+                    label="Open Pulse Invoice"
+                    onPress={() =>
+                      router.push(FINANCE_PRO_LAUNCH.pulseInvoice(pathname))
+                    }
+                  />
+                  <FinanceProQuietAction
+                    label="Open Pulse POD"
+                    onPress={() => router.push(FINANCE_PRO_LAUNCH.pulsePod(pathname))}
+                  />
+                </View>
+              }
+            >
               <FinanceProPipelineFlow
                 pipeline={command.pipeline}
                 selected={selection.pipelineStage}
@@ -248,23 +328,6 @@ export function FinanceProCommandScreen() {
                   setSelection((s) => togglePipelineStageSelection(s, id))
                 }
               />
-              <View
-                style={{
-                  marginTop: 8,
-                  flexDirection: "row",
-                  flexWrap: "wrap",
-                  gap: 16,
-                }}
-              >
-                <FinanceProQuietAction
-                  label="Open Pulse Invoice"
-                  onPress={() => router.push(FINANCE_PRO_LAUNCH.pulseInvoice(pathname))}
-                />
-                <FinanceProQuietAction
-                  label="Open Pulse POD"
-                  onPress={() => router.push(FINANCE_PRO_LAUNCH.pulsePod(pathname))}
-                />
-              </View>
             </FinanceProPanel>
 
             {showTrips ? (

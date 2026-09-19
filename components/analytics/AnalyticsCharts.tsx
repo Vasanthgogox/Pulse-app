@@ -2,8 +2,17 @@
  * Shared animated chart primitives for party analytics dashboards.
  * Built on react-native-svg + Animated (same stack as vehicle analytics).
  */
-import { memo, useEffect, useMemo, useRef } from "react";
-import { Animated, Easing } from "react-native";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Animated,
+  Easing,
+  Platform,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+  type ViewStyle,
+} from "react-native";
 import Svg, {
   Circle,
   Defs,
@@ -16,6 +25,7 @@ import Svg, {
   Text as SvgText,
 } from "react-native-svg";
 
+import Layout from "@/constants/Layout";
 import { Theme } from "@/constants/Theme";
 import { formatINRChip } from "@/lib/format";
 
@@ -32,6 +42,7 @@ export interface TrendPoint {
   profit: number;
   margin: number;
   tripCount: number;
+  customerCount?: number;
 }
 
 function smoothLinePath(pts: { x: number; y: number }[]): string {
@@ -86,6 +97,11 @@ function useBarAnim(trigger: string, duration = 780) {
   return anim;
 }
 
+export interface TrendLineTooltipRow {
+  label: string;
+  value: string;
+}
+
 export interface TrendLineChartProps {
   data: readonly TrendPoint[];
   width: number;
@@ -93,7 +109,14 @@ export interface TrendLineChartProps {
   field: "revenue" | "profit" | "margin";
   color?: string;
   gradientId?: string;
+  /** When set, points are tappable and show a detail card. */
+  interactive?: boolean;
+  selectedIndex?: number | null;
+  onPointPress?: (index: number, point: TrendPoint) => void;
+  detailRows?: (point: TrendPoint) => TrendLineTooltipRow[];
 }
+
+const TOOLTIP_WIDTH = 196;
 
 export const TrendLineChart = memo(function TrendLineChart({
   data,
@@ -102,13 +125,25 @@ export const TrendLineChart = memo(function TrendLineChart({
   field,
   color = Theme.primary,
   gradientId = "trendLineGrad",
+  interactive = false,
+  selectedIndex: selectedIndexProp,
+  onPointPress,
+  detailRows,
 }: TrendLineChartProps) {
+  const [internalIndex, setInternalIndex] = useState<number | null>(null);
+  const selectedIndex =
+    selectedIndexProp !== undefined ? selectedIndexProp : internalIndex;
+
   const trigger = data.map((d) => `${d.label}:${d[field]}`).join("|") + field;
   const entrance = useEntranceAnim(trigger);
   const translateY = entrance.interpolate({
     inputRange: [0, 1],
     outputRange: [12, 0],
   });
+
+  useEffect(() => {
+    setInternalIndex(null);
+  }, [trigger]);
 
   const chartW = width - PAD.left - PAD.right;
   const chartH = height - PAD.top - PAD.bottom;
@@ -157,8 +192,55 @@ export const TrendLineChart = memo(function TrendLineChart({
     }).start();
   }, [lineDraw, pathLength, trigger]);
 
+  const handlePointPress = useCallback(
+    (index: number) => {
+      const point = data[index];
+      if (!point) return;
+      const next = selectedIndex === index ? null : index;
+      if (selectedIndexProp === undefined) setInternalIndex(next);
+      onPointPress?.(index, point);
+    },
+    [data, onPointPress, selectedIndex, selectedIndexProp],
+  );
+
+  const activePoint =
+    selectedIndex != null && selectedIndex >= 0 ? data[selectedIndex] : null;
+  const activePos =
+    selectedIndex != null && selectedIndex >= 0 ? pts[selectedIndex] : null;
+  const tooltipRows = activePoint
+    ? detailRows?.(activePoint) ?? [
+        {
+          label: isMargin ? "Margin" : "Amount",
+          value: isMargin
+            ? `${activePoint[field].toFixed(0)}%`
+            : formatINRChip(activePoint[field]),
+        },
+      ]
+    : [];
+
+  const tooltipLeft = activePos
+    ? Math.max(
+        8,
+        Math.min(activePos.x - TOOLTIP_WIDTH / 2, width - TOOLTIP_WIDTH - 8),
+      )
+    : 0;
+  const tooltipTop =
+    activePos && activePos.y < 128
+      ? activePos.y + 18
+      : activePos
+        ? Math.max(4, activePos.y - 148)
+        : 0;
+
   return (
-    <Animated.View style={{ opacity: entrance, transform: [{ translateY }] }}>
+    <Animated.View
+      style={{
+        opacity: entrance,
+        transform: [{ translateY }],
+        position: "relative",
+        width,
+        height,
+      }}
+    >
       <Svg width={width} height={height}>
         <Defs>
           <LinearGradient id={gradientId} x1="0" y1="0" x2="0" y2="1">
@@ -195,6 +277,19 @@ export const TrendLineChart = memo(function TrendLineChart({
           />
         ) : null}
 
+        {activePos ? (
+          <Line
+            x1={activePos.x}
+            y1={PAD.top}
+            x2={activePos.x}
+            y2={baseY}
+            stroke={color}
+            strokeWidth={1}
+            strokeDasharray="4 4"
+            strokeOpacity={0.45}
+          />
+        ) : null}
+
         {pts.map((p, i) => (
           <TrendDot
             key={`${p.x}-${p.y}-${i}`}
@@ -203,6 +298,7 @@ export const TrendLineChart = memo(function TrendLineChart({
             color={color}
             index={i}
             trigger={trigger}
+            selected={selectedIndex === i}
           />
         ))}
 
@@ -228,13 +324,62 @@ export const TrendLineChart = memo(function TrendLineChart({
             y={height - 6}
             textAnchor="middle"
             fontSize={9}
-            fill={Theme.textMuted}
+            fill={selectedIndex === i ? Theme.textPrimary : Theme.textMuted}
             fontWeight="600"
           >
             {d.label}
           </SvgText>
         ))}
       </Svg>
+
+      {interactive
+        ? pts.map((p, i) => (
+            <Pressable
+              key={`hit-${data[i]?.label ?? i}`}
+              onPress={() => handlePointPress(i)}
+              accessibilityRole="button"
+              accessibilityLabel={`${data[i].label}, ${
+                isMargin
+                  ? `${data[i][field].toFixed(0)} percent`
+                  : formatINRChip(data[i][field])
+              }. Show month details.`}
+              accessibilityState={{ selected: selectedIndex === i }}
+              hitSlop={Layout.touchTargetHitSlop}
+              style={[
+                styles.hit,
+                {
+                  left: p.x - Layout.minTouchTargetSize / 2,
+                  top: p.y - Layout.minTouchTargetSize / 2,
+                },
+                Platform.OS === "web"
+                  ? ({ cursor: "pointer" } as unknown as ViewStyle)
+                  : null,
+              ]}
+            />
+          ))
+        : null}
+
+      {interactive && activePoint && activePos ? (
+        <View
+          pointerEvents="none"
+          style={[
+            styles.tooltip,
+            { left: tooltipLeft, top: tooltipTop, width: TOOLTIP_WIDTH },
+          ]}
+        >
+          <Text style={styles.tooltipTitle} numberOfLines={1}>
+            {activePoint.label}
+          </Text>
+          {tooltipRows.map((row) => (
+            <View key={row.label} style={styles.tooltipRow}>
+              <Text style={styles.tooltipLabel}>{row.label}</Text>
+              <Text style={styles.tooltipValue} numberOfLines={1}>
+                {row.value}
+              </Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
     </Animated.View>
   );
 });
@@ -245,12 +390,14 @@ function TrendDot({
   color,
   index,
   trigger,
+  selected = false,
 }: {
   cx: number;
   cy: number;
   color: string;
   index: number;
   trigger: string;
+  selected?: boolean;
 }) {
   const scale = useRef(new Animated.Value(0)).current;
   useEffect(() => {
@@ -268,20 +415,88 @@ function TrendDot({
 
   const r = scale.interpolate({
     inputRange: [0, 1],
-    outputRange: [0, 5],
+    outputRange: [0, selected ? 7 : 5],
   });
 
   return (
-    <AnimatedCircle
-      cx={cx}
-      cy={cy}
-      r={r as unknown as number}
-      fill={Theme.screenBackground}
-      stroke={color}
-      strokeWidth={2}
-    />
+    <G>
+      {selected ? (
+        <Circle
+          cx={cx}
+          cy={cy}
+          r={12}
+          fill={color}
+          fillOpacity={0.16}
+        />
+      ) : null}
+      <AnimatedCircle
+        cx={cx}
+        cy={cy}
+        r={r as unknown as number}
+        fill={selected ? color : Theme.screenBackground}
+        stroke={color}
+        strokeWidth={2}
+      />
+    </G>
   );
 }
+
+const styles = StyleSheet.create({
+  hit: {
+    position: "absolute",
+    width: Layout.minTouchTargetSize,
+    height: Layout.minTouchTargetSize,
+    borderRadius: Layout.minTouchTargetSize / 2,
+  },
+  tooltip: {
+    position: "absolute",
+    zIndex: 4,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: Theme.borderMedium,
+    backgroundColor: Theme.cardWhite,
+    gap: 6,
+    ...(Platform.OS === "web"
+      ? ({
+          boxShadow: `0 8px 24px 0 ${Theme.brandBlueShadow}`,
+        } as unknown as ViewStyle)
+      : {
+          elevation: 6,
+          shadowColor: Theme.primary,
+          shadowOpacity: 0.12,
+          shadowRadius: 12,
+          shadowOffset: { width: 0, height: 4 },
+        }),
+  },
+  tooltipTitle: {
+    fontSize: 12,
+    fontWeight: "800",
+    color: Theme.textPrimary,
+    marginBottom: 2,
+  },
+  tooltipRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 12,
+  },
+  tooltipLabel: {
+    fontSize: 11,
+    fontWeight: "600",
+    color: Theme.textSecondary,
+  },
+  tooltipValue: {
+    fontSize: 12,
+    fontWeight: "800",
+    fontVariant: ["tabular-nums"],
+    color: Theme.textPrimary,
+    flexShrink: 1,
+    minWidth: 0,
+    textAlign: "right",
+  },
+});
 
 export interface TrendBarChartProps {
   data: readonly TrendPoint[];

@@ -1,3 +1,4 @@
+import Layout from "@/constants/Layout";
 import Theme from "@/constants/Theme";
 import { formatFinanceChip } from "./financeProFormat";
 import { Pressable, StyleSheet, Text, View } from "react-native";
@@ -54,54 +55,57 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: "row",
     alignItems: "center",
-    minHeight: 44,
-    paddingVertical: 6,
-    gap: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-    borderBottomColor: "#EFF2F5",
+    minHeight: Layout.minTouchTargetSize,
+    paddingVertical: 8,
+    gap: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: Theme.surfaceBorder,
   },
   rowSelected: {
     backgroundColor: Theme.brandBlueWashSubtle,
+    marginHorizontal: -8,
+    paddingHorizontal: 8,
+    borderRadius: 8,
   },
   meta: {
     flex: 1.1,
     minWidth: 72,
-    maxWidth: 160,
+    maxWidth: 180,
     flexShrink: 1,
   },
   label: {
     fontSize: 13,
     fontWeight: "700",
-    color: "#181C32",
+    color: Theme.textPrimary,
   },
   caption: {
     fontSize: 11,
-    color: "#78829D",
+    color: Theme.textSecondary,
     marginTop: 1,
   },
   barTrack: {
     flex: 1,
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: "#F1F1F4",
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Theme.surfaceGray,
     overflow: "hidden",
   },
   barFill: {
-    height: 10,
-    borderRadius: 5,
-    backgroundColor: Theme.primary,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: Theme.darkGreen,
   },
   value: {
-    width: 64,
+    width: 72,
     textAlign: "right",
     fontSize: 13,
-    fontWeight: "700",
+    fontWeight: "800",
     fontVariant: ["tabular-nums"],
-    color: "#181C32",
+    color: Theme.textPrimary,
   },
   empty: {
     fontSize: 13,
-    color: "#78829D",
+    color: Theme.textSecondary,
     paddingVertical: 12,
   },
 });
