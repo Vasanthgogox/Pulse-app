@@ -70,7 +70,7 @@ export function useMarketIndentsQuery(
     enabled,
     // Cross-org feed: partner shippers mutate indents outside this org's invalidation path.
     staleTime: STALE.frequent,
-    refetchOnMount: refetchOnMountIfEntityListEmpty<IndentRow[]>(),
+    refetchOnMount: true,
   });
 }
 
@@ -145,8 +145,11 @@ export function invalidateMarketIndentsForIntegratedSuppliers(
 }
 
 /** My direct quotes for GET LOAD views (carrier side). */
-export function useMyDirectQuotesQuery(orgId: string | null) {
-  const gateOpen = useAppQueryGate(orgId);
+export function useMyDirectQuotesQuery(
+  orgId: string | null,
+  options?: { urgent?: boolean },
+) {
+  const gateOpen = useAppQueryGate(orgId, { urgent: options?.urgent });
   return useQuery<DirectQuoteRow[]>({
     queryKey: [...queryKeys.indents.finite(orgId ?? ''), 'my-direct-quotes'],
     queryFn: async () => {

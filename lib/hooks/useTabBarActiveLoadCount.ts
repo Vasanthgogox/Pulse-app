@@ -45,7 +45,9 @@ export function useTabBarActiveLoadCount(
         indent.circulation_target ?? "integrated_supplier",
       ).toLowerCase();
       const isMarketVisible =
-        target === "integrated_supplier" || target === "both";
+        target === "integrated_supplier" ||
+        target === "both" ||
+        target === "marketplace";
       if (!isMarketVisible) continue;
       if (status === "awarded") {
         if (awardedToMeIds.has(indent.id)) activeIds.add(indent.id);

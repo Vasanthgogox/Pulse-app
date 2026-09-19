@@ -99,9 +99,14 @@ export function OrganizationProvider({ children }: { children: ReactNode }) {
     const currentUid = userRef.current?.uid ?? null;
     if (currentUid) workspacePopulatedForUserRef.current = currentUid;
     bindLinkedOrgDisplayViewerOrg(org?.id ?? null);
-    setCurrentOrganizationState(org);
-    setError(null);
-    setIsLoading(false);
+    setCurrentOrganizationState((prev) => {
+      if (prev?.id === org?.id && prev?.operatingModel === org?.operatingModel && prev?.name === org?.name) {
+        return prev;
+      }
+      return org;
+    });
+    setError((prev) => (prev ? null : prev));
+    setIsLoading((prev) => (prev ? false : prev));
     if (!isStartupComplete()) markStartupPhase('org_resolved');
   }, []);
 

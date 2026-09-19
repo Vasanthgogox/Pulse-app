@@ -93,12 +93,12 @@ export function useMemberCapabilities(): MemberDomainAccess {
     activeWorkspace,
   } = useActiveWorkspace();
 
+  const orgReady = Boolean(org?.currentOrganization);
   const accessLoading =
     isLoading ||
     authStatus === "restoring" ||
-    Boolean(org?.isLoading) ||
     (authStatus === "authenticated" && !membershipResolved) ||
-    (Boolean(memberRole) && !org?.currentOrganization && org?.isLoading !== false);
+    (authStatus === "authenticated" && !orgReady && Boolean(org?.isLoading));
 
   return useMemo(() => {
     const isOwnerOrAdmin = memberRole === "owner" || memberRole === "admin";

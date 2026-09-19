@@ -9,6 +9,7 @@ import { getTripOperationalDisplay } from "@/features/operations/display";
 import type { TripRow } from "@/features/trips/services/trips.service";
 import { useCallback, useMemo } from "react";
 import {
+  isGetLoadMarketCirculation,
   statusMatchesFilter,
   type DoneSubTab,
   type LoadSubTab,
@@ -150,8 +151,7 @@ export function useLoadCenterFilters({
       const status = (i.status || "").toLowerCase();
       if (!statusMatchesFilter(status, "DONE")) return false;
       // Unset target defaults to integrated_supplier (matches createIndent).
-      const target = (i.circulation_target || "integrated_supplier").toLowerCase();
-      const isTargeted = target === "integrated_supplier" || target === "both";
+      const isTargeted = isGetLoadMarketCirculation(i.circulation_target);
       if (!isTargeted) return false;
       if (awardedToMeIndentIds.has(i.id)) return false;
       return myQuoteByIndentId.has(i.id);
@@ -191,9 +191,7 @@ export function useLoadCenterFilters({
           status === "cancelled"
         )
           return false;
-        // Unset target defaults to integrated_supplier (matches createIndent).
-        const target = (i.circulation_target || "integrated_supplier").toLowerCase();
-        return target === "integrated_supplier" || target === "both";
+        return isGetLoadMarketCirculation(i.circulation_target);
       }),
     [marketIndents],
   );
